@@ -39,16 +39,18 @@ export function OfflineQueue({ items }: { items: OfflineScan[] }) {
                         ? "info"
                         : "neutral"
                 }
+                icon={
+                  item.status === "failed" ? (
+                    <WarningIcon aria-hidden />
+                  ) : item.failureKind === "offline" ? (
+                    <CloudSlashIcon aria-hidden />
+                  ) : item.status === "syncing" ? (
+                    <SpinnerGapIcon aria-hidden />
+                  ) : (
+                    <HardDriveIcon aria-hidden />
+                  )
+                }
               >
-                {item.status === "failed" ? (
-                  <WarningIcon aria-hidden className="size-3" />
-                ) : item.failureKind === "offline" ? (
-                  <CloudSlashIcon aria-hidden className="size-3" />
-                ) : item.status === "syncing" ? (
-                  <SpinnerGapIcon aria-hidden className="size-3" />
-                ) : (
-                  <HardDriveIcon aria-hidden className="size-3" />
-                )}
                 {item.status === "failed"
                   ? t("scannerStateAttention")
                   : item.status === "syncing"

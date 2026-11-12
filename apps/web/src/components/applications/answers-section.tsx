@@ -6,7 +6,6 @@ import { sponsorShareKey } from "@hackos/shared/applications";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { StatusBadge } from "@/components/common/status-badge";
 import { type FieldValue, TemplateFieldControl } from "@/components/common/template-field-control";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -323,9 +322,7 @@ function ReviewBubble({ review }: { review: ReviewEntry }) {
         <p className="text-sm font-medium">{review.author_name ?? t("unknownReviewer")}</p>
         <div className="flex items-center gap-2">
           {review.score != null && (
-            <StatusBadge tone="neutral" dot={false}>
-              {review.score}/5
-            </StatusBadge>
+            <span className="text-sm font-medium tabular-nums">{review.score}/5</span>
           )}
           <span className="text-muted-foreground text-xs">
             {formatEventDate(review.updated_at, language, "date")}

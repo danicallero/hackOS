@@ -60,7 +60,7 @@ export function ProjectListRow({
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex min-w-0 items-center justify-between gap-3">
           <span className="truncate font-medium">{project.name}</span>
-          <StatusBadge className="shrink-0" tone={submitted ? "success" : "neutral"} dot={false}>
+          <StatusBadge className="shrink-0" tone={submitted ? "success" : "neutral"}>
             {t(submitted ? "dataStatusSubmitted" : "dataStatusDraft")}
           </StatusBadge>
         </div>

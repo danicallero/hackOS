@@ -67,10 +67,7 @@ export default function ProjectsPage() {
       id: "status",
       header: t("inviteStatus"),
       cell: (project) => (
-        <StatusBadge
-          tone={project.submissionStatus === "submitted" ? "success" : "neutral"}
-          dot={false}
-        >
+        <StatusBadge tone={project.submissionStatus === "submitted" ? "success" : "neutral"}>
           {t(project.submissionStatus === "submitted" ? "dataStatusSubmitted" : "dataStatusDraft")}
         </StatusBadge>
       ),

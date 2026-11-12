@@ -216,14 +216,18 @@ export default function ApplicationDetailPage() {
         }
         meta={
           form ? (
-            <span className="text-muted-foreground text-xs">
-              {[
-                t("grantsRoleInline", { role: grantedRoleNameLabel(form.granted_role_name, t) }),
-                form.capacity != null ? t("quotaInline", { capacity: form.capacity }) : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </span>
+            <dl className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+              <div className="flex gap-1.5">
+                <dt className="text-muted-foreground">{t("colGrantedRole")}</dt>
+                <dd className="font-medium">{grantedRoleNameLabel(form.granted_role_name, t)}</dd>
+              </div>
+              {form.capacity != null && (
+                <div className="flex gap-1.5">
+                  <dt className="text-muted-foreground">{t("colQuota")}</dt>
+                  <dd className="font-medium tabular-nums">{form.capacity}</dd>
+                </div>
+              )}
+            </dl>
           ) : undefined
         }
       />

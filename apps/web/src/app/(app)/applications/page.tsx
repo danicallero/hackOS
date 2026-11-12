@@ -80,11 +80,7 @@ export default function ApplicationsPage() {
       header: t("colWindow"),
       cell: (f) => {
         const w = windowState(f, t);
-        return (
-          <StatusBadge tone={w.tone} dot={false}>
-            {w.label}
-          </StatusBadge>
-        );
+        return <StatusBadge tone={w.tone}>{w.label}</StatusBadge>;
       },
     },
     {

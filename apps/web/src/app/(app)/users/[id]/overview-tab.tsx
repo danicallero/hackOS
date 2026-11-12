@@ -373,7 +373,7 @@ function StaffEditForm({
               <span className="text-muted-foreground">
                 {t("currentEmailInline", { email: user.email })}
               </span>
-              <StatusBadge tone={user.emailVerified ? "success" : "warning"} dot={false}>
+              <StatusBadge tone={user.emailVerified ? "success" : "warning"}>
                 {user.emailVerified ? t("verified") : t("unverified")}
               </StatusBadge>
             </div>

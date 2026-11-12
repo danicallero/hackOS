@@ -43,8 +43,11 @@ export function ProjectOverview({
       <div className="min-w-0 space-y-6">
         {review}
         {project.winners?.map((winner) => (
-          <StatusBadge key={winner.challengeId} tone="success" dot={false}>
-            <TrophyIcon aria-hidden="true" className="size-4" />
+          <StatusBadge
+            key={winner.challengeId}
+            tone="success"
+            icon={<TrophyIcon aria-hidden="true" />}
+          >
             {winner.challengeTitle} · {labels.rank.replace("{rank}", String(winner.rank))}
           </StatusBadge>
         ))}

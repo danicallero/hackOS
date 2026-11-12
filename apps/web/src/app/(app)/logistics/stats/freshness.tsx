@@ -15,9 +15,5 @@ export function Freshness({ kind }: { kind: FreshnessKind }) {
         : kind === "incomplete"
           ? "danger"
           : "warning";
-  return (
-    <StatusBadge tone={tone} dot={false}>
-      {t(FRESHNESS_LABEL_KEYS[kind])}
-    </StatusBadge>
-  );
+  return <StatusBadge tone={tone}>{t(FRESHNESS_LABEL_KEYS[kind])}</StatusBadge>;
 }
