@@ -12,10 +12,10 @@
 //   POST /api/me/responses/:responseId/decline   → decline my place (H15)
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
+import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -425,7 +425,10 @@ export default function MyApplicationDetailPage() {
   if (loading) {
     return (
       <PageLayout aria-busy="true" width="reading">
-        <PageHeader title={t("tabApplication")} />
+        <PageHeader
+          context={<BackLink href="/my-applications" label={t("myApplications")} />}
+          title={t("tabApplication")}
+        />
         <div role="status" className="space-y-4">
           <span className="sr-only">{t("loading")}</span>
           <Skeleton className="h-5 w-2/3 max-w-md" />
@@ -442,7 +445,10 @@ export default function MyApplicationDetailPage() {
   if (!form && !response) {
     return (
       <PageLayout width="reading">
-        <PageHeader title={t("tabApplication")} />
+        <PageHeader
+          context={<BackLink href="/my-applications" label={t("myApplications")} />}
+          title={t("tabApplication")}
+        />
         {loadError ? (
           <ContextualError message={loadError} onRetry={retry} />
         ) : (
@@ -454,11 +460,6 @@ export default function MyApplicationDetailPage() {
             <EmptyState
               title={t("applicationNotOpenTitle")}
               description={t("applicationNotOpenDesc")}
-              action={
-                <Button asChild variant="outline">
-                  <Link href="/my-applications">{t("backToMyApplications")}</Link>
-                </Button>
-              }
             />
           </Section>
         )}

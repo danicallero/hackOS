@@ -124,7 +124,7 @@ function LoginInner() {
   return (
     <Card>
       <CardHeader>
-        <h1 className="type-page-title text-balance">{t("welcomeBack")}</h1>
+        <h1 className="type-page-title text-balance">{t("signIn")}</h1>
       </CardHeader>
       <CardContent>
         <Form {...form}>

@@ -1,5 +1,6 @@
 "use client";
 import { useParams, useSearchParams } from "next/navigation";
+import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
@@ -7,7 +8,7 @@ import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { isNotFoundError } from "@/lib/api";
 import type { DirectoryEntry } from "@/lib/directory";
 import { useLocale } from "@/lib/i18n";
-import { PersonProfile, ProfileBackLink } from "../../../people/[userId]/person-detail";
+import { PersonProfile } from "../../../people/[userId]/person-detail";
 import { AvailabilityTimeline } from "../../availability-timeline";
 import type { HelperDetail } from "../../model";
 import { requestListSource } from "../../navigation";
@@ -38,7 +39,7 @@ export default function HelperPage() {
   );
   const helper = resource.data;
   const back = (
-    <ProfileBackLink
+    <BackLink
       href={requestBack ?? `/help-desk/helpers${suffix}`}
       label={t(requestBack ? "helpDeskViewRequest" : "helpDeskHelpers")}
     />

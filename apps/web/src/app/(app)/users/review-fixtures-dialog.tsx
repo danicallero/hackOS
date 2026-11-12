@@ -9,11 +9,10 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { shortDateTimeFmt } from "@/lib/datetime";
+import { formatEventDate } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
-
-const dateFmt = shortDateTimeFmt;
+import type { Language } from "@/lib/types";
 
 type FixtureAccount = {
   fixtureKey: string;
@@ -43,10 +42,8 @@ function fixtureKindLabel(kind: FixtureAccount["kind"], t: Translate): string {
   return kind === "staff" ? t("staff") : t("participant");
 }
 
-function formatLastSignIn(value: string | null): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : dateFmt.format(date);
+function formatLastSignIn(value: string | null, language: Language): string {
+  return formatEventDate(value, language, "dateTime") || "—";
 }
 
 /** Admin-only control for the synthetic accounts used by App Store review. */
@@ -57,7 +54,7 @@ export function ReviewFixturesDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<RegenerateResponse | null>(null);
@@ -212,7 +209,7 @@ export function ReviewFixturesDialog({
                           </dt>
                           <dd className="mt-1 text-sm tabular-nums">
                             {account.lastAuthenticatedAt
-                              ? formatLastSignIn(account.lastAuthenticatedAt)
+                              ? formatLastSignIn(account.lastAuthenticatedAt, language)
                               : t("reviewFixturesNeverUsed")}
                           </dd>
                         </div>

@@ -1,7 +1,6 @@
 {
   "apiError_degree_in_use": "This degree is used in applications. Merge it into another degree before deleting it.",
   "signOut": "Sign out",
-  "welcomeBack": "Welcome back",
   "forgotPassword": "Forgot password?",
   "checkEmail": "Check your email",
   "resetPassword": "Reset your password",

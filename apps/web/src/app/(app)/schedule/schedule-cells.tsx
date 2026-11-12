@@ -28,7 +28,7 @@ import { useAudienceRoles } from "@/hooks/use-audience-roles";
 import { useInlineEditState } from "@/hooks/use-inline-edit-state";
 import { ApiError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { formatScheduledDateTime, fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
+import { formatEventDate, fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, type ScheduleAudience } from "@/lib/logistics";
 import { toast } from "@/lib/toast";
@@ -57,7 +57,7 @@ export function StatusPill({
   item: PublicScheduleItem;
   status: ReturnType<typeof scheduleStatus>;
 }) {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   if (status === "staffOnly") {
     return (
       <span className="text-muted-foreground" title={t("staffSeeAllHint")}>
@@ -69,7 +69,7 @@ export function StatusPill({
     <StatusBadge tone={SCHEDULE_STATUS_TONES[status]}>{scheduleStatusLabel(status, t)}</StatusBadge>
   );
   if (status === "scheduled" && item.publishAt) {
-    return <span title={formatScheduledDateTime(item.publishAt)}>{badge}</span>;
+    return <span title={formatEventDate(item.publishAt, language, "dateTime")}>{badge}</span>;
   }
   return badge;
 }
@@ -586,16 +586,14 @@ export function EditableScannableCell({
 
 export function EditablePublishDateCell({
   value,
-  locale,
   fieldLabel,
   onSave,
 }: {
   value: string | null;
-  locale: string;
   fieldLabel: string;
   onSave: (next: string | null) => Promise<CellSaveResult>;
 }) {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(() => toDatetimeLocal(value));
   const [saving, setSaving] = useState(false);
@@ -638,7 +636,7 @@ export function EditablePublishDateCell({
         className="button-interaction hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
       >
         <span className="sr-only">{t("editScheduleFieldAria", { field: fieldLabel })}: </span>
-        {value ? formatScheduledDateTime(value, locale) : t("notSet")}
+        {value ? formatEventDate(value, language, "dateTime") : t("notSet")}
       </button>
     );
   }

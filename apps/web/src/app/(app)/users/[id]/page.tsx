@@ -6,6 +6,7 @@ import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { useParams } from "next/navigation";
 import { useCallback } from "react";
 import { CertificatesPanel } from "@/components/certificates/certificates-panel";
+import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageLayout } from "@/components/common/page-layout";
@@ -88,6 +89,7 @@ export default function UserProfilePage() {
     }
     return (
       <div className="space-y-6">
+        <BackLink href="/users" label={t("users")} />
         <EmptyState
           title={t("userNotFoundTitle")}
           description={

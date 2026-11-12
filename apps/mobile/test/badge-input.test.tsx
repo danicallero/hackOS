@@ -47,7 +47,7 @@ it("opens NFC directly and keeps code methods in the options menu", async () => 
   expect(
     StyleSheet.flatten(view.getByRole("button", { name: "personLinkBadgeNfc" }).props.style)
       .borderRadius,
-  ).toBe(25);
+  ).toBe(999);
   await fireEvent.press(view.getByRole("button", { name: "personLinkBadgeNfc" }));
   expect(onNfc).toHaveBeenCalledTimes(1);
   expect(onAlternative).not.toHaveBeenCalled();

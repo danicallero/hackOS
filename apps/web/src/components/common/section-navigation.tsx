@@ -1,7 +1,6 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { ChartBarIcon } from "@phosphor-icons/react/dist/csr/ChartBar";
 import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
@@ -19,6 +18,7 @@ import { HelpdeskClosedNotice } from "@/app/(app)/help-desk/requests/closed-noti
 import { RequestHelpAction } from "@/app/(app)/help-desk/requests/request-help-action";
 import { useHelpdesk } from "@/app/(app)/help-desk/shared";
 import { ActionGroup } from "@/components/common/action-group";
+import { BackLink } from "@/components/common/back-link";
 import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -169,20 +169,10 @@ export function ProjectsSectionHeader({
           recordName ??
           t(management ? "manageProjects" : authenticated ? "projects" : "projectGallery")
         }
+        context={recordName ? <BackLink href={backHref} label={backLabel} /> : undefined}
         state={recordState}
         primaryAction={recordAction ?? primaryAction}
-        secondaryActions={
-          recordName && !authenticated ? (
-            <Button asChild variant="outline" size="sm">
-              <Link href={backHref}>
-                <ArrowLeftIcon aria-hidden="true" />
-                {backLabel}
-              </Link>
-            </Button>
-          ) : (
-            secondaryActions
-          )
-        }
+        secondaryActions={secondaryActions}
       />
       <ProjectsNavigation />
     </div>

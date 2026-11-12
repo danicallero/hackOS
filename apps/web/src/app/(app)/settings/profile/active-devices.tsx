@@ -9,6 +9,7 @@ import { IconButton } from "@/components/common/icon-button";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
+import { formatEventDate } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 
@@ -93,7 +94,6 @@ export function ActiveDevices() {
     (a, b) => Number(b.token === current) - Number(a.token === current),
   );
   const others = ordered.filter((session) => session.token !== current);
-  const when = new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" });
 
   return (
     <div className="space-y-3">
@@ -111,7 +111,9 @@ export function ActiveDevices() {
                 {isCurrent && <StatusBadge tone="success">{t("thisDevice")}</StatusBadge>}
                 {!isCurrent && (
                   <p className="text-muted-foreground text-sm">
-                    {t("activeDeviceSince", { when: when.format(new Date(session.updatedAt)) })}
+                    {t("activeDeviceSince", {
+                      when: formatEventDate(session.updatedAt, language, "dateTime"),
+                    })}
                   </p>
                 )}
               </div>

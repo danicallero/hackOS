@@ -561,6 +561,17 @@ metadata: email, badge id) → one `primaryAction` + optional
 `secondaryActions`. A status never sits beside the title: without a capsule
 it reads as stray text there, so it leads the line below.
 
+- **Record pages carry one back link in `context`.** `BackLink`
+  (`components/common/back-link.tsx`): a quiet arrow plus the parent's name
+  ("Users", "Applications"), the same on every record route. It steps back
+  through browser history when the entry just below is the parent list (search,
+  filters, page and scroll return intact) and otherwise goes to the canonical
+  parent. Don't hand-roll arrow links or put "Back to…" buttons in
+  `secondaryActions` or empty states. Tab changes inside a record use
+  `replace`, so Back leaves the record in one press. In-page drill-downs that
+  change `?role=`/`tab` state, not the route, use `DrilldownBackButton`, which
+  looks the same.
+
 - **Record pages use the same header as every other page.** An avatar goes in
   `leading` and the identity line in `meta` — don't hand-roll a second header
   layout with its own `h1` size and an `ml-auto` action block, which strands
@@ -985,6 +996,7 @@ anything else.
 | A short, self-contained dialog that passed the test above | `Modal` (controlled or `trigger`) | Hand-rolled Radix Dialog; anything the table above sends to a route |
 | A single-record editor opened from a list or workspace | `SidePanelEditor` | Recreating a right sheet's focus, close, header and footer behavior in a route component |
 | Report a failed load/submit in place | `ContextualError` (+ retry) | A toast alone |
+| Inline notice about the surrounding content (error, warning, success) | `Alert` with `variant` `destructive`, `warning` or `success`, plus `AlertTitle`/`AlertDescription`; one tint (`/40` border, `/10` fill) for every tone. Keep the role the situation needs (`role="status"` for non-urgent updates) | Hand-rolled `border-warning/40 bg-warning/10` boxes with their own opacities |
 | Confirm a completed action | Toast (Sileo) | A modal interrupting the flow |
 | Communicate entity status | `StatusBadge` with a `tone` and its dot, or an `icon` replacing the dot (queue states: `QueueStatusBadge`); `StatusDot` is the shared quiet dot/label presentation. Neither needs a pill or outline. | Coloured prose, custom pills, badges for static metadata |
 | A dashboard metric | `StatCard` (delta/footer slots for meters/sparklines); compact definition lists for supporting scanner totals, with the primary count emphasized | An identical card for every supporting count |
@@ -1317,6 +1329,18 @@ otherwise add no label. Native mobile pickers only speak the phone's zone, so
 (`toPickerDate`) and converts the answer back (`fromPickerDate`). Public pages
 and the TV already format with the zone in `GET /api/public/event`.
 
+On web there is one display path: `formatEventDate(value, language, preset)`
+(or `eventDateFormat` for a reusable formatter) in `lib/datetime.ts`. It
+follows the UI language and the event zone, never the browser's. Any stored
+timestamp ("submitted", "created", "opens", "expires", a publish time) uses the
+`dateTime` preset ("05 Jan 2026, 14:30"), so it reads the same on every screen.
+Presets spell out their fields instead of `dateStyle`/`timeStyle`, because
+browsers differ on the glue ("," versus "at"). Add a new named preset for a
+genuinely different shape (compact `dayMonthTime`, chart buckets, `clock`);
+do not call `Intl.DateTimeFormat` or `toLocale*String` for a displayed
+timestamp. Only `datetime-local` input values use `toDatetimeLocal` /
+`fromDatetimeLocal`.
+
 ## 11. Web specifics
 
 **Summary: Next.js 16 + shadcn (vendored) + Tailwind v4 tokens; sidebar
@@ -1394,8 +1418,13 @@ architecture: [`mobile.md`](./mobile.md).**
   source of visual values; import from `@/theme`. Colours (`colors`) are UIKit
   semantic colours on iOS and the same palette as fixed light/dark pairs on
   Android (never Material You, never a Material ripple). `space` (4-pt grid plus
-  the 6/10 UIKit half-steps), `radius` (`control` 12, `container` 14, `sheet` 22,
-  `full` capsule, always with `borderCurve: "continuous"`), `type` (Apple text
+  the 6/10 UIKit half-steps), `radius` (`chip` 10, `control` 12, `container` 14, `sheet` 22,
+  `full` capsule, always with `borderCurve: "continuous"`). One radius per role:
+  fields and glass controls `control`; cards, grouped sections, banners and
+  floating menus `container`; modals `sheet`; buttons and badges `full`; a
+  segment nested in a padded track is the track radius minus the padding
+  (`chip` inside a `control` track). Circles derived from their own size
+  (44 pt icon buttons, 50 pt glass buttons) keep half their side as the radius, `type` (Apple text
   styles, plus `compact` 14) and `motion` (durations and springs) are in
   `theme/tokens.ts`. Font weight stops at 700. Text is `AppText` (or `type.*`
   spread into a style); screens
