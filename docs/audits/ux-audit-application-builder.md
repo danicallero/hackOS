@@ -19,7 +19,7 @@ then confirming each finding against the source.
 
 | # | Severity | Finding | Fix |
 | --- | --- | --- | --- |
-| 1 | 🔴 High | `FormPreviewPanel`/`FormPreviewModal` (`[id]/form-preview.tsx`) only render the custom `fields` array — never the shirt-size/dietary fields the server injects when the logistics toggles are on. Toggle it on, hit Preview, see nothing. | Fetch the food-intolerance dictionary once in `QuestionsCard`; append synthetic preview-only fields (mirroring `service.ts`'s `SHIRT_SIZE_FIELD`/`FOOD_NOTES_FIELD`) when `form.ask_shirt_size`/`form.ask_food_intolerances` are true; pass through to the preview components. |
+| 1 | 🔴 High | `FormPreviewPanel`/`FormPreviewModal` (`[id]/form-preview.tsx`) only render the custom `fields` array — never the shirt-size/dietary fields the server injects when the logistics toggles are on. Toggle it on, hit Preview, see nothing. | Fetch the food-intolerance dictionary once in `QuestionsCard`; append synthetic preview-only fields (mirroring `applications/forms.ts`'s shirt-size/dietary fields) when `form.ask_shirt_size`/`form.ask_food_intolerances` are true; pass through to the preview components. |
 | 2 | 🟡 Medium | The "New application form" creation modal never mentions shirt/dietary. They're silently pre-set based on person type and only visible later, scrolled down in the Form tab. | Add the same two switches to the creation modal, pre-checked to match today's silent default, so the decision is visible and editable at creation time. |
 | 3 | 🟡 Medium | No unsaved-changes protection. Add a question, navigate away, it's gone — no warning. `settings/event/page.tsx` already has this pattern (`useUnsavedChangesGuard` + per-tab `onDirtyChange`); the builder doesn't. | Thread the same `onDirtyChange`/aggregate-guard pattern through `MetadataCard`, `QuestionsCard`, and `applications/[id]/page.tsx`. |
 | 4 | 🟡 Medium | Form settings and Questions are separate cards with separate Save buttons and separate `Saved`/`Unsaved` badges — easy to save one and forget the other, no aggregate signal. | Once #3's dirty-state plumbing exists, surface a small aggregate "unsaved changes" indicator near the page header. **Not** merging the two PATCH flows into one save action — bigger, riskier scope, explicitly deferred. |
@@ -89,7 +89,7 @@ Two more rounds on the same surface, same session.
 ### Event-configurable shirt-size list
 
 The shirt-size picker was hardcoded (`["XS","S","M","L","XL","XXL"]`) in six
-places: `applications/service.ts` (API, the actual submit-time field/validation),
+places: `applications/submission.ts` (API, the actual submit-time field/validation),
 and five web spots — `my-applications/lib.ts` (participant form), `applications/[id]/shared.ts`
 (builder preview), `claim-account/page.tsx` (invite claim), `settings/profile/page.tsx`
 (self-edit), `users/[id]/overview-tab.tsx` (staff edit). Made `event_config.shirt_sizes`
@@ -97,7 +97,7 @@ and five web spots — `my-applications/lib.ts` (participant form), `application
 
 - API: `GET /api/public/event` now returns `shirtSizes` (public — invite-claim
   and participant pages are unauthenticated/low-privilege contexts); `PUT /api/event`
-  accepts and validates it (unique, 1–20 entries). `applications/service.ts`'s
+  accepts and validates it (unique, 1–20 entries). `applications/forms.ts`'s
   `enrichTemplate` reads it live instead of a hardcoded const, so the
   submit-time select field's options — and therefore validation — follow
   whatever is currently configured.
@@ -318,7 +318,7 @@ one-question-at-a-time interaction landed.
   is derived from which fields are already set (`text_condition` → "text",
   `pattern` → "regex", else "length"), and switching category clears the
   other category's fields so stale values can't linger and fire silently.
-- Relaxed URL validation (`SIMPLE_URL_RE` in `service.ts`) so `https://` is
+- Relaxed URL validation so `https://` is
   optional — applicants no longer have to type a scheme for a field validated
   as "Is a URL" to accept it.
 - Removed the `file-url` field kind entirely (schema, web types, kind icons,
@@ -340,7 +340,7 @@ one-question-at-a-time interaction landed.
   *not* inline-editable here, since the dedicated edit-response endpoint this
   modal's edit mode uses intentionally excludes this data (a past-bug
   safeguard already documented in that endpoint). `getResponseDetail()` in
-  `service.ts` was changed to return the *raw* template plus `sections`/
+  `applications/response-details.ts` was changed to return the *raw* template plus `sections`/
   `ask_shirt_size`/`ask_food_intolerances` instead of a server-enriched
   template, to match what `ResponsesTab`'s pathway already provided and avoid
   double-counting these fields once the client synthesizes them itself.

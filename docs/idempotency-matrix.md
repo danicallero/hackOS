@@ -28,7 +28,7 @@ retry contract.
   threshold.
 
 A key reused after its window executes again as a new request. Because the
-table is bounded, the account-removal scrub in `identity/removal.ts` scans at
+table is bounded, the account-removal scrub in `identity/scrub.ts` scans at
 most 7 days of rows.
 
 ## Exactly-once boundary

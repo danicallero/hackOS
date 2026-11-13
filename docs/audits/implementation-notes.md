@@ -46,7 +46,7 @@ alongside `extractDni`, add the client-side prefill branch, then add the key
 to `RESERVED_FIELD_KEYS` — see the doc comment on that constant.
 
 **Endpoints / hooks.**
-- `apps/api/src/modules/applications/service.ts:submitResponse` — on submit, in
+- `apps/api/src/modules/applications/submission.ts:submitResponse` — on submit, in
   the same transaction that writes shirt size / intolerances to the user row, it
   now also mirrors a national-ID answer onto `users.dni` via
   `extractDni(responses)` (matches a `dni` key in any casing; `COALESCE` keeps a
@@ -175,7 +175,7 @@ compatibility grant is deliberately absent from templates.
 confirmed|declined|expired`).
 
 **State transitions (new / fixed).**
-- `service.ts:revokeSpot` — **new** transition `accepted | confirmed → rejected`.
+- `decisions.ts:revokeSpot` — **new** transition `accepted | confirmed → rejected`.
   This is the "reject / decline a spot even after the participant confirmed"
   case, which had **no path** before (`decide` requires `review`;
   `revertDecision` only flips *unsent* internal decisions). It invalidates the
@@ -199,7 +199,7 @@ confirmed|declined|expired`).
   "pure applicant" (`isPureApplicant` in `apps/web/src/lib/session.tsx` — no
   confirmed spot, no capability, not an enterprise judge or sponsor rep).
   The same "confirmed → lost" transition also revokes roles:
-  `service.ts:revokeApplicationGrantedRoles` deletes the `user_roles` row(s)
+  `internal.ts:revokeApplicationGrantedRoles` deletes the `user_roles` row(s)
   `doConfirm` granted (H8/H11) for that application's `application_grants_roles`,
   cascading through `identity/role-grants.ts:applyRoleAssignmentRevokeRules`
   the same way manual role removal does. A row with `source = 'manual'` (an
@@ -208,7 +208,7 @@ confirmed|declined|expired`).
   (`revertDecision(…, "review")`, `decide` + `send-decision`) — verified.
 
 **Batch (fixed "flaky" behaviour).**
-- `service.ts:runBatch` — shared helper: deterministic id order, one row's
+- `decision-batches.ts:runBatch` — shared helper: deterministic id order, one row's
   failure never aborts the rest, and **every skip is reported** as
   `{ id, reason }`. Previously batches did `catch {}` and returned only a count,
   so partial failures were invisible.
@@ -229,7 +229,7 @@ the batch toast now surfaces the skipped count + first reason.
 
 **Schema.** None new.
 
-**Endpoints.** `service.ts:listUserResponsesForStaff` +
+**Endpoints.** `application-reads.ts:listUserResponsesForStaff` +
 `GET /api/users/:id/applications` (`APPLICATIONS_REVIEW`) — a user's responses
 with their **real** staff-side status (not the applicant mask).
 
@@ -255,7 +255,7 @@ H23/H24), and a badge/"Batch" assignment control on profile details
 
 ## H54 account deletion: implementation bug fixes
 
-The full schema, state machine, and removal.ts data flow are documented in
+The full schema, state machine, and removal data flow are documented in
 [`account-deletion.md`](../account-deletion.md) —
 not restated here. Two bug fixes from this work, unrelated to that doc's
 scope:
@@ -271,7 +271,7 @@ scope:
 **Schema.** None new; same `app_response_status` enum as Module 2.
 
 **Bug fix — rejection email sent twice (H14).**
-`service.ts:batchSendDecisions` (the row-selection "Send" action,
+`decision-batches.ts:batchSendDecisions` (the row-selection "Send" action,
 `POST /api/responses/batch/send-decision`) used to fall through to a resend for
 any row already at `accepted`/`rejected`/`expired`, with no
 `decision_sent_at` guard — unlike the toolbar's `sendDecisionsBatch`, which
@@ -280,8 +280,7 @@ listed unsent (`accepted_internal`/`rejected_internal`) and already-sent
 (`accepted`/`rejected`) rows together, a "select all + Send" there could
 re-fire a real rejection email. Fixed: `batchSendDecisions` now only ever acts
 on `accepted_internal`/`rejected_internal` and skips (reports, doesn't resend)
-anything else. Explicit re-sends are a separate, deliberate action: `service.ts
-:resendDecision` now also handles `rejected` (folded in what used to be the
+anything else. Explicit re-sends are a separate, deliberate action: `decisions.ts:resendDecision` now also handles `rejected` (folded in what used to be the
 private `resendRejectedDecision`), and a new
 `batchResendDecisions` / `POST /api/responses/batch/resend-decision` covers the
 batch case. See the `resendDecision`/`batchSendDecisions` doc comments.
@@ -342,7 +341,7 @@ starting status (previously only reachable via the removed
 above was a stopgap; `submitted` never had any code path that could produce
 it (`submitResponse` always lands on `review`/`confirmed`), so it was pure
 dead weight — `decide()`'s alias branch, the duplicate `computeAvailableActions`
-copies (`applications/service.ts` and `identity/routes/profile.ts`), and the
+copies (`applications/response-details.ts` and `identity/routes/profile.ts`), and the
 `WORKSPACE_STATUSES.review`/label/tone maps mentioning it. A migration
 (`0209_remove_submitted_status.sql`) rebuilds the `app_response_status` enum
 without the value (Postgres has no `DROP VALUE`), guarded by a check that
@@ -354,7 +353,7 @@ a real step, which had drifted from the code well before this cleanup.
 have both an `active` boolean and an `open_at`/`close_at` window — two
 independent "is this open" gates with two different UI controls. Removed
 entirely (`0207_remove_application_active.sql`); "open" is now derived purely
-from the window (`service.ts:isWindowOpen`). An admin who wants a form closed
+from the window (`forms.ts:isWindowOpen`). An admin who wants a form closed
 sets `close_at` instead of toggling a separate switch.
 
 **Follow-up — review modal redesign (H13).**

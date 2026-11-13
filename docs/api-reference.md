@@ -211,8 +211,11 @@ review and confirmation. The decision-maker can optionally allow that one
 response to resubmit after the form window closes and auto-accept that next
 submission with a fresh confirmation email. Form deletion removes its responses, reviews,
 versions, grants and confirmation tokens transactionally; anonymous-retention
-records remain a deliberate deletion boundary. The confirmation-window expirer (`applications/expirer.ts`)
-is a background tick, not a request path.
+records remain a deliberate deletion boundary. The confirmation-window expirer worker is registered in `applications/expirer.ts`;
+its transition implementation lives in `applications/expirations.ts`, not a
+request path. The public `applications/service.ts` entry point re-exports the
+split form, submission, review, decision, confirmation, response-read and
+expirer services; shared transition locks live in `applications/internal.ts`.
 
 Acceptance email links carry their bearer token in a URL fragment so the web
 server, referrer and request logs do not receive it. Landing pages do not act on
