@@ -1,23 +1,17 @@
 import { Image } from "expo-image";
-import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Animated, Easing, Linking, ScrollView, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Link } from "expo-router";
+import { useEffect, useRef } from "react";
+import { Animated, Easing, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
-import { SheetModal } from "@/components/app-sheet";
-import { ChallengeSheet } from "@/components/challenge-detail";
 import { FavouriteStar } from "@/components/favourite-star";
-import { EmptyState, FloatingGlassButton, Section, Separator } from "@/components/native-ui";
+import { EmptyState } from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
-import { NoteRow, QuickAction } from "@/components/profile-parts";
-import { NavRow } from "@/components/project-ui";
-import { SymbolView } from "@/components/symbol";
 import {
   collectionProgress,
   companyMonogram,
   type SponsorCollection,
   type SponsorCollectionItem,
 } from "@/lib/diary-sponsors";
-import { displayUrl } from "@/lib/directory";
 import { useLocale } from "@/lib/i18n";
 import { colors, radius, type } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
@@ -25,23 +19,20 @@ import { useParticipantLayout } from "@/theme/layout-participant";
 const MIN_CELL = 100;
 const MAX_COLUMNS = 6;
 const GRID_GAP = 12;
-const ROW_ICON_INSET = 52;
 
 /**
  * Companies (#935): a sticker album of the sponsor stands an attendee can
- * collect by scanning them. Collected badges are in full colour and open a
- * company sheet; the rest stay as locked silhouettes with their names, so
+ * collect by scanning them. Collected badges are in full colour and zoom into the
+ * company page; the rest stay as locked silhouettes with their names, so
  * attendees know who is left to find.
  */
 export function CompanyAlbum({
   collection,
   highlightId,
-  onOpen,
 }: {
   collection: SponsorCollection;
   /** The company just collected by a scan; its badge celebrates once. */
   highlightId: number | null;
-  onOpen: (item: SponsorCollectionItem) => void;
 }) {
   const { t } = useLocale();
   const readable = useParticipantLayout("list");
@@ -58,12 +49,7 @@ export function CompanyAlbum({
       <View style={{ flexDirection: "row", flexWrap: "wrap", rowGap: 20 }}>
         {collection.items.map((item) => (
           <View key={item.enterpriseId} style={{ width: `${100 / columns}%` }}>
-            <CompanyBadge
-              item={item}
-              size={size}
-              celebrate={item.enterpriseId === highlightId}
-              onOpen={() => onOpen(item)}
-            />
+            <CompanyBadge item={item} size={size} celebrate={item.enterpriseId === highlightId} />
           </View>
         ))}
       </View>
@@ -146,7 +132,31 @@ function AlbumProgress({ collected, total }: { collected: number; total: number 
   );
 }
 
-/** A round sticker: the logo on white, or a locked silhouette until collected. */
+/**
+ * Drains the colour from whatever sits under it (the parent must `isolation: "isolate"`).
+ * React Native's `filter` has no grayscale on iOS, and expo-image has no such prop.
+ */
+export function Desaturate() {
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        backgroundColor: "gray",
+        bottom: 0,
+        left: 0,
+        mixBlendMode: "saturation",
+        position: "absolute",
+        right: 0,
+        top: 0,
+      }}
+    />
+  );
+}
+
+/**
+ * A round sticker: the logo on white in full colour once collected; until then
+ * the same disc with the logo desaturated and faded, no lock or extra copy.
+ */
 function Medallion({
   item,
   size,
@@ -163,15 +173,15 @@ function Medallion({
         style={{
           alignItems: "center",
           // Logos are designed for a light ground, so the sticker stays white
-          // in dark mode too. An empty slot is a dashed outline.
-          backgroundColor: collected ? colors.accentText : colors.surface,
-          borderColor: collected ? colors.separator : colors.tertiaryLabel,
+          // in dark mode too.
+          backgroundColor: colors.accentText,
+          borderColor: colors.separator,
           borderRadius: size / 2,
-          borderStyle: collected ? "solid" : "dashed",
-          borderWidth: collected ? 1 : 1.5,
+          borderWidth: 1,
           boxShadow: collected ? "0 3px 10px rgba(0,0,0,0.14)" : undefined,
           height: size,
           justifyContent: "center",
+          isolation: "isolate",
           overflow: "hidden",
           width: size,
         }}
@@ -181,18 +191,16 @@ function Medallion({
             accessible={false}
             source={{ uri: logo }}
             contentFit="contain"
-            // Uncollected logos render as a flat silhouette of their shape.
-            tintColor={collected ? undefined : (colors.tertiaryLabel as string)}
             style={{
               height: size * 0.62,
-              opacity: collected ? 1 : 0.55,
+              opacity: collected ? 1 : 0.5,
               width: size * 0.62,
             }}
           />
         ) : (
           <Text
             style={{
-              color: collected ? colors.label : colors.secondaryLabel,
+              color: collected ? colors.label : colors.tertiaryLabel,
               fontSize: size * 0.3,
               fontWeight: "700",
             }}
@@ -200,6 +208,7 @@ function Medallion({
             {companyMonogram(item.name)}
           </Text>
         )}
+        {collected ? null : <Desaturate />}
       </View>
       {collected && item.entry?.starred ? (
         <View
@@ -219,28 +228,6 @@ function Medallion({
           <FavouriteStar on size={16} />
         </View>
       ) : null}
-      {collected ? null : (
-        <View
-          style={{
-            alignItems: "center",
-            backgroundColor: colors.surface,
-            borderRadius: radius.control,
-            bottom: 0,
-            height: 24,
-            justifyContent: "center",
-            position: "absolute",
-            right: 0,
-            width: 24,
-          }}
-        >
-          <SymbolView
-            accessible={false}
-            name="lock.fill"
-            size={12}
-            tintColor={colors.secondaryLabel}
-          />
-        </View>
-      )}
     </View>
   );
 }
@@ -249,12 +236,10 @@ function CompanyBadge({
   item,
   size,
   celebrate,
-  onOpen,
 }: {
   item: SponsorCollectionItem;
   size: number;
   celebrate: boolean;
-  onOpen: () => void;
 }) {
   const { t } = useLocale();
   const collected = item.entry !== null;
@@ -293,9 +278,15 @@ function CompanyBadge({
             width: size + 16,
           }}
         />
-        <Animated.View style={{ transform: [{ scale }] }}>
-          <Medallion item={item} size={size} collected={collected} />
-        </Animated.View>
+        {/* The zoom source is a plain, untransformed view: iOS snapshots it, and an animated
+            transform on the source itself breaks the open and dismiss zoom. */}
+        <Link.AppleZoom>
+          <View style={{ height: size, width: size }}>
+            <Animated.View style={{ transform: [{ scale }] }}>
+              <Medallion item={item} size={size} collected={collected} />
+            </Animated.View>
+          </View>
+        </Link.AppleZoom>
       </View>
       <Text
         numberOfLines={2}
@@ -312,197 +303,15 @@ function CompanyBadge({
     </View>
   );
 
-  if (!collected) {
-    return (
-      <View accessible accessibilityLabel={t("diaryCompanyLocked", { name: item.name })}>
+  return (
+    <Link href={`/companies/${item.enterpriseId}`} asChild>
+      <PressableFeedback
+        feedback="opacity"
+        accessibilityRole="button"
+        accessibilityLabel={collected ? item.name : t("diaryCompanyLocked", { name: item.name })}
+      >
         {content}
-      </View>
-    );
-  }
-  return (
-    <PressableFeedback
-      feedback="opacity"
-      accessibilityRole="button"
-      accessibilityLabel={item.name}
-      onPress={onOpen}
-    >
-      {content}
-    </PressableFeedback>
-  );
-}
-
-/** One collected company: not a person profile, a compact stand card. */
-export function CompanySheet({
-  item,
-  busy,
-  onClose,
-  onToggleStar,
-  onEditNote,
-  onRemove,
-  children,
-}: {
-  item: SponsorCollectionItem | null;
-  busy: boolean;
-  onClose: () => void;
-  onToggleStar: () => void;
-  onEditNote: () => void;
-  onRemove: () => void;
-  /**
-   * Sheets opened from this one (the note editor). iOS presents a modal only
-   * from the top-most controller, so a sibling page sheet would silently
-   * never appear over this one; rendered inside, it stacks.
-   */
-  children?: ReactNode;
-}) {
-  const { t, language } = useLocale();
-  const insets = useSafeAreaInsets();
-  const entry = item?.entry ?? null;
-  const sheetContent = useParticipantLayout("form").content;
-  // H45: a challenge's brief stacks over this sheet (see `children`).
-  const [challengeId, setChallengeId] = useState<number | null>(null);
-  const collectedOn = entry
-    ? new Date(entry.createdAt).toLocaleDateString(language, { day: "numeric", month: "long" })
-    : null;
-  return (
-    <SheetModal
-      visible={item !== null && entry !== null}
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      {item && entry ? (
-        <View style={{ backgroundColor: colors.background, flex: 1 }}>
-          {/* Room for the 44pt glass close circle the other sheets use. */}
-          <View style={{ height: 60 }} />
-          <ScrollView
-            testID="company-sheet"
-            contentContainerStyle={{
-              gap: 24,
-              paddingBottom: Math.max(32, insets.bottom + 16),
-              ...sheetContent,
-            }}
-          >
-            <View style={{ alignItems: "center", gap: 12 }}>
-              <Medallion item={item} size={112} collected />
-              <View style={{ alignItems: "center", gap: 4 }}>
-                <Text
-                  accessibilityRole="header"
-                  style={{
-                    color: colors.label,
-                    fontSize: type.title.fontSize,
-                    fontWeight: "700",
-                    textAlign: "center",
-                  }}
-                >
-                  {item.name}
-                </Text>
-                {collectedOn ? (
-                  <Text style={{ color: colors.secondaryLabel, fontSize: type.subhead.fontSize }}>
-                    {t("diaryCompanyCollectedOn", { date: collectedOn })}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <QuickAction
-                icon={entry.starred ? "star.fill" : "star"}
-                iconTint={entry.starred ? colors.warning : colors.accent}
-                label={t(entry.starred ? "diaryUnfavourite" : "diaryFavourite")}
-                title={t("diaryFavourite")}
-                selected={entry.starred}
-                busy={busy}
-                onPress={onToggleStar}
-                iconNode={<FavouriteStar on={entry.starred} size={22} />}
-              />
-              <QuickAction
-                icon="note.text"
-                label={t(entry.note ? "diaryEditNote" : "diaryNote")}
-                title={t(entry.note ? "diaryEditNote" : "diaryNote")}
-                busy={false}
-                onPress={onEditNote}
-              />
-              {item.website ? (
-                <QuickAction
-                  icon="globe"
-                  label={`${t("directoryWebsite")}, ${displayUrl(item.website)}`}
-                  title={t("directoryWebsite")}
-                  busy={false}
-                  onPress={() => void Linking.openURL(item.website as string)}
-                />
-              ) : null}
-            </View>
-
-            {item.description ? (
-              <Section>
-                <Text
-                  selectable
-                  style={{
-                    color: colors.label,
-                    fontSize: type.callout.fontSize,
-                    lineHeight: 23,
-                    paddingHorizontal: 16,
-                    paddingVertical: 14,
-                  }}
-                >
-                  {item.description}
-                </Text>
-              </Section>
-            ) : null}
-
-            {entry.note ? (
-              <Section title={t("diaryNote")}>
-                <NoteRow note={entry.note} hint={t("diaryEditNote")} onPress={onEditNote} />
-              </Section>
-            ) : null}
-
-            {item.challenges.length > 0 ? (
-              <Section title={t("directoryChallenges")}>
-                {item.challenges.map((challenge, index) => (
-                  <View key={challenge.id}>
-                    {index > 0 ? <Separator inset={ROW_ICON_INSET} /> : null}
-                    <NavRow
-                      icon="trophy"
-                      title={challenge.name}
-                      onPress={() => setChallengeId(challenge.id)}
-                    />
-                  </View>
-                ))}
-              </Section>
-            ) : null}
-
-            <Section>
-              <PressableFeedback
-                feedback="row"
-                accessibilityRole="button"
-                accessibilityState={{ disabled: busy }}
-                disabled={busy}
-                onPress={onRemove}
-                style={{
-                  alignItems: "center",
-                  justifyContent: "center",
-                  minHeight: 50,
-                  paddingHorizontal: 16,
-                }}
-              >
-                <Text style={{ color: colors.destructive, fontSize: type.callout.fontSize }}>
-                  {t("diaryCompanyRemove")}
-                </Text>
-              </PressableFeedback>
-            </Section>
-          </ScrollView>
-          <FloatingGlassButton
-            top={16}
-            side="right"
-            icon="xmark"
-            accessibilityLabel={t("close")}
-            onPress={onClose}
-          />
-          {children}
-          {challengeId !== null ? (
-            <ChallengeSheet challengeId={challengeId} onClose={() => setChallengeId(null)} />
-          ) : null}
-        </View>
-      ) : null}
-    </SheetModal>
+      </PressableFeedback>
+    </Link>
   );
 }

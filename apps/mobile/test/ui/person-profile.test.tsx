@@ -11,6 +11,7 @@ const mockBack = jest.fn();
 const mockRouterPush = jest.fn();
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ id: mockId }),
+  Link: require("./mock-link").makeLink((href: unknown) => mockRouterPush(href)),
   useRouter: () => ({ back: mockBack, canGoBack: () => true, push: mockRouterPush }),
 }));
 jest.mock("expo-router/stack", () => ({ __esModule: true, default: { Screen: () => null } }));
@@ -49,6 +50,14 @@ jest.mock("@/components/glass-view", () => ({
 }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
 jest.mock("@/lib/haptics", () => ({ haptic: jest.fn() }));
+let mockTint: string | null = null;
+jest.mock("@/lib/image-tint", () => ({
+  prefetchImageTint: jest.fn(),
+  useImageTint: (uri: string | null | undefined) => ({
+    color: uri ? mockTint : null,
+    fromCache: true,
+  }),
+}));
 jest.mock("@/theme/colors", () => ({
   colors: new Proxy({}, { get: (_target, key) => (key === "__esModule" ? false : "black") }),
 }));
@@ -94,6 +103,7 @@ let diary: DiaryEntry[];
 beforeEach(() => {
   mockId = "101";
   personResult = profile;
+  mockTint = null;
   diary = [entry];
   mockDownload.mockReset().mockResolvedValue({ uri: "file:///cache/ana-souto-cv.pdf" });
   mockShare.mockReset().mockResolvedValue(undefined);
@@ -130,6 +140,40 @@ it("shows the whole profile with the saved note", async () => {
   expect(screen.queryByRole("button", { name: "diaryNote" })).toBeNull();
   await fireEvent.press(screen.getByRole("link", { name: "GitHub, github.com/ana" }));
   expect(open).toHaveBeenCalledWith("https://github.com/ana");
+});
+
+it("tints the hero from the photo's colour and stays plain without one (H48)", async () => {
+  mockTint = "#3366cc";
+  await renderMobile(<PersonProfileScreen />);
+  await screen.findByText("Ana Souto");
+  expect(screen.getByTestId("person-hero").props.style.experimental_backgroundImage).toContain(
+    "rgba(51,102,204,0.5)",
+  );
+});
+
+it("keeps the plain background without a colour or a photo (H48)", async () => {
+  await renderMobile(<PersonProfileScreen />);
+  await screen.findByText("Ana Souto");
+  expect(screen.queryByTestId("person-hero")).toBeNull();
+  mockTint = "#3366cc";
+  personResult = { ...profile, photoUrl: null };
+  await renderMobile(<PersonProfileScreen />);
+  expect(screen.queryByTestId("person-hero")).toBeNull();
+});
+
+it("lists every company the person belongs to, each opening its page (H44)", async () => {
+  personResult = {
+    ...profile,
+    enterprises: [
+      { id: 4, name: "Acme", logoUrl: null },
+      { id: 9, name: "Globex", logoUrl: null },
+    ],
+  };
+  await renderMobile(<PersonProfileScreen />);
+  await screen.findByText("Ana Souto");
+  await fireEvent.press(screen.getByRole("button", { name: "Globex" }));
+  expect(screen.getByRole("button", { name: "Acme" })).toBeTruthy();
+  expect(mockRouterPush).toHaveBeenCalledWith("/companies/9");
 });
 
 it("offers Report on another person's profile (H18)", async () => {

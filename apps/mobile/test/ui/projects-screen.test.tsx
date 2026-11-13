@@ -31,6 +31,7 @@ jest.mock("@/components/header-back-button", () => ({
 }));
 jest.mock("expo-router", () => ({
   useScrollToTop: jest.fn(),
+  Link: require("./mock-link").makeLink((href: unknown) => mockPush(href)),
   useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),
   useFocusEffect: (callback: () => undefined | (() => void)) => {
     const { useEffect } = jest.requireActual("react");

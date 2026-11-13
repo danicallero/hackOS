@@ -170,6 +170,12 @@ authenticated route `/api/users/<id>/photo?v=<op prefix>`; the web prefixes it
 with the API origin (`apiAssetUrl` in `apps/web/src/lib/directory.ts`) so the
 session cookie travels with the image request.
 
+Besides the owner, staff and readers who saved the person, any signed-in user may read a
+shared photo (`show_photo` on a visible profile) while the person speaks at a shown,
+participant-visible schedule item or represents a visible company (H44, H48): that is
+what lets the schedule and company pages show an avatar (`photoPublishedOnPublicSurface`).
+The profile card follows the same rule (`profilePublishedOnPublicSurface`, below).
+
 ### CV from the application
 
 The profile picks the CV up from the application automatically. Application
@@ -201,7 +207,13 @@ removal, like any other upload.
 ## What a reader sees
 
 A reader is an attendee who saved the person in their diary by scanning their
-badge or ticket.
+badge or ticket. Without a scan, any attendee with event access may also read
+the card of an opted-in person (`directory_visible`) who
+speaks at a shown, published, participant-audience schedule item or is a member
+of a visible, non-synthetic company (H44, H48): the people the schedule and
+company pages already show. Opened this way the card carries no `cvUrl` and
+the CV route answers 404: the CV stays scan-only. Nobody else is readable
+unsaved, and no field is added by this rule.
 
 `DirectoryEntry` is the complete list of exposed fields:
 
@@ -216,6 +228,8 @@ badge or ticket.
 | `projects[]` `{kind, id, name}` | every active `submissions` → `repos` (`kind: "project"`), then every active, unlinked `planned_work_groups` membership (`kind: "workGroup"`), each by id | `show_project` |
 | `project` | deprecated: the first of `projects` (or `null`), kept for app builds that predate the list | `show_project` |
 | `challenges[]` `{id, name}` | published, non-test challenges of any of those projects (`queue_entries`) or groups (`planned_work_group_challenges`) | `show_project` |
+| `activities[]` `{id, title, startsAt, endsAt, location}` | shown schedule items the person speaks at (`schedule_speakers`, H48), by start time; only items visible to the participant audience with a due `publishAt` | always (`[]` when none) |
+| `enterprises[]` `{id, name, logoUrl}` | every visible, non-synthetic company the person is a sponsor member of (`sponsors`, H44; a person can have several rows), oldest membership first, once each | always (`[]` when none) |
 | `helpTopics[]` `{id, name}` | the person's help desk knowledge (`helper_topics`, H61; [`help-desk.md`](./help-desk.md)) | their helper profile is published (`[]` otherwise) |
 
 Nothing else leaves the module: no email, DNI, badge, intolerances,
@@ -236,7 +250,7 @@ a test account. The same rule decides whether a scan saves the person
 | `GET /api/me/public-profile` | authenticated + event access |
 | `PUT /api/me/public-profile` | authenticated + event access, `Idempotency-Key` |
 | `GET /api/directory/:userId` | event access + the person is in the caller's diary (#935) |
-| `GET /api/directory/:userId/cv` | as above; visible profile with `share_cv`. Also help desk readers (`helpdesk:request`/`offer`/`coverage`) for a published helper with `share_cv`, no scan needed (H61, H63) |
+| `GET /api/directory/:userId/cv` | readers who saved the person only (not the speaker/representative rule); visible profile with `share_cv`. Also help desk readers (`helpdesk:request`/`offer`/`coverage`) for a published helper with `share_cv`, no scan needed (H61, H63) |
 | `POST /api/me/public-profile/cv` | authenticated + event access, multipart, `Idempotency-Key` |
 | `DELETE /api/me/public-profile/cv` | authenticated + event access, `Idempotency-Key` |
 | `GET /api/me/public-profile/cv` | authenticated (own CV, shared or not) |
@@ -258,7 +272,7 @@ account photo for scanner rosters, independent of `show_photo`. The route schema
 - There is no listing route and no save-by-id route; people are added to a
   diary only by `POST /api/me/diary/scan`.
 - `GET /api/directory/:userId` answers 404 for missing, hidden and unsaved
-  people alike, so visibility cannot be probed.
+  people alike (unsaved speakers and company representatives excepted), so visibility cannot be probed.
 - `GET /api/me/public-profile` returns the settings plus `preview`, the entry
   as readers would see it if visible.
 - `GET /api/directory/:userId/cv` and `GET /api/users/:id/photo` answer the
@@ -285,8 +299,10 @@ address stays visible next to the icon; links open with
 and challenges. Empty rows are omitted. A 404 (hidden or missing) shows
 "Person not found"; other failures keep an inline error with Retry. It
 refetches on `domain.changed` for the `directory` topic. Only attendees who
-saved the person in their diary may open it; the API answers the same 404 to
-anyone else.
+saved the person, or who is a shown speaker or company representative, may
+open it; the API answers the same 404 to anyone else. A person opened without
+a diary entry shows no CV row, favourite star, note or remove action: those
+need the reader's diary entry.
 
 Every CV link on the web (the person page, the owner's file name and the
 "View CV" link of the My profile preview) opens the shared viewer

@@ -841,6 +841,25 @@ The web audience filter mirrors mobile: empty audiences mean staff-only, and a s
 projection keeps that filter available even before staff-only activities are scheduled.
 
 Schedule filters retain the unfiltered day/hour grid and only remove event blocks.
+
+### Speakers and companies on activities (H44, H48)
+
+`components/public/schedule-links.tsx` is the one renderer: `SpeakerStack`
+(overlapping avatars, `+N` overflow, so 1, 3 or ~15 speakers take one line),
+`CompanyMarks` (small logos), `ScheduleLinks` (compact, for rows and blocks)
+and `ScheduleLinksDetail` (full lists; rows link to `/people/:id` and
+`/companies/:id` only for signed-in viewers, both reads need a session). The
+staff editor (`schedule-links-fields.tsx`) keeps speakers as an ordered,
+height-bounded list with drag handle, move up/down and remove. The timetable
+marks the live activity (red "Now") and the next one, offers a day strip, a
+company filter, search over speaker and company names, and opens
+`/timetable?activity=ID` (read once on mount, never written back). The company
+page (`/companies/:id`, `components/sponsors/company-profile.tsx`) reads
+`GET /api/enterprises/:id/profile`; its hero tint is computed in the browser
+from the logo (`useLogoColor` in `lib/company.ts`, cached per URL, neutral when
+the canvas is tainted). `/people/:userId` lists the person's companies and talks;
+the CV stays scan-only. Tolerates both the legacy single-company and the
+`enterprises[]` API shapes (`speakerCompanies`, `personCompanies`).
 Short blocks use compact padding and line heights so title, category and time fit
 inside their actual duration; filtering does not collapse the calendar to a single hour.
 

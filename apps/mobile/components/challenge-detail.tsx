@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { Link, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { Linking, ScrollView, Text, View } from "react-native";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
@@ -6,8 +6,10 @@ import { SheetModal } from "@/components/app-sheet";
 import { EntryBackToolbar } from "@/components/header-back-button";
 import { EmptyState, FloatingGlassButton, Section, Separator } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { type ChallengeDetail, fetchChallengeDetail, type GalleryPage } from "@/lib/projects";
@@ -105,28 +107,48 @@ export function ChallengeDetailBody({
       ) : null}
       {company ? (
         <Section>
-          <View
-            style={{
-              alignItems: "center",
-              flexDirection: "row",
-              gap: 12,
-              minHeight: 60,
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-            }}
-          >
-            <PersonAvatar size={40} name={company.name} uri={company.logoUrl} kind="sponsor" />
-            <Text
+          <Link href={`/companies/${company.id}`} asChild>
+            <PressableFeedback
+              feedback="row"
+              accessibilityRole="button"
+              accessibilityLabel={company.name}
               style={{
-                color: colors.label,
-                flex: 1,
-                fontSize: type.body.fontSize,
-                fontWeight: "600",
+                alignItems: "center",
+                flexDirection: "row",
+                gap: 12,
+                minHeight: 60,
+                paddingHorizontal: 16,
+                paddingVertical: 8,
               }}
             >
-              {company.name}
-            </Text>
-          </View>
+              <Link.AppleZoom>
+                <View>
+                  <PersonAvatar
+                    size={40}
+                    name={company.name}
+                    uri={company.logoUrl}
+                    kind="sponsor"
+                  />
+                </View>
+              </Link.AppleZoom>
+              <Text
+                style={{
+                  color: colors.label,
+                  flex: 1,
+                  fontSize: type.body.fontSize,
+                  fontWeight: "600",
+                }}
+              >
+                {company.name}
+              </Text>
+              <SymbolView
+                name="chevron.right"
+                size={13}
+                tintColor={colors.tertiaryLabel}
+                accessible={false}
+              />
+            </PressableFeedback>
+          </Link>
           {company.website ? (
             <>
               <Separator inset={68} />

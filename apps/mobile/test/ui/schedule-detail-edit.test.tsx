@@ -31,6 +31,7 @@ jest.mock("expo-router/stack", () => ({
   __esModule: true,
   default: { Screen: () => null, Toolbar: () => null },
 }));
+jest.mock("@/components/avatar-row", () => ({ AvatarRow: () => null }));
 jest.mock("@/components/glass-view", () => ({
   GlassView: ({ children }: { children: ReactNode }) => <MockView>{children}</MockView>,
   isRealLiquidGlassAvailable: () => false,

@@ -451,6 +451,27 @@ table uses. A linked sponsor rep instead only sees *live* items explicitly
 tagged `sponsor`, with owners/contactNote but never the (staff-internal)
 notes/visibility. One feed, not three parallel endpoints.
 
+**Speakers and companies (H44, H48; no dedicated story).** `schedule_speakers`
+(ordered by `position`, users) and `schedule_enterprises` (companies, no speaker
+needed) hang off an item (migration `0709`). Every schedule item shape —
+`GET /api/schedule`, `GET /api/public/activities` and the write responses —
+carries `speakers: {userId, name, firstName, surname, avatarUrl, enterprises: {id, name}[]}[]`
+and `enterprises: {id, name, logoUrl}[]`. `firstName`/`surname` are the account's separate name parts (initials on avatars without a photo); `avatarUrl` is set only while the
+person shares their photo on their public profile; a speaker's `enterprises` lists every company they belong to (a person can have several `sponsors` rows), oldest membership first, once each; both it and the item's
+`enterprises` leave out hidden companies for anyone who is not staff. `POST` and
+`PATCH /api/schedule` accept `speakerUserIds` (order = position) and
+`enterpriseIds` with replace-all semantics (omitted keeps the list on `PATCH`,
+`[]` clears it); an unknown or inactive id answers 400 and nothing is saved. The
+write is audited in the same transaction with the ids before and after.
+`GET /api/enterprises/:id/profile` (any signed-in user; sponsors module) is the
+company page: details, `representatives` (the company's `sponsors` members, with `firstName`/`surname` like speakers),
+revealed `challenges` (`summary` = start of the description) and `activities` —
+the caller's own audience-filtered schedule feed narrowed to items linked to the
+company or spoken at by one of its members, once each, by start time. A hidden
+company answers 404 unless the caller is staff. A person's public profile card
+(`/api/directory/:userId`, `/api/users/:id/public-profile` preview) lists the
+participant-visible items they speak at and their visible company ([directory](./directory.md)).
+
 The Manage Schedule table's optional "Live Activity" column reads the listing's
 `liveActivityAudience` (#966), and its "Export CSV" action (any
 `schedule:read`/`schedule:manage` holder) builds the file client-side from the

@@ -61,6 +61,20 @@ describe("enterprise management (H43-H45)", () => {
     expect(mine.json().id).toBe(entId);
   });
 
+  it("lets schedule managers list enterprises for the company picker (H48)", async () => {
+    const a = await getApp();
+    const editor = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const plain = await createUser();
+    expect(
+      (await a.inject({ method: "GET", url: "/api/enterprises", headers: asUser(editor) }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await a.inject({ method: "GET", url: "/api/enterprises", headers: asUser(plain) }))
+        .statusCode,
+    ).toBe(403);
+  });
+
   it("requires an exact enterprise relationship and preserves wildcard access", async () => {
     const a = await getApp();
     const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);

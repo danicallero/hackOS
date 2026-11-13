@@ -372,6 +372,8 @@ export async function scrubRelationships(
   // ownership rows for that account and only detach authorship from rows that
   // belong to somebody else (H54).
   await client.query(`DELETE FROM schedule_owners WHERE user_id = $1`, [userId]);
+  // H48: anonymized accounts keep their users row, so the cascade would not run.
+  await client.query(`DELETE FROM schedule_speakers WHERE user_id = $1`, [userId]);
   await client.query(`UPDATE schedule_owners SET assigned_by = NULL WHERE assigned_by = $1`, [
     userId,
   ]);

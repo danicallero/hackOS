@@ -53,12 +53,14 @@ import {
   type PublicScheduleItem,
   type ScheduleInput,
   type ScheduleOwner,
+  type ScheduleSpeaker,
   type ScheduleTranslations,
 } from "@/lib/logistics";
 import type { RsvpKind } from "@/lib/rsvp";
 import { toast } from "@/lib/toast";
 import type { Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { ScheduleLinksFields } from "./schedule-links-fields";
 import { scheduleAudienceLabel } from "./schedule-model";
 
 const LANGUAGES = ["es", "gl", "en"] as const;
@@ -99,6 +101,8 @@ export function scheduleItemToForm(
   const form = sharedScheduleItemToForm(item, accountLanguage);
   return {
     ...form,
+    speakerUserIds: (item.speakers ?? []).map((s) => s.userId),
+    enterpriseIds: (item.enterprises ?? []).map((e) => e.id),
     description: form.description ?? "",
     location: form.location ?? "",
     contactNote: form.contactNote ?? "",
@@ -141,6 +145,8 @@ export function cleanScheduleForm(form: ScheduleInput): ScheduleInput {
     liveActivityAudience: (form.audiences ?? []).length > 0 && form.liveActivityAudience === true,
     contactNote: form.contactNote?.trim() || null,
     notes: form.notes?.trim() || null,
+    speakerUserIds: form.speakerUserIds ?? [],
+    enterpriseIds: form.enterpriseIds ?? [],
   };
 }
 
@@ -192,6 +198,7 @@ export function ScheduleFormModal({
   title,
   initial,
   initialTranslations,
+  initialSpeakers = [],
   onSubmit,
   scheduleId,
 }: {
@@ -207,6 +214,8 @@ export function ScheduleFormModal({
    * translation entry.
    */
   initialTranslations?: ScheduleTranslations;
+  /** Display data for the item's current speakers (ids live in `initial`). */
+  initialSpeakers?: ScheduleSpeaker[];
   /**
    * `pendingOwners` is only populated in create mode (no `scheduleId` yet)
    * — the caller is responsible for assigning them to the newly created item
@@ -445,6 +454,13 @@ export function ScheduleFormModal({
             </SelectContent>
           </Select>
         </Field>
+
+        <ScheduleLinksFields
+          speakerUserIds={values.speakerUserIds ?? []}
+          enterpriseIds={values.enterpriseIds ?? []}
+          initialSpeakers={initialSpeakers}
+          onChange={(next) => setValues((v) => ({ ...v, ...next }))}
+        />
 
         <Field id="schedule-audiences" label={t("audienceLabel")}>
           <p className="text-muted-foreground -mt-1 text-xs">{t("staffSeeAllHint")}</p>

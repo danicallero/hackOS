@@ -822,6 +822,7 @@
   "diaryCompaniesEmpty": "No companies",
   "diaryCompanyLocked": "{name}, not collected yet",
   "diaryCompanyCollectedOn": "Collected {date}",
+  "diaryCompanyVisitBooth": "Visit their booth to collect it",
   "diaryCompanyRemove": "Remove from collection",
   "accountStands": "Company tags",
   "standsTitle": "Company tags",
@@ -1115,5 +1116,13 @@
   "rsvpUnanswered": "No answer",
   "couldNotSaveRsvps": "Could not save your answers",
   "rsvpClosed": "Closed",
-  "rsvpNoItems": "No activities are asking for your RSVP."
+  "rsvpNoItems": "No activities are asking for your RSVP.",
+  "companyRepresentatives": "Representatives",
+  "companyChallenges": "Challenges",
+  "companyActivities": "Activities",
+  "companyMore": "More",
+  "companyNotFound": "Company not available",
+  "scheduleSpeakers": "Speakers",
+  "scheduleCompanies": "Companies",
+  "personTalks": "Talks"
 }

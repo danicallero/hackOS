@@ -1,6 +1,7 @@
 "use client";
 
 import { type ActivityKind, activityKindLabelKey } from "@hackos/shared/activity-kinds";
+import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
@@ -17,6 +18,11 @@ import {
   segmentLabel,
   type ViewerScheduleSegment,
 } from "@/components/public/schedule-audience-filter";
+import {
+  deriveScheduleCompanies,
+  matchesScheduleCompanyFilter,
+  scheduleLinksText,
+} from "@/components/public/schedule-company-filter";
 import {
   deriveScheduleKinds,
   matchesScheduleKindFilter,
@@ -55,6 +61,7 @@ export function PublicScheduleView() {
   // with "just workshops" instead of picking one axis.
   const [search, setSearch] = useState("");
   const [locations, setLocations] = useState<string[]>([]);
+  const [companyFilter, setCompanyFilter] = useState<Set<string>>(new Set());
   const [kindFilter, setKindFilter] = useState<Set<ActivityKind>>(new Set());
   // The signed-in attendee's own answers (RSVP), so what they said they will attend is one filter away.
   const { me } = useSessionContext();
@@ -100,6 +107,7 @@ export function PublicScheduleView() {
   }, [loadEvent, loadSchedule]);
 
   const availableSegments = useMemo(() => deriveViewerScheduleSegments(items ?? []), [items]);
+  const availableCompanies = useMemo(() => deriveScheduleCompanies(items ?? []), [items]);
   const availableKinds = useMemo(() => deriveScheduleKinds(items ?? []), [items]);
   const displayedItems = useMemo(
     () =>
@@ -107,13 +115,14 @@ export function PublicScheduleView() {
         (item) =>
           matchesScheduleSegmentFilter(item, segmentFilter) &&
           matchesScheduleKindFilter(item, kindFilter) &&
+          matchesScheduleCompanyFilter(item, companyFilter) &&
           (!attendanceFilter.size || attendanceFilter.has(answers.get(item.id) ?? "")) &&
           (!locations.length || locations.includes(item.location ?? "")) &&
           normalizeSearchText(
-            `${item.title} ${item.description ?? ""} ${item.location ?? ""}`,
+            `${item.title} ${item.description ?? ""} ${item.location ?? ""} ${scheduleLinksText(item)}`,
           ).includes(normalizeSearchText(search)),
       ) ?? null,
-    [items, segmentFilter, kindFilter, attendanceFilter, answers, locations, search],
+    [items, segmentFilter, kindFilter, companyFilter, attendanceFilter, answers, locations, search],
   );
   const answered = [...answers.values()].some((answer) => answer === "yes" || answer === "unsure");
   const filters: FilterDefinition[] = [
@@ -147,6 +156,19 @@ export function PublicScheduleView() {
               label: t(activityKindLabelKey(kind)),
               color: `var(--schedule-${kind})`,
             })),
+          },
+        ]
+      : []),
+    ...(availableCompanies.length > 0
+      ? [
+          {
+            id: "company",
+            label: t("scheduleCompaniesLabel"),
+            icon: BuildingsIcon,
+            type: "multiple" as const,
+            value: [...companyFilter],
+            onChange: (values: string[]) => setCompanyFilter(new Set(values)),
+            options: availableCompanies.map((c) => ({ value: String(c.id), label: c.name })),
           },
         ]
       : []),

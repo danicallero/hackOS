@@ -822,6 +822,7 @@
   "diaryCompaniesEmpty": "Non hai empresas",
   "diaryCompanyLocked": "{name}, aínda sen conseguir",
   "diaryCompanyCollectedOn": "Conseguida o {date}",
+  "diaryCompanyVisitBooth": "Visita o seu stand para conseguila",
   "diaryCompanyRemove": "Quitar da colección",
   "accountStands": "Etiquetas de empresa",
   "standsTitle": "Etiquetas de empresa",
@@ -1115,5 +1116,13 @@
   "rsvpUnanswered": "Sen resposta",
   "couldNotSaveRsvps": "Non se puideron gardar as túas respostas",
   "rsvpClosed": "Pechado",
-  "rsvpNoItems": "Non hai actividades que che pidan RSVP."
+  "rsvpNoItems": "Non hai actividades que che pidan RSVP.",
+  "companyRepresentatives": "Representantes",
+  "companyChallenges": "Retos",
+  "companyActivities": "Actividades",
+  "companyMore": "Máis",
+  "companyNotFound": "Empresa non dispoñible",
+  "scheduleSpeakers": "Ponentes",
+  "scheduleCompanies": "Empresas",
+  "personTalks": "Charlas"
 }

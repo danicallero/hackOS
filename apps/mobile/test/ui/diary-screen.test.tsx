@@ -65,6 +65,7 @@ jest.mock("expo-router", () => ({
   useNavigation: () => mockNavigation,
   useRouter: () => ({ push: mockPush, setParams: mockSetParams }),
   useFocusEffect: (effect: () => void) => require("react").useEffect(effect, [effect]),
+  Link: require("./mock-link").makeLink((href: unknown) => mockPush(href)),
 }));
 jest.mock("expo-router/stack", () => {
   const { Pressable } = require("react-native");
@@ -386,7 +387,7 @@ describe("People", () => {
     expect(screen.queryByLabelText("diaryCompaniesProgress:1/2")).toBeNull();
     await fireEvent.press(screen.getByTestId("connection-celebration"));
     await waitFor(() => expect(screen.queryByTestId("connection-celebration")).toBeNull());
-    expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "104" } });
+    expect(mockPush).toHaveBeenCalledWith("/people/104");
     expect(haptic).toHaveBeenCalledWith("success");
     expect(screen.getByText("Bea R.")).toBeTruthy();
   });
@@ -401,9 +402,7 @@ describe("People", () => {
     expect(haptic).toHaveBeenCalledWith("success");
     // Once it covers the screen, the person joins the list and their profile
     // opens underneath, so both are in place when it fades.
-    await waitFor(() =>
-      expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "104" } }),
-    );
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/people/104"));
     expect(screen.getByTestId("connection-celebration")).toBeTruthy();
     expect(screen.getByText("Bea R.")).toBeTruthy();
     await fireEvent.press(screen.getByTestId("connection-celebration"));
@@ -418,7 +417,7 @@ describe("People", () => {
     await waitFor(() => expect(screen.queryByTestId("connection-celebration")).toBeNull(), {
       timeout: 4000,
     });
-    expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "104" } });
+    expect(mockPush).toHaveBeenCalledWith("/people/104");
   });
 
   it("celebrates over the QR camera without closing it first", async () => {
@@ -433,7 +432,7 @@ describe("People", () => {
     expect(calls("/api/me/diary/scan")).toHaveLength(1);
     await fireEvent.press(screen.getByTestId("connection-celebration"));
     await waitFor(() => expect(screen.queryByRole("button", { name: "qr fixture" })).toBeNull());
-    expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "104" } });
+    expect(mockPush).toHaveBeenCalledWith("/people/104");
   });
 
   it("uses a still crossfade under reduced motion", async () => {
@@ -543,7 +542,7 @@ describe("People", () => {
     await fireEvent.press(
       await screen.findByRole("button", { name: "Ana S., Builds robots, Rover" }),
     );
-    expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "101" } });
+    expect(mockPush).toHaveBeenCalledWith("/people/101");
     expect(screen.queryByRole("button", { name: /^diaryUnavailablePerson/ })).toBeNull();
   });
 
@@ -679,20 +678,11 @@ describe("Companies", () => {
     expect(screen.queryByRole("button", { name: "Beta" })).toBeNull();
   });
 
-  it("opens a company sheet and favourites it without a person layout", async () => {
+  it("opens the company page from a collected badge", async () => {
     mockParams = { view: "companies" };
     await renderMobile(<DiaryScreen />);
     await fireEvent.press(await screen.findByRole("button", { name: "Acme" }));
-    expect(await screen.findByText("Acme description")).toBeTruthy();
-    expect(screen.getByText("Vision")).toBeTruthy();
-    await fireEvent.press(screen.getByRole("button", { name: "diaryFavourite" }));
-    await waitFor(() =>
-      expect(apiFetch).toHaveBeenCalledWith(
-        "/api/me/diary/3",
-        expect.objectContaining({ method: "PATCH", body: JSON.stringify({ starred: true }) }),
-      ),
-    );
-    expect(await screen.findByRole("button", { name: "diaryUnfavourite" })).toBeTruthy();
+    expect(mockPush).toHaveBeenCalledWith("/companies/9");
   });
 
   it("switches to Companies and reloads the album after a stand scan", async () => {
