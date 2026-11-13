@@ -67,9 +67,7 @@ describe("role-derivation consistency across screens", () => {
   // Untyped `require` (no @types/node in this workspace) rather than an ES
   // `import` of node:fs/node:path, which would need type declarations this
   // package doesn't carry.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const fs = require("node:fs");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const path = require("node:path");
   // process.cwd() rather than __dirname: this workspace has no @types/node,
   // so __dirname isn't ambient-typed here. Jest's rootDir is this package
