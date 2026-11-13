@@ -19,10 +19,10 @@ interface Row {
 }
 
 async function readWindows(db: Queryable): Promise<{ rows: Row[]; now: Date }> {
-  const [{ rows }, clock] = await Promise.all([
-    db.query<Row>("SELECT starts_at, ends_at FROM helpdesk_open_windows ORDER BY starts_at, id"),
-    db.query<{ now: Date }>("SELECT now() AS now"),
-  ]);
+  const { rows } = await db.query<Row>(
+    "SELECT starts_at, ends_at FROM helpdesk_open_windows ORDER BY starts_at, id",
+  );
+  const clock = await db.query<{ now: Date }>("SELECT now() AS now");
   return { rows, now: (clock.rows[0] as { now: Date }).now };
 }
 
