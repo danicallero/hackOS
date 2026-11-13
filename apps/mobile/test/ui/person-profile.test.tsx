@@ -55,6 +55,7 @@ jest.mock("@/lib/image-tint", () => ({
   prefetchImageTint: jest.fn(),
   useImageTint: (uri: string | null | undefined) => ({
     color: uri ? mockTint : null,
+    settled: !uri || mockTint !== null,
     fromCache: true,
   }),
 }));
@@ -142,23 +143,25 @@ it("shows the whole profile with the saved note", async () => {
   expect(open).toHaveBeenCalledWith("https://github.com/ana");
 });
 
-it("tints the hero from the photo's colour and stays plain without one (H48)", async () => {
+it("tints the hero from the photo's colour (H48)", async () => {
   mockTint = "#3366cc";
   await renderMobile(<PersonProfileScreen />);
   await screen.findByText("Ana Souto");
   expect(screen.getByTestId("person-hero").props.style.experimental_backgroundImage).toContain(
-    "rgba(51,102,204,0.5)",
+    "rgba(51,102,204,0.8)",
   );
 });
 
-it("keeps the plain background without a colour or a photo (H48)", async () => {
+it("waits for the photo's colour, and is blue without a photo (H48)", async () => {
   await renderMobile(<PersonProfileScreen />);
   await screen.findByText("Ana Souto");
   expect(screen.queryByTestId("person-hero")).toBeNull();
   mockTint = "#3366cc";
   personResult = { ...profile, photoUrl: null };
   await renderMobile(<PersonProfileScreen />);
-  expect(screen.queryByTestId("person-hero")).toBeNull();
+  expect(screen.getByTestId("person-hero").props.style.experimental_backgroundImage).toContain(
+    "rgba(0,122,255,0.8)",
+  );
 });
 
 it("lists every company the person belongs to, each opening its page (H44)", async () => {
