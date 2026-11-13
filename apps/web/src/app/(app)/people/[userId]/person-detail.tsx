@@ -247,18 +247,18 @@ export function PersonProfile({
     <>
       <HeroBleed color={entry.photoColor ?? photoColor}>
         {context}
-        <header className="flex flex-col items-center gap-3 pt-6 text-center">
+        <header className="flex flex-col items-center gap-3 pt-6 text-center sm:flex-row sm:items-center sm:gap-6 sm:text-left">
           <UserAvatar
             name={entry.displayName}
             image={entry.photoUrl}
-            className="size-28 shadow-md ring-4 ring-background/70"
+            className="size-28 shrink-0 shadow-md ring-4 ring-background/70 sm:size-32"
             fallbackClassName="text-3xl"
             showInitials
             decorative
             presenceLabel={present ? t("helpDeskPresent") : undefined}
           />
-          <div className="min-w-0 space-y-1">
-            <h1 className="font-display text-3xl leading-tight wrap-anywhere">
+          <div className="min-w-0 space-y-2">
+            <h1 className="font-display text-3xl leading-tight wrap-anywhere sm:text-4xl">
               {entry.displayName}
             </h1>
             {entry.headline && (
@@ -266,7 +266,7 @@ export function PersonProfile({
             )}
           </div>
           {(visibleRole || entry.cvUrl) && (
-            <div className="flex flex-wrap items-center justify-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
               {visibleRole && <Badge variant="secondary">{visibleRole}</Badge>}
               {entry.cvUrl && (
                 <CvViewer
@@ -288,19 +288,16 @@ export function PersonProfile({
         {entry.bio && (
           <p className="max-w-prose whitespace-pre-line wrap-anywhere text-pretty">{entry.bio}</p>
         )}
-        {rows.length > 0 && (
-          <dl className="divide-y divide-border/60">
-            {rows.map((row) => (
-              <div
-                key={row.id}
-                className="grid min-w-0 gap-1 py-3 text-sm sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-4"
-              >
-                <dt className="text-muted-foreground">{row.label}</dt>
-                <dd className="min-w-0">{row.value}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
+        {rows.map((row) => (
+          <section
+            key={row.id}
+            aria-label={row.label}
+            className="min-w-0 space-y-2 border-t border-border/60 pt-5 text-sm"
+          >
+            <h2 className="type-meta font-medium text-muted-foreground">{row.label}</h2>
+            <div className="min-w-0 text-base">{row.value}</div>
+          </section>
+        ))}
         {children}
       </PageLayout>
     </>

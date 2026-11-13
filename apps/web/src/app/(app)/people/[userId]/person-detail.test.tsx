@@ -194,7 +194,7 @@ describe("shared helper identity (H63)", () => {
     await act(async () => renderProfile(true));
     expect(container.querySelector("header")?.textContent).toContain("Mentor");
     expect(container.querySelector('img[src$="/api/enterprises/7/logo"]')).not.toBeNull();
-    expect([...container.querySelectorAll("dt")].map((el) => el.textContent)).toEqual([
+    expect([...container.querySelectorAll("section > h2")].map((el) => el.textContent)).toEqual([
       "helpDeskCompany",
       "helpDeskKnowledge",
     ]);
