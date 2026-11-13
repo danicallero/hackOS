@@ -6,8 +6,7 @@ import { HeroBleed } from "@/components/common/hero-bleed";
 import { useLogoColor } from "@/lib/company";
 import { useLocale } from "@/lib/i18n";
 import type { NativeProject } from "@/lib/native-projects";
-import { cn } from "@/lib/utils";
-import { ProjectCarousel, projectGallery } from "./project-carousel";
+import { projectGallery } from "./project-carousel";
 
 /**
  * Tinted top of a project record (H47, H48): back link, title, state and
@@ -31,8 +30,7 @@ export function ProjectRecordHero({
 }) {
   const { t } = useLocale();
   const inGallery = usePathname().startsWith("/gallery");
-  const gallery = projectGallery(files);
-  const cover = gallery?.images[0];
+  const cover = projectGallery(files)?.images[0];
   // Project assets are authenticated API paths: the sampler sends cookies.
   const color = useLogoColor(cover ? assetUrl(cover.thumbnailUrl ?? cover.url) : null, {
     credentials: true,
@@ -42,23 +40,14 @@ export function ProjectRecordHero({
   return (
     <HeroBleed color={color} contentClassName="max-w-6xl">
       <BackLink href={backHref} label={backLabel} />
-      <header
-        className={cn("grid gap-6 pt-4 lg:gap-8", gallery && "lg:grid-cols-[22rem_minmax(0,1fr)]")}
-      >
-        {gallery && (
-          <ProjectCarousel
-            images={gallery.images}
-            assetUrl={assetUrl}
-            className="mx-auto w-full max-w-sm lg:mx-0 lg:max-w-none"
-          />
-        )}
-        <div className="flex min-w-0 flex-col justify-end gap-4">
+      <header className="flex flex-col gap-4 pt-2 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0 space-y-3">
           <h1 className="font-display text-3xl leading-tight text-balance wrap-anywhere sm:text-5xl">
             {name}
           </h1>
           {state}
-          {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </div>
+        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </header>
     </HeroBleed>
   );

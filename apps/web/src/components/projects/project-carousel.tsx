@@ -26,16 +26,25 @@ export function ProjectCarousel({
   images,
   assetUrl,
   className,
+  fit = "cover",
 }: {
   images: ProjectFile[];
   assetUrl: (path: string) => string;
   className?: string;
+  /** `contain` shows whole screenshots on a muted ground; `cover` fills the frame. */
+  fit?: "cover" | "contain";
 }) {
   const [index, setIndex] = useState(0);
   const [open, setOpen] = useState(false);
   const current = images[open ? index : 0];
   return (
-    <div className={cn("relative overflow-hidden rounded-2xl bg-card shadow-lg", className)}>
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-2xl",
+        fit === "contain" ? "bg-muted" : "bg-card shadow-lg",
+        className,
+      )}
+    >
       <ul
         className="flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         onScroll={(event) => {
@@ -44,7 +53,13 @@ export function ProjectCarousel({
         }}
       >
         {images.map((file) => (
-          <li key={file.objectKey} className="aspect-[4/3] w-full shrink-0 snap-center">
+          <li
+            key={file.objectKey}
+            className={cn(
+              "w-full shrink-0 snap-center",
+              fit === "contain" ? "aspect-video" : "aspect-[4/3]",
+            )}
+          >
             <button
               type="button"
               onClick={() => setOpen(true)}
@@ -56,7 +71,7 @@ export function ProjectCarousel({
                 src={assetUrl(file.thumbnailUrl ?? file.url)}
                 alt=""
                 crossOrigin="use-credentials"
-                className="size-full object-cover"
+                className={cn("size-full", fit === "contain" ? "object-contain" : "object-cover")}
               />
             </button>
           </li>

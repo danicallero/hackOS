@@ -1,7 +1,6 @@
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { TrophyIcon } from "@phosphor-icons/react/dist/ssr/Trophy";
 import Link from "next/link";
-import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { UserAvatar } from "@/components/common/user-avatar";
 import { Button } from "@/components/ui/button";
@@ -20,7 +19,6 @@ export function ProjectOverview({
   review,
   showQueue = false,
   asideExtra,
-  omitFieldKeys,
 }: {
   project: NativeProject;
   language: Language;
@@ -38,12 +36,10 @@ export function ProjectOverview({
   showQueue?: boolean;
   /** Extra content after the team. */
   asideExtra?: React.ReactNode;
-  /** Answers shown elsewhere on the page (the cover gallery). */
-  omitFieldKeys?: string[];
 }) {
   return (
-    <div className="grid w-full items-start gap-8 lg:grid-cols-[22rem_minmax(0,1fr)]">
-      <div className="min-w-0 space-y-8 lg:col-start-2 lg:row-start-1">
+    <div className="grid w-full items-start gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="min-w-0 space-y-8">
         {review}
         {project.winners?.map((winner) => (
           <StatusBadge
@@ -54,7 +50,40 @@ export function ProjectOverview({
             {winner.challengeTitle} · {labels.rank.replace("{rank}", String(winner.rank))}
           </StatusBadge>
         ))}
-        <SectionCard title={labels.challenges} variant="plain">
+        <ProjectAnswers project={project} language={language} assetUrl={assetUrl} />
+      </div>
+      <aside className="min-w-0 space-y-8 lg:sticky lg:top-6">
+        {(project.members.length === 0 ||
+          project.members.some((member) => member.status !== "declined" && member.name)) && (
+          <AsideBlock title={labels.team}>
+            {project.members.length === 0 && (
+              <p className="text-sm text-muted-foreground">{labels.noMembers}</p>
+            )}
+            <ul className="divide-y divide-border/60">
+              {project.members
+                .filter((member) => member.status !== "declined" && member.name)
+                .map((member) => (
+                  <li key={member.userId} className="flex items-center gap-3 py-3">
+                    {member.photoUrl && (
+                      <UserAvatar
+                        name={`${member.name ?? ""} ${member.surname ?? ""}`.trim()}
+                        image={assetUrl(member.photoUrl)}
+                        className="size-10"
+                        decorative
+                      />
+                    )}
+                    <span className="min-w-0 flex-1 wrap-anywhere">
+                      {`${member.name ?? ""} ${member.surname ?? ""}`.trim()}
+                    </span>
+                    {member.status === "invited" && (
+                      <span className="text-sm text-muted-foreground">{labels.pending}</span>
+                    )}
+                  </li>
+                ))}
+            </ul>
+          </AsideBlock>
+        )}
+        <AsideBlock title={labels.challenges}>
           {project.challenges.length === 0 && (
             <p className="text-sm text-muted-foreground">{labels.noChallenges}</p>
           )}
@@ -86,46 +115,7 @@ export function ProjectOverview({
               </li>
             ))}
           </ul>
-        </SectionCard>
-        <ProjectAnswers
-          project={project}
-          language={language}
-          fallbackTitle={labels.details}
-          omitFieldKeys={omitFieldKeys}
-          assetUrl={assetUrl}
-        />
-      </div>
-      <aside className="min-w-0 space-y-6 lg:col-start-1 lg:row-start-1">
-        {(project.members.length === 0 ||
-          project.members.some((member) => member.status !== "declined" && member.name)) && (
-          <SectionCard title={labels.team} variant="plain">
-            {project.members.length === 0 && (
-              <p className="text-sm text-muted-foreground">{labels.noMembers}</p>
-            )}
-            <ul className="divide-y divide-border/60">
-              {project.members
-                .filter((member) => member.status !== "declined" && member.name)
-                .map((member) => (
-                  <li key={member.userId} className="flex items-center gap-3 py-3">
-                    {member.photoUrl && (
-                      <UserAvatar
-                        name={`${member.name ?? ""} ${member.surname ?? ""}`.trim()}
-                        image={assetUrl(member.photoUrl)}
-                        className="size-10"
-                        decorative
-                      />
-                    )}
-                    <span className="min-w-0 flex-1 wrap-anywhere">
-                      {`${member.name ?? ""} ${member.surname ?? ""}`.trim()}
-                    </span>
-                    {member.status === "invited" && (
-                      <span className="text-sm text-muted-foreground">{labels.pending}</span>
-                    )}
-                  </li>
-                ))}
-            </ul>
-          </SectionCard>
-        )}
+        </AsideBlock>
         {asideExtra}
         {((!asideExtra && project.githubUrl) || project.demoUrl) && (
           <ProjectDescriptionLinks
@@ -134,5 +124,15 @@ export function ProjectOverview({
         )}
       </aside>
     </div>
+  );
+}
+
+/** The fixed facts every project has: a small heading, then the list. */
+function AsideBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="min-w-0 space-y-2">
+      <h2 className="type-meta font-medium text-muted-foreground">{title}</h2>
+      {children}
+    </section>
   );
 }

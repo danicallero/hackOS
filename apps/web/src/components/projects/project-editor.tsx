@@ -41,7 +41,6 @@ import { useSessionContext } from "@/lib/session";
 import { DeleteProjectAction } from "./delete-project-action";
 import { GithubActivity } from "./github-activity";
 import { GithubLink } from "./github-link";
-import { projectGallery } from "./project-carousel";
 import { ProjectChallenges } from "./project-challenges";
 import { ProjectOverview } from "./project-overview";
 import { ProjectRecordHero } from "./project-record-hero";
@@ -650,7 +649,6 @@ export function ProjectEditor({
           </div>
         ) : (
           <ProjectOverview
-            omitFieldKeys={coverFieldKeys(project.files)}
             showQueue
             asideExtra={
               !staff && project.isMember ? (
@@ -712,9 +710,4 @@ export function ProjectEditor({
       </PageLayout>
     </>
   );
-}
-
-function coverFieldKeys(files: Parameters<typeof projectGallery>[0]): string[] {
-  const gallery = projectGallery(files);
-  return gallery ? [gallery.fieldKey] : [];
 }
