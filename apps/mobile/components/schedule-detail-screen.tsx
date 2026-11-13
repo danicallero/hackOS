@@ -376,7 +376,8 @@ export function ScheduleDetailScreen({
                       firstName: speaker.firstName,
                       surname: speaker.surname,
                       uri: speaker.avatarUrl,
-                      subtitle: speaker.enterpriseName,
+                      subtitle:
+                        speaker.enterprises.map((company) => company.name).join(" · ") || null,
                       href: `/people/${speaker.userId}`,
                     }))}
                   />

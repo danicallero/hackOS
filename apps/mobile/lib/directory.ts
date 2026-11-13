@@ -27,8 +27,8 @@ export interface DirectoryEntry {
     endsAt: string;
     location: string | null;
   }[];
-  /** The company the person represents, when they are a sponsor member. */
-  enterprise?: { id: number; name: string; logoUrl: string | null } | null;
+  /** Every company the person represents (a person can belong to several), oldest membership first. */
+  enterprises?: { id: number; name: string; logoUrl: string | null }[];
 }
 
 /** Absolute URL of an authenticated, root-relative API asset route. */

@@ -322,15 +322,14 @@ export const scheduleAudience = z.union([
   z.string().regex(/^role:[1-9][0-9]{0,8}$/),
 ]);
 
-/** A speaker on a schedule item, with the company they belong to when it is visible to the caller. */
+/** A speaker on a schedule item, with every company they belong to that is visible to the caller. */
 export const scheduleSpeakerSchema = z.object({
   userId: z.number().int(),
   name: z.string(),
   firstName: z.string(),
   surname: z.string().nullable(),
   avatarUrl: z.string().nullable(),
-  enterpriseId: z.number().int().nullable(),
-  enterpriseName: z.string().nullable(),
+  enterprises: z.array(z.object({ id: z.number().int(), name: z.string() })),
 });
 
 /** A company linked to a schedule item; hidden companies are left out for anyone but staff. */

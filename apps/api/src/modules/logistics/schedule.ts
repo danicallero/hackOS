@@ -141,8 +141,8 @@ export interface ScheduleSpeaker {
   firstName: string;
   surname: string | null;
   avatarUrl: string | null;
-  enterpriseId: number | null;
-  enterpriseName: string | null;
+  /** Every company the speaker belongs to that the caller may see, oldest membership first. */
+  enterprises: { id: number; name: string }[];
 }
 
 /** A company an item is linked to. */
@@ -305,19 +305,19 @@ export async function loadScheduleLinks(
                         AND u.is_test_account = false
                         AND EXISTS (SELECT 1 FROM user_event_access a WHERE a.user_id = u.id)
                    THEN u.photo_key END AS photo_key,
-              ent.id AS enterprise_id, ent.name AS enterprise_name
+              COALESCE(ent.list, '[]'::jsonb) AS enterprises
          FROM schedule_speakers ss
          JOIN users u ON u.id = ss.user_id
           AND u.account_state = 'active' AND u.anonymized_at IS NULL
          LEFT JOIN user_public_profiles p ON p.user_id = u.id
          LEFT JOIN LATERAL (
-           SELECT e.id, e.name
-             FROM sponsors sp
-             JOIN enterprises e ON e.id = sp.enterprise_id
-            WHERE sp.user_id = u.id
-              AND ($2::boolean OR (e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))
-            ORDER BY sp.id
-            LIMIT 1
+           SELECT jsonb_agg(jsonb_build_object('id', m.id, 'name', m.name) ORDER BY m.sp_id) AS list
+             FROM (SELECT e.id, e.name, min(sp.id) AS sp_id
+                     FROM sponsors sp
+                     JOIN enterprises e ON e.id = sp.enterprise_id
+                    WHERE sp.user_id = u.id
+                      AND ($2::boolean OR (e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))
+                    GROUP BY e.id, e.name) m
          ) ent ON true
         WHERE ss.schedule_id = ANY($1::int[])
         ORDER BY ss.schedule_id, ss.position, ss.user_id`,
@@ -341,8 +341,10 @@ export async function loadScheduleLinks(
       firstName: String(row.first_name),
       surname: (row.surname as string | null) ?? null,
       avatarUrl: photoUrl(userId, (row.photo_key as string | null) ?? null),
-      enterpriseId: row.enterprise_id == null ? null : Number(row.enterprise_id),
-      enterpriseName: (row.enterprise_name as string | null) ?? null,
+      enterprises: ((row.enterprises as { id: number; name: string }[]) ?? []).map((e) => ({
+        id: Number(e.id),
+        name: e.name,
+      })),
     });
   }
   for (const row of enterpriseRows as Record<string, unknown>[]) {

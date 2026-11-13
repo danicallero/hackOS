@@ -328,7 +328,7 @@ describe("saved profile reads (#934, #935)", () => {
       challenges: [{ id: challenge, name: "Green AI" }],
       helpTopics: [],
       activities: [],
-      enterprise: null,
+      enterprises: [],
     });
     const body = res.body;
     for (const forbidden of [
@@ -509,7 +509,39 @@ describe("speakers and company representatives (H44, H48)", () => {
     await repOf(rep);
     const res = await card(rep);
     expect(res.statusCode).toBe(200);
-    expect(res.json().enterprise).toMatchObject({ name: "Acme" });
+    expect(res.json().enterprises).toMatchObject([{ name: "Acme" }]);
+  });
+
+  it("lists every visible company of a representative once, hiding hidden ones", async () => {
+    const rep = await person("Rae", "Rep");
+    await putProfile(rep, VISIBLE);
+    const ids: number[] = [];
+    for (const [name, visibility] of [
+      ["Beta", "visible"],
+      ["Alpha", "visible"],
+      ["Secret", "hidden"],
+    ]) {
+      const { rows } = await pool.query(
+        `INSERT INTO enterprises (name, visibility) VALUES ($1, $2) RETURNING id`,
+        [name, visibility],
+      );
+      ids.push(rows[0].id);
+      await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+        rows[0].id,
+        rep,
+      ]);
+    }
+    // A second membership row for the same company must not duplicate it.
+    await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+      ids[0],
+      rep,
+    ]);
+    const res = await card(rep);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().enterprises).toEqual([
+      { id: ids[0], name: "Beta", logoUrl: null },
+      { id: ids[1], name: "Alpha", logoUrl: null },
+    ]);
   });
 
   it("exposes no CV without a scan, and both with one", async () => {

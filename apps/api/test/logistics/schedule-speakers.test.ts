@@ -53,8 +53,7 @@ describe("schedule speakers and companies", () => {
     expect(created.speakers[0]).toMatchObject({
       name: "Bo Peep",
       avatarUrl: null,
-      enterpriseId: acme,
-      enterpriseName: "Acme",
+      enterprises: [{ id: acme, name: "Acme" }],
     });
     expect(created.enterprises).toEqual([{ id: acme, name: "Acme", logoUrl: null }]);
 

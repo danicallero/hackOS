@@ -229,7 +229,7 @@ unsaved, and no field is added by this rule.
 | `project` | deprecated: the first of `projects` (or `null`), kept for app builds that predate the list | `show_project` |
 | `challenges[]` `{id, name}` | published, non-test challenges of any of those projects (`queue_entries`) or groups (`planned_work_group_challenges`) | `show_project` |
 | `activities[]` `{id, title, startsAt, endsAt, location}` | shown schedule items the person speaks at (`schedule_speakers`, H48), by start time; only items visible to the participant audience with a due `publishAt` | always (`[]` when none) |
-| `enterprise` `{id, name, logoUrl}` | the first visible company the person is a sponsor member of (`sponsors`, H44); `null` otherwise | always |
+| `enterprises[]` `{id, name, logoUrl}` | every visible, non-synthetic company the person is a sponsor member of (`sponsors`, H44; a person can have several rows), oldest membership first, once each | always (`[]` when none) |
 | `helpTopics[]` `{id, name}` | the person's help desk knowledge (`helper_topics`, H61; [`help-desk.md`](./help-desk.md)) | their helper profile is published (`[]` otherwise) |
 
 Nothing else leaves the module: no email, DNI, badge, intolerances,

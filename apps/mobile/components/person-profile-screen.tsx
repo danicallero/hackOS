@@ -3,7 +3,7 @@ import { HeaderHeightContext } from "expo-router/react-navigation";
 import Stack from "expo-router/stack";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { type LayoutChangeEvent, Text, View } from "react-native";
-import Animated, { runOnJS, useAnimatedReaction } from "react-native-reanimated";
+import Animated, { FadeIn, runOnJS, useAnimatedReaction } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActivityLinkSection } from "@/components/activity-link-rows";
 import { AppRefreshControl } from "@/components/app-refresh-control";
@@ -32,13 +32,16 @@ import { ProfileCard } from "@/components/profile-card";
 import { NoteRow, QuickAction } from "@/components/profile-parts";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
+import { useColorScheme } from "@/components/useColorScheme";
 import { alert } from "@/lib/alert";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { DiaryEntry } from "@/lib/diary";
 import type { DirectoryEntry } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
 import { availabilityDays, type HelperDetail } from "@/lib/help-desk";
+import { heroTint } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
+import { useImageTint } from "@/lib/image-tint";
 import { safeBack } from "@/lib/navigation";
 import { reportContent } from "@/lib/reports";
 import { isPadIdiom } from "@/lib/tabs";
@@ -73,6 +76,7 @@ export function PersonProfileScreen({
   const router = useRouter();
   const { t, language } = useLocale();
   const readable = useParticipantLayout("list");
+  const dark = useColorScheme() === "dark";
   const insets = useSafeAreaInsets();
   // iOS shows the transparent native header, whose height the automatic
   // inset adds above the avatar's true top (#935).
@@ -223,6 +227,9 @@ export function PersonProfileScreen({
   const goBack = () => safeBack(router, "/");
   const person = state.status === "ready" ? state.person : null;
   const helper = state.status === "ready" ? state.helper : null;
+  // Tinted from the photo's colour; no photo or colour keeps the plain background.
+  const photoTint = useImageTint(person?.photoUrl);
+  const hero = photoTint.color ? heroTint(photoTint.color, dark) : null;
 
   return (
     <View ref={avatarCollapse.hostRef} onLayout={avatarCollapse.onHostLayout} style={{ flex: 1 }}>
@@ -301,6 +308,21 @@ export function PersonProfileScreen({
           <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
         }
       >
+        {hero ? (
+          <Animated.View
+            entering={photoTint.fromCache ? undefined : FadeIn.duration(400)}
+            testID="person-hero"
+            pointerEvents="none"
+            style={{
+              experimental_backgroundImage: hero.gradient,
+              height: 620,
+              left: 0,
+              position: "absolute",
+              right: 0,
+              top: -300,
+            }}
+          />
+        ) : null}
         {loadError && state.status === "ready" ? (
           <RequestFeedback error={loadError} onRetry={() => void load()} retrying={refreshing} />
         ) : null}
@@ -315,6 +337,7 @@ export function PersonProfileScreen({
             <ProfileCard
               beforeKnowledge={helper ? <HelperCompany helper={helper} /> : undefined}
               data={person}
+              nameColor={hero?.foreground}
               onNameLayout={(event: LayoutChangeEvent) => {
                 avatarCollapse.onNameLayout(event);
                 const { y, height } = event.nativeEvent.layout;
@@ -380,50 +403,56 @@ export function PersonProfileScreen({
               }
             />
 
-            {person.enterprise ? (
+            {(person.enterprises ?? []).length > 0 ? (
               <Section>
-                <Link href={`/companies/${person.enterprise.id}`} asChild>
-                  <PressableFeedback
-                    feedback="row"
-                    accessibilityRole="button"
-                    accessibilityLabel={person.enterprise.name}
-                    style={{
-                      alignItems: "center",
-                      flexDirection: "row",
-                      gap: 12,
-                      minHeight: 60,
-                      paddingHorizontal: 16,
-                      paddingVertical: 8,
-                    }}
-                  >
-                    <Link.AppleZoom>
-                      <View>
-                        <PersonAvatar
-                          size={40}
-                          kind="sponsor"
-                          name={person.enterprise.name}
-                          uri={person.enterprise.logoUrl}
+                {(person.enterprises ?? []).map((company, index) => (
+                  <View key={company.id}>
+                    {index > 0 ? <Separator inset={68} /> : null}
+                    <Link href={`/companies/${company.id}`} asChild>
+                      <PressableFeedback
+                        feedback="row"
+                        accessibilityRole="button"
+                        accessibilityLabel={company.name}
+                        style={{
+                          alignItems: "center",
+                          flexDirection: "row",
+                          gap: 12,
+                          minHeight: 60,
+                          paddingHorizontal: 16,
+                          paddingVertical: 8,
+                        }}
+                      >
+                        <Link.AppleZoom>
+                          <View>
+                            <PersonAvatar
+                              size={40}
+                              kind="sponsor"
+                              name={company.name}
+                              uri={company.logoUrl}
+                            />
+                          </View>
+                        </Link.AppleZoom>
+                        <Text
+                          numberOfLines={1}
+                          style={{
+                            color: colors.label,
+                            flex: 1,
+                            fontSize: type.body.fontSize,
+                            fontWeight: "600",
+                          }}
+                        >
+                          {company.name}
+                        </Text>
+                        <SymbolView
+                          name="chevron.right"
+                          size={13}
+                          tintColor={colors.tertiaryLabel}
+                          accessible={false}
                         />
-                      </View>
-                    </Link.AppleZoom>
-                    <Text
-                      style={{
-                        color: colors.label,
-                        flex: 1,
-                        fontSize: type.body.fontSize,
-                        fontWeight: "600",
-                      }}
-                    >
-                      {person.enterprise.name}
-                    </Text>
-                    <SymbolView
-                      name="chevron.right"
-                      size={13}
-                      tintColor={colors.tertiaryLabel}
-                      accessible={false}
-                    />
-                  </PressableFeedback>
-                </Link>
+                      </PressableFeedback>
+                    </Link>
+                  </View>
+                ))}
               </Section>
             ) : null}
 

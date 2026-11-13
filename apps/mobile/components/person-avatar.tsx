@@ -1,9 +1,10 @@
 import { Image, type ImageProps } from "expo-image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { SymbolView } from "@/components/symbol";
 import { diaryInitials } from "@/lib/diary";
 import { apiImageSource } from "@/lib/directory";
+import { prefetchImageTint } from "@/lib/image-tint";
 import { colors } from "@/theme/colors";
 
 export interface ApiImage {
@@ -63,6 +64,8 @@ export function PersonAvatar({
   kind?: "person" | "sponsor";
 }) {
   const photo = useApiImage(uri);
+  // The page this avatar opens tints its hero with the image; get it ready first.
+  useEffect(() => prefetchImageTint(uri), [uri]);
   const frame = {
     alignItems: "center" as const,
     backgroundColor: colors.elevatedSurface,

@@ -17,7 +17,6 @@ import { broadcastForActiveUser } from "../logistics/active-broadcast.js";
 import { type CallerScheduleAudience, listScheduleForAudiences } from "../logistics/schedule.js";
 import { reconcileTicketAccess } from "../logistics/tickets.js";
 import { enqueueWalletSync } from "../logistics/wallet-sync.js";
-import { logoColorFromUrl } from "./logo-color.js";
 import type {
   CreateEnterpriseBody,
   EnterpriseKind,
@@ -122,7 +121,7 @@ export async function getEnterpriseProfile(
   caller: CallerScheduleAudience,
 ) {
   const { rows } = await pool.query(
-    `SELECT e.id, e.name, e.website, e.logo_url, e.logo_color,
+    `SELECT e.id, e.name, e.website, e.logo_url,
             COALESCE(e.logo_negative_url, e.logo_url) AS logo_negative_url, e.description
        FROM enterprises e
       WHERE e.id = $1
@@ -132,19 +131,6 @@ export async function getEnterpriseProfile(
   const enterprise = rows[0];
   if (!enterprise) throw new NotFoundError("Enterprise not found", { id: enterpriseId });
   if (caller.isStaff) await assertEnterpriseScope(pool, viewerId, enterpriseId);
-
-  // Logos that predate logo_color get it on first read; a failure leaves it NULL.
-  let logoTint = (enterprise.logo_color as string | null) ?? null;
-  if (logoTint == null && enterprise.logo_url) {
-    const logoUrl = String(enterprise.logo_url);
-    logoTint = await logoColorFromUrl(logoUrl);
-    if (logoTint) {
-      await pool.query(
-        "UPDATE enterprises SET logo_color = $1 WHERE id = $2 AND logo_url = $3 AND logo_color IS NULL",
-        [logoTint, enterpriseId, logoUrl],
-      );
-    }
-  }
 
   const [{ rows: people }, { rows: challengeRows }, activities] = await Promise.all([
     pool.query(
@@ -178,7 +164,6 @@ export async function getEnterpriseProfile(
     name: String(enterprise.name),
     logoUrl: (enterprise.logo_url as string | null) ?? null,
     logoNegativeUrl: (enterprise.logo_negative_url as string | null) ?? null,
-    logoColor: logoTint,
     website: (enterprise.website as string | null) ?? null,
     description: (enterprise.description as string | null) ?? null,
     representatives: people.map((row: Record<string, unknown>) => ({
@@ -284,8 +269,6 @@ export async function updateEnterprise(
       i += 1;
     }
   }
-  // A changed or removed logo invalidates its colour; the profile read recomputes it.
-  if ((patch as Record<string, unknown>).logoUrl !== undefined) sets.push("logo_color = NULL");
   values.push(id);
   try {
     return await withTransaction(async (client) => {
@@ -402,14 +385,13 @@ export async function setEnterpriseLogo(
   logoUrl: string,
   variant: "default" | "negative",
   actorId: number | null,
-  color: string | null = null,
 ) {
-  const sets = variant === "negative" ? "logo_negative_url = $1" : "logo_url = $1, logo_color = $3";
+  const sets = variant === "negative" ? "logo_negative_url = $1" : "logo_url = $1";
   return withTransaction(async (client) => {
     await assertEnterpriseScope(client, actorId, id);
     const { rows } = await client.query(
       `UPDATE enterprises SET ${sets} WHERE id = $2 RETURNING ${COLUMNS}`,
-      variant === "negative" ? [logoUrl, id] : [logoUrl, id, color],
+      [logoUrl, id],
     );
     if (!rows[0]) throw new NotFoundError("Enterprise not found", { id });
     await audit(client, {

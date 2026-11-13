@@ -1,6 +1,5 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
 import { asUser, createUser, createUserWithCapabilities, useTestApp } from "../helpers.js";
@@ -81,48 +80,6 @@ describe("GET /api/enterprises/:id/profile", () => {
     ]);
   });
 
-  it("tints the hero with the colour of the uploaded logo, and clears it when the logo changes", async () => {
-    const acme = await enterprise("Acme");
-    const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
-    const png = await sharp({
-      create: { width: 32, height: 32, channels: 4, background: "#3366cc" },
-    })
-      .png()
-      .toBuffer();
-    const boundary = `----hackos-${crypto.randomUUID()}`;
-    const upload = await (await getApp()).inject({
-      method: "POST",
-      url: `/api/enterprises/${acme}/logo`,
-      headers: {
-        ...asUser(admin),
-        "content-type": `multipart/form-data; boundary=${boundary}`,
-        "idempotency-key": `logo-${boundary}`,
-      },
-      payload: Buffer.concat([
-        Buffer.from(
-          `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="logo.png"\r\nContent-Type: image/png\r\n\r\n`,
-        ),
-        png,
-        Buffer.from(`\r\n--${boundary}--\r\n`),
-      ]),
-    });
-    expect(upload.statusCode).toBe(200);
-    const { rows } = await pool.query("SELECT logo_color FROM enterprises WHERE id = $1", [acme]);
-    expect(rows[0].logo_color).toBe("#3366cc");
-
-    const viewer = await createUser();
-    expect((await profile(viewer, acme)).json().logoColor).toBe("#3366cc");
-
-    await (await getApp()).inject({
-      method: "PATCH",
-      url: `/api/enterprises/${acme}`,
-      headers: asUser(admin),
-      payload: { logoUrl: null },
-    });
-    const cleared = await profile(viewer, acme);
-    expect(cleared.json()).toMatchObject({ logoUrl: null, logoColor: null });
-  });
-
   it("lists activities linked directly or through a member speaker, once each, by start", async () => {
     const acme = await enterprise("Acme");
     const other = await enterprise("Other");
@@ -149,9 +106,32 @@ describe("GET /api/enterprises/:id/profile", () => {
     const speaker = res.json().activities[0].speakers[0];
     expect(speaker).toMatchObject({
       userId: rep.userId,
-      enterpriseId: acme,
-      enterpriseName: "Acme",
+      enterprises: [{ id: acme, name: "Acme" }],
     });
+  });
+
+  it("lists a speaker of two companies on both pages, once, with both companies", async () => {
+    const acme = await enterprise("Acme");
+    const other = await enterprise("Other");
+    const rep = await member(acme);
+    await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+      other,
+      rep.userId,
+    ]);
+    const talk = await item("Talk");
+    await pool.query(`INSERT INTO schedule_speakers (schedule_id, user_id) VALUES ($1, $2)`, [
+      talk,
+      rep.userId,
+    ]);
+    const viewer = await createUser();
+    for (const id of [acme, other]) {
+      const activities = (await profile(viewer, id)).json().activities;
+      expect(activities.map((i: { title: string }) => i.title)).toEqual(["Talk"]);
+      expect(activities[0].speakers[0].enterprises).toEqual([
+        { id: acme, name: "Acme" },
+        { id: other, name: "Other" },
+      ]);
+    }
   });
 
   it("follows the schedule audience rules", async () => {
@@ -220,6 +200,6 @@ describe("person profile activities", () => {
     const card = res.json().preview;
     expect(card.activities.map((i: { title: string }) => i.title)).toEqual(["Workshop", "Talk"]);
     expect(card.activities[0]).toMatchObject({ id: earlier, location: null });
-    expect(card.enterprise).toEqual({ id: acme, name: "Acme", logoUrl: null });
+    expect(card.enterprises).toEqual([{ id: acme, name: "Acme", logoUrl: null }]);
   });
 });

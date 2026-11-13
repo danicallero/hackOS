@@ -45,8 +45,8 @@ export interface DirectoryEntry {
   helpTopics: { id: number; name: string }[];
   /** H48: shown schedule items the person speaks at, by start time. */
   activities: DirectoryActivity[];
-  /** The visible company the person represents, if any. */
-  enterprise: { id: number; name: string; logoUrl: string | null } | null;
+  /** Every visible company the person represents, oldest membership first. */
+  enterprises: { id: number; name: string; logoUrl: string | null }[];
 }
 
 export interface DirectoryActivity {
@@ -76,7 +76,7 @@ interface EntryRow {
   challenges: DirectoryEntry["challenges"];
   help_topics: DirectoryEntry["helpTopics"];
   activities: DirectoryActivity[];
-  enterprise: DirectoryEntry["enterprise"];
+  enterprises: DirectoryEntry["enterprises"];
 }
 
 /**
@@ -221,12 +221,14 @@ function entrySql(profiles: string, accountLinks = true): string {
               AND (s.publish_at IS NULL OR s.publish_at <= now())
               AND 'participant' = ANY (s.audiences)
          ), '[]'::jsonb) AS activities,
-         (SELECT jsonb_build_object('id', e.id, 'name', e.name, 'logoUrl', e.logo_url)
-            FROM sponsors sp
-            JOIN enterprises e ON e.id = sp.enterprise_id
-           WHERE sp.user_id = u.id AND e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}
-           ORDER BY sp.id
-           LIMIT 1) AS enterprise
+         COALESCE((
+           SELECT jsonb_agg(jsonb_build_object('id', m.id, 'name', m.name, 'logoUrl', m.logo_url) ORDER BY m.sp_id)
+             FROM (SELECT e.id, e.name, e.logo_url, min(sp.id) AS sp_id
+                     FROM sponsors sp
+                     JOIN enterprises e ON e.id = sp.enterprise_id
+                    WHERE sp.user_id = u.id AND e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}
+                    GROUP BY e.id, e.name, e.logo_url) m
+         ), '[]'::jsonb) AS enterprises
     FROM ${profiles}
     JOIN users u ON u.id = p.user_id
     ${DISPLAY_NAME_JOIN}
@@ -264,13 +266,11 @@ function toEntry(row: EntryRow, cvPath = `/api/directory/${row.user_id}/cv`): Di
       endsAt: new Date(a.endsAt).toISOString(),
       location: a.location ?? null,
     })),
-    enterprise: row.enterprise
-      ? {
-          id: Number(row.enterprise.id),
-          name: row.enterprise.name,
-          logoUrl: row.enterprise.logoUrl ?? null,
-        }
-      : null,
+    enterprises: (row.enterprises ?? []).map((e) => ({
+      id: Number(e.id),
+      name: e.name,
+      logoUrl: e.logoUrl ?? null,
+    })),
   };
 }
 

@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
-import Animated from "react-native-reanimated";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActivityLinkSection } from "@/components/activity-link-rows";
 import { AppRefreshControl } from "@/components/app-refresh-control";
@@ -33,10 +33,12 @@ import { SymbolView } from "@/components/symbol";
 import { useColorScheme } from "@/components/useColorScheme";
 import { alert } from "@/lib/alert";
 import { ApiError, apiFetch } from "@/lib/api";
-import { type CompanyProfile, fetchCompanyProfile, heroTint } from "@/lib/company";
+import { type CompanyProfile, fetchCompanyProfile } from "@/lib/company";
 import type { SponsorCollection, SponsorCollectionEntry } from "@/lib/diary-sponsors";
 import { haptic } from "@/lib/haptics";
+import { heroTint } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
+import { useImageTint } from "@/lib/image-tint";
 import { safeBack } from "@/lib/navigation";
 import { resolveScheduleText } from "@/lib/schedule";
 import { colors, radius, type } from "@/theme";
@@ -256,7 +258,11 @@ export function CompanyProfileScreen() {
   }
 
   // An uncollected company keeps the neutral grey hero instead of its logo colour.
-  const hero = heroTint(uncollected ? null : profile?.logoColor, dark);
+  // The colour is computed on the device (prefetched from the lists); until it
+  // is ready the neutral hero shows, then the tint fades in over it.
+  const logoTint = useImageTint(uncollected ? null : profile?.logoUrl);
+  const hero = heroTint(logoTint.color, dark);
+  const neutralHero = heroTint(null, dark);
   const site = profile?.website;
   const descriptionStyle = {
     color: colors.label,
@@ -300,17 +306,34 @@ export function CompanyProfileScreen() {
         }}
       >
         {profile ? (
-          <View
-            pointerEvents="none"
-            style={{
-              experimental_backgroundImage: hero.gradient,
-              height: 620,
-              left: 0,
-              position: "absolute",
-              right: 0,
-              top: -300,
-            }}
-          />
+          <>
+            <View
+              pointerEvents="none"
+              style={{
+                experimental_backgroundImage: neutralHero.gradient,
+                height: 620,
+                left: 0,
+                position: "absolute",
+                right: 0,
+                top: -300,
+              }}
+            />
+            {logoTint.color ? (
+              <Animated.View
+                entering={logoTint.fromCache ? undefined : FadeIn.duration(400)}
+                testID="company-hero"
+                pointerEvents="none"
+                style={{
+                  experimental_backgroundImage: hero.gradient,
+                  height: 620,
+                  left: 0,
+                  position: "absolute",
+                  right: 0,
+                  top: -300,
+                }}
+              />
+            ) : null}
+          </>
         ) : null}
         {state.status === "loading" ? (
           <RequestFeedback loading />

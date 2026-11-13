@@ -1,8 +1,6 @@
-jest.mock("./api", () => ({ apiFetch: jest.fn() }));
+import { heroTint } from "./hero-tint";
 
-import { heroTint } from "./company";
-
-describe("company hero tint", () => {
+describe("hero tint", () => {
   it("fades the logo colour to transparent in both schemes", () => {
     for (const dark of [false, true]) {
       expect(heroTint("#3366cc", dark).gradient).toMatch(

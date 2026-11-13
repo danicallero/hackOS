@@ -1216,8 +1216,7 @@ never slides behind the clock.
 **Company screen (H44, H45, H59).** `app/companies/[id].tsx`
 (`components/company-profile-screen.tsx`) reads `GET /api/enterprises/:id/profile`
 and follows Apple Music's artist page: a tinted gradient hero (CSS
-`experimental_backgroundImage`; `heroTint` in `lib/company.ts` tints it with the
-profile's `logoColor`, computed server-side from the logo, darkened in dark mode,
+`experimental_backgroundImage`; `heroTint` in `lib/hero-tint.ts` tints it with the logo's dominant colour, computed on the device by `lib/image-tint.ts` (Skia draws the logo at 24x24, `pickDominantColor` ignores transparent and near-white/black pixels and favours saturated buckets; nothing is stored server-side), darkened in dark mode,
 neutral grey when null, and picks the white or black foreground for the name by
 luminance), the logo in a rounded
 card with a soft shadow (the negative logo in dark mode when present), the
@@ -1229,12 +1228,23 @@ hidden or missing company shows "Company not available". iOS uses the
 transparent native header and the name joins the bar after 150 pt of scroll;
 Android and cold links float a glass back button.
 
+**Image tint (H44, H48).** `lib/image-tint.ts` keeps an in-memory colour per
+image URL. `PersonAvatar` calls `prefetchImageTint(uri)` for every logo and
+photo a list renders, so the tint is computed before the page opens: in-flight
+work is deduplicated, at most two decodes run at once, each after interactions.
+The page's `useImageTint` reads the cache synchronously, so a prefetched hero
+is already tinted; an uncached one shows the neutral hero and fades the tint in.
+Colours are not persisted, so a photo hidden later leaves no trace after a
+restart.
+
 **Speakers and companies on activities.** The schedule detail adds Speakers
-(avatar, name, company as subtitle; opens `people/[id]`; without a photo the avatar shows the first letters of first name and surname on the account avatar's blue, via `UserAvatar`, as do the company's Representatives) and Companies (logo,
+(avatar, name, companies as a truncated subtitle joined with " · "; opens `people/[id]`; without a photo the avatar shows the first letters of first name and surname on the account avatar's blue, via `UserAvatar`, as do the company's Representatives) and Companies (logo,
 name; opens `companies/[id]`) rows between the description and Information,
 from the item's optional `speakers` and `enterprises`. A person's profile
-shows their company (`enterprise`) and Talks (`activities`) when the API sends
-them, and a challenge's company row opens the company screen.
+shows every company they belong to (`enterprises`, one row each, opening its
+company screen with the same zoom) and Talks (`activities`) when the API sends
+them, tints its hero from the photo's dominant colour (same `useImageTint` and
+`heroTint`; no photo or no usable colour keeps the plain background), and a challenge's company row opens the company screen.
 
 `app/people/[id].tsx` (`components/person-profile-screen.tsx`) is a saved
 person's full profile from `GET /api/directory/:userId` (the only directory
