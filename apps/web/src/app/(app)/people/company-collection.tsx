@@ -332,7 +332,7 @@ export function CompanyCollection({ nameOf }: { nameOf: ChallengeName }) {
                   type="button"
                   variant="ghost"
                   label={t("moreActions")}
-                  className="absolute top-0 right-0 size-8"
+                  className="absolute top-1 left-1 size-8 rounded-full bg-background shadow-sm ring-1 ring-border"
                   onClick={() => setOpenId(item.enterpriseId)}
                 >
                   <DotsThreeIcon aria-hidden="true" weight="bold" />
