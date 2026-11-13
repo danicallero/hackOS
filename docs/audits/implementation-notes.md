@@ -106,7 +106,7 @@ it `sponsor`; and an effective capability makes it `staff` (or `admin`).
 Confirmed participants, accepted mentors, sponsor representatives, and
 capability holders each receive the same permanent ticket credential, so all
 attendee types can be accredited. Ticket issuance is idempotent and does not
-revoke a ticket if a relationship later changes (plan/07 invariant 10).
+revoke a ticket if a relationship later changes (plan/07 invariant 7).
 Staff with `users:write` can manually set an attendee relationship to
 participant or mentor; during accreditation, a scanner can make that same
 choice for an otherwise unassigned person before assigning their badge.
@@ -193,7 +193,7 @@ confirmed|declined|expired`).
   other tie to the event was an application they later declined or had
   revoked keeps their ticket — same reasoning as sponsor reps, who already
   had an unconditional `sponsors` branch. The `tickets` row itself is never
-  touched — plan/07 invariant 10 — only its exposure: `GET /api/me/ticket`
+  touched — plan/07 invariant 7 — only its exposure: `GET /api/me/ticket`
   returns `ticketToken: null` and new wallet-pass issuance 404s once
   `hasEventAccess` is false. Web nav hides wallet/queue/project/inbox for a
   "pure applicant" (`isPureApplicant` in `apps/web/src/lib/session.tsx` — no
@@ -347,7 +347,7 @@ copies (`applications/service.ts` and `identity/routes/profile.ts`), and the
 (`0209_remove_submitted_status.sql`) rebuilds the `app_response_status` enum
 without the value (Postgres has no `DROP VALUE`), guarded by a check that
 fails loudly if any row still holds it. `plan/07-datos-relevantes-ers.md` §3
-and invariant 8 were updated to match — they still documented `submitted` as
+and invariant 6 were updated to match — they still documented `submitted` as
 a real step, which had drifted from the code well before this cleanup.
 
 **Follow-up — availability replaces the `active` flag (H11).** Forms used to

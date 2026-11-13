@@ -46,8 +46,8 @@ export async function registerModules(app: FastifyInstance): Promise<void> {
   await registerIdentityModule(app); // WS-A1 (H1-H10)
   await registerLiveActivitiesModule(app); // #966 Live Activities (H38, H25, H26)
   await registerLogisticsModule(app); // WS-C  (H22-H27)
-  await registerNotificationsModule(app);
-  registerOnboardingModule(app); // WS-F  (H50-H53)
+  await registerNotificationsModule(app); // WS-F  (H50-H53)
+  registerOnboardingModule(app); // edition onboarding (H15, H2)
   await registerProjectsModule(app); // WS-B1 (H16-H17)
   await registerQueueModule(app); // WS-B2 (H29-H42)
   registerRealtimeModule(app); // #892 multiplexed realtime stream

@@ -18,11 +18,10 @@ export interface MailMessage {
 /**
  * Resolved SMTP configuration used by the email channel.
  *
- * DELTA(H52): the story says the provider is chosen "por base de datos"; per
- * explicit user decision it is instead fixed at deploy time via env vars
- * (config.MAIL_PROVIDER and SMTP settings, see src/config.ts). Relay settings are an
- * ops change (env + restart), not a runtime toggle, and there is no mail
- * settings table or admin endpoint.
+ * H52: the relay is fixed at deploy time via env vars (config.MAIL_PROVIDER
+ * and SMTP settings, see src/config.ts). Relay settings are an ops change
+ * (env + restart), not a runtime toggle, and there is no mail settings table
+ * or admin endpoint.
  */
 export interface MailConfig {
   provider: "smtp";

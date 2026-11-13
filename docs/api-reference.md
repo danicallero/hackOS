@@ -46,18 +46,29 @@ Each domain is a directory under `apps/api/src/modules/<domain>/` exporting
 
 ```
 registerModules(app)
-├─ applications   (WS-A2 · H11-H15, H27)
-├─ challenges     (WS-G  · H44)
-├─ event          (WS-G  · H45, H47)
-├─ exports        (WS-F  · H54, H56)
-├─ form-libraries (H11/H16 question-owned catalogues)
-├─ identity       (WS-A1 · H1-H10)
+├─ applications    (H11-H15, H27)
+├─ certificates    (#1083 attendance certificates)
+├─ challenges      (H44)
+├─ diary           (#935)
+├─ directory       (#934)
+├─ event           (H45, H47)
+├─ exports         (H54, H56)
+├─ form-libraries  (H11/H16 question-owned catalogues)
+├─ github          (GitHub App repo linking, activity ranking)
+├─ helpdesk        (H61-H67)
+├─ identity        (H1-H10)
 ├─ live-activities (#966 · H38, H25, H26, H59, H19, H22)
-├─ logistics      (WS-C  · H22-H27)
-├─ notifications  (WS-F  · H50-H53)
-├─ projects       (WS-B1 · H16-H17)
-├─ queue          (WS-B2 · H29-H42)
-└─ sponsors       (WS-G  · H43-H45, H58)
+├─ logistics       (H22-H28, H59)
+├─ notifications   (H50-H53)
+├─ onboarding      (edition onboarding)
+├─ projects        (H16-H21, H60)
+├─ queue           (H29-H42)
+├─ realtime        (#892 multiplexed stream)
+├─ reports         (H18 content reports)
+├─ rsvps           (per-activity RSVPs)
+├─ sponsors        (H43-H45, H58)
+├─ statistics      (H27)
+└─ telemetry       (#544 browser refetch observations)
 ```
 
 A module owns routes, its own DB access (no cross-module raw SQL — call the
@@ -264,7 +275,7 @@ duplicate degree rows transactionally: every answer using the source catalogue
 ID moves to the retained ID before the duplicate is deleted, and the audited
 result reports the number of updated answers (#846).
 
-### projects (H16–H17, H21)
+### projects (H16–H21, H60)
 A "project" is a `repos` row; "team" is the set of `submissions (repo_id,
 user_id)` rows (`invited`/`active`/`declined`) — there is no `teams` table.
 Challenge intent is stored in `project_challenges`; submitted answers are
@@ -359,7 +370,7 @@ the caller's own delivery plumbing, so they follow the push-token posture
 (authenticated, no capability, no audit row). See
 [Live Activities](./live-activities.md).
 
-### logistics (H22–H27, H59)
+### logistics (H22–H28, H59)
 Accreditation (badge issuance, rotation, revocation), presence (door in/out
 with certainty-window derivation and conflict detection), meal/activity
 scanning, the pre-event schedule, cross-station people search, and Apple/Google
@@ -534,6 +545,41 @@ fields are grouped by profile, response metadata and individual form. Each group
 can be selected or cleared at once and expanded to adjust individual fields;
 search reveals matching fields and group selection affects only those matches.
 
+### certificates (#1083)
+Attendance certificates issued by the organisation and verifiable by public
+code. Full detail: [`certificates.md`](./certificates.md).
+
+### form-libraries
+Question-owned catalogues (universities, degrees, knowledge topics) with
+participant proposals and `users:write` curation. Full detail: [`form-libraries.md`](./form-libraries.md).
+
+### github
+GitHub App repo linking for projects (private repos included), the webhook
+that records commit/PR activity, and the TV ranking. Full detail:
+[`github-activity.md`](./github-activity.md).
+
+### realtime (#892)
+The multiplexed `/api/realtime/stream` and its per-scope access checks. Full
+detail: [`realtime-transport.md`](./realtime-transport.md).
+
+### reports (H18)
+Attendee reports of projects and public profiles, and the organiser inbox that
+closes them. Full detail: [`content-reports.md`](./content-reports.md).
+
+### rsvps
+Per-activity RSVPs: organizer settings, attendee answers, staff corrections
+and logistics headcounts. The meal-plan routes under identity and logistics
+are facades over this module. Full detail:
+[`catering-rsvp.md`](./catering-rsvp.md).
+
+### statistics (H27)
+Generic dashboard scopes, server-side aggregation, panel ACLs and safe exports.
+Full detail: [`statistics-dashboard.md`](./statistics-dashboard.md).
+
+### telemetry (#544)
+Accepts browser refetch-storm observations and exposes them as Prometheus
+counters (H38, H41-H42). No database state.
+
 ## Cross-cutting conventions
 
 These apply uniformly across every module above; a route or PR that doesn't
@@ -547,7 +593,7 @@ role — they guard with `requireCapability(CAPABILITIES.X)` /
 `requireAnyCapability(...)` from `lib/capabilities.ts`. A "role" (participant,
 judge, sponsor, staff…) is always *derived* from capabilities and
 relationships for display purposes only; it is never the permission source
-(`plan/07` invariant 13). This is also why the mobile app's tabs and the web
+(`plan/07` invariant 10). This is also why the mobile app's tabs and the web
 app's workspaces can change for a user the instant their capabilities change,
 with no reinstall or redeploy (H55).
 

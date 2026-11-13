@@ -305,6 +305,11 @@ Gotchas that cost real time:
   `event_access = true`. `hasEventAccess` is the canonical API field; an
   accepted application or capability alone no longer grants it.
   The bounce is silent, so check the API log rather than guessing.
+- **Don't drive a simulator the user is looking at.** Run screenshot sweeps in
+  the foreground, one step at a time, with a settle wait after each reload;
+  never leave a terminate/relaunch loop running in the background (the
+  relaunch race crashes the dev client with `AppContextLost`). Prefer Metro
+  hot reload and deep links over terminate/launch.
 - **Running Metro writes `apps/mobile/.expo/types/router.d.ts`**, which narrows
   `router.push()` and makes `pnpm typecheck` fail on pre-existing call sites.
   `rm -rf apps/mobile/.expo/types` before typechecking. Never commit `.env`.

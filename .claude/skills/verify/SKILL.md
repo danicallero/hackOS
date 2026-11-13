@@ -9,6 +9,7 @@ description: Build, launch and drive hackOS (API + web) locally to verify a chan
 
 ```sh
 pnpm infra:up          # postgres :5433, valkey :6379, minio :9000, mailpit :8025 (often already up)
+                       # other worktrees may hold :3000/:3001 — check with lsof and set PORT if so
 pnpm migrate
 cd apps/api && WORKERS_INLINE=1 pnpm dev            # API on :3000 (background)
 cd apps/web && ulimit -n 65536 && pnpm dev          # web on :3001 (background)
@@ -30,14 +31,18 @@ docker exec hackos-postgres-1 psql -U hackos -d hackos \
 curl -c s.jar -X POST :3000/api/auth/sign-in/email ... # then use -b s.jar
 ```
 
-Grant capabilities via SQL: insert into `roles`, `role_capabilities`
-(capability strings like `accredit:scan`), and `user_roles`. Note: heredocs
+Grant capabilities via SQL: insert into `roles` (set `event_access = true`,
+or sign-in to the event area silently bounces), `role_capabilities`
+(capability strings like `accredit:scan` with `state = 'allow'`; the column
+defaults to `inherit`, which grants nothing), and `user_roles`. Note: heredocs
 into `docker exec psql` silently no-op — pass statements with repeated `-c`
 flags instead.
 
 ## Driving the web GUI
 
-No Playwright in the repo; use system Chrome headless from the scratchpad:
+For a flow worth keeping, write a Playwright spec under `e2e/browser` and run
+`pnpm test:ui:browser` (`docs/ui-testing.md`). For a one-off check, drive
+system Chrome headless from the scratchpad:
 
 ```sh
 npm init -y && npm install playwright-core
@@ -46,6 +51,9 @@ npm init -y && npm install playwright-core
 ```js
 chromium.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: true })
 ```
+
+UI changes also need screenshots on the PR: `docs/ui-testing.md` § Screenshots
+on UI PRs.
 
 - Log in at `/login` (`input[type=email]`, `input[type=password]`, submit).
 - UI language follows the user's `language` column (default `en`) — match
