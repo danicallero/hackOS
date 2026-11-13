@@ -176,6 +176,8 @@ export function clearImageTints(): void {
  */
 export function useImageTint(uri: string | null | undefined): {
   color: string | null;
+  /** True once the colour is known to be there or not: no image, or it was decoded (or failed). */
+  settled: boolean;
   fromCache: boolean;
 } {
   const [, rerender] = useState(0);
@@ -187,5 +189,9 @@ export function useImageTint(uri: string | null | undefined): {
     return off;
   }, [uri]);
   const color = cache.get(uri) ?? null;
-  return { color, fromCache: initial.uri === uri && initial.hit };
+  return {
+    color,
+    settled: !uri || cache.get(uri) !== undefined,
+    fromCache: initial.uri === uri && initial.hit,
+  };
 }

@@ -55,6 +55,7 @@ jest.mock("@/lib/image-tint", () => ({
   prefetchImageTint: jest.fn(),
   useImageTint: (uri: string | null | undefined) => ({
     color: uri ? mockTint : null,
+    settled: !uri || mockTint !== null,
     fromCache: true,
   }),
 }));

@@ -227,9 +227,9 @@ export function PersonProfileScreen({
   const goBack = () => safeBack(router, "/");
   const person = state.status === "ready" ? state.person : null;
   const helper = state.status === "ready" ? state.helper : null;
-  // Tinted from the photo's colour, blue without a photo; a photo whose colour is still loading keeps the plain background.
+  // Tinted from the photo's colour, blue without a usable photo; a photo whose colour is still loading keeps the plain background.
   const photoTint = useImageTint(person?.photoUrl);
-  const heroColor = person && !person.photoUrl ? NO_PHOTO_TINT : photoTint.color;
+  const heroColor = photoTint.color ?? (person && photoTint.settled ? NO_PHOTO_TINT : null);
   const hero = heroColor ? heroTint(heroColor, dark) : null;
 
   return (
