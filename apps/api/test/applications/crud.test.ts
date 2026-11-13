@@ -20,6 +20,28 @@ import {
 
 const getApp = useTestApp();
 
+async function expectIdempotentReplay(
+  app: Awaited<ReturnType<typeof getApp>>,
+  actorId: number,
+  method: "POST" | "PATCH",
+  url: string,
+  key: string,
+  payload: Record<string, unknown>,
+) {
+  const request = {
+    method,
+    url,
+    headers: { ...asUser(actorId), "Idempotency-Key": key },
+    payload,
+  };
+  const first = await app.inject(request);
+  const replay = await app.inject(request);
+  expect(replay.statusCode).toBe(first.statusCode);
+  expect(replay.headers["idempotency-replayed"]).toBe("true");
+  expect(replay.json()).toEqual(first.json());
+  return first;
+}
+
 /**
  * Test roles get a random position in [1e6, ~1e9) (see helpers.ts). Push a
  * user's own (single, throwaway) role position above that whole range so
@@ -37,6 +59,54 @@ async function giveManagerTopPosition(userId: number): Promise<void> {
 }
 
 describe("applications CRUD (H11)", () => {
+  it("replays form creation and schema updates once per key", async () => {
+    const app = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const { pool } = await import("../../src/db/pool.js");
+
+    const created = await expectIdempotentReplay(
+      app,
+      manager,
+      "POST",
+      "/api/applications",
+      "application-create",
+      { name: "Idempotent form", template: sampleTemplate() },
+    );
+    expect(created.statusCode).toBe(201);
+    const applicationId = created.json().id as number;
+
+    const updatedTemplate = [
+      ...sampleTemplate(),
+      {
+        key: "additional",
+        label: { en: "Additional", es: "Adicional", gl: "Adicional" },
+        kind: "text",
+        required: false,
+      },
+    ];
+    const updated = await expectIdempotentReplay(
+      app,
+      manager,
+      "PATCH",
+      `/api/applications/${applicationId}`,
+      "application-schema-update",
+      { template: updatedTemplate },
+    );
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().current_form_version).toBe(2);
+
+    const { rows: auditRows } = await pool.query<{ action: string }>(
+      `SELECT action FROM audit_log WHERE entity_type = 'application' AND entity_id = $1 ORDER BY id`,
+      [String(applicationId)],
+    );
+    expect(auditRows.map((row) => row.action)).toEqual(["created", "updated"]);
+    const versions = await pool.query(
+      `SELECT version FROM application_form_versions WHERE application_id = $1 ORDER BY version`,
+      [applicationId],
+    );
+    expect(versions.rows.map((row: { version: number }) => row.version)).toEqual([1, 2]);
+  });
+
   it("deletes a form with its response and review data", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);

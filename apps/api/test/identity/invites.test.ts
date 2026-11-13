@@ -76,6 +76,28 @@ async function createUserInviteLink(
   return res.json();
 }
 
+async function expectIdempotentReplay(
+  app: App,
+  actorId: number,
+  method: "POST" | "PUT",
+  url: string,
+  key: string,
+  payload: Record<string, unknown>,
+) {
+  const request = {
+    method,
+    url,
+    headers: { ...asUser(actorId), "Idempotency-Key": key },
+    payload,
+  };
+  const first = await app.inject(request);
+  const replay = await app.inject(request);
+  expect(replay.statusCode).toBe(first.statusCode);
+  expect(replay.headers["idempotency-replayed"]).toBe("true");
+  expect(replay.json()).toEqual(first.json());
+  return first;
+}
+
 const ACCEPT_BASE = {
   name: "Marie",
   surname: "Curie",
@@ -1264,6 +1286,56 @@ describe("H9 invite regeneration", () => {
 });
 
 describe("H10 reusable user invite links", () => {
+  it("replays reusable-link creation and edits once per key", async () => {
+    const app = await getApp();
+    const actor = await inviter();
+    const enterpriseId = await createEnterprise("IdempotentCo");
+    const { pool } = await import("../../src/db/pool.js");
+
+    const created = await expectIdempotentReplay(
+      app,
+      actor,
+      "POST",
+      "/api/invites/user-links",
+      "user-link-create",
+      {
+        kind: "sponsor",
+        enterpriseId,
+        roleIds: [],
+        maxRedeems: 3,
+        expiresInMinutes: 60,
+      },
+    );
+    expect(created.statusCode).toBe(201);
+    const linkId = created.json().id as number;
+
+    const updated = await expectIdempotentReplay(
+      app,
+      actor,
+      "PUT",
+      `/api/invites/user-links/${linkId}`,
+      "user-link-update",
+      {
+        kind: "sponsor",
+        enterpriseId,
+        roleIds: [],
+        maxRedeems: 4,
+        expiresInMinutes: 30,
+      },
+    );
+    expect(updated.statusCode).toBe(200);
+
+    const { rows } = await pool.query<{ action: string }>(
+      `SELECT action FROM audit_log
+        WHERE entity_type = 'user_invite_link' AND entity_id = $1 ORDER BY id`,
+      [String(linkId)],
+    );
+    expect(rows.map((row) => row.action)).toEqual(["create", "update"]);
+    expect(
+      (await pool.query(`SELECT id FROM user_invite_links WHERE id = $1`, [linkId])).rowCount,
+    ).toBe(1);
+  });
+
   it("edits an active unused link, but never changes a redeemed link", async () => {
     const a = await getApp();
     const actor = await inviter();

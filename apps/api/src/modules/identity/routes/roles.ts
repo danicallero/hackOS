@@ -14,6 +14,7 @@ import {
   userHasCapability,
 } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
+import { idempotencyGuard } from "../../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { broadcast } from "../../../lib/sse.js";
 import { reconcileTicketAccess } from "../../logistics/tickets.js";
@@ -295,7 +296,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
   api.post(
     "/api/roles",
     {
-      preHandler: manage,
+      preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
         summary: "Create a role",
@@ -372,7 +373,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
   api.patch(
     "/api/roles/:roleId",
     {
-      preHandler: manage,
+      preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
         summary: "Rename or toggle visibility of a role",
@@ -430,7 +431,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
   api.patch(
     "/api/roles/:roleId/position",
     {
-      preHandler: manage,
+      preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
         summary: "Reorder a role",
@@ -482,7 +483,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
   api.put(
     "/api/roles/:roleId/capabilities",
     {
-      preHandler: manage,
+      preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
         summary: "Replace a role's tri-state capability grants",
@@ -691,7 +692,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
   api.post(
     "/api/roles/:roleId/reset-to-default",
     {
-      preHandler: manage,
+      preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
         summary: "Reset a seeded role's capabilities to its seed-time snapshot",
@@ -787,7 +788,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
   api.post(
     "/api/roles/:roleId/users/:userId",
     {
-      preHandler: manage,
+      preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
         description:
@@ -854,7 +855,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
   api.delete(
     "/api/roles/:roleId/users/:userId",
     {
-      preHandler: manage,
+      preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
         description:

@@ -22,6 +22,28 @@ import { TEST_DATABASE_URL } from "../test-env.js";
 
 const getApp = useTestApp();
 
+async function expectIdempotentReplay(
+  app: Awaited<ReturnType<typeof getApp>>,
+  actorId: number,
+  method: "POST" | "PATCH" | "PUT" | "DELETE",
+  url: string,
+  key: string,
+  payload?: Record<string, unknown>,
+) {
+  const request = {
+    method,
+    url,
+    headers: { ...asUser(actorId), "Idempotency-Key": key },
+    ...(payload === undefined ? {} : { payload }),
+  };
+  const first = await app.inject(request);
+  const replay = await app.inject(request);
+  expect(replay.statusCode).toBe(first.statusCode);
+  expect(replay.headers["idempotency-replayed"]).toBe("true");
+  expect(replay.json()).toEqual(first.json());
+  return first;
+}
+
 async function manager(): Promise<number> {
   return createUserWithCapabilities([CAPABILITIES.PERMISSIONS_MANAGE]);
 }
@@ -337,6 +359,102 @@ describe("H8 canonical event-access projection", () => {
 });
 
 describe("H8 roles CRUD and assignment API", () => {
+  it("replays role create, edit, reorder, capability, reset, assign and remove mutations once", async () => {
+    const app = await getApp();
+    const actor = await createUserWithCapabilities([
+      CAPABILITIES.PERMISSIONS_MANAGE,
+      CAPABILITIES.USERS_READ,
+    ]);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 2000000000 WHERE id IN (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+
+    const created = await expectIdempotentReplay(app, actor, "POST", "/api/roles", "role-create", {
+      name: "idempotent-role",
+      position: 100,
+      isVisible: true,
+      eventAccess: false,
+    });
+    expect(created.statusCode).toBe(201);
+    const roleId = created.json().id as number;
+    await pool.query(`UPDATE roles SET is_seeded = true WHERE id = $1`, [roleId]);
+    await seedRoleDefaults(roleId, { [CAPABILITIES.USERS_READ]: "allow" }, false);
+
+    const updated = await expectIdempotentReplay(
+      app,
+      actor,
+      "PATCH",
+      `/api/roles/${roleId}`,
+      "role-edit",
+      { name: "idempotent-role-renamed", isVisible: false },
+    );
+    expect(updated.statusCode).toBe(200);
+
+    const reordered = await expectIdempotentReplay(
+      app,
+      actor,
+      "PATCH",
+      `/api/roles/${roleId}/position`,
+      "role-reorder",
+      { position: 200 },
+    );
+    expect(reordered.statusCode).toBe(200);
+
+    const capabilities = await expectIdempotentReplay(
+      app,
+      actor,
+      "PUT",
+      `/api/roles/${roleId}/capabilities`,
+      "role-capabilities",
+      { capabilities: [{ capability: CAPABILITIES.USERS_READ, state: "deny" }] },
+    );
+    expect(capabilities.statusCode).toBe(200);
+
+    const reset = await expectIdempotentReplay(
+      app,
+      actor,
+      "POST",
+      `/api/roles/${roleId}/reset-to-default`,
+      "role-reset",
+    );
+    expect(reset.statusCode).toBe(200);
+
+    const memberId = await createUser();
+    const assigned = await expectIdempotentReplay(
+      app,
+      actor,
+      "POST",
+      `/api/roles/${roleId}/users/${memberId}`,
+      "role-assign",
+    );
+    expect(assigned.statusCode).toBe(200);
+
+    const removed = await expectIdempotentReplay(
+      app,
+      actor,
+      "DELETE",
+      `/api/roles/${roleId}/users/${memberId}`,
+      "role-remove",
+    );
+    expect(removed.statusCode).toBe(200);
+
+    const { rows } = await pool.query<{ action: string }>(
+      `SELECT action FROM audit_log WHERE entity_type = 'role' AND entity_id = $1 ORDER BY id`,
+      [String(roleId)],
+    );
+    expect(rows.map((row) => row.action)).toEqual([
+      "create",
+      "update",
+      "reorder",
+      "set_capabilities",
+      "reset_to_default",
+      "assign_user",
+      "remove_user",
+    ]);
+  });
+
   it("hides internal Store-review roles without hiding similarly named real roles (H8)", async () => {
     const app = await getApp();
     const actor = await manager();
@@ -2008,6 +2126,42 @@ describe("H8 role-grant-rules CRUD API", () => {
       [String(ruleId)],
     );
     expect(audits.rows.map((r) => r.action)).toEqual(["create", "update", "delete"]);
+  });
+
+  it("replays grant-rule creation and update once per key", async () => {
+    const app = await getApp();
+    const actor = await highPositionManager([CAPABILITIES.ACCREDIT_SCAN]);
+    const role = await createRole([CAPABILITIES.ACCREDIT_SCAN], { name: "idempotent-rule-role" });
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [role]);
+
+    const created = await expectIdempotentReplay(
+      app,
+      actor,
+      "POST",
+      "/api/role-grant-rules",
+      "grant-rule-create",
+      { roleId: role, triggerEvent: "sponsor.enterprise_linked", action: "grant" },
+    );
+    expect(created.statusCode).toBe(201);
+    const ruleId = created.json().id as number;
+
+    const updated = await expectIdempotentReplay(
+      app,
+      actor,
+      "PATCH",
+      `/api/role-grant-rules/${ruleId}`,
+      "grant-rule-update",
+      { enabled: false },
+    );
+    expect(updated.statusCode).toBe(200);
+
+    const { rows } = await pool.query<{ action: string }>(
+      `SELECT action FROM audit_log
+        WHERE entity_type = 'role_grant_rule' AND entity_id = $1 ORDER BY id`,
+      [String(ruleId)],
+    );
+    expect(rows.map((row) => row.action)).toEqual(["create", "update"]);
   });
 
   it("filters the list by roleId (H8 per-role Grant Rules tab)", async () => {
