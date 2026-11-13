@@ -31,6 +31,7 @@ import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
 import {
   helpSheetOptions,
   nativeStackScreenOptions,
+  sheetPresentation,
   transparentDetailHeaderOptions,
 } from "@/lib/navigation";
 import { setNfcShield } from "@/lib/nfc-reader";
@@ -545,8 +546,8 @@ function RootLayoutNav({
   const sideRegion = useSideRegion();
   const networkingPresentation =
     process.env.EXPO_OS === "ios" && sideRegion.edge && !sideRegion.tabletRail
-      ? "fullScreenModal"
-      : "modal";
+      ? ({ presentation: "fullScreenModal" } as const)
+      : sheetPresentation;
   const { refetch } = useMeContext();
   const showRestoringSession = useDelayedVisibility(!me && loading, 500);
   const canEnterApp = canEnterMobileApp(authenticated, me?.hasEventAccess);
@@ -669,18 +670,18 @@ function RootLayoutNav({
           />
           <Stack.Screen
             name="profile-tasks"
-            options={{ contentStyle: noSidePadding, headerShown: false, presentation: "modal" }}
+            options={{ contentStyle: noSidePadding, headerShown: false, ...sheetPresentation }}
           />
           <Stack.Screen
             name="notification-onboarding"
-            options={{ contentStyle: noSidePadding, headerShown: false, presentation: "modal" }}
+            options={{ contentStyle: noSidePadding, headerShown: false, ...sheetPresentation }}
           />
           <Stack.Screen
             name="networking-profile"
             options={{
               contentStyle: noSidePadding,
               headerShown: process.env.EXPO_OS === "ios" && isRealLiquidGlassAvailable(),
-              presentation: networkingPresentation,
+              ...networkingPresentation,
             }}
           />
         </Stack.Protected>

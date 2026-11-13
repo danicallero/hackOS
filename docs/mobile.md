@@ -39,6 +39,8 @@ there. Device coverage drives accreditation, meals, and recordable activities
 through stable IDs from `@hackos/shared/ui-test-ids`; ordinary CI remains on
 the hardware-free native screen suite.
 
+**Sheet grabber.** Every sheet that can be pulled down shows the iOS drag handle. Router sheets use `sheetPresentation` (`lib/navigation.ts`): a one-detent iOS `formSheet` with `sheetGrabberVisible`, kept as tall as the former page sheet; an opaque `headerStyle` would paint over the grabber, so sheet headers stay transparent. `SheetModal` (`components/app-sheet.tsx`) draws the same `SheetGrabber` (36 x 5 pt, tertiary label) on iOS and Android. Full-screen and zoom-presented pages have none.
+
 Read/loading/error/refresh coverage by route and embedded sheet is recorded in
 [Mobile surface states](./mobile-surface-states.md).
 

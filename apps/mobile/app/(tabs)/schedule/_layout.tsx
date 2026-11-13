@@ -1,6 +1,6 @@
 import { Stack } from "expo-router/stack";
 import { useLocale } from "@/lib/i18n";
-import { useTabStackScreenOptions } from "@/lib/navigation";
+import { sheetPresentation, useTabStackScreenOptions } from "@/lib/navigation";
 import { colors, type } from "@/theme";
 
 /**
@@ -30,7 +30,7 @@ export default function ScheduleLayout() {
             fontSize: type.body.fontSize,
             fontWeight: "600",
           },
-          presentation: "modal",
+          ...sheetPresentation,
           title: t("tabNotifications"),
         }}
       />
