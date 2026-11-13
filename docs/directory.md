@@ -244,15 +244,15 @@ a test account. The same rule decides whether a scan saves the person
 | `DELETE /api/me/photo` | authenticated, `Idempotency-Key` |
 | `POST /api/users/:id/photo` | `users:write`, multipart, `Idempotency-Key` |
 | `DELETE /api/users/:id/photo` | `users:write`, `Idempotency-Key` |
-| `GET /api/users/:id/photo` | the person; or `users:read`; or a logistics-capability holder when the person shares `show_photo`; or event access + the person is in the caller's diary, while their profile is shared with `show_photo` |
+| `GET /api/users/:id/photo` | the person; or `users:read`; or a logistics-capability holder (scanner roster, any photo); or event access + the person is in the caller's diary, while their profile is shared with `show_photo` |
 | `DELETE /api/users/:id/public-profile` | `users:write` (moderation), `Idempotency-Key` |
 
 No capability grants directory browsing. Staff may read profiles through
 user management as described below. The former `directory:read` grants are
 retired history and are absent from the current baseline and seeded roles.
 Admins (`*`) and user staff get no browsing shortcut: `users:read` reaches
-photos for user management, while logistics-capability holders can fetch only
-photos that the person shared publicly, for scanner rosters. The route schemas in
+photos for user management, and logistics-capability holders can fetch every
+account photo for scanner rosters, independent of `show_photo`. The route schemas in
 `/documentation` are the request and response reference.
 
 - There is no listing route and no save-by-id route; people are added to a

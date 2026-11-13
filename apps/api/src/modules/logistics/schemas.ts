@@ -190,7 +190,7 @@ const scannerPersonCard = z.object({
   revokedBadgeIds: z.array(z.string()),
   name: z.string().nullable(),
   surname: z.string().nullable(),
-  /** Authenticated photo route, present only when the person shares it publicly. */
+  /** Authenticated photo route, present whenever the person has an account photo. */
   photoUrl: z.string().nullable(),
   dni: z.string().nullable(),
   accepted: z.boolean(),
