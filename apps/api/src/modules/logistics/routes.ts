@@ -365,7 +365,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: lookupBody,
         description:
-          "Resolve an entrance-ticket QR token to the full person card staff needs to accredit (H22): identity fields (name, DNI, email, shirt size), intolerances, notes, confirmed-spot history, current badge if already accredited, and hasEventAccess (H43) — whether this ticket's owner currently holds real role-derived event access; false means the historical ticket token still exists (permanent, plan/07 invariant 10) but check-in will be refused. Read-only.",
+          "Resolve an entrance-ticket QR token to the full person card staff needs to accredit (H22): identity fields (name, DNI, email, shirt size), intolerances, notes, confirmed-spot history, current badge if already accredited, and hasEventAccess (H43) — whether this ticket's owner currently holds real role-derived event access; false means the historical ticket token still exists (permanent, plan/07 invariant 7) but check-in will be refused. Read-only.",
       },
     },
     async (req) => lookupByTicket(req.body.ticketToken, actor(req.userId)),

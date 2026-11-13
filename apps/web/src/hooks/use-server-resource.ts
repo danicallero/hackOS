@@ -80,7 +80,12 @@ export function useServerResource<T>(
   );
 
   const reload = useCallback(() => {
-    invalidateServerState(keyRef.current);
+    const key = keyRef.current;
+    invalidateServerState(key);
+    const currentStamp = `${serverStateEpoch()}:${JSON.stringify(key)}`;
+    setResult((current) =>
+      current?.stamp === currentStamp && current.data !== null ? current : null,
+    );
     setNonce((n) => n + 1);
   }, []);
 

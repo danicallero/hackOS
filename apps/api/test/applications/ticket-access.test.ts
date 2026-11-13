@@ -15,7 +15,7 @@ import { createApplication } from "./fixtures.js";
 /**
  * Losing event access (declining a confirmed spot, or staff revoking one)
  * must stop the ticket/wallet from being served — even though the `tickets`
- * row itself is never touched (plan/07 invariant 10: neither consumed nor
+ * row itself is never touched (plan/07 invariant 7: neither consumed nor
  * revoked). Any wallet pass already issued gets voided. A user with multiple
  * event-bearing roles keeps access until the last such role is removed; role
  * capabilities, visibility, and application status do not grant it.
@@ -111,7 +111,7 @@ describe("ticket/wallet exposure follows event access", () => {
     });
     expect(ticket.json().ticketToken).toBeNull();
 
-    // The underlying tickets row is never touched (plan/07 invariant 10).
+    // The underlying tickets row is never touched (plan/07 invariant 7).
     const { rows } = await pool.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [userId]);
     expect(rows).toHaveLength(1);
   });

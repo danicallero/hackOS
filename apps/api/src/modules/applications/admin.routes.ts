@@ -7,6 +7,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
+import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { currentEventKey } from "../event/context.js";
 import { syncFieldLibraries } from "../form-libraries/service.js";
@@ -256,7 +257,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   r.post(
     "/api/applications",
     {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_MANAGE),
+      preHandler: [requireCapability(CAPABILITIES.APPLICATIONS_MANAGE), idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.APPLICATIONS_MANAGE }),
       schema: {
         summary: "Create an application form",
@@ -336,7 +337,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   r.patch(
     "/api/applications/:id",
     {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_MANAGE),
+      preHandler: [requireCapability(CAPABILITIES.APPLICATIONS_MANAGE), idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.APPLICATIONS_MANAGE }),
       schema: {
         summary: "Update an application form",

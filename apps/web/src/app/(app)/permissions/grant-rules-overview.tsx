@@ -62,7 +62,6 @@ export function GrantRulesOverviewModal({
 
   useEffect(() => {
     if (open) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       load();
     }
   }, [open, load]);

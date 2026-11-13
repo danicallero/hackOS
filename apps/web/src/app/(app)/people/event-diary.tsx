@@ -138,7 +138,6 @@ function DiaryPage() {
   }, [t]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- clears the previous error before a fresh read
     load();
     return () => {
       generation.current += 1;

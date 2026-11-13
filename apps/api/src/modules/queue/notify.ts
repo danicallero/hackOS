@@ -206,25 +206,23 @@ export async function prepareTeamCalled(
   const memberIds = await repoMemberIds(client, params.repoId, fixtureMarker);
   if (memberIds.length === 0) return nothing;
 
-  const [{ challengeName, teamName, nameById }, { rows: staffRows }] = await Promise.all([
-    loadNotifyContext(client, {
-      challengeId: params.challengeId,
-      repoId: params.repoId,
-      memberIds,
-    }),
-    // H29: same opt-in staff push used by notify-enter (queue.staff), so
-    // operators with a backgrounded app still get a device notification the
-    // moment a team is called, not just the live SSE echo.
-    client.query(
-      `SELECT DISTINCT np.user_id
-         FROM notification_preferences np
-         JOIN users u ON u.id = np.user_id
-        WHERE np.category = $1 AND np.channel = 'push' AND np.enabled = true
-          AND u.account_state = 'active' AND u.anonymized_at IS NULL
-          AND u.is_test_account = $2`,
-      [QUEUE_STAFF_CATEGORY, fixtureMarker],
-    ),
-  ]);
+  const { challengeName, teamName, nameById } = await loadNotifyContext(client, {
+    challengeId: params.challengeId,
+    repoId: params.repoId,
+    memberIds,
+  });
+  // H29: same opt-in staff push used by notify-enter (queue.staff), so
+  // operators with a backgrounded app still get a device notification the
+  // moment a team is called, not just the live SSE echo.
+  const { rows: staffRows } = await client.query(
+    `SELECT DISTINCT np.user_id
+       FROM notification_preferences np
+       JOIN users u ON u.id = np.user_id
+      WHERE np.category = $1 AND np.channel = 'push' AND np.enabled = true
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
+        AND u.is_test_account = $2`,
+    [QUEUE_STAFF_CATEGORY, fixtureMarker],
+  );
 
   const payload = {
     entryId: params.entryId,
@@ -343,21 +341,19 @@ export async function prepareTeamPreCalls(
     membersByRepo.set(Number(row.repo_id), list);
   }
 
-  const [{ rows: challengeRows }, { rows: repoRows }, { rows: userRows }] = await Promise.all([
-    client.query<{ id: number; title: string }>(
-      `SELECT id, title FROM challenges WHERE id = ANY($1::int[])`,
-      [[...new Set(teams.map((team) => team.challengeId))]],
-    ),
-    client.query<{ id: number; name: string }>(
-      `SELECT id, name FROM repos WHERE id = ANY($1::int[])`,
-      [repoIds],
-    ),
-    client.query<{ id: number; name: string | null }>(
-      `SELECT id, name FROM users
-        WHERE id = ANY($1::int[]) AND account_state = 'active' AND anonymized_at IS NULL`,
-      [[...new Set(memberRows.map((row) => Number(row.user_id)))]],
-    ),
-  ]);
+  const { rows: challengeRows } = await client.query<{ id: number; title: string }>(
+    `SELECT id, title FROM challenges WHERE id = ANY($1::int[])`,
+    [[...new Set(teams.map((team) => team.challengeId))]],
+  );
+  const { rows: repoRows } = await client.query<{ id: number; name: string }>(
+    `SELECT id, name FROM repos WHERE id = ANY($1::int[])`,
+    [repoIds],
+  );
+  const { rows: userRows } = await client.query<{ id: number; name: string | null }>(
+    `SELECT id, name FROM users
+      WHERE id = ANY($1::int[]) AND account_state = 'active' AND anonymized_at IS NULL`,
+    [[...new Set(memberRows.map((row) => Number(row.user_id)))]],
+  );
   const challengeName = new Map(challengeRows.map((row) => [Number(row.id), row.title]));
   const teamName = new Map(repoRows.map((row) => [Number(row.id), row.name]));
   const userName = new Map(userRows.map((row) => [Number(row.id), row.name]));

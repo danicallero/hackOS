@@ -79,15 +79,14 @@ export async function fixtureSubjectScopeErrors(
 ): Promise<Map<number, ForbiddenError | NotFoundError>> {
   const out = new Map<number, ForbiddenError | NotFoundError>();
   if (subjectUserIds.length === 0) return out;
-  const [actor, subjects] = await Promise.all([
-    db.query<{ is_test_account: boolean }>(`SELECT is_test_account FROM users WHERE id = $1`, [
-      actorId,
-    ]),
-    db.query<{ id: number; is_test_account: boolean }>(
-      `SELECT id, is_test_account FROM users WHERE id = ANY($1::int[])`,
-      [subjectUserIds],
-    ),
-  ]);
+  const actor = await db.query<{ is_test_account: boolean }>(
+    `SELECT is_test_account FROM users WHERE id = $1`,
+    [actorId],
+  );
+  const subjects = await db.query<{ id: number; is_test_account: boolean }>(
+    `SELECT id, is_test_account FROM users WHERE id = ANY($1::int[])`,
+    [subjectUserIds],
+  );
   const actorIsTest = actor.rows[0]?.is_test_account;
   const subjectIsTest = new Map(subjects.rows.map((r) => [r.id, r.is_test_account]));
   for (const id of subjectUserIds) {

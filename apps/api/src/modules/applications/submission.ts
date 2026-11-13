@@ -182,7 +182,7 @@ export async function submitResponse(
       [userId],
     );
     if (!userRows[0]) throw new NotFoundError("User not found");
-    // plan/07 invariant 8: no advancing past submitted without a verified email.
+    // plan/07 invariant 6: no advancing past submitted without a verified email.
     if (!userRows[0].email_verified) {
       throw new ForbiddenError("Verify your email before submitting", {
         code: "email_not_verified",

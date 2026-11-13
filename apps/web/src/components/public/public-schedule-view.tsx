@@ -95,7 +95,6 @@ export function PublicScheduleView() {
   // Fetch event and schedule on mount or language change; callbacks manage independent
   // error/loading states for decoupled failure recovery, making setState expected here.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void Promise.all([loadEvent(), loadSchedule()]);
   }, [loadEvent, loadSchedule]);
 

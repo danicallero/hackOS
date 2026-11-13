@@ -7,6 +7,7 @@ import {
   authorizationContextFor,
   createUser,
   createUserWithCapabilities,
+  expectIdempotentReplay,
   useTestApp,
 } from "../helpers.js";
 
@@ -1264,6 +1265,66 @@ describe("H9 invite regeneration", () => {
 });
 
 describe("H10 reusable user invite links", () => {
+  it("replays reusable-link creation and edits once per key", async () => {
+    const app = await getApp();
+    const actor = await inviter();
+    const enterpriseId = await createEnterprise("IdempotentCo");
+    const { pool } = await import("../../src/db/pool.js");
+
+    const created = await expectIdempotentReplay(
+      app,
+      actor,
+      {
+        method: "POST",
+        url: "/api/invites/user-links",
+        key: "user-link-create",
+        payload: {
+          kind: "sponsor",
+          enterpriseId,
+          roleIds: [],
+          maxRedeems: 3,
+          expiresInMinutes: 60,
+        },
+      },
+      201,
+      {
+        entityType: "user_invite_link",
+        entityId: (body) => Number(body.id),
+        action: "create",
+      },
+    );
+    const linkId = created.json().id as number;
+
+    await expectIdempotentReplay(
+      app,
+      actor,
+      {
+        method: "PUT",
+        url: `/api/invites/user-links/${linkId}`,
+        key: "user-link-update",
+        payload: {
+          kind: "sponsor",
+          enterpriseId,
+          roleIds: [],
+          maxRedeems: 4,
+          expiresInMinutes: 30,
+        },
+      },
+      200,
+      { entityType: "user_invite_link", entityId: linkId, action: "update" },
+    );
+
+    const { rows } = await pool.query<{ action: string }>(
+      `SELECT action FROM audit_log
+        WHERE entity_type = 'user_invite_link' AND entity_id = $1 ORDER BY id`,
+      [String(linkId)],
+    );
+    expect(rows.map((row) => row.action)).toEqual(["create", "update"]);
+    expect(
+      (await pool.query(`SELECT id FROM user_invite_links WHERE id = $1`, [linkId])).rowCount,
+    ).toBe(1);
+  });
+
   it("edits an active unused link, but never changes a redeemed link", async () => {
     const a = await getApp();
     const actor = await inviter();

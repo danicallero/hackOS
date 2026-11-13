@@ -68,7 +68,6 @@ export function EventConfigProvider({
   }, [t, enabled]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetching event config from API is a legitimate external-system sync on mount.
     void load();
   }, [load]);
 

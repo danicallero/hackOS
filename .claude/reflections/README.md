@@ -86,6 +86,14 @@ specialized workflow    → .claude/skills/<name>/SKILL.md
 reusable policy         → .claude/rules/
 ```
 
+On promotion, cut the entry down to a stub (heading, `Status: promoted`,
+`Date`, `Promoted-To`) so the ID stays resolvable but the rule is not read
+twice: `lessons.md` is read in full before every change, so every line in it
+costs every task. The same applies when growing an entry: fold a new
+correction into the existing Lesson/Action wording instead of appending
+another paragraph, and split an entry that has come to cover several
+unrelated triggers.
+
 There should be exactly one canonical place for any given rule. If you're
 promoting into a file that already covers the topic, edit that section rather
 than appending a redundant one.

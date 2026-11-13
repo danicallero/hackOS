@@ -599,7 +599,6 @@ export function EditablePublishDateCell({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!editing) setDraft(toDatetimeLocal(value)); // Resync local draft to latest server value while not mid-edit.
   }, [value, editing]);
 

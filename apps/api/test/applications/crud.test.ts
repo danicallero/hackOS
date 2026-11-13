@@ -7,6 +7,7 @@ import {
   createRole,
   createUser,
   createUserWithCapabilities,
+  expectIdempotentReplay,
   useTestApp,
 } from "../helpers.js";
 import {
@@ -37,6 +38,60 @@ async function giveManagerTopPosition(userId: number): Promise<void> {
 }
 
 describe("applications CRUD (H11)", () => {
+  it("replays form creation and schema updates once per key", async () => {
+    const app = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const { pool } = await import("../../src/db/pool.js");
+
+    const created = await expectIdempotentReplay(
+      app,
+      manager,
+      {
+        method: "POST",
+        url: "/api/applications",
+        key: "application-create",
+        payload: { name: "Idempotent form", template: sampleTemplate() },
+      },
+      201,
+      { entityType: "application", entityId: (body) => Number(body.id), action: "created" },
+    );
+    const applicationId = created.json().id as number;
+
+    const updatedTemplate = [
+      ...sampleTemplate(),
+      {
+        key: "additional",
+        label: { en: "Additional", es: "Adicional", gl: "Adicional" },
+        kind: "text",
+        required: false,
+      },
+    ];
+    const updated = await expectIdempotentReplay(
+      app,
+      manager,
+      {
+        method: "PATCH",
+        url: `/api/applications/${applicationId}`,
+        key: "application-schema-update",
+        payload: { template: updatedTemplate },
+      },
+      200,
+      { entityType: "application", entityId: applicationId, action: "updated" },
+    );
+    expect(updated.json().current_form_version).toBe(2);
+
+    const { rows: auditRows } = await pool.query<{ action: string }>(
+      `SELECT action FROM audit_log WHERE entity_type = 'application' AND entity_id = $1 ORDER BY id`,
+      [String(applicationId)],
+    );
+    expect(auditRows.map((row) => row.action)).toEqual(["created", "updated"]);
+    const versions = await pool.query(
+      `SELECT version FROM application_form_versions WHERE application_id = $1 ORDER BY version`,
+      [applicationId],
+    );
+    expect(versions.rows.map((row: { version: number }) => row.version)).toEqual([1, 2]);
+  });
+
   it("deletes a form with its response and review data", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
