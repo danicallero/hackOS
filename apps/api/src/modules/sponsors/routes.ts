@@ -24,6 +24,7 @@ import {
   requireEnterpriseJudgeManager,
   requireSponsorPortalAccess,
 } from "./access.js";
+import { logoColor } from "./logo-color.js";
 import {
   addJudgeBody,
   addMemberBody,
@@ -214,7 +215,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
         params: enterpriseIdParam,
         summary: "Read a company's profile",
         description:
-          "H44/H45 company page for signed-in users: name, logos, website and description; `representatives` (the company's sponsor members, with `avatarUrl` only while they share their photo on their public profile); `challenges` (only revealed ones, with a `summary` cut from the description); and `activities`, the caller's own schedule feed (same audience and visibility rules as GET /api/public/activities, H59) narrowed to the items linked to the company plus those a member of the company speaks at, each once, by start time. A hidden or not-yet-revealed company answers 404 unless the caller is staff, who see everything it has.",
+          "H44/H45 company page for signed-in users: name, logos, `logoColor` (`#rrggbb` representative colour of the logo that tints the page hero, computed on upload and lazily for older logos; null when the logo is missing or has no usable colour), website and description; `representatives` (the company's sponsor members, with `avatarUrl` only while they share their photo on their public profile); `challenges` (only revealed ones, with a `summary` cut from the description); and `activities`, the caller's own schedule feed (same audience and visibility rules as GET /api/public/activities, H59) narrowed to the items linked to the company plus those a member of the company speaks at, each once, by start time. A hidden or not-yet-revealed company answers 404 unless the caller is staff, who see everything it has.",
         response: { 200: enterpriseProfileResponse },
       },
     },
@@ -667,7 +668,13 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
         .slice(0, 32);
       const key = `enterprises/${req.params.id}/logo-${req.query.variant}-${operation}.${ext}`;
       const logoUrl = await putObject(key, bytes, file.mimetype);
-      await setEnterpriseLogo(req.params.id, logoUrl, req.query.variant, req.userId);
+      await setEnterpriseLogo(
+        req.params.id,
+        logoUrl,
+        req.query.variant,
+        req.userId,
+        req.query.variant === "default" ? await logoColor(bytes) : null,
+      );
       return { logoUrl, variant: req.query.variant };
     },
   );

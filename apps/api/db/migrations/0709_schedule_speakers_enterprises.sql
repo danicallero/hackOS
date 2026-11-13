@@ -24,3 +24,9 @@ CREATE TABLE schedule_enterprises (
 );
 
 CREATE INDEX schedule_enterprises_enterprise_id_idx ON schedule_enterprises (enterprise_id);
+
+-- DELTA(H44): the mobile company page tints its hero with the logo's colour.
+-- `logo_color` ("#rrggbb") is computed server-side when the logo is uploaded
+-- or changed, and lazily on the profile read for logos that predate it; NULL
+-- means not computed yet (or no usable colour).
+ALTER TABLE enterprises ADD COLUMN logo_color text;

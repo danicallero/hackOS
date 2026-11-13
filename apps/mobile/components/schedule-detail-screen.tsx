@@ -373,6 +373,8 @@ export function ScheduleDetailScreen({
                     items={(detailItem?.speakers ?? []).map((speaker) => ({
                       key: String(speaker.userId),
                       name: speaker.name,
+                      firstName: speaker.firstName,
+                      surname: speaker.surname,
                       uri: speaker.avatarUrl,
                       subtitle: speaker.enterpriseName,
                       onPress: () => router.push(`/people/${speaker.userId}`),

@@ -455,8 +455,8 @@ notes/visibility. One feed, not three parallel endpoints.
 (ordered by `position`, users) and `schedule_enterprises` (companies, no speaker
 needed) hang off an item (migration `0709`). Every schedule item shape —
 `GET /api/schedule`, `GET /api/public/activities` and the write responses —
-carries `speakers: {userId, name, avatarUrl, enterpriseId, enterpriseName}[]`
-and `enterprises: {id, name, logoUrl}[]`. `avatarUrl` is set only while the
+carries `speakers: {userId, name, firstName, surname, avatarUrl, enterpriseId, enterpriseName}[]`
+and `enterprises: {id, name, logoUrl}[]`. `firstName`/`surname` are the account's separate name parts (initials on avatars without a photo); `avatarUrl` is set only while the
 person shares their photo on their public profile; `enterpriseName` and
 `enterprises` leave out hidden companies for anyone who is not staff. `POST` and
 `PATCH /api/schedule` accept `speakerUserIds` (order = position) and
@@ -464,7 +464,7 @@ person shares their photo on their public profile; `enterpriseName` and
 `[]` clears it); an unknown or inactive id answers 400 and nothing is saved. The
 write is audited in the same transaction with the ids before and after.
 `GET /api/enterprises/:id/profile` (any signed-in user; sponsors module) is the
-company page: details, `representatives` (the company's `sponsors` members),
+company page: details, `logoColor` (`#rrggbb`, the logo's representative colour — transparent and near-white/near-black pixels ignored — that tints the mobile hero; stored in `enterprises.logo_color`, computed with `sharp` when the default logo is uploaded, reset when `logoUrl` is patched, and computed lazily on this read for older logos; null when there is no logo or it cannot be read), `representatives` (the company's `sponsors` members, with `firstName`/`surname` like speakers),
 revealed `challenges` (`summary` = start of the description) and `activities` —
 the caller's own audience-filtered schedule feed narrowed to items linked to the
 company or spoken at by one of its members, once each, by start time. A hidden

@@ -137,6 +137,9 @@ export interface SchedulePatch {
 export interface ScheduleSpeaker {
   userId: number;
   name: string;
+  /** Given name and surname on their own, for initials. */
+  firstName: string;
+  surname: string | null;
   avatarUrl: string | null;
   enterpriseId: number | null;
   enterpriseName: string | null;
@@ -297,6 +300,7 @@ export async function loadScheduleLinks(
   const [{ rows: speakerRows }, { rows: enterpriseRows }] = await Promise.all([
     db.query(
       `SELECT ss.schedule_id, u.id AS user_id, btrim(u.name || ' ' || COALESCE(u.surname, '')) AS name,
+              u.name AS first_name, NULLIF(btrim(u.surname), '') AS surname,
               CASE WHEN p.directory_visible AND p.show_photo
                         AND u.is_test_account = false
                         AND EXISTS (SELECT 1 FROM user_event_access a WHERE a.user_id = u.id)
@@ -334,6 +338,8 @@ export async function loadScheduleLinks(
     entry(Number(row.schedule_id)).speakers.push({
       userId,
       name: String(row.name),
+      firstName: String(row.first_name),
+      surname: (row.surname as string | null) ?? null,
       avatarUrl: photoUrl(userId, (row.photo_key as string | null) ?? null),
       enterpriseId: row.enterprise_id == null ? null : Number(row.enterprise_id),
       enterpriseName: (row.enterprise_name as string | null) ?? null,

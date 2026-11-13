@@ -576,6 +576,7 @@ Table enterprises {
   director_id integer
   id integer [pk, increment, not null]
   kind text [not null, default: `'sponsor'::text`, note: 'H45: label for the optional public ?kind= filter; does not affect ordering.']
+  logo_color text
   logo_negative_url text
   logo_url text
   name text [unique, not null]

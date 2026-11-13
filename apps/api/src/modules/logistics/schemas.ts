@@ -326,6 +326,8 @@ export const scheduleAudience = z.union([
 export const scheduleSpeakerSchema = z.object({
   userId: z.number().int(),
   name: z.string(),
+  firstName: z.string(),
+  surname: z.string().nullable(),
   avatarUrl: z.string().nullable(),
   enterpriseId: z.number().int().nullable(),
   enterpriseName: z.string().nullable(),

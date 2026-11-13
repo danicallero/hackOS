@@ -28,7 +28,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { useColorScheme } from "@/components/useColorScheme";
 import { ApiError } from "@/lib/api";
-import { type CompanyProfile, fetchCompanyProfile, heroGradient } from "@/lib/company";
+import { type CompanyProfile, fetchCompanyProfile, heroTint } from "@/lib/company";
 import { useLocale } from "@/lib/i18n";
 import { safeBack } from "@/lib/navigation";
 import { resolveScheduleText } from "@/lib/schedule";
@@ -157,6 +157,7 @@ export function CompanyProfileScreen() {
     }
   }
 
+  const hero = heroTint(profile?.logoColor, dark);
   const site = profile?.website;
   const descriptionStyle = {
     color: colors.label,
@@ -203,7 +204,7 @@ export function CompanyProfileScreen() {
           <View
             pointerEvents="none"
             style={{
-              experimental_backgroundImage: heroGradient(profile.name, dark),
+              experimental_backgroundImage: hero.gradient,
               height: 620,
               left: 0,
               position: "absolute",
@@ -226,7 +227,7 @@ export function CompanyProfileScreen() {
                 accessibilityRole="header"
                 selectable
                 style={{
-                  color: colors.label,
+                  color: hero.foreground,
                   fontSize: type.title.fontSize,
                   fontWeight: "700",
                   textAlign: "center",
@@ -314,6 +315,8 @@ export function CompanyProfileScreen() {
                   items={profile.representatives.map((person) => ({
                     key: String(person.userId),
                     name: person.name,
+                    firstName: person.firstName,
+                    surname: person.surname,
                     uri: person.avatarUrl,
                     onPress: () => router.push(`/people/${person.userId}`),
                   }))}

@@ -1,5 +1,6 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
 import { asUser, createUser, createUserWithCapabilities, useTestApp } from "../helpers.js";
@@ -78,6 +79,48 @@ describe("GET /api/enterprises/:id/profile", () => {
     expect(body.challenges).toEqual([
       { id: expect.any(Number), title: "Revealed", summary: "Build a rocket" },
     ]);
+  });
+
+  it("tints the hero with the colour of the uploaded logo, and clears it when the logo changes", async () => {
+    const acme = await enterprise("Acme");
+    const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+    const png = await sharp({
+      create: { width: 32, height: 32, channels: 4, background: "#3366cc" },
+    })
+      .png()
+      .toBuffer();
+    const boundary = `----hackos-${crypto.randomUUID()}`;
+    const upload = await (await getApp()).inject({
+      method: "POST",
+      url: `/api/enterprises/${acme}/logo`,
+      headers: {
+        ...asUser(admin),
+        "content-type": `multipart/form-data; boundary=${boundary}`,
+        "idempotency-key": `logo-${boundary}`,
+      },
+      payload: Buffer.concat([
+        Buffer.from(
+          `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="logo.png"\r\nContent-Type: image/png\r\n\r\n`,
+        ),
+        png,
+        Buffer.from(`\r\n--${boundary}--\r\n`),
+      ]),
+    });
+    expect(upload.statusCode).toBe(200);
+    const { rows } = await pool.query("SELECT logo_color FROM enterprises WHERE id = $1", [acme]);
+    expect(rows[0].logo_color).toBe("#3366cc");
+
+    const viewer = await createUser();
+    expect((await profile(viewer, acme)).json().logoColor).toBe("#3366cc");
+
+    await (await getApp()).inject({
+      method: "PATCH",
+      url: `/api/enterprises/${acme}`,
+      headers: asUser(admin),
+      payload: { logoUrl: null },
+    });
+    const cleared = await profile(viewer, acme);
+    expect(cleared.json()).toMatchObject({ logoUrl: null, logoColor: null });
   });
 
   it("lists activities linked directly or through a member speaker, once each, by start", async () => {

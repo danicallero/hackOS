@@ -1214,9 +1214,10 @@ never slides behind the clock.
 **Company screen (H44, H45, H59).** `app/companies/[id].tsx`
 (`components/company-profile-screen.tsx`) reads `GET /api/enterprises/:id/profile`
 and follows Apple Music's artist page: a tinted gradient hero (CSS
-`experimental_backgroundImage`; the hue is derived from the company name by
-`heroGradient` in `lib/company.ts`, since logos are private bitmaps with no
-pixel access and no colour dependency is installed), the logo in a rounded
+`experimental_backgroundImage`; `heroTint` in `lib/company.ts` tints it with the
+profile's `logoColor`, computed server-side from the logo, darkened in dark mode,
+neutral grey when null, and picks the white or black foreground for the name by
+luminance), the logo in a rounded
 card with a soft shadow (the negative logo in dark mode when present), the
 name, the description clamped to four lines with "More", the website, then
 Representatives (`AvatarRow`, as Podcasts' Hosts & Guests; opens
@@ -1227,7 +1228,7 @@ transparent native header and the name joins the bar after 150 pt of scroll;
 Android and cold links float a glass back button.
 
 **Speakers and companies on activities.** The schedule detail adds Speakers
-(avatar, name, company as subtitle; opens `people/[id]`) and Companies (logo,
+(avatar, name, company as subtitle; opens `people/[id]`; without a photo the avatar shows the first letters of first name and surname on the account avatar's blue, via `UserAvatar`, as do the company's Representatives) and Companies (logo,
 name; opens `companies/[id]`) rows between the description and Information,
 from the item's optional `speakers` and `enterprises`. A person's profile
 shows their company (`enterprise`) and Talks (`activities`) when the API sends

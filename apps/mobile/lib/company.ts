@@ -7,9 +7,17 @@ export interface CompanyProfile {
   name: string;
   logoUrl: string | null;
   logoNegativeUrl: string | null;
+  /** Representative colour of the logo ("#rrggbb"), server-computed; null falls back to a neutral tint. */
+  logoColor: string | null;
   website: string | null;
   description: string | null;
-  representatives: { userId: number; name: string; avatarUrl: string | null }[];
+  representatives: {
+    userId: number;
+    name: string;
+    firstName: string;
+    surname: string | null;
+    avatarUrl: string | null;
+  }[];
   challenges: { id: number; title: string; summary: string | null }[];
   activities: ScheduleItem[];
 }
@@ -18,6 +26,8 @@ export interface CompanyProfile {
 export interface ScheduleSpeaker {
   userId: number;
   name: string;
+  firstName: string;
+  surname: string | null;
   avatarUrl: string | null;
   enterpriseId: number | null;
   enterpriseName: string | null;
@@ -40,30 +50,45 @@ export async function fetchCompanyProfile(id: number): Promise<CompanyProfile> {
   };
 }
 
-/** A stable hue from the company name: logos are private-cacheable bitmaps with no pixel access, so the hero tint is derived from the name. */
-export function companyHue(name: string): number {
-  let hash = 0;
-  for (let index = 0; index < name.length; index += 1) {
-    hash = (hash * 31 + name.charCodeAt(index)) % 360;
-  }
-  return hash;
+const NEUTRAL: RGB = [142, 142, 147];
+
+type RGB = [number, number, number];
+
+function parseHex(hex: string | null | undefined): RGB | null {
+  const match = /^#([0-9a-f]{6})$/i.exec(hex ?? "");
+  if (!match) return null;
+  const n = Number.parseInt(match[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-function hslToRgb(h: number, s: number, l: number): [number, number, number] {
-  const a = s * Math.min(l, 1 - l);
-  const f = (n: number) => {
-    const k = (n + h / 30) % 12;
-    return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+function luminance([r, g, b]: RGB): number {
+  const lin = (v: number) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
   };
-  return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
 }
 
 /**
- * Hero gradient for a company: the name's tint fading to transparent over the
- * screen background. The tint stays soft (alpha ≤ .55, muted lightness), so
- * the system label colour keeps its contrast in both schemes.
+ * Hero tint from the logo's colour (`logoColor`, "#rrggbb"; null falls back to
+ * a neutral grey): a gradient fading to transparent over the screen background,
+ * plus the foreground (white or black) that reads on the tint at the strongest
+ * point of the gradient. Dark mode darkens the tint so it does not glare.
  */
-export function heroGradient(name: string, dark: boolean): string {
-  const [r, g, b] = hslToRgb(companyHue(name), dark ? 0.5 : 0.65, dark ? 0.4 : 0.6);
-  return `linear-gradient(to bottom, rgba(${r},${g},${b},${dark ? 0.6 : 0.5}) 0%, rgba(${r},${g},${b},0) 100%)`;
+export function heroTint(
+  logoColor: string | null | undefined,
+  dark: boolean,
+): { gradient: string; foreground: "white" | "black" } {
+  const base = parseHex(logoColor) ?? NEUTRAL;
+  const tint = (dark ? base.map((v) => Math.round(v * 0.6)) : base) as RGB;
+  const alpha = dark ? 0.7 : 0.5;
+  const ground = dark ? 0 : 255;
+  const shown = tint.map((v) => Math.round(v * alpha + ground * (1 - alpha))) as RGB;
+  // Contrast against white vs black text: pick the better one.
+  const foreground = luminance(shown) > 0.179 ? "black" : "white";
+  const [r, g, b] = tint;
+  return {
+    gradient: `linear-gradient(to bottom, rgba(${r},${g},${b},${alpha}) 0%, rgba(${r},${g},${b},0) 100%)`,
+    foreground,
+  };
 }

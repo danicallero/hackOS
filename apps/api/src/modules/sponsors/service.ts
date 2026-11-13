@@ -17,6 +17,7 @@ import { broadcastForActiveUser } from "../logistics/active-broadcast.js";
 import { type CallerScheduleAudience, listScheduleForAudiences } from "../logistics/schedule.js";
 import { reconcileTicketAccess } from "../logistics/tickets.js";
 import { enqueueWalletSync } from "../logistics/wallet-sync.js";
+import { logoColorFromUrl } from "./logo-color.js";
 import type {
   CreateEnterpriseBody,
   EnterpriseKind,
@@ -121,7 +122,7 @@ export async function getEnterpriseProfile(
   caller: CallerScheduleAudience,
 ) {
   const { rows } = await pool.query(
-    `SELECT e.id, e.name, e.website, e.logo_url,
+    `SELECT e.id, e.name, e.website, e.logo_url, e.logo_color,
             COALESCE(e.logo_negative_url, e.logo_url) AS logo_negative_url, e.description
        FROM enterprises e
       WHERE e.id = $1
@@ -132,9 +133,23 @@ export async function getEnterpriseProfile(
   if (!enterprise) throw new NotFoundError("Enterprise not found", { id: enterpriseId });
   if (caller.isStaff) await assertEnterpriseScope(pool, viewerId, enterpriseId);
 
+  // Logos that predate logo_color get it on first read; a failure leaves it NULL.
+  let logoTint = (enterprise.logo_color as string | null) ?? null;
+  if (logoTint == null && enterprise.logo_url) {
+    const logoUrl = String(enterprise.logo_url);
+    logoTint = await logoColorFromUrl(logoUrl);
+    if (logoTint) {
+      await pool.query(
+        "UPDATE enterprises SET logo_color = $1 WHERE id = $2 AND logo_url = $3 AND logo_color IS NULL",
+        [logoTint, enterpriseId, logoUrl],
+      );
+    }
+  }
+
   const [{ rows: people }, { rows: challengeRows }, activities] = await Promise.all([
     pool.query(
       `SELECT u.id AS user_id, btrim(u.name || ' ' || COALESCE(u.surname, '')) AS name,
+              u.name AS first_name, NULLIF(btrim(u.surname), '') AS surname,
               CASE WHEN p.directory_visible AND p.show_photo
                         AND u.is_test_account = false
                         AND EXISTS (SELECT 1 FROM user_event_access a WHERE a.user_id = u.id)
@@ -163,11 +178,14 @@ export async function getEnterpriseProfile(
     name: String(enterprise.name),
     logoUrl: (enterprise.logo_url as string | null) ?? null,
     logoNegativeUrl: (enterprise.logo_negative_url as string | null) ?? null,
+    logoColor: logoTint,
     website: (enterprise.website as string | null) ?? null,
     description: (enterprise.description as string | null) ?? null,
     representatives: people.map((row: Record<string, unknown>) => ({
       userId: Number(row.user_id),
       name: String(row.name),
+      firstName: String(row.first_name),
+      surname: (row.surname as string | null) ?? null,
       avatarUrl: photoUrl(Number(row.user_id), (row.photo_key as string | null) ?? null),
     })),
     challenges: challengeRows.map((row: Record<string, unknown>) => {
@@ -266,6 +284,8 @@ export async function updateEnterprise(
       i += 1;
     }
   }
+  // A changed or removed logo invalidates its colour; the profile read recomputes it.
+  if ((patch as Record<string, unknown>).logoUrl !== undefined) sets.push("logo_color = NULL");
   values.push(id);
   try {
     return await withTransaction(async (client) => {
@@ -382,13 +402,14 @@ export async function setEnterpriseLogo(
   logoUrl: string,
   variant: "default" | "negative",
   actorId: number | null,
+  color: string | null = null,
 ) {
-  const column = variant === "negative" ? "logo_negative_url" : "logo_url";
+  const sets = variant === "negative" ? "logo_negative_url = $1" : "logo_url = $1, logo_color = $3";
   return withTransaction(async (client) => {
     await assertEnterpriseScope(client, actorId, id);
     const { rows } = await client.query(
-      `UPDATE enterprises SET ${column} = $1 WHERE id = $2 RETURNING ${COLUMNS}`,
-      [logoUrl, id],
+      `UPDATE enterprises SET ${sets} WHERE id = $2 RETURNING ${COLUMNS}`,
+      variant === "negative" ? [logoUrl, id] : [logoUrl, id, color],
     );
     if (!rows[0]) throw new NotFoundError("Enterprise not found", { id });
     await audit(client, {

@@ -187,12 +187,15 @@ export const enterpriseProfileResponse = z.object({
   name: z.string(),
   logoUrl: z.string().nullable(),
   logoNegativeUrl: z.string().nullable(),
+  logoColor: z.string().nullable(),
   website: z.string().nullable(),
   description: z.string().nullable(),
   representatives: z.array(
     z.object({
       userId: z.number().int(),
       name: z.string(),
+      firstName: z.string(),
+      surname: z.string().nullable(),
       avatarUrl: z.string().nullable(),
     }),
   ),
