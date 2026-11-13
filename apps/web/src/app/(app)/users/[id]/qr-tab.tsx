@@ -20,7 +20,6 @@ export function QrTab({ user }: { user: UserDetail }) {
 
   useEffect(() => {
     let alive = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     logisticsApi
       .userTicket(user.id)

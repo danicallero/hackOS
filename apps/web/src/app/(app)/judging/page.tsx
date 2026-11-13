@@ -190,7 +190,6 @@ export default function QueuePage() {
   }, [canUse, t]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetching judging rooms is API sync.
     void loadRooms();
   }, [loadRooms]);
 
@@ -256,7 +255,6 @@ export default function QueuePage() {
   useEffect(() => {
     const term = search.trim();
     if (!effectiveChallengeId || !term) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- Clear search on empty query.
       setSearchResults([]);
       setSearching(false);
       return;

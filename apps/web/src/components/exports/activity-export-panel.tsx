@@ -61,7 +61,6 @@ export function ActivityExportPanel({ trigger }: { trigger?: ReactNode }) {
   }, [language, t]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- catalog fetch synchronises this selector with the API.
     void load();
   }, [load]);
 

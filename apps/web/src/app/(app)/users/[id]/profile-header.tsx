@@ -147,7 +147,6 @@ function useAccountRemoval(user: UserDetail) {
   useEffect(() => {
     if (!canDelete) return;
     let active = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setEligibilityError(null);
     api

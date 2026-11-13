@@ -64,7 +64,6 @@ export function ReviewFixturesDialog({
   useEffect(() => {
     if (!open) return;
     let active = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStatusLoading(true);
     api
       .get<FixtureStatusResponse>("/api/admin/review-fixtures")

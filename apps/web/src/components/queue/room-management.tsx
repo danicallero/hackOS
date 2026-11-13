@@ -101,13 +101,11 @@ export function RoomManagement({ embedded = false }: { embedded?: boolean }) {
   );
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
   useEffect(() => {
     if (panelMode !== "edit" || selectedRoomId === null) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadRoomDetails(selectedRoomId);
   }, [loadRoomDetails, panelMode, selectedRoomId]);
 

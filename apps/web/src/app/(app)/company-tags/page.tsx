@@ -291,7 +291,6 @@ export default function CompanyTagsPage() {
   }, [t]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (canManage) void load();
   }, [canManage, load]);
 
