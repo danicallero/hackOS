@@ -133,7 +133,8 @@ below.
   (H28), `GET`/`PUT /api/me/notification-preferences` (H51).
 - `GET /api/scanner/snapshot` — capability-guarded, replace-all seed for the
   device SQLite store. It contains only the lightweight person cards, an
-  authenticated photo URL when the person opted into public photo sharing,
+  authenticated photo URL for every person with an account photo (staff see
+  it regardless of the public profile's photo switch),
   ticket and current/revoked badge mappings, scannable activities, meal/activity
   scan counts, last door state, and the current `eventAccess` entitlement
   needed by H22-H26. Ticket tokens are included only while the person's live
@@ -431,9 +432,8 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   `scan/person/[id]`; a new scan replaces the person, Android back clears the pane, and the person
   route hands a deep link or a people-list/history tap to the scanner as `personId` params. Compact
   windows still push the route.
-  "View people" opens the people finder over the scanner pane only. Rows show a
-  person's photo when their public profile shares it; hidden photos stay absent
-  from the local roster. On iOS the pane is its own
+  "View people" opens the people finder over the scanner pane only. Rows show
+  every person's account photo, whether or not their public profile shares it. On iOS the pane is its own
   native stack (`components/pane-people-stack.ios.tsx`, an independent react-navigation tree):
   its root bar carries the title, role filter and sync status, `People` is pushed with the native
   large title, back item, integrated search and filter, and the route's header is hidden

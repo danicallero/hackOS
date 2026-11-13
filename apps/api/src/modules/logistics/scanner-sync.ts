@@ -7,7 +7,9 @@ import { scannableActivitySql, scannableCategoriesParam } from "./scannable.js";
 
 /**
  * Who may read the scanner roster. The photo route admits the same holders to
- * the shared photos the roster links, so both read this one list.
+ * every photo the roster links, so both read this one list. Staff identify the
+ * person in front of them, so the roster photo does not depend on the public
+ * profile's photo switch (#934).
  */
 export const SCANNER_ROSTER_CAPABILITIES = [
   CAPABILITIES.ACCREDIT_SCAN,
@@ -44,9 +46,7 @@ export async function scannerSnapshot(actorId?: number) {
     pool.query(
       `SELECT u.id, u.email, u.name, u.surname, u.dni, u.badge_id, u.badge_id_history,
               u.food_intolerance_notes, u.notes,
-              CASE WHEN pp.directory_visible AND pp.show_photo AND u.is_test_account = false
-                     AND EXISTS (SELECT 1 FROM user_event_access a WHERE a.user_id = u.id)
-                   THEN u.photo_key ELSE NULL END AS photo_key,
+              u.photo_key,
               CASE WHEN EXISTS (
                 SELECT 1 FROM user_event_access uea WHERE uea.user_id = u.id
               ) THEN t.token ELSE NULL END AS ticket_token,
@@ -90,7 +90,6 @@ export async function scannerSnapshot(actorId?: number) {
               last_presence.scanned_at AS last_presence_at
          FROM users u
          LEFT JOIN user_effective_role_name uern ON uern.user_id = u.id
-         LEFT JOIN user_public_profiles pp ON pp.user_id = u.id
          LEFT JOIN tickets t ON t.user_id = u.id
          -- Anonymized profiles (H54) must never reach a scanner's local store.
          LEFT JOIN LATERAL (
