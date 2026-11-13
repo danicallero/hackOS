@@ -73,10 +73,8 @@ export function CompanyView({ company, context }: { company: Company; context: R
   const logoColor = useLogoColor(company.logoUrl);
   const { data: event } = useServerResource(["public", "event"], () => getPublicEvent());
   const zone = event?.timezone;
-  const day = eventDateFormat(language, "weekdayDayMonthText", zone);
   const clock = eventDateFormat(language, "clock", zone);
-  const monthShort = new Intl.DateTimeFormat(language, { month: "short", timeZone: zone });
-  const dayNum = new Intl.DateTimeFormat(language, { day: "numeric", timeZone: zone });
+  const weekdayShort = new Intl.DateTimeFormat(language, { weekday: "short", timeZone: zone });
   const long = (company.description?.length ?? 0) > 280;
 
   return (
@@ -217,24 +215,21 @@ export function CompanyView({ company, context }: { company: Company; context: R
                     className="button-interaction -mx-1 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 rounded-sm px-1 py-2 hover:bg-muted"
                   >
                     <span className="flex min-w-0 items-center gap-3">
-                      <span
-                        aria-hidden="true"
-                        className="flex size-11 shrink-0 flex-col items-center justify-center rounded-lg border border-border/60 leading-none"
-                      >
+                      <span className="flex h-11 min-w-12 shrink-0 flex-col px-1.5 items-center justify-center rounded-lg border border-border/60 leading-none">
                         <span className="text-[0.625rem] font-medium text-muted-foreground uppercase">
-                          {monthShort.format(new Date(activity.startsAt))}
+                          {weekdayShort.format(new Date(activity.startsAt))}
                         </span>
                         <span className="text-base font-medium">
-                          {dayNum.format(new Date(activity.startsAt))}
+                          {clock.format(new Date(activity.startsAt))}
                         </span>
                       </span>
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-medium">{activity.title}</span>
-                        <span className="block truncate text-xs text-muted-foreground capitalize">
-                          {day.format(new Date(activity.startsAt))} ·{" "}
-                          {clock.format(new Date(activity.startsAt))}
-                          {activity.location ? ` · ${activity.location}` : ""}
-                        </span>
+                        {activity.location && (
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {activity.location}
+                          </span>
+                        )}
                       </span>
                     </span>
                     <SpeakerStack speakers={activity.speakers ?? []} max={3} />
