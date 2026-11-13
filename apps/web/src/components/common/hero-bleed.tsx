@@ -23,9 +23,14 @@ export function HeroBleed({
         "-mx-4 -mt-3 mb-6 px-4 pt-16 pb-10 [--hero-mix:60%] sm:-mx-6 sm:px-6 md:-mt-6 md:pt-10 lg:-mt-8 dark:[--hero-mix:40%]",
         className,
       )}
-      style={{ backgroundImage: heroGradient(color) }}
     >
-      <div className="mx-auto w-full max-w-(--page-width-reading)">{children}</div>
+      {/* Fixed, so the wash reaches the window edges and runs behind the sidebar. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-x-0 top-0 z-0 h-[28rem]"
+        style={{ backgroundImage: heroGradient(color) }}
+      />
+      <div className="relative mx-auto w-full max-w-(--page-width-reading)">{children}</div>
     </div>
   );
 }

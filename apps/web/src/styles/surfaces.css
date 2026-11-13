@@ -66,3 +66,9 @@ body {
     right center / 0.75rem 100% no-repeat scroll;
   background-color: var(--card);
 }
+
+/* Tinted heroes sit behind the floating sidebar too (H47, H48). */
+body:has([data-hero-bleed]) [data-slot="sidebar-inner"] {
+  background-color: color-mix(in srgb, var(--sidebar) 78%, transparent);
+  backdrop-filter: blur(24px);
+}
