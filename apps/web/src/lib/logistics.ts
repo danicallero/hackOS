@@ -296,8 +296,19 @@ export interface ScheduleSpeaker {
   userId: number;
   name: string;
   avatarUrl: string | null;
-  enterpriseId: number | null;
-  enterpriseName: string | null;
+  /** A person may belong to several sponsors. */
+  enterprises?: { id: number; name: string }[];
+  /** Legacy single-company shape, tolerated until every API build sends `enterprises`. */
+  enterpriseId?: number | null;
+  enterpriseName?: string | null;
+}
+
+/** The companies a speaker represents, from either API shape. */
+export function speakerCompanies(speaker: ScheduleSpeaker): { id: number; name: string }[] {
+  if (speaker.enterprises) return speaker.enterprises;
+  return speaker.enterpriseId != null && speaker.enterpriseName
+    ? [{ id: speaker.enterpriseId, name: speaker.enterpriseName }]
+    : [];
 }
 
 export interface ScheduleEnterprise {

@@ -84,7 +84,10 @@ export default function PublicChallengePage() {
         title={challenge ? displayText(challenge.title, language) : t("challenges")}
         meta={
           challenge && (
-            <div className="mt-2 flex items-center gap-3">
+            <CompanyLink
+              href={authenticated ? `/companies/${challenge.enterprise.id}` : null}
+              className="mt-2 flex items-center gap-3"
+            >
               {challenge.enterprise.logoUrl && (
                 <SponsorLogo
                   logoUrl={challenge.enterprise.logoUrl}
@@ -94,7 +97,7 @@ export default function PublicChallengePage() {
                 />
               )}
               <span className="text-sm text-muted-foreground">{challenge.enterprise.name}</span>
-            </div>
+            </CompanyLink>
           )
         }
         context={
@@ -227,5 +230,26 @@ export default function PublicChallengePage() {
         </article>
       )}
     </>
+  );
+}
+
+function CompanyLink({
+  href,
+  className,
+  children,
+}: {
+  href: string | null;
+  className: string;
+  children: React.ReactNode;
+}) {
+  return href ? (
+    <Link
+      href={href}
+      className={`${className} button-interaction w-fit rounded-sm hover:underline`}
+    >
+      {children}
+    </Link>
+  ) : (
+    <div className={className}>{children}</div>
   );
 }

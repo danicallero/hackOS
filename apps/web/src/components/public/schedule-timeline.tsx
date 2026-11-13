@@ -11,7 +11,11 @@ import { EmptyState } from "@/components/common/empty-state";
 import { IconButton } from "@/components/common/icon-button";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { TabBar } from "@/components/common/tab-bar";
-import { ScheduleLinks } from "@/components/public/schedule-links";
+import {
+  ScheduleLinks,
+  ScheduleLinksDetail,
+  SpeakerStack,
+} from "@/components/public/schedule-links";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useNow } from "@/hooks/use-now";
@@ -96,6 +100,20 @@ export function positionDayItems(
   return result;
 }
 
+function NowBadge({ live }: { live: boolean }) {
+  const { t } = useLocale();
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded-full px-1.5 py-px text-[0.625rem] leading-4 font-semibold uppercase",
+        live ? "bg-destructive text-destructive-foreground" : "bg-primary/10 text-primary",
+      )}
+    >
+      {live ? t("scheduleNow") : t("scheduleNext")}
+    </span>
+  );
+}
+
 const nextDate = (key: string) =>
   new Date(Date.parse(`${key}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 
@@ -126,6 +144,17 @@ export function ScheduleTimeline({
   const today = instantToWallClock(new Date(now).toISOString(), timezone).slice(0, 10);
   const source = rangeItems ?? items;
   const visibleIds = new Set(items.map((item) => item.id));
+  // Red marks what is on right now (like the time marker); primary marks what comes next.
+  const { liveIds, nextId } = useMemo(() => {
+    const live = new Set<number>();
+    let next: PublicScheduleItem | null = null;
+    for (const item of items) {
+      const starts = Date.parse(item.startsAt);
+      if (starts <= now && now < Date.parse(item.endsAt)) live.add(item.id);
+      else if (starts > now && (!next || starts < Date.parse(next.startsAt))) next = item;
+    }
+    return { liveIds: live, nextId: next?.id ?? null };
+  }, [items, now]);
   const days = useMemo(() => {
     const grouped = new Map<string, PublicScheduleItem[]>();
     for (const item of [...source].sort(
@@ -163,6 +192,17 @@ export function ScheduleTimeline({
   const showNow = visible.some(([key]) => key === today);
   const openItem = (item: PublicScheduleItem) =>
     setSelectedItem(items.find((original) => original.id === item.id) ?? item);
+  // `/timetable?activity=ID` (company and person pages) opens that activity once.
+  const deepLinked = useRef(false);
+  useEffect(() => {
+    if (deepLinked.current || source.length === 0) return;
+    deepLinked.current = true;
+    const id = Number(new URLSearchParams(window.location.search).get("activity"));
+    const target = source.find((item) => item.id === id);
+    if (!target) return;
+    setSelectedDay(instantToWallClock(target.startsAt, timezone).slice(0, 10));
+    setSelectedItem(target);
+  }, [source, timezone]);
   function goToNow() {
     setSelectedDay(today);
     if (scroller.current)
@@ -268,6 +308,26 @@ export function ScheduleTimeline({
       className={cn("gap-0 space-y-3", className)}
     >
       {renderToolbar ? renderToolbar(controls) : controls}
+      {view === "day" && days.length > 1 && (
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+          {days.map(([key, entries]) => (
+            <Button
+              key={key}
+              type="button"
+              size="sm"
+              variant={key === activeDay[0] ? "default" : "outline"}
+              aria-pressed={key === activeDay[0]}
+              className="shrink-0 capitalize"
+              onClick={() => setSelectedDay(key)}
+            >
+              {shortDate.format(new Date(entries[0].startsAt))}
+              {key === today && (
+                <span aria-hidden="true" className="size-1.5 rounded-full bg-destructive" />
+              )}
+            </Button>
+          ))}
+        </div>
+      )}
       <TabsContent value={view}>
         <div
           ref={scroller}
@@ -276,39 +336,50 @@ export function ScheduleTimeline({
           {view === "day" && (
             <div className="divide-y divide-border/60 sm:hidden">
               <div className="sticky top-0 z-10 bg-background">{dayHeader}</div>
-              {activeDay[1]
-                .filter((item) => visibleIds.has(item.id))
-                .map((item) => (
-                  <div key={item.id} className="grid grid-cols-[3rem_minmax(0,1fr)] gap-2 p-3">
-                    <time
-                      dateTime={item.startsAt}
-                      className="pt-2 text-xs text-muted-foreground tabular-nums"
-                    >
-                      {timeFormatter.format(new Date(item.startsAt))}
-                    </time>
-                    <button
-                      type="button"
-                      onClick={() => openItem(item)}
-                      className={cn(
-                        "button-interaction min-w-0 rounded-sm border-l-[3px] px-3 py-2 text-left",
-                        SCHEDULE_CATEGORY_STYLES[toActivityKind(item.type) ?? "activity"],
-                      )}
-                    >
-                      <span className="block text-sm font-semibold">{item.title}</span>
-                      <span className="mt-1 block text-xs text-muted-foreground">
-                        {t(activityKindLabelKey(toActivityKind(item.type) ?? "activity"))} ·{" "}
-                        {timeFormatter.format(new Date(item.startsAt))}–
-                        {timeFormatter.format(new Date(item.endsAt))}
-                      </span>
-                      {item.location && (
-                        <span className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                          <MapPinIcon aria-hidden="true" className="size-3 shrink-0" />
-                          {item.location}
+              {activeDay[1].some((item) => visibleIds.has(item.id)) ? (
+                activeDay[1]
+                  .filter((item) => visibleIds.has(item.id))
+                  .map((item) => (
+                    <div key={item.id} className="grid grid-cols-[3rem_minmax(0,1fr)] gap-2 p-3">
+                      <time
+                        dateTime={item.startsAt}
+                        className="pt-2 text-xs text-muted-foreground tabular-nums"
+                      >
+                        {timeFormatter.format(new Date(item.startsAt))}
+                      </time>
+                      <button
+                        type="button"
+                        onClick={() => openItem(item)}
+                        className={cn(
+                          "button-interaction min-w-0 rounded-sm border-l-[3px] px-3 py-2 text-left",
+                          SCHEDULE_CATEGORY_STYLES[toActivityKind(item.type) ?? "activity"],
+                          liveIds.has(item.id) && "ring-2 ring-destructive/70",
+                        )}
+                      >
+                        <span className="flex items-start justify-between gap-2">
+                          <span className="block text-sm font-semibold">{item.title}</span>
+                          {(liveIds.has(item.id) || item.id === nextId) && (
+                            <NowBadge live={liveIds.has(item.id)} />
+                          )}
                         </span>
-                      )}
-                    </button>
-                  </div>
-                ))}
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          {t(activityKindLabelKey(toActivityKind(item.type) ?? "activity"))} ·{" "}
+                          {timeFormatter.format(new Date(item.startsAt))}–
+                          {timeFormatter.format(new Date(item.endsAt))}
+                        </span>
+                        {item.location && (
+                          <span className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                            <MapPinIcon aria-hidden="true" className="size-3 shrink-0" />
+                            {item.location}
+                          </span>
+                        )}
+                        <ScheduleLinks item={item} maxSpeakers={5} className="mt-2" />
+                      </button>
+                    </div>
+                  ))
+              ) : (
+                <EmptyState title={emptyTitle ?? t("schedulePending")} className="py-10" />
+              )}
             </div>
           )}
           <div
@@ -394,6 +465,8 @@ export function ScheduleTimeline({
                           "button-interaction absolute flex flex-col items-start justify-start overflow-hidden rounded-sm border border-l-[3px] px-2 text-left",
                           itemHeight < 42 ? "py-0.5" : itemHeight < 60 ? "py-1" : "py-2",
                           SCHEDULE_CATEGORY_STYLES[toActivityKind(item.type) ?? "activity"],
+                          liveIds.has(item.id) && "ring-2 ring-destructive/70",
+                          item.id === nextId && "ring-2 ring-primary/50",
                         )}
                         style={{
                           top,
@@ -402,24 +475,40 @@ export function ScheduleTimeline({
                           left: `calc(${(lane * 100) / laneCount}% + 2px)`,
                         }}
                       >
-                        <span
-                          className={cn(
-                            "block max-w-full truncate font-semibold",
-                            itemHeight < 60 ? "text-xs leading-4" : "text-sm",
+                        <span className="flex w-full min-w-0 shrink-0 items-center gap-1.5">
+                          <span
+                            className={cn(
+                              "block min-w-0 truncate font-semibold",
+                              itemHeight < 60 ? "text-xs leading-4" : "text-sm",
+                            )}
+                          >
+                            {item.title}
+                          </span>
+                          {itemHeight >= 42 && (liveIds.has(item.id) || item.id === nextId) && (
+                            <NowBadge live={liveIds.has(item.id)} />
                           )}
-                        >
-                          {item.title}
                         </span>
                         {itemHeight >= 42 && (
-                          <span className="block max-w-full truncate text-xs opacity-80">
+                          <span className="block max-w-full shrink-0 truncate text-xs opacity-80">
                             {t(activityKindLabelKey(toActivityKind(item.type) ?? "activity"))}
                             {` · ${timeFormatter.format(new Date(item.startsAt))}–${timeFormatter.format(new Date(item.endsAt))}`}
                           </span>
                         )}
-                        {itemHeight >= 88 && item.location && (
-                          <span className="mt-1 flex items-center gap-1 text-xs opacity-80">
-                            <MapPinIcon aria-hidden="true" className="size-3 shrink-0" />
-                            <span className="truncate">{item.location}</span>
+                        {itemHeight >= 88 && (item.location || item.speakers?.length) && (
+                          <span className="mt-1 flex w-full min-w-0 shrink-0 items-center justify-between gap-2 text-xs opacity-80">
+                            {item.location ? (
+                              <span className="flex min-w-0 items-center gap-1">
+                                <MapPinIcon aria-hidden="true" className="size-3 shrink-0" />
+                                <span className="truncate">{item.location}</span>
+                              </span>
+                            ) : (
+                              <span />
+                            )}
+                            <SpeakerStack
+                              speakers={item.speakers ?? []}
+                              max={laneCount > 1 ? 2 : 4}
+                              className="shrink-0"
+                            />
                           </span>
                         )}
                       </button>
@@ -476,7 +565,7 @@ export function ScheduleTimeline({
             {selectedItem.description && (
               <p className="whitespace-pre-wrap text-pretty">{selectedItem.description}</p>
             )}
-            <ScheduleLinks item={selectedItem} />
+            <ScheduleLinksDetail item={selectedItem} />
             {showResponsible && selectedItem.owners && selectedItem.owners.length > 0 && (
               <div>
                 <h3 className="type-subheading">{t("ownersLabel")}</h3>
