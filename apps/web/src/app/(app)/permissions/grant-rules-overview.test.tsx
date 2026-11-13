@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,7 +21,7 @@ const rules: RoleGrantRule[] = [
     action: "grant",
     enabled: true,
     enterpriseId: null,
-    enterpriseName: null,
+    enterpriseName: "José Labs",
   },
   {
     id: 2,
@@ -101,6 +102,16 @@ describe("GrantRulesOverviewModal row navigation", () => {
     expect(
       document.querySelector('input[aria-label="allGrantRulesSearchPlaceholder"]'),
     ).not.toBeNull();
+  });
+
+  it("searches rule fields without case or accent sensitivity", async () => {
+    const input = document.querySelector<HTMLInputElement>(
+      'input[aria-label="allGrantRulesSearchPlaceholder"]',
+    )!;
+    const user = userEvent.setup();
+    await act(async () => user.type(input, "JOSE"));
+    expect(document.body.textContent).toContain("José Labs");
+    expect(document.querySelectorAll("ul > li")).toHaveLength(1);
   });
 
   it("calls onSelectRule with the clicked rule", async () => {

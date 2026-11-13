@@ -9,7 +9,10 @@ vi.mock("@/lib/data/cities.json", () => ({
   default: {
     countries: ["ES"],
     regions: ["Galicia"],
-    rows: [["Vigo", 0, 0, 0]],
+    rows: [
+      ["Vigo", 0, 0, 0],
+      ["A Coruña", "A Coruna", 0, 0],
+    ],
   },
 }));
 
@@ -97,6 +100,12 @@ describe("CityPicker (H12)", () => {
     expect((container.querySelector("input") as HTMLInputElement).value).toBe(
       "Madrid, Community of Madrid, Spain",
     );
+  });
+
+  it("finds A Coruña from an unaccented local query", async () => {
+    await search("coruna");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("A Coruña, Galicia, Spain");
   });
 
   it("shows a pending search and permits complete manual entry without waiting", async () => {

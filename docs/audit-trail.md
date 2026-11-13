@@ -57,8 +57,9 @@ substituted for a historical snapshot.
   neither an initiator nor request correlation. Account removal scrubs subject
   references, initiator references and correlation on surviving related entries.
 
-Actor search includes initiating users. Relationships needed for subject erasure
-remain internal IDs; private content is not needed to locate those relationships.
+Actor search includes initiating users and ignores case and accents when matching
+account names and email addresses. Relationships needed for subject erasure remain
+internal IDs; private content is not needed to locate those relationships.
 
 ## Related actions and editing noise
 

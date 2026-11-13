@@ -14,6 +14,11 @@ describe("quick search arrival (#1182)", () => {
     expect(findQuickTarget(document, "Missing")).toBeNull();
   });
 
+  it("matches labels without case or accent sensitivity", () => {
+    mount("<h2>José Núñez</h2>");
+    expect(findQuickTarget(document, "JOSE nunez")?.tagName).toBe("H2");
+  });
+
   it("skips hidden matches", () => {
     mount("<div hidden><h2>Danger zone</h2></div>");
     expect(findQuickTarget(document, "Danger zone")).toBeNull();

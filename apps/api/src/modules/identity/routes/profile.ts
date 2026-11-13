@@ -901,9 +901,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
              AND is_test_account = false
              AND (unaccent(name) ILIKE unaccent($1)
               OR unaccent(surname) ILIKE unaccent($1)
-              OR email ILIKE $1
-              OR badge_id ILIKE $1
-              OR dni ILIKE $1
+              OR unaccent(email) ILIKE unaccent($1)
+              OR unaccent(badge_id) ILIKE unaccent($1)
+              OR unaccent(dni) ILIKE unaccent($1)
               OR unaccent(name || ' ' || surname) ILIKE unaccent($1)
               OR unaccent(surname || ' ' || name) ILIKE unaccent($1))`
         : `WHERE account_state = 'active' AND anonymized_at IS NULL

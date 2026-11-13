@@ -1,3 +1,5 @@
+import { normalizeSearchText } from "@/lib/search-text";
+
 // City suggestions for CityPicker, fastest source first:
 //   1. a bundled index of ~1.2k Spanish places (data/cities.json, built by
 //      scripts/build-city-data.mjs) that answers instantly and offline;
@@ -31,14 +33,6 @@ interface PreparedCity {
 const REMOTE_TIMEOUT_MS = 5000;
 const LIMIT = 6;
 
-export const normalizeCityText = (text: string) =>
-  text
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim();
-
 export function formatCityValue({ city, province, country }: CityValue) {
   return [city, province, country].filter(Boolean).join(", ");
 }
@@ -52,7 +46,18 @@ function loadIndex(): Promise<PreparedCity[]> {
     const data = (module.default ?? module) as unknown as CityIndex;
     return data.rows.map(([name, ascii, region, country]) => ({
       name,
-      keys: [normalizeCityText(name), ...(ascii ? [normalizeCityText(ascii)] : [])],
+      keys: [
+        normalizeSearchText(name)
+          .replace(/[^\p{L}\p{N}]+/gu, " ")
+          .trim(),
+        ...(ascii
+          ? [
+              normalizeSearchText(ascii)
+                .replace(/[^\p{L}\p{N}]+/gu, " ")
+                .trim(),
+            ]
+          : []),
+      ],
       region: data.regions[region] ?? "",
       regionIndex: region,
       country: data.countries[country] ?? "",
@@ -82,16 +87,22 @@ function countryName(code: string, language: string) {
 /** Instant suggestions from the bundled index. Rows are sorted by population. */
 async function searchLocalCities(query: string, language: string): Promise<CityValue[]> {
   const [name, ...rest] = query.split(",");
-  const needle = normalizeCityText(name ?? "");
+  const needle = normalizeSearchText(name ?? "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
   if (needle.length < 2) return [];
-  const qualifier = normalizeCityText(rest.join(" "));
+  const qualifier = normalizeSearchText(rest.join(" "))
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
   const index = await loadIndex();
   const exact: PreparedCity[] = [];
   const prefix: PreparedCity[] = [];
   const word: PreparedCity[] = [];
   for (const city of index) {
     if (qualifier) {
-      const where = normalizeCityText(`${city.region} ${countryName(city.country, language)}`);
+      const where = normalizeSearchText(`${city.region} ${countryName(city.country, language)}`)
+        .replace(/[^\p{L}\p{N}]+/gu, " ")
+        .trim();
       if (!where.includes(qualifier)) continue;
     }
     if (city.keys.some((k) => k === needle)) exact.push(city);
@@ -162,7 +173,9 @@ async function searchOpenMeteo(query: string, language: string, signal: AbortSig
 const dedupe = (cities: CityValue[]) => {
   const seen = new Set<string>();
   return cities.filter((c) => {
-    const key = normalizeCityText(formatCityValue(c));
+    const key = normalizeSearchText(formatCityValue(c))
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim();
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

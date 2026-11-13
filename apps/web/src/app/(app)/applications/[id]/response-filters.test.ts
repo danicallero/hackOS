@@ -50,8 +50,8 @@ describe("score selection (H13/H14)", () => {
 
 describe("response search (H13)", () => {
   const row = {
-    name: "Ada Lovelace",
-    email: "ada@example.test",
+    name: "José Núñez",
+    email: "jose@example.test",
     reviews: [
       {
         author_id: 1,
@@ -62,8 +62,8 @@ describe("response search (H13)", () => {
       },
     ],
   };
-  it("matches names, emails and permitted review notes without case sensitivity", () => {
-    for (const query of [" ADA ", "example.test", " ROBOTICS ", ""]) {
+  it("matches names, emails and permitted review notes without case or accent sensitivity", () => {
+    for (const query of [" JOSE NUNEZ ", "JOSE@example.test", " ROBOTICS ", ""]) {
       expect(matchesResponseSearch(row, query)).toBe(true);
     }
     expect(matchesResponseSearch(row, "unrelated")).toBe(false);

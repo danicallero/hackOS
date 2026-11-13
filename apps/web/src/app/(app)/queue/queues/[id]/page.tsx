@@ -41,8 +41,22 @@ import {
   setQueueGroupRooms,
   updateQueueGroup,
 } from "@/lib/queue";
+import { normalizeSearchText } from "@/lib/search-text";
 import { useSessionContext } from "@/lib/session";
 import { showErrorToast, toast } from "@/lib/toast";
+
+export function filterQueueEntriesBySearch(
+  entries: QueueGroupQueue["entries"],
+  search: string,
+): QueueGroupQueue["entries"] {
+  const needle = normalizeSearchText(search);
+  if (!needle) return entries;
+  return entries.filter((entry) =>
+    [entry.repo_name, entry.queue_name, String(entry.repo_id)].some((value) =>
+      normalizeSearchText(value).includes(needle),
+    ),
+  );
+}
 
 export default function QueueDetailPage() {
   const { t } = useLocale();
@@ -113,16 +127,10 @@ export default function QueueDetailPage() {
     { enabled: Number.isFinite(queueGroupId) },
   );
 
-  const filteredEntries = useMemo(() => {
-    const entries = queue?.entries ?? [];
-    const needle = search.trim().toLocaleLowerCase();
-    if (!needle) return entries;
-    return entries.filter((entry) =>
-      [entry.repo_name, entry.queue_name, String(entry.repo_id)].some((value) =>
-        value.toLocaleLowerCase().includes(needle),
-      ),
-    );
-  }, [queue?.entries, search]);
+  const filteredEntries = useMemo(
+    () => filterQueueEntriesBySearch(queue?.entries ?? [], search),
+    [queue?.entries, search],
+  );
 
   if (!canManage) return <AccessDenied ask={t("roomAdminDeniedDesc")} />;
 
