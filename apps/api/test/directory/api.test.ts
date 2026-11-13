@@ -471,6 +471,69 @@ describe("saved profile reads (#934, #935)", () => {
   });
 });
 
+describe("speakers and company representatives (H44, H48)", () => {
+  async function speakerOf(userId: number) {
+    const { rows } = await pool.query(
+      `INSERT INTO schedule (title, starts_at, ends_at, visibility, audiences)
+       VALUES ('Talk', now() + interval '1 hour', now() + interval '2 hours', 'shown', '{participant}')
+       RETURNING id`,
+    );
+    await pool.query(`INSERT INTO schedule_speakers (schedule_id, user_id) VALUES ($1, $2)`, [
+      rows[0].id,
+      userId,
+    ]);
+  }
+  async function repOf(userId: number) {
+    const { rows } = await pool.query(
+      `INSERT INTO enterprises (name, visibility) VALUES ('Acme', 'visible') RETURNING id`,
+    );
+    await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+      rows[0].id,
+      userId,
+    ]);
+  }
+
+  it("lets any attendee read an opted-in speaker without a scan", async () => {
+    const ada = await person("Ada", "Lovelace");
+    await putProfile(ada, { ...VISIBLE, headline: "Compilers" });
+    await speakerOf(ada);
+    const res = await card(ada);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().headline).toBe("Compilers");
+    expect(res.json().activities).toHaveLength(1);
+  });
+
+  it("lets any attendee read an opted-in company representative without a scan", async () => {
+    const rep = await person("Rae", "Rep");
+    await putProfile(rep, VISIBLE);
+    await repOf(rep);
+    const res = await card(rep);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().enterprise).toMatchObject({ name: "Acme" });
+  });
+
+  it("keeps opted-out speakers and representatives unreadable", async () => {
+    const speaker = await person("Out", "Speaker");
+    await putProfile(speaker, { ...VISIBLE, directoryVisible: false });
+    await speakerOf(speaker);
+    const rep = await person("Out", "Rep");
+    await repOf(rep);
+    expect((await card(speaker)).statusCode).toBe(404);
+    expect((await card(rep)).statusCode).toBe(404);
+  });
+
+  it("keeps unrelated and unpublished-talk people unreadable", async () => {
+    const other = await person("Un", "Related");
+    await putProfile(other, VISIBLE);
+    expect((await card(other)).statusCode).toBe(404);
+    const hiddenTalk = await person("Hidden", "Talk");
+    await putProfile(hiddenTalk, VISIBLE);
+    await speakerOf(hiddenTalk);
+    await pool.query(`UPDATE schedule SET visibility = 'hidden'`);
+    expect((await card(hiddenTalk)).statusCode).toBe(404);
+  });
+});
+
 describe("moderation and removal (#934)", () => {
   it("hides a profile and clears its text, audited, only with users:write", async () => {
     const me = await person("Ana", "Pérez");

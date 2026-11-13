@@ -298,27 +298,41 @@ export async function photoPublishedInDirectory(db: Queryable, userId: number): 
 }
 
 /**
- * Whether the person's shared photo also appears on a public surface any
- * signed-in user can open: a speaker of a shown, participant-visible schedule
- * item, or a representative of a visible company (H44, H48).
+ * Whether the person's shared profile (opt-in on, admitted, not a test
+ * account) is also on a public surface any attendee can open: a speaker of a
+ * shown, published, participant-audience schedule item, or a representative of
+ * a visible, non-synthetic company (H44, H48). The photo and the profile card
+ * both follow this rule; `requirePhoto` adds the photo switch.
  */
-export async function photoPublishedOnPublicSurface(
+async function sharedOnPublicSurface(
   db: Queryable,
   userId: number,
+  requirePhoto: boolean,
 ): Promise<boolean> {
-  if (!(await photoPublishedInDirectory(db, userId))) return false;
   const { rowCount } = await db.query(
-    `SELECT 1 WHERE EXISTS (
+    `SELECT 1 FROM user_public_profiles p JOIN users u ON u.id = p.user_id
+      WHERE ${VISIBLE_WHERE} ${requirePhoto ? "AND p.show_photo" : ""} AND u.id = $1
+        AND (EXISTS (
          SELECT 1 FROM schedule_speakers ss JOIN schedule s ON s.id = ss.schedule_id
-          WHERE ss.user_id = $1 AND s.visibility = 'shown'
+          WHERE ss.user_id = u.id AND s.visibility = 'shown'
             AND (s.publish_at IS NULL OR s.publish_at <= now())
             AND 'participant' = ANY (s.audiences))
        OR EXISTS (
          SELECT 1 FROM sponsors sp JOIN enterprises e ON e.id = sp.enterprise_id
-          WHERE sp.user_id = $1 AND e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC})`,
+          WHERE sp.user_id = u.id AND e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))`,
     [userId],
   );
   return (rowCount ?? 0) > 0;
+}
+
+/** The shared photo of a speaker or company representative, readable by any attendee. */
+export function photoPublishedOnPublicSurface(db: Queryable, userId: number): Promise<boolean> {
+  return sharedOnPublicSurface(db, userId, true);
+}
+
+/** The shared profile of a speaker or company representative, readable by any attendee. */
+export function profilePublishedOnPublicSurface(db: Queryable, userId: number): Promise<boolean> {
+  return sharedOnPublicSurface(db, userId, false);
 }
 
 async function assertReaderAdmitted(userId: number): Promise<void> {
@@ -346,12 +360,17 @@ export async function savedByReader(
 }
 
 /**
- * Readers see only the people they saved; hidden, missing and unsaved people
- * are deliberately indistinguishable (#934, #935).
+ * Readers see the people they saved and the opted-in speakers and company
+ * representatives anyone can already see on the schedule and company pages
+ * (H44, H48); hidden, missing and other people are deliberately
+ * indistinguishable (#934, #935).
  */
 async function assertMayReadPerson(readerId: number, userId: number) {
   await assertReaderAdmitted(readerId);
-  if (!(await savedByReader(pool, readerId, userId))) {
+  if (
+    !(await savedByReader(pool, readerId, userId)) &&
+    !(await profilePublishedOnPublicSurface(pool, userId))
+  ) {
     throw new NotFoundError("Person not found");
   }
 }

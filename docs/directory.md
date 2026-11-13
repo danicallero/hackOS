@@ -174,6 +174,7 @@ Besides the owner, staff and readers who saved the person, any signed-in user ma
 shared photo (`show_photo` on a visible profile) while the person speaks at a shown,
 participant-visible schedule item or represents a visible company (H44, H48): that is
 what lets the schedule and company pages show an avatar (`photoPublishedOnPublicSurface`).
+The profile card follows the same rule (`profilePublishedOnPublicSurface`, below).
 
 ### CV from the application
 
@@ -206,7 +207,12 @@ removal, like any other upload.
 ## What a reader sees
 
 A reader is an attendee who saved the person in their diary by scanning their
-badge or ticket.
+badge or ticket. Without a scan, any attendee with event access may also read
+the card (and the shared CV) of an opted-in person (`directory_visible`) who
+speaks at a shown, published, participant-audience schedule item or is a member
+of a visible, non-synthetic company (H44, H48): the people the schedule and
+company pages already show. Nobody else is readable unsaved, and no field is
+added by this rule.
 
 `DirectoryEntry` is the complete list of exposed fields:
 
@@ -265,7 +271,7 @@ account photo for scanner rosters, independent of `show_photo`. The route schema
 - There is no listing route and no save-by-id route; people are added to a
   diary only by `POST /api/me/diary/scan`.
 - `GET /api/directory/:userId` answers 404 for missing, hidden and unsaved
-  people alike, so visibility cannot be probed.
+  people alike (unsaved speakers and company representatives excepted), so visibility cannot be probed.
 - `GET /api/me/public-profile` returns the settings plus `preview`, the entry
   as readers would see it if visible.
 - `GET /api/directory/:userId/cv` and `GET /api/users/:id/photo` answer the
@@ -292,8 +298,8 @@ address stays visible next to the icon; links open with
 and challenges. Empty rows are omitted. A 404 (hidden or missing) shows
 "Person not found"; other failures keep an inline error with Retry. It
 refetches on `domain.changed` for the `directory` topic. Only attendees who
-saved the person in their diary may open it; the API answers the same 404 to
-anyone else.
+saved the person, or who is a shown speaker or company representative, may
+open it; the API answers the same 404 to anyone else.
 
 Every CV link on the web (the person page, the owner's file name and the
 "View CV" link of the My profile preview) opens the shared viewer

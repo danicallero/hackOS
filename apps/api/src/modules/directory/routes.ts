@@ -111,9 +111,9 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
       preHandler: requireAuth,
       schema: {
         params: userParams,
-        summary: "Read a saved person's public profile",
+        summary: "Read a person's public profile",
         description:
-          "Returns one opted-in person: name, photo route (when shown), headline, bio, location note, social links, CV route (when shared), every project and work group with their challenges (`projects`, when `showProject`; `project` is the first one, deprecated). Only attendees who saved this person in their diary (by scanning their badge or ticket) may read it. A missing or hidden profile, and a person the caller has not saved, all answer 404, so visibility cannot be probed (#934, #935).",
+          "Returns one opted-in person: name, photo route (when shown), headline, bio, location note, social links, CV route (when shared), every project and work group with their challenges (`projects`, when `showProject`; `project` is the first one, deprecated). Also returns the shown talks they speak at (`activities`) and the company they represent (`enterprise`). Attendees may read it when they saved this person in their diary (by scanning their badge or ticket), or when the person is opted in and speaks at a shown, published, participant-audience schedule item or represents a visible company (H44, H48). A missing or hidden profile, and anyone else the caller has not saved, all answer 404, so visibility cannot be probed (#934, #935).",
       },
     },
     async (req) => getDirectoryEntry(req.userId as number, req.params.userId),
@@ -295,7 +295,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         params: userParams,
         summary: "Download a shared CV",
         description:
-          "Streams the CV of an opted-in person who shares it: their application CV when there is one, otherwise their upload. A hidden profile, an unshared CV and a missing CV all answer 404. Readable by attendees who saved this person (the access check runs on every request and the reader must also have event access, #935), and by help desk readers (`helpdesk:request`, `helpdesk:offer` or `helpdesk:coverage`) when the person has a published helper profile and shares their CV, without a badge scan (H61, H63), and by the requester and team members of a request that helper claimed (H64, H66), and by the helpers a help request reached or claimed, for the requester's CV while their public profile and CV are shared (H64, H66).",
+          "Streams the CV of an opted-in person who shares it: their application CV when there is one, otherwise their upload. A hidden profile, an unshared CV and a missing CV all answer 404. Readable by attendees who saved this person or, while the CV is shared, by any attendee when the person is a speaker or company representative (the access check runs on every request and the reader must also have event access, #935), and by help desk readers (`helpdesk:request`, `helpdesk:offer` or `helpdesk:coverage`) when the person has a published helper profile and shares their CV, without a badge scan (H61, H63), and by the requester and team members of a request that helper claimed (H64, H66), and by the helpers a help request reached or claimed, for the requester's CV while their public profile and CV are shared (H64, H66).",
       },
     },
     async (req, reply) => {
