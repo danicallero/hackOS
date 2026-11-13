@@ -199,13 +199,14 @@ export async function searchCities(
     // Index unavailable: the live geocoders below still work.
   }
   let failed = true;
+  const remoteQuery = normalizeSearchText(query);
   for (const [source, search] of [
     ["photon", searchPhoton],
     ["open-meteo", searchOpenMeteo],
   ] as const) {
     if (signal.aborted) break;
     try {
-      const cities = dedupe((await search(query, language, signal)).filter(isComplete));
+      const cities = dedupe((await search(remoteQuery, language, signal)).filter(isComplete));
       failed = false;
       if (cities.length > 0) return { cities, source, failed };
     } catch {
