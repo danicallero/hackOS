@@ -88,14 +88,20 @@ export function PersonAvatar({
     <View
       style={[
         frame,
-        // Tinted like the account avatar, so it reads on grouped and plain grounds.
-        name && !photo.loaded ? { backgroundColor: colors.accentSurface } : null,
+        // Solid blue without a photo, so it reads on grouped, plain and tinted grounds.
+        name && !photo.loaded
+          ? { backgroundColor: kind === "person" ? colors.primaryAction : colors.accentSurface }
+          : null,
       ]}
     >
       {photo.loaded ? null : name ? (
         <Text
           accessible={false}
-          style={{ color: colors.onAccentSurface, fontSize: size * 0.36, fontWeight: "600" }}
+          style={{
+            color: kind === "person" ? colors.primaryActionText : colors.onAccentSurface,
+            fontSize: size * 0.36,
+            fontWeight: "600",
+          }}
         >
           {diaryInitials(name)}
         </Text>
