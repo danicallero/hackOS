@@ -22,10 +22,13 @@ export function SpeakerStack({
   speakers,
   max = 4,
   className,
+  large = false,
 }: {
   speakers: ScheduleSpeaker[];
   max?: number;
   className?: string;
+  /** 28px avatars on a pill in the page background, for stacks drawn over coloured blocks. */
+  large?: boolean;
 }) {
   if (speakers.length === 0) return null;
   const shown = speakers.slice(0, max);
@@ -35,15 +38,20 @@ export function SpeakerStack({
       role="img"
       aria-label={speakers.map((s) => s.name).join(", ")}
       title={speakers.map((s) => s.name).join(", ")}
-      className={cn("inline-flex items-center -space-x-1", className)}
+      className={cn(
+        "inline-flex items-center",
+        large ? "-space-x-1.5" : "-space-x-0.5",
+        large && "relative z-20 rounded-full bg-background p-0.5",
+        className,
+      )}
     >
       {shown.map((s) => (
         <UserAvatar
           key={s.userId}
           name={s.name}
           image={s.avatarUrl}
-          className="size-6 ring-2 ring-background"
-          fallbackClassName="text-[0.625rem]"
+          className={cn("ring-2 ring-background", large ? "size-7" : "size-6")}
+          fallbackClassName={large ? "text-[0.6875rem]" : "text-[0.625rem]"}
           showInitials
           decorative
         />
@@ -51,7 +59,10 @@ export function SpeakerStack({
       {rest > 0 && (
         <span
           aria-hidden="true"
-          className="relative flex size-6 items-center justify-center rounded-full bg-muted text-[0.625rem] font-medium text-muted-foreground tabular-nums ring-2 ring-background"
+          className={cn(
+            "relative flex items-center justify-center rounded-full bg-muted text-[0.625rem] font-medium text-muted-foreground tabular-nums ring-2 ring-background",
+            large ? "size-7" : "size-6",
+          )}
         >
           +{rest}
         </span>

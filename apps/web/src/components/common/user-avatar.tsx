@@ -39,7 +39,7 @@ export function UserAvatar({
       {image ? <AvatarImage src={apiAssetUrl(image)} alt={decorative ? "" : name} /> : null}
       <AvatarFallback
         className={cn(
-          showInitials ? "bg-primary/10 font-medium text-primary" : "bg-muted",
+          showInitials ? "bg-[#007aff] font-medium text-white dark:bg-[#0a84ff]" : "bg-muted",
           fallbackClassName,
         )}
       >

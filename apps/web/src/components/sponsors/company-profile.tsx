@@ -81,10 +81,10 @@ export function CompanyView({ company, context }: { company: Company; context: R
       <div className="space-y-5">
         {context}
         <header
-          className="-mx-1 flex flex-col gap-4 rounded-surface p-5 [--hero-mix:35%] sm:flex-row sm:items-center dark:[--hero-mix:22%]"
+          className="-mx-1 flex min-h-64 flex-col items-center justify-center gap-5 rounded-t-surface px-6 pt-10 pb-12 text-center [--hero-mix:45%] sm:min-h-72 sm:flex-row sm:justify-start sm:gap-8 sm:px-10 sm:text-left dark:[--hero-mix:28%]"
           style={{ backgroundImage: heroGradient(logoColor) }}
         >
-          <div className="flex size-24 shrink-0 items-center justify-center rounded-surface bg-white p-3 shadow-sm dark:bg-card">
+          <div className="flex size-36 shrink-0 items-center justify-center rounded-surface bg-white p-5 shadow-md sm:size-44 dark:bg-card">
             {company.logoUrl ? (
               <SponsorLogo
                 logoUrl={company.logoUrl}
@@ -93,13 +93,15 @@ export function CompanyView({ company, context }: { company: Company; context: R
                 className="max-h-full max-w-full object-contain"
               />
             ) : (
-              <span className="text-2xl font-medium text-muted-foreground">
+              <span className="text-4xl font-medium text-muted-foreground">
                 {company.name.slice(0, 2).toUpperCase()}
               </span>
             )}
           </div>
-          <div className="min-w-0 space-y-1">
-            <h1 className="type-page-title wrap-anywhere">{company.name}</h1>
+          <div className="min-w-0 space-y-2">
+            <h1 className="font-display text-3xl leading-tight wrap-anywhere sm:text-5xl">
+              {company.name}
+            </h1>
             {company.website && (
               <a
                 href={company.website}

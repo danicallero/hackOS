@@ -1,5 +1,5 @@
 import Image from "next/image";
-import type { ImgHTMLAttributes } from "react";
+import { type ImgHTMLAttributes, useState } from "react";
 import { cn } from "@/lib/utils";
 
 /** Renders the appropriate sponsor logo for the active colour scheme. */
@@ -21,7 +21,9 @@ export function SponsorLogo({
   /** Lets display surfaces account for the source mark's intrinsic proportions. */
   onLoad?: ImgHTMLAttributes<HTMLImageElement>["onLoad"];
 }) {
-  const negative = logoNegativeUrl ?? logoUrl;
+  // A dark-mode variant that fails to load falls back to the normal logo.
+  const [negativeBroken, setNegativeBroken] = useState(false);
+  const negative = negativeBroken ? logoUrl : (logoNegativeUrl ?? logoUrl);
 
   return (
     <>
@@ -43,7 +45,10 @@ export function SponsorLogo({
         height={1}
         unoptimized
         className={cn("size-auto", className, "hidden dark:block")}
-        onError={onError}
+        onError={() => {
+          if (negative !== logoUrl) setNegativeBroken(true);
+          else onError?.();
+        }}
         onLoad={onLoad}
       />
     </>

@@ -462,7 +462,7 @@ export function ScheduleTimeline({
                         type="button"
                         onClick={() => openItem(item)}
                         className={cn(
-                          "button-interaction absolute flex flex-col items-start justify-start overflow-hidden rounded-sm border border-l-[3px] px-2 text-left",
+                          "button-interaction absolute z-20 flex flex-col items-start justify-start overflow-hidden rounded-sm border border-l-[3px] px-2 text-left",
                           itemHeight < 42 ? "py-0.5" : itemHeight < 60 ? "py-1" : "py-2",
                           SCHEDULE_CATEGORY_STYLES[toActivityKind(item.type) ?? "activity"],
                           liveIds.has(item.id) && "ring-2 ring-destructive/70",
@@ -494,22 +494,19 @@ export function ScheduleTimeline({
                             {` · ${timeFormatter.format(new Date(item.startsAt))}–${timeFormatter.format(new Date(item.endsAt))}`}
                           </span>
                         )}
-                        {itemHeight >= 88 && (item.location || item.speakers?.length) && (
-                          <span className="mt-1 flex w-full min-w-0 shrink-0 items-center justify-between gap-2 text-xs opacity-80">
-                            {item.location ? (
-                              <span className="flex min-w-0 items-center gap-1">
-                                <MapPinIcon aria-hidden="true" className="size-3 shrink-0" />
-                                <span className="truncate">{item.location}</span>
-                              </span>
-                            ) : (
-                              <span />
-                            )}
-                            <SpeakerStack
-                              speakers={item.speakers ?? []}
-                              max={laneCount > 1 ? 2 : 4}
-                              className="shrink-0"
-                            />
+                        {itemHeight >= 88 && item.location && (
+                          <span className="mt-1 flex max-w-[calc(100%-6.5rem)] shrink-0 items-center gap-1 text-xs opacity-80">
+                            <MapPinIcon aria-hidden="true" className="size-3 shrink-0" />
+                            <span className="truncate">{item.location}</span>
                           </span>
+                        )}
+                        {itemHeight >= 72 && (item.speakers?.length ?? 0) > 0 && (
+                          <SpeakerStack
+                            speakers={item.speakers ?? []}
+                            max={laneCount > 1 ? 2 : 3}
+                            large
+                            className="absolute right-1.5 bottom-1.5"
+                          />
                         )}
                       </button>
                     ),
