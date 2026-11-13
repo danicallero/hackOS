@@ -1,12 +1,10 @@
 "use client";
 
-import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import { ClockCountdownIcon } from "@phosphor-icons/react/dist/csr/ClockCountdown";
-import Link from "next/link";
 import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";
+import { ChallengeCard } from "@/components/public/challenge-card";
 import { SponsorGrid } from "@/components/public/sponsor-grid";
-import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
 import type {
   PublicAnnouncement,
@@ -14,7 +12,6 @@ import type {
   PublicEvent,
   PublicSponsor,
 } from "./public-types";
-import { displayText } from "./public-types";
 import { EventPhaseDisplay, useEventPhase } from "./timer";
 
 /** H41/H45/H47: the event overview owns event information; programme and inbox keep their own views. */
@@ -69,28 +66,7 @@ export function HomeOverview({
         {challenges.length ? (
           <div className="grid auto-rows-fr gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {challenges.map((challenge) => (
-              <SectionCard
-                key={challenge.id}
-                title={displayText(challenge.title, language)}
-                className="flex h-full flex-col"
-                bodyClassName="flex-1"
-                footer={
-                  <Button asChild variant="outline" size="sm">
-                    <Link
-                      href={`/challenge/${challenge.id}`}
-                      aria-label={`${t("viewChallenge")}: ${displayText(challenge.title, language)}`}
-                    >
-                      {t("viewChallenge")}
-                      <ArrowRightIcon aria-hidden="true" />
-                    </Link>
-                  </Button>
-                }
-              >
-                <p className="text-xs text-muted-foreground">{challenge.enterprise.name}</p>
-                <p className="line-clamp-3 text-pretty text-sm">
-                  {displayText(challenge.description, language)}
-                </p>
-              </SectionCard>
+              <ChallengeCard key={challenge.id} challenge={challenge} />
             ))}
           </div>
         ) : (
