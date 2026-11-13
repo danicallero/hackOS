@@ -247,11 +247,9 @@ export async function submitRsvps(
     );
     if (!userRows[0]) throw new NotFoundError("User not found", { userId });
 
-    const [eventKey, kind, language] = await Promise.all([
-      currentEventKey(client),
-      attendanceKind(client, userId),
-      userLanguage(client, userId),
-    ]);
+    const eventKey = await currentEventKey(client);
+    const kind = await attendanceKind(client, userId);
+    const language = await userLanguage(client, userId);
     const mealActivities = new Set<number>();
     if (answers.length > 0) {
       const { rows } = await client.query<{ id: number; is_meal: boolean }>(

@@ -25,12 +25,19 @@ export async function queueGroupFixtureMarker(
   client: Queryable,
   queueGroupId: number,
 ): Promise<boolean | null> {
-  // The enterprise and serving-room inspections resolve their targets from the
-  // group id inside the statement, so all three reads are issued together
-  // instead of as a dependent chain. They are interpreted below in the
-  // original order, so the first violation reported is unchanged.
-  const markerQuery = client.query<QueueFixtureMarkers>(
-    `SELECT COALESCE(bool_or(c.is_test_account IS TRUE), false) AS has_synthetic,
+  // The three reads use the same transaction client, so issue them one at a
+  // time. Capture errors to preserve the marker-first error order while also
+  // ensuring no sibling query outlives the transaction.
+  const settle = async <T>(operation: () => Promise<T>) => {
+    try {
+      return { status: "fulfilled", value: await operation() } as const;
+    } catch (reason) {
+      return { status: "rejected", reason } as const;
+    }
+  };
+  const markerResult = await settle(() =>
+    client.query<QueueFixtureMarkers>(
+      `SELECT COALESCE(bool_or(c.is_test_account IS TRUE), false) AS has_synthetic,
             COALESCE(bool_or(c.is_test_account IS NOT TRUE), false) AS has_real,
             COALESCE(
               bool_or(
@@ -47,15 +54,18 @@ export async function queueGroupFixtureMarker(
        LEFT JOIN repos r ON r.id = qe.repo_id
       WHERE qgc.queue_group_id = $1
       GROUP BY qg.enterprise_id`,
-    [queueGroupId],
+      [queueGroupId],
+    ),
   );
-  const enterpriseQuery = inspectFixtureEnterpriseScopeOfQueueGroup(client, queueGroupId);
-  const roomsQuery = inspectFixtureRoomScopesOfQueueGroup(client, queueGroupId);
-  // H53: rejected graph checks must not leave sibling reads running after the
-  // request ends (or into the next integration test's TRUNCATE).
-  await Promise.allSettled([markerQuery, enterpriseQuery, roomsQuery]);
+  const enterpriseResult = await settle(() =>
+    inspectFixtureEnterpriseScopeOfQueueGroup(client, queueGroupId),
+  );
+  const roomsResult = await settle(() =>
+    inspectFixtureRoomScopesOfQueueGroup(client, queueGroupId),
+  );
 
-  const { rows } = await markerQuery;
+  if (markerResult.status === "rejected") throw markerResult.reason;
+  const { rows } = markerResult.value;
   const marker = rows[0];
   // A queue group without a membership row is malformed, just like a group
   // id that was deleted. Never let either case fall through to the real
@@ -69,7 +79,8 @@ export async function queueGroupFixtureMarker(
     });
   }
   if (marker && (marker.has_synthetic || marker.has_real)) {
-    const enterprise = await enterpriseQuery;
+    if (enterpriseResult.status === "rejected") throw enterpriseResult.reason;
+    const enterprise = enterpriseResult.value;
     if (
       !enterprise.exists ||
       (enterprise.has_synthetic && enterprise.has_real) ||
@@ -85,7 +96,8 @@ export async function queueGroupFixtureMarker(
 
     // One set-based inspection for every serving room (same verdict per room
     // as inspectFixtureRoomScope, without a query per room).
-    for (const room of await roomsQuery) {
+    if (roomsResult.status === "rejected") throw roomsResult.reason;
+    for (const room of roomsResult.value) {
       if (
         !room.exists ||
         (room.has_synthetic && room.has_real) ||
@@ -231,11 +243,10 @@ export async function assertQueueEntryScope(
   entryId: number,
   actorIsSyntheticHint?: ActorMarkerHint,
 ): Promise<boolean> {
-  const actorIsSynthetic = actorMarker(client, actorId, actorIsSyntheticHint);
   // One read serves both the entry-side fixture verdict and the queue-group
   // lookup (they were two reads of the same row). Order of verdicts is kept:
   // entry marker mismatch, actor side, missing group scope, group graph.
-  const entryRow = client.query<{
+  const { rows } = await client.query<{
     challenge_is_test_account: boolean;
     repo_is_test_account: boolean;
     queue_group_id: number | null;
@@ -250,15 +261,15 @@ export async function assertQueueEntryScope(
       WHERE qe.id = $1`,
     [entryId],
   );
-  entryRow.catch(() => undefined);
-  const row = (await entryRow).rows[0];
+  const row = rows[0];
   if (row && row.challenge_is_test_account !== row.repo_is_test_account) {
     throw new ConflictError("Queue fixture markers must match", {
       code: "review_fixture_scope",
       entryId,
     });
   }
-  assertActorSide(row?.challenge_is_test_account === true, await actorIsSynthetic);
+  const actorIsSynthetic = await actorMarker(client, actorId, actorIsSyntheticHint);
+  assertActorSide(row?.challenge_is_test_account === true, actorIsSynthetic);
   if (row?.queue_group_id == null) {
     throw new ConflictError("Queue entry has no complete queue-group scope", {
       code: "review_fixture_scope",
@@ -284,21 +295,21 @@ export async function assertQueueRoomScope(
   roomId: number,
   actorIsSyntheticHint?: ActorMarkerHint,
 ): Promise<boolean> {
-  const actorIsSynthetic = actorMarker(client, actorId, actorIsSyntheticHint);
-  const groups = client.query<{ queue_group_id: number }>(
+  const actorIsSynthetic = await assertFixtureQueueScope(
+    client,
+    actorId,
+    "room",
+    roomId,
+    actorIsSyntheticHint,
+  );
+  const { rows } = await client.query<{ queue_group_id: number }>(
     `SELECT queue_group_id FROM room_queue_groups WHERE room_id = $1`,
     [roomId],
   );
-  groups.catch(() => undefined);
-  await assertFixtureQueueScope(client, actorId, "room", roomId, actorIsSynthetic);
-  const { rows } = await groups;
-  // Every serving group's graph is inspected concurrently; verdicts are then
-  // read in row order so the first violation is the one a serial loop raised.
-  const markers = rows.map((row) => queueGroupFixtureMarker(client, Number(row.queue_group_id)));
-  for (const pending of markers) pending.catch(() => undefined);
+  // Validate serving groups in row order; every query uses the same client.
   let fixtureMarker: boolean | undefined;
-  for (const pending of markers) {
-    const groupMarker = await pending;
+  for (const row of rows) {
+    const groupMarker = await queueGroupFixtureMarker(client, Number(row.queue_group_id));
     if (groupMarker === null) {
       throw new ConflictError("Queue fixture markers must match", {
         code: "review_fixture_scope",
@@ -324,7 +335,12 @@ export async function assertQueueGroupScope(
   actorId: number,
   queueGroupId: number,
 ): Promise<boolean> {
-  await assertFixtureQueueScope(client, actorId, "queueGroup", queueGroupId);
+  const actorIsSynthetic = await assertFixtureQueueScope(
+    client,
+    actorId,
+    "queueGroup",
+    queueGroupId,
+  );
   if ((await queueGroupFixtureMarker(client, queueGroupId)) === null) {
     throw new ConflictError("Queue group has no complete fixture scope", {
       code: "review_fixture_scope",
@@ -332,7 +348,7 @@ export async function assertQueueGroupScope(
       resourceId: queueGroupId,
     });
   }
-  return isSyntheticOperator(client, actorId);
+  return actorIsSynthetic;
 }
 
 /** Assert a challenge and its queue group are in actor scope. */
@@ -342,20 +358,22 @@ export async function assertQueueChallengeScope(
   challengeId: number,
   actorIsSyntheticHint?: ActorMarkerHint,
 ): Promise<boolean> {
-  const actorIsSynthetic = actorMarker(client, actorId, actorIsSyntheticHint);
-  const scopePromise = resolveQueueChallengeScope(client, challengeId);
-  scopePromise.catch(() => undefined);
-  await assertFixtureQueueScope(client, actorId, "challenge", challengeId, actorIsSynthetic);
-  const actorMarkerValue = await actorIsSynthetic;
-  const scope = await scopePromise;
-  if (scope.fixtureMarker !== actorMarkerValue) {
+  const actorIsSynthetic = await assertFixtureQueueScope(
+    client,
+    actorId,
+    "challenge",
+    challengeId,
+    actorIsSyntheticHint,
+  );
+  const scope = await resolveQueueChallengeScope(client, challengeId);
+  if (scope.fixtureMarker !== actorIsSynthetic) {
     throw new ConflictError("Queue fixture markers must match", {
       code: "review_fixture_scope",
       resource: "challenge",
       resourceId: challengeId,
     });
   }
-  return actorMarkerValue;
+  return actorIsSynthetic;
 }
 
 /** Assert a repo and every queue entry referencing it are in actor scope. */
@@ -365,30 +383,28 @@ export async function assertQueueRepoScope(
   repoId: number,
   actorIsSyntheticHint?: ActorMarkerHint,
 ): Promise<boolean> {
-  const actorIsSynthetic = actorMarker(client, actorId, actorIsSyntheticHint);
-  const graph = assertRepoFixtureGraph(client, repoId);
-  const repoQuery = client.query<{ is_test_account: boolean }>(
+  const actorIsSynthetic = await assertFixtureQueueScope(
+    client,
+    actorId,
+    "repo",
+    repoId,
+    actorIsSyntheticHint,
+  );
+  await assertRepoFixtureGraph(client, repoId);
+  const { rows: repoRows } = await client.query<{ is_test_account: boolean }>(
     `SELECT is_test_account FROM repos WHERE id = $1`,
     [repoId],
   );
-  const groupQuery = client.query<{ queue_group_id: number }>(
+  const { rows: groupRows } = await client.query<{ queue_group_id: number }>(
     `SELECT DISTINCT qgc.queue_group_id
        FROM queue_entries qe
        JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
       WHERE qe.repo_id = $1`,
     [repoId],
   );
-  for (const pending of [graph, repoQuery, groupQuery]) pending.catch(() => undefined);
-  await assertFixtureQueueScope(client, actorId, "repo", repoId, actorIsSynthetic);
-  await graph;
-  const repoMarker = (await repoQuery).rows[0]?.is_test_account === true;
-  const groupRows = (await groupQuery).rows;
-  const markers = groupRows.map((row) =>
-    queueGroupFixtureMarker(client, Number(row.queue_group_id)),
-  );
-  for (const pending of markers) pending.catch(() => undefined);
-  for (const pending of markers) {
-    const groupMarker = await pending;
+  const repoMarker = repoRows[0]?.is_test_account === true;
+  for (const row of groupRows) {
+    const groupMarker = await queueGroupFixtureMarker(client, Number(row.queue_group_id));
     if (groupMarker === null || groupMarker !== repoMarker) {
       throw new ConflictError("Queue fixture markers must match", {
         code: "review_fixture_scope",
