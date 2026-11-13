@@ -111,7 +111,7 @@ export function createTintCache(
     const promise = new Promise<string | null>((resolve) => {
       waiting.push(() =>
         schedule(() => {
-          decode(uri)
+          void decode(uri)
             .catch((error: unknown) => {
               if (__DEV__) console.warn("Image tint failed", uri, error);
               return null;
