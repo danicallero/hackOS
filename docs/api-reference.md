@@ -593,7 +593,7 @@ role — they guard with `requireCapability(CAPABILITIES.X)` /
 `requireAnyCapability(...)` from `lib/capabilities.ts`. A "role" (participant,
 judge, sponsor, staff…) is always *derived* from capabilities and
 relationships for display purposes only; it is never the permission source
-(`plan/07` invariant 13). This is also why the mobile app's tabs and the web
+(`plan/07` invariant 10). This is also why the mobile app's tabs and the web
 app's workspaces can change for a user the instant their capabilities change,
 with no reinstall or redeploy (H55).
 

@@ -121,6 +121,10 @@ everything configurable comes from `src/config.ts` (zod-validated env).
 
 ## Pull requests and merges
 
+- **An implementation or issue-fix request includes its draft PR.** After the
+  change is validated, open the PR without waiting to be asked ("PR" alone
+  means open it now) and report the URL; skip it only when the user asked for
+  local-only work.
 - **Open every pull request as a draft** (`gh pr create --draft` or the
   GitHub UI). Mark it ready for review only when the change is ready for the
   full CI matrix; draft updates intentionally run only lightweight checks.

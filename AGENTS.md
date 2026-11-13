@@ -57,6 +57,11 @@ out because agents skip them under time pressure:
   a one-off script doesn't need a config system. Three similar lines beat a
   premature helper. Don't add a layer, a flag, or a fallback for a case that
   can't happen yet.
+- **A defect report is an instruction to fix it.** When the user says
+  something is wrong (a screenshot, a crash, "this is broken"), take the
+  corrective step in the same turn and report what was changed and the
+  evidence, not agreement or a cause narration. Ask only for a genuine
+  product decision, alongside the fixes that don't depend on it.
 - **Docs before code, code before spec.** If you need to understand how
   something works, read the doc for that area first
   (`docs/README.md` → the matching file). If none exists, write one as part
@@ -167,7 +172,9 @@ must be able to continue with no other context. Include:
 
 ## Before you finish
 
-Run these from the repo root and ensure they pass:
+Before committing, run the focused tests for what you changed, then these from
+the repo root, and ensure they pass. A run that hangs, is interrupted or
+reports failures is not validation: fix it or report the concrete blocker.
 
 ```sh
 pnpm lint                          # biome + the check:* scripts (copy, story IDs, page size, …)
