@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { Link, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { Linking, ScrollView, Text, View } from "react-native";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
@@ -76,7 +76,6 @@ export function ChallengeDetailBody({
   onOpenProjects?: () => void;
 }) {
   const { t } = useLocale();
-  const router = useRouter();
   const [hasProjects, setHasProjects] = useState(false);
   useEffect(() => {
     if (!onOpenProjects) return;
@@ -108,38 +107,48 @@ export function ChallengeDetailBody({
       ) : null}
       {company ? (
         <Section>
-          <PressableFeedback
-            feedback="row"
-            accessibilityRole="button"
-            accessibilityLabel={company.name}
-            onPress={() => router.push(`/companies/${company.id}`)}
-            style={{
-              alignItems: "center",
-              flexDirection: "row",
-              gap: 12,
-              minHeight: 60,
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-            }}
-          >
-            <PersonAvatar size={40} name={company.name} uri={company.logoUrl} kind="sponsor" />
-            <Text
+          <Link href={`/companies/${company.id}`} asChild>
+            <PressableFeedback
+              feedback="row"
+              accessibilityRole="button"
+              accessibilityLabel={company.name}
               style={{
-                color: colors.label,
-                flex: 1,
-                fontSize: type.body.fontSize,
-                fontWeight: "600",
+                alignItems: "center",
+                flexDirection: "row",
+                gap: 12,
+                minHeight: 60,
+                paddingHorizontal: 16,
+                paddingVertical: 8,
               }}
             >
-              {company.name}
-            </Text>
-            <SymbolView
-              name="chevron.right"
-              size={13}
-              tintColor={colors.tertiaryLabel}
-              accessible={false}
-            />
-          </PressableFeedback>
+              <Link.AppleZoom>
+                <View>
+                  <PersonAvatar
+                    size={40}
+                    name={company.name}
+                    uri={company.logoUrl}
+                    kind="sponsor"
+                  />
+                </View>
+              </Link.AppleZoom>
+              <Text
+                style={{
+                  color: colors.label,
+                  flex: 1,
+                  fontSize: type.body.fontSize,
+                  fontWeight: "600",
+                }}
+              >
+                {company.name}
+              </Text>
+              <SymbolView
+                name="chevron.right"
+                size={13}
+                tintColor={colors.tertiaryLabel}
+                accessible={false}
+              />
+            </PressableFeedback>
+          </Link>
           {company.website ? (
             <>
               <Separator inset={68} />

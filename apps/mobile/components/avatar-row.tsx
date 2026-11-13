@@ -1,3 +1,4 @@
+import { type Href, Link } from "expo-router";
 import { ScrollView, Text, View } from "react-native";
 import { PersonAvatar } from "@/components/person-avatar";
 import { PressableFeedback } from "@/components/pressable-feedback";
@@ -12,7 +13,8 @@ export interface AvatarRowItem {
   surname?: string | null;
   uri: string | null;
   subtitle?: string | null;
-  onPress: () => void;
+  /** Opens this route; on iOS the avatar zooms into the destination. */
+  href: Href;
 }
 
 /**
@@ -38,50 +40,54 @@ export function AvatarRow({
       contentContainerStyle={{ gap: 16, paddingHorizontal: inset }}
     >
       {items.map((item) => (
-        <PressableFeedback
-          key={item.key}
-          feedback="opacity"
-          accessibilityRole="button"
-          accessibilityLabel={[item.name, item.subtitle].filter(Boolean).join(", ")}
-          onPress={item.onPress}
-          style={{ alignItems: "center", gap: 6, width: size + 12 }}
-        >
-          {kind === "person" ? (
-            <UserAvatar
-              name={item.firstName ?? item.name}
-              surname={item.surname}
-              image={item.uri}
-              size={size}
-            />
-          ) : (
-            <PersonAvatar size={size} name={item.name} uri={item.uri} kind={kind} />
-          )}
-          <View style={{ alignItems: "center", gap: 1 }}>
-            <Text
-              numberOfLines={2}
-              style={{
-                color: colors.label,
-                fontSize: type.footnote.fontSize,
-                fontWeight: "600",
-                textAlign: "center",
-              }}
-            >
-              {item.name}
-            </Text>
-            {item.subtitle ? (
+        <Link key={item.key} href={item.href} asChild>
+          <PressableFeedback
+            feedback="opacity"
+            accessibilityRole="button"
+            accessibilityLabel={[item.name, item.subtitle].filter(Boolean).join(", ")}
+            style={{ alignItems: "center", gap: 6, width: size + 12 }}
+          >
+            <Link.AppleZoom>
+              <View>
+                {kind === "person" ? (
+                  <UserAvatar
+                    name={item.firstName ?? item.name}
+                    surname={item.surname}
+                    image={item.uri}
+                    size={size}
+                  />
+                ) : (
+                  <PersonAvatar size={size} name={item.name} uri={item.uri} kind={kind} />
+                )}
+              </View>
+            </Link.AppleZoom>
+            <View style={{ alignItems: "center", gap: 1 }}>
               <Text
-                numberOfLines={1}
+                numberOfLines={2}
                 style={{
-                  color: colors.secondaryLabel,
-                  fontSize: type.caption.fontSize,
+                  color: colors.label,
+                  fontSize: type.footnote.fontSize,
+                  fontWeight: "600",
                   textAlign: "center",
                 }}
               >
-                {item.subtitle}
+                {item.name}
               </Text>
-            ) : null}
-          </View>
-        </PressableFeedback>
+              {item.subtitle ? (
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: colors.secondaryLabel,
+                    fontSize: type.caption.fontSize,
+                    textAlign: "center",
+                  }}
+                >
+                  {item.subtitle}
+                </Text>
+              ) : null}
+            </View>
+          </PressableFeedback>
+        </Link>
       ))}
     </ScrollView>
   );

@@ -1,5 +1,5 @@
 import { Image } from "expo-image";
-import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { Link, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -104,6 +104,8 @@ export function CompanyProfileScreen() {
   const [expanded, setExpanded] = useState(false);
   const [clamped, setClamped] = useState(false);
   const [titleShown, setTitleShown] = useState(false);
+  // Scroll distance at which the large name has gone under the bar; the bar's blur and title wait for it.
+  const [titleAt, setTitleAt] = useState(TITLE_AT);
   const request = useRef(0);
   const usesCustomAndroidHeader = process.env.EXPO_OS === "android";
   // iOS keeps the native back circle; a cold deep link has nothing to pop (H59).
@@ -140,11 +142,15 @@ export function CompanyProfileScreen() {
   const name = profile?.name ?? "";
   useEffect(() => {
     if (process.env.EXPO_OS !== "ios") return;
-    navigation.setOptions({ title: titleShown ? name : "", headerTitle: titleShown ? name : "" });
+    navigation.setOptions({
+      title: titleShown ? name : "",
+      headerTitle: titleShown ? name : "",
+      scrollEdgeEffects: { top: titleShown ? "soft" : "hidden" },
+    });
   }, [navigation, name, titleShown]);
 
   function onScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const shown = event.nativeEvent.contentOffset.y > TITLE_AT;
+    const shown = event.nativeEvent.contentOffset.y > titleAt;
     setTitleShown((current) => (current === shown ? current : shown));
   }
 
@@ -222,8 +228,15 @@ export function CompanyProfileScreen() {
         ) : (
           <>
             <View style={{ alignItems: "center", gap: 18, paddingHorizontal: 24 }}>
-              <Logo profile={profile} dark={dark} />
+              <Link.AppleZoomTarget>
+                <Logo profile={profile} dark={dark} />
+              </Link.AppleZoomTarget>
               <Text
+                onLayout={({ nativeEvent: { layout } }) =>
+                  // Content sits 56 pt below the top inset, the bar 44 pt: the name is under the bar
+                  // once its bottom edge (after the logo and gap) is 12 pt up.
+                  setTitleAt(layout.y + layout.height + 12)
+                }
                 accessibilityRole="header"
                 selectable
                 style={{
@@ -318,7 +331,7 @@ export function CompanyProfileScreen() {
                     firstName: person.firstName,
                     surname: person.surname,
                     uri: person.avatarUrl,
-                    onPress: () => router.push(`/people/${person.userId}`),
+                    href: `/people/${person.userId}`,
                   }))}
                 />
               </View>

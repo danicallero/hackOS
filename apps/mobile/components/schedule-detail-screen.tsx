@@ -377,7 +377,7 @@ export function ScheduleDetailScreen({
                       surname: speaker.surname,
                       uri: speaker.avatarUrl,
                       subtitle: speaker.enterpriseName,
-                      onPress: () => router.push(`/people/${speaker.userId}`),
+                      href: `/people/${speaker.userId}`,
                     }))}
                   />
                 </View>
@@ -395,7 +395,7 @@ export function ScheduleDetailScreen({
                       key: String(company.id),
                       name: company.name,
                       uri: company.logoUrl,
-                      onPress: () => router.push(`/companies/${company.id}`),
+                      href: `/companies/${company.id}`,
                     }))}
                   />
                 </View>

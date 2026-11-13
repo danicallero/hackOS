@@ -691,7 +691,7 @@ prizes from `GET /api/public/challenges`, plus a Projects row to the filtered
 gallery only once the gallery answers with projects for it (it is 403 before
 publication). A company's challenges in the diary open the same brief as a
 sheet stacked over the company sheet. Each project on a profile opens its page;
-the server decides who may read it. The challenge filter is the native filter menu (multi-select, kept open while choosing; the glass toolbar button is the only filter control) so it scales past a dozen challenges.
+the server decides who may read it. Company pages (`companies/[id]`) and person profiles open from a logo or avatar with the iOS zoom transition (`Link.AppleZoom` in `avatar-row.tsx` and the company rows; the profile's own logo/avatar is the `Link.AppleZoomTarget`): swipe from the edge or pull down to zoom back, and there is no grabber because they are pushed screens, not sheets. Their native bar stays transparent with no blur or title until the large name has scrolled under it. The challenge filter is the native filter menu (multi-select, kept open while choosing; the glass toolbar button is the only filter control) so it scales past a dozen challenges.
 
 Several projects list as one grouped row section (name, draft/submitted,
 chevron); the editor lists the chosen challenges (mandatory ones with a lock) and an

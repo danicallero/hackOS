@@ -11,6 +11,7 @@ const mockBack = jest.fn();
 const mockRouterPush = jest.fn();
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ id: mockId }),
+  Link: require("./mock-link").makeLink((href: unknown) => mockRouterPush(href)),
   useRouter: () => ({ back: mockBack, canGoBack: () => true, push: mockRouterPush }),
 }));
 jest.mock("expo-router/stack", () => ({ __esModule: true, default: { Screen: () => null } }));
