@@ -30,9 +30,20 @@ describe("pickDominantColor", () => {
     ).toBe("#143cdc");
   });
 
+  it("takes a small vivid accent over a large grey or white body", () => {
+    expect(
+      pickDominantColor([
+        ...repeat(px(255, 255, 255), 300),
+        ...repeat(px(60, 60, 62), 200),
+        ...repeat(px(240, 120, 20), 12),
+      ]),
+    ).toBe("#f07814");
+  });
+
   it("returns null without a usable pixel", () => {
     expect(pickDominantColor([])).toBeNull();
     expect(pickDominantColor(repeat(px(255, 255, 255), 50))).toBeNull();
+    expect(pickDominantColor(repeat(px(120, 120, 122), 50))).toBeNull();
   });
 });
 

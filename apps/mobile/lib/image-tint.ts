@@ -6,8 +6,8 @@ import { apiImageSource } from "./directory";
 /**
  * Representative colour of a logo or a profile photo (H44, H48), computed on
  * the device so nothing is stored server-side: it tints the company and
- * person page heroes. Transparent pixels and near-white/near-black ones are
- * ignored; the rest are bucketed and the bucket with the most (and most
+ * person page heroes. Transparent, near-white, near-black and grey pixels are
+ * ignored, so a small vivid accent on a white or black logo is the colour; the rest are bucketed and the bucket with the most (and most
  * saturated) pixels wins. `rgba` is RGBA, 4 bytes per pixel. Returns
  * `#rrggbb`, or null when there is no usable colour.
  */
@@ -20,7 +20,7 @@ export function pickDominantColor(rgba: ArrayLike<number>): string | null {
     const a = rgba[i + 3] as number;
     const max = Math.max(r, g, b);
     const min = Math.min(r, g, b);
-    if (a < 128 || min > 235 || max < 30) continue;
+    if (a < 128 || min > 235 || max < 30 || max - min < 24) continue;
     const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
     const bucket = buckets.get(key) ?? { n: 0, r: 0, g: 0, b: 0, s: 0 };
     bucket.n += 1;

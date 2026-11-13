@@ -43,7 +43,50 @@ export function heroGradient(logoColor: string | null | undefined): string {
 
 const colorCache = new Map<string, string | null>();
 
-/** Representative colour of a logo: mean of its saturated, opaque, mid-tone pixels; null when none or unreadable. */
+/**
+ * Representative colour of RGBA pixels: transparent, near-white, near-black and
+ * grey ones are ignored, the rest are bucketed by colour and the bucket with the
+ * most (and most saturated) pixels wins, so a small vivid accent on a white or
+ * black logo is the colour. Same rule as the mobile app; null when none is usable.
+ */
+export function pickDominantColor(rgba: ArrayLike<number>): string | null {
+  const buckets = new Map<number, { n: number; r: number; g: number; b: number; s: number }>();
+  for (let i = 0; i + 3 < rgba.length; i += 4) {
+    const r = rgba[i] as number;
+    const g = rgba[i + 1] as number;
+    const b = rgba[i + 2] as number;
+    const a = rgba[i + 3] as number;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    if (a < 128 || min > 235 || max < 30 || max - min < 24) continue;
+    const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+    const bucket = buckets.get(key) ?? { n: 0, r: 0, g: 0, b: 0, s: 0 };
+    bucket.n += 1;
+    bucket.r += r;
+    bucket.g += g;
+    bucket.b += b;
+    bucket.s += (max - min) / max;
+    buckets.set(key, bucket);
+  }
+  let best: { n: number; r: number; g: number; b: number } | null = null;
+  let bestScore = 0;
+  for (const bucket of buckets.values()) {
+    const score = bucket.n * (0.25 + bucket.s / bucket.n);
+    if (score > bestScore) {
+      bestScore = score;
+      best = bucket;
+    }
+  }
+  if (!best) return null;
+  const { n } = best;
+  const hex = (sum: number) =>
+    Math.round(sum / n)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${hex(best.r)}${hex(best.g)}${hex(best.b)}`;
+}
+
+/** Representative colour of a logo, read from a 32px copy; null when unreadable. */
 function sampleLogoColor(img: HTMLImageElement): string | null {
   const size = 32;
   const canvas = document.createElement("canvas");
@@ -52,32 +95,11 @@ function sampleLogoColor(img: HTMLImageElement): string | null {
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
   ctx.drawImage(img, 0, 0, size, size);
-  let data: Uint8ClampedArray;
   try {
-    data = ctx.getImageData(0, 0, size, size).data;
+    return pickDominantColor(ctx.getImageData(0, 0, size, size).data);
   } catch {
     return null; // tainted canvas: the logo host sends no CORS headers
   }
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  let n = 0;
-  for (let i = 0; i < data.length; i += 4) {
-    const [pr, pg, pb, pa] = [data[i], data[i + 1], data[i + 2], data[i + 3]];
-    const max = Math.max(pr, pg, pb);
-    const min = Math.min(pr, pg, pb);
-    if (pa < 200 || (max > 240 && min > 225) || max < 25 || max - min < 24) continue;
-    r += pr;
-    g += pg;
-    b += pb;
-    n++;
-  }
-  if (n === 0) return null;
-  const hex = (v: number) =>
-    Math.round(v / n)
-      .toString(16)
-      .padStart(2, "0");
-  return `#${hex(r)}${hex(g)}${hex(b)}`;
 }
 
 const inFlight = new Map<string, Promise<string | null>>();
