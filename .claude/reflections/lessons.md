@@ -1,5 +1,11 @@
 # Lessons
 
+Active reflections for hackOS. See `README.md` in this directory for the
+format, classification flow, and promotion path.
+
+Promoted entries are one-line stubs: the rule lives only in the file named by
+`Promoted-To`.
+
 ## [R001] Validate tests before committing
 
 Status: active
@@ -321,9 +327,6 @@ Check that copy revisions improve comprehension while retaining deliberate chara
 ### Exceptions
 Change intentional voice when the user requests it or it creates a concrete comprehension problem.
 
-Active reflections for hackOS. See `README.md` in this directory for the
-format, classification flow, and promotion path.
-
 ## [R010] Align multi-column fields independently of helper text
 
 Status: active
@@ -423,35 +426,8 @@ The plain-text MIME part retains readable labeled links.
 ## [R013] Check reflections throughout each task
 
 Status: promoted
-Scope: repository
-Source: user-correction
 Date: 2026-10-04
-Promoted-To: CLAUDE.md
-
-### Trigger
-Before and during any code, documentation, test, or configuration change.
-
-### Mistake
-An agent reviewed reflections once but did not keep checking later changes
-against the lessons, so a known mistake could recur while completing the task.
-
-### Lesson
-Reflections are an ongoing check for the entire task, not a one-time startup
-reading.
-
-### Action
-Read the entire lessons file before editing. Compare the intended work with
-applicable active lessons, re-check substantive diffs as work proceeds, and
-apply each lesson's validation before commit or PR. Resolve conflicts
-explicitly when higher-priority instructions or current product requirements
-take precedence.
-
-### Validation
-Confirm applicable lessons were considered at planning, during implementation,
-and during final diff/validation review.
-
-### Exceptions
-None.
+Promoted-To: `CLAUDE.md` § Reflections are a required check
 
 ## [R014] Keep nested menus flowing in one direction
 
@@ -720,33 +696,9 @@ provided the fresh-install path has been checked and does not access it.
 
 ## [R021] Attach PR screenshots with the GitHub CLI
 
-Status: active
-Scope: repository
-Source: user-correction
+Status: promoted
 Date: 2026-10-08
-
-### Trigger
-Posting screenshots or video on a pull request or issue comment.
-
-### Mistake
-The agent stopped at "gh cannot upload images" and left screenshots in a local
-folder, following stale repository docs that described a branch-hosting
-workaround.
-
-### Lesson
-`gh` 2.101+ uploads images and video itself. Do not host files on a throwaway
-branch or ask the user to drag them in.
-
-### Action
-Run `gh pr comment <n> --body … --attach '<abs path>#<alt text>'`, repeating the
-flag for each file. Describe in the text what each image shows. Fix any doc
-that claims otherwise.
-
-### Validation
-Open the returned comment URL's content and confirm the images render.
-
-### Exceptions
-If `gh --version` is older than 2.101, report that blocker.
+Promoted-To: `docs/ui-testing.md` § Screenshots on UI PRs → Posting them
 
 ## [R022] Let a section's layout explain its primary path and alternatives
 
@@ -757,7 +709,7 @@ Date: 2026-10-15
 
 ### Trigger
 Designing a card that offers a main workflow plus an optional alternative
-(for example Devpost submission versus native submission).
+(for example submitting a form now versus deferring or opting out).
 
 ### Mistake
 A secondary-styled alternative sat in the card header, away from the main path,
@@ -940,7 +892,6 @@ CSV columns follow the current and historical form definitions.
 ### Exceptions
 Explicit user authorization to populate a particular event's form is allowed.
 
-
 ## [R028] Separate navigator width from reading width on tablets
 
 Status: active
@@ -969,33 +920,8 @@ Sheets and focused single-column editors retain their own readable content bound
 ## [R029] Let state-specific actions replace redundant status badges
 
 Status: promoted
-Scope: module:web
-Source: user-correction
 Date: 2026-11-02
-Promoted-To: docs/DESIGN.md
-
-### Trigger
-A record's state has a visible action that already names that state.
-
-### Mistake
-Displayed a Draft badge beside Delete draft, repeating the same information.
-
-### Lesson
-Use the meaningful state-specific action to carry the state when it is available;
-reserve status badges for states with no corresponding action in that position.
-
-### Action
-Render the action and state badge mutually exclusively. Check list and detail
-headers together, including states whose action is unavailable.
-
-### Validation
-Verify actionable drafts show their control without a Draft badge, while
-submitted, in-review and other non-actionable states retain their status.
-
-### Exceptions
-An action whose label does not communicate the current state may still need
-an independent status indicator.
-
+Promoted-To: `docs/DESIGN.md` (status badges vs state-specific actions)
 
 ## [R030] Test a tab's destination after visiting its settings
 

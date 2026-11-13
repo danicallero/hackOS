@@ -2,7 +2,7 @@
 
 Living documentation for how the current code implements the product. The
 normative functional source of truth remains `plan/historias-hackos.md`
-(stories H1–H59) and `plan/07-datos-relevantes-ers.md` (hard invariants);
+(stories H1–H67) and `plan/07-datos-relevantes-ers.md` (hard invariants);
 this folder explains *how* the code implements the relevant slices. If a doc
 here disagrees with `plan/`, the plan wins and the doc (or the code) is the bug.
 
@@ -14,9 +14,9 @@ orientation** below → whichever module doc matches your task.
 **One-paragraph orientation.** hackOS is a Fastify API (`apps/api`, raw SQL,
 no ORM) plus a Next.js web app and an Expo mobile app, all reading/writing the
 same Postgres database and sharing capability names and realtime event names
-from `packages/shared`. Every domain — applications, projects, queue,
-logistics, notifications, identity, sponsors, challenges, event, exports —
-lives in its own `apps/api/src/modules/<domain>/` directory and follows the
+from `packages/shared`. Every domain (identity, applications, projects, queue,
+logistics, notifications, help desk and the rest registered in
+`apps/api/src/modules/index.ts`) lives in its own `apps/api/src/modules/<domain>/` directory and follows the
 same conventions: capability-based authorization (never role checks),
 audited mutations in the same transaction as the write, `SELECT ... FOR
 UPDATE` + idempotency keys on state transitions, and SSE realtime fan-out
@@ -86,6 +86,8 @@ Architecture & modules:
   invariants (a group never spans enterprises; every challenge has exactly one
   group), the 1:1 backfill, and the admin merge that turns several of an
   enterprise's challenges into one shared judging queue with one form.
+- [Judging timing](./project-lifecycle-audit.md) — track targets, preparation
+  allowances and timing clarifications (H30, H33–H37).
 - [Queue operator console](./queue-operator.md) — the live arrival board for
   queue operators: shared-queue deduplication, local team search, room
   destinations, capability-gated actions, and the integration boundary with
@@ -138,7 +140,6 @@ Architecture & modules:
 Frontend (web & mobile):
 
 - [Web help desk](./help-desk-web.md) — published helpers, shared bio and knowledge, dated availability, team requests, helper inbox and coverage (H61–H67).
-
 - [Design system, UI & UX](./DESIGN.md) — the consolidated design rulebook,
   indexed and summarized per section: principles, tokens (with intent and
   boundaries), the landing-derived edition theme and `/design-system` preview,
@@ -207,5 +208,3 @@ this folder), [`apps/web/README.md`](../apps/web/README.md) for web frontend
 conventions and the component library, and
 [`deploy/README.md`](../deploy/README.md) for the full deployment story
 (networking, secrets, Caddy and rollout order).
-
-- [Judging timing](./project-lifecycle-audit.md) — track targets, preparation allowances and timing clarifications.

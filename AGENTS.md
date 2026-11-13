@@ -31,7 +31,7 @@ Before touching code in a domain, read the matching doc:
 
 | You're working on | Read |
 |---|---|
-| `apps/api/src/modules/<domain>/` | `docs/api-reference.md` (module/convention map), or `docs/challenges-devpost.md` (challenges/projects), or the relevant `docs/*.md` file |
+| `apps/api/src/modules/<domain>/` | `docs/api-reference.md` (module/convention map), then the module's own doc from `docs/README.md` (e.g. `docs/projects.md`, `docs/help-desk.md`) |
 | Queue / judging / rooms | `docs/background-workers.md` (tick model, event map) |
 | `apps/web/` | `apps/web/README.md` (component library, conventions) |
 | `apps/mobile/` | `docs/mobile.md` (what's built), `docs/mobile-release.md` (build/release) |
@@ -170,10 +170,12 @@ must be able to continue with no other context. Include:
 Run these from the repo root and ensure they pass:
 
 ```sh
-pnpm lint                          # biome + copy check
+pnpm lint                          # biome + the check:* scripts (copy, story IDs, page size, …)
 pnpm --filter @hackos/api test     # API integration tests (if you changed API code)
 pnpm --filter @hackos/web typecheck # web type check (if you changed web code)
 pnpm --filter @hackos/web test     # web unit tests (if you changed web code)
+pnpm --filter @hackos/mobile typecheck # mobile type check (if you changed mobile code)
+pnpm --filter @hackos/mobile test  # mobile screen tests (if you changed mobile code)
 ```
 
 If your change alters what a screen looks like (mobile or web), also run it and
@@ -183,11 +185,8 @@ to see the change without building it. Recipe and gotchas:
 
 ## Opening a PR
 
-- Open every PR as a draft (`gh pr create --draft` or the GitHub UI). Mark it
-  ready for review only when it is ready for the full CI matrix.
-- PRs may target protected `staging` or `main`; `staging` is the development
-  branch and `main` is production. Both branches build and deploy only after
-  their PR is merged.
+Draft-only, target branches, no AI attribution and the never-merge-unasked
+rule are in `CLAUDE.md` § Pull requests and merges.
 
 Use [`.github/PULL_REQUEST_TEMPLATE.md`](./.github/PULL_REQUEST_TEMPLATE.md)
 as the PR body — fill in every section (delete Screenshots/Migration only if

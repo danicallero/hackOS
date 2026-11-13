@@ -4,7 +4,7 @@
 > writing code. This file contains the conventions themselves.
 
 Hackathon management platform: one API replacing four legacy tools. **Functional
-source of truth: `plan/historias-hackos.md`** (user stories H1-H59). If docs
+source of truth: `plan/historias-hackos.md`** (user stories H1-H67; H6 retired). If docs
 conflict, that file wins. Hard invariants live in `plan/07-datos-relevantes-ers.md`.
 
 ## Layout
@@ -12,7 +12,8 @@ conflict, that file wins. Hard invariants live in `plan/07-datos-relevantes-ers.
 - `apps/api` — Fastify 5 + BullMQ + Postgres + Valkey.
 - `apps/web` — Next.js 16; conventions in `apps/web/README.md`.
 - `apps/mobile` — Expo Router; `docs/mobile.md`, `docs/mobile-release.md`.
-- `packages/shared` — `capabilities.ts` + `events.ts`. Add new names THERE, never inline.
+- `packages/shared` — contracts shared by API, web and mobile. Capability and
+  event names live in `capabilities.ts` / `events.ts`: add new names THERE, never inline.
 - `plan/` — normative docs. Read-only.
 - `docs/` — living implementation docs. Keep in sync with code.
 - `deploy/` — canonical Docker Compose runtime for the ARM64 staging host and
@@ -75,7 +76,7 @@ check in the work process for the whole task, not only at startup.
   migration for a correction to already merged/applied shared history.
 - **Numbering bands per workstream** (avoids parallel collisions):
   `0001-0099` foundation · `01xx` identity · `02xx` applications ·
-  `03xx` projects/devpost · `04xx` queue/judging · `05xx` logistics ·
+  `03xx` projects · `04xx` queue/judging · `05xx` logistics ·
   `06xx` notifications · `07xx` sponsors/content · `08xx` roles/permissions
   (H8 rework replacing the capability-group model — see
   `apps/api/src/lib/capabilities.ts`) · `09xx` help desk (H61-H67).
@@ -158,7 +159,7 @@ Concrete triggers — if your change does X, update Y:
 | You changed | Update |
 |---|---|
 | A route's request/response shape or behavior | Its Zod schema's `summary`/`description` (this **is** the API doc — `/documentation` is generated from it, nothing to hand-sync) |
-| A new module, or a module's schema/state machine | The relevant file in `docs/` (add a new one if the module has none yet; follow the format in `docs/api-reference.md` or `docs/challenges-devpost.md`) |
+| A new module, or a module's schema/state machine | The relevant file in `docs/` (add a new one if the module has none yet; follow the format in `docs/api-reference.md` or `docs/projects.md`) and its entry in `docs/api-reference.md` § Modules |
 | A new `docs/*.md` file | Its link in `docs/README.md`'s index |
 | `packages/shared/src/capabilities.ts` or `events.ts` | Any doc that enumerates capabilities/events by name (grep before assuming there are none) |
 | A `deploy/docker-compose.yml` env var (added/renamed/removed) | The matching row in `docs/env-vars.md`, `deploy/README.md`'s configuration/service-only tables, and `deploy/.env.example` when it is non-secret |

@@ -289,7 +289,8 @@ deploy/               Canonical Docker Compose runtime and host runbook
 
 The backend is split by domain under `apps/api/src/modules`: identity,
 applications, projects, challenges, sponsors, event configuration, logistics,
-queue and judging, notifications, and exports. Each module owns its routes and
+queue and judging, notifications, help desk, exports and more (the full map is
+in [`docs/api-reference.md`](docs/api-reference.md)). Each module owns its routes and
 services; background processors are registered from the same module.
 
 The web app has a stable personal area plus capability-gated workspaces for
@@ -315,7 +316,7 @@ concurrent requests have one winner.
 - Capability and event strings come from `@hackos/shared`; clients and the API
 do not invent their own copies.
 
-Read [`CLAUDE.md`](CLAUDE.md) before changing code. It is the concise list of
+Read [`AGENTS.md`](AGENTS.md) and [`CLAUDE.md`](CLAUDE.md) before changing code. `CLAUDE.md` is the concise list of
 non-negotiable conventions and tells you which documentation must change with
 each part of the system. If two documents disagree, the user stories in
 [`plan/historias-hackos.md`](plan/historias-hackos.md) win; the hard concurrency
