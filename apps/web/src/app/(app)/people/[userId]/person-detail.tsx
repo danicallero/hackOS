@@ -245,44 +245,44 @@ export function PersonProfile({
 
   return (
     <>
-      <HeroBleed color={photoColor}>
-        <PageHeader
-          context={context}
-          leading={
-            <UserAvatar
-              name={entry.displayName}
-              image={entry.photoUrl}
-              className="size-16"
-              fallbackClassName="text-lg"
-              showInitials
-              decorative
-              presenceLabel={present ? t("helpDeskPresent") : undefined}
-            />
-          }
-          title={entry.displayName}
-          meta={
-            entry.headline ? (
-              <span className="text-muted-foreground wrap-anywhere text-sm">{entry.headline}</span>
-            ) : undefined
-          }
-          secondaryActions={
-            visibleRole ? <Badge variant="secondary">{visibleRole}</Badge> : undefined
-          }
-          primaryAction={
-            entry.cvUrl ? (
-              <CvViewer
-                path={entry.cvUrl}
-                name={entry.displayName}
-                trigger={
-                  <Button type="button" variant="outline" size="sm">
-                    <FilePdfIcon aria-hidden="true" />
-                    {t("viewCv")}
-                  </Button>
-                }
-              />
-            ) : undefined
-          }
-        />
+      <HeroBleed color={entry.photoColor ?? photoColor}>
+        {context}
+        <header className="flex flex-col items-center gap-3 pt-6 text-center">
+          <UserAvatar
+            name={entry.displayName}
+            image={entry.photoUrl}
+            className="size-28 shadow-md ring-4 ring-background/70"
+            fallbackClassName="text-3xl"
+            showInitials
+            decorative
+            presenceLabel={present ? t("helpDeskPresent") : undefined}
+          />
+          <div className="min-w-0 space-y-1">
+            <h1 className="font-display text-3xl leading-tight wrap-anywhere">
+              {entry.displayName}
+            </h1>
+            {entry.headline && (
+              <p className="text-muted-foreground wrap-anywhere text-sm">{entry.headline}</p>
+            )}
+          </div>
+          {(visibleRole || entry.cvUrl) && (
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {visibleRole && <Badge variant="secondary">{visibleRole}</Badge>}
+              {entry.cvUrl && (
+                <CvViewer
+                  path={entry.cvUrl}
+                  name={entry.displayName}
+                  trigger={
+                    <Button type="button" variant="outline" size="sm">
+                      <FilePdfIcon aria-hidden="true" />
+                      {t("viewCv")}
+                    </Button>
+                  }
+                />
+              )}
+            </div>
+          )}
+        </header>
       </HeroBleed>
       <PageLayout width="reading">
         {entry.bio && (

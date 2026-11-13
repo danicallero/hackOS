@@ -81,8 +81,8 @@ export function CompanyView({ company, context }: { company: Company; context: R
     <>
       <HeroBleed color={logoColor} className="space-y-5">
         {context}
-        <header className="flex flex-col items-center gap-5 text-center sm:flex-row sm:gap-8 sm:text-left">
-          <div className="flex size-36 shrink-0 items-center justify-center rounded-surface bg-white p-5 shadow-md sm:size-44 dark:bg-card">
+        <header className="flex flex-col items-center gap-4 pt-4 text-center sm:flex-row sm:gap-8 sm:text-left">
+          <div className="flex size-28 shrink-0 items-center justify-center rounded-surface bg-white p-4 shadow-md sm:size-44 dark:bg-card">
             {company.logoUrl ? (
               <SponsorLogo
                 logoUrl={company.logoUrl}
