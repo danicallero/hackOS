@@ -1,9 +1,9 @@
 const NEUTRAL: RGB = [142, 142, 147];
 
 /** The hero of a person without a photo (system blue). */
-export const NO_PHOTO_TINT = "#007aff";
+export const NO_PHOTO_TINT: RGB = [0, 122, 255];
 
-type RGB = [number, number, number];
+export type RGB = [number, number, number];
 
 function parseHex(hex: string | null | undefined): RGB | null {
   const match = /^#([0-9a-f]{6})$/i.exec(hex ?? "");
@@ -29,8 +29,9 @@ function luminance([r, g, b]: RGB): number {
 export function heroTint(
   color: string | null | undefined,
   dark: boolean,
+  fallback: RGB = NEUTRAL,
 ): { gradient: string; foreground: "white" | "black" } {
-  const base = parseHex(color) ?? NEUTRAL;
+  const base = parseHex(color) ?? fallback;
   const tint = (dark ? base.map((v) => Math.round(v * 0.6)) : base) as RGB;
   const alpha = dark ? 0.85 : 0.8;
   const ground = dark ? 0 : 255;

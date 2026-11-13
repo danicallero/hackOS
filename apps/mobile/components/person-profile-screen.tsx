@@ -229,8 +229,10 @@ export function PersonProfileScreen({
   const helper = state.status === "ready" ? state.helper : null;
   // Tinted from the photo's colour, blue without a usable photo; a photo whose colour is still loading keeps the plain background.
   const photoTint = useImageTint(person?.photoUrl);
-  const heroColor = photoTint.color ?? (person && photoTint.settled ? NO_PHOTO_TINT : null);
-  const hero = heroColor ? heroTint(heroColor, dark) : null;
+  const hero =
+    photoTint.color || (person && photoTint.settled)
+      ? heroTint(photoTint.color, dark, NO_PHOTO_TINT)
+      : null;
 
   return (
     <View ref={avatarCollapse.hostRef} onLayout={avatarCollapse.onHostLayout} style={{ flex: 1 }}>
