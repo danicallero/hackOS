@@ -1115,5 +1115,13 @@
   "rsvpUnanswered": "Sin respuesta",
   "couldNotSaveRsvps": "No se pudieron guardar tus respuestas",
   "rsvpClosed": "Cerrado",
-  "rsvpNoItems": "No hay actividades que te pidan RSVP."
+  "rsvpNoItems": "No hay actividades que te pidan RSVP.",
+  "companyRepresentatives": "Representantes",
+  "companyChallenges": "Retos",
+  "companyActivities": "Actividades",
+  "companyMore": "Más",
+  "companyNotFound": "Empresa no disponible",
+  "scheduleSpeakers": "Ponentes",
+  "scheduleCompanies": "Empresas",
+  "personTalks": "Charlas"
 }

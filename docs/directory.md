@@ -170,6 +170,11 @@ authenticated route `/api/users/<id>/photo?v=<op prefix>`; the web prefixes it
 with the API origin (`apiAssetUrl` in `apps/web/src/lib/directory.ts`) so the
 session cookie travels with the image request.
 
+Besides the owner, staff and readers who saved the person, any signed-in user may read a
+shared photo (`show_photo` on a visible profile) while the person speaks at a shown,
+participant-visible schedule item or represents a visible company (H44, H48): that is
+what lets the schedule and company pages show an avatar (`photoPublishedOnPublicSurface`).
+
 ### CV from the application
 
 The profile picks the CV up from the application automatically. Application
@@ -216,6 +221,8 @@ badge or ticket.
 | `projects[]` `{kind, id, name}` | every active `submissions` → `repos` (`kind: "project"`), then every active, unlinked `planned_work_groups` membership (`kind: "workGroup"`), each by id | `show_project` |
 | `project` | deprecated: the first of `projects` (or `null`), kept for app builds that predate the list | `show_project` |
 | `challenges[]` `{id, name}` | published, non-test challenges of any of those projects (`queue_entries`) or groups (`planned_work_group_challenges`) | `show_project` |
+| `activities[]` `{id, title, startsAt, endsAt, location}` | shown schedule items the person speaks at (`schedule_speakers`, H48), by start time; only items visible to the participant audience with a due `publishAt` | always (`[]` when none) |
+| `enterprise` `{id, name, logoUrl}` | the first visible company the person is a sponsor member of (`sponsors`, H44); `null` otherwise | always |
 | `helpTopics[]` `{id, name}` | the person's help desk knowledge (`helper_topics`, H61; [`help-desk.md`](./help-desk.md)) | their helper profile is published (`[]` otherwise) |
 
 Nothing else leaves the module: no email, DNI, badge, intolerances,

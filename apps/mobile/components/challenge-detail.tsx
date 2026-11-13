@@ -6,8 +6,10 @@ import { SheetModal } from "@/components/app-sheet";
 import { EntryBackToolbar } from "@/components/header-back-button";
 import { EmptyState, FloatingGlassButton, Section, Separator } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { type ChallengeDetail, fetchChallengeDetail, type GalleryPage } from "@/lib/projects";
@@ -74,6 +76,7 @@ export function ChallengeDetailBody({
   onOpenProjects?: () => void;
 }) {
   const { t } = useLocale();
+  const router = useRouter();
   const [hasProjects, setHasProjects] = useState(false);
   useEffect(() => {
     if (!onOpenProjects) return;
@@ -105,7 +108,11 @@ export function ChallengeDetailBody({
       ) : null}
       {company ? (
         <Section>
-          <View
+          <PressableFeedback
+            feedback="row"
+            accessibilityRole="button"
+            accessibilityLabel={company.name}
+            onPress={() => router.push(`/companies/${company.id}`)}
             style={{
               alignItems: "center",
               flexDirection: "row",
@@ -126,7 +133,13 @@ export function ChallengeDetailBody({
             >
               {company.name}
             </Text>
-          </View>
+            <SymbolView
+              name="chevron.right"
+              size={13}
+              tintColor={colors.tertiaryLabel}
+              accessible={false}
+            />
+          </PressableFeedback>
           {company.website ? (
             <>
               <Separator inset={68} />

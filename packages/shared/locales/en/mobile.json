@@ -1115,5 +1115,13 @@
   "rsvpUnanswered": "No answer",
   "couldNotSaveRsvps": "Could not save your answers",
   "rsvpClosed": "Closed",
-  "rsvpNoItems": "No activities are asking for your RSVP."
+  "rsvpNoItems": "No activities are asking for your RSVP.",
+  "companyRepresentatives": "Representatives",
+  "companyChallenges": "Challenges",
+  "companyActivities": "Activities",
+  "companyMore": "More",
+  "companyNotFound": "Company not available",
+  "scheduleSpeakers": "Speakers",
+  "scheduleCompanies": "Companies",
+  "personTalks": "Talks"
 }

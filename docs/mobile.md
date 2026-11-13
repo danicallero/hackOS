@@ -1211,6 +1211,28 @@ only the menu (no star). The diary's header owns the status-bar area on both
 platforms; the profile keeps an Android status-bar scrim, so scrolled content
 never slides behind the clock.
 
+**Company screen (H44, H45, H59).** `app/companies/[id].tsx`
+(`components/company-profile-screen.tsx`) reads `GET /api/enterprises/:id/profile`
+and follows Apple Music's artist page: a tinted gradient hero (CSS
+`experimental_backgroundImage`; the hue is derived from the company name by
+`heroGradient` in `lib/company.ts`, since logos are private bitmaps with no
+pixel access and no colour dependency is installed), the logo in a rounded
+card with a soft shadow (the negative logo in dark mode when present), the
+name, the description clamped to four lines with "More", the website, then
+Representatives (`AvatarRow`, as Podcasts' Hosts & Guests; opens
+`people/[id]`), Challenges (opens `projects/challenge`, only those already
+public) and Activities (opens `schedule/[id]`). Empty sections are omitted; a
+hidden or missing company shows "Company not available". iOS uses the
+transparent native header and the name joins the bar after 150 pt of scroll;
+Android and cold links float a glass back button.
+
+**Speakers and companies on activities.** The schedule detail adds Speakers
+(avatar, name, company as subtitle; opens `people/[id]`) and Companies (logo,
+name; opens `companies/[id]`) rows between the description and Information,
+from the item's optional `speakers` and `enterprises`. A person's profile
+shows their company (`enterprise`) and Talks (`activities`) when the API sends
+them, and a challenge's company row opens the company screen.
+
 `app/people/[id].tsx` (`components/person-profile-screen.tsx`) is a saved
 person's full profile from `GET /api/directory/:userId` (the only directory
 route left; there is no list and no Save, since only a scan adds someone):

@@ -33,7 +33,11 @@ import {
 } from "../../../lib/profile-files.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { putObject } from "../../../lib/storage.js";
-import { photoPublishedInDirectory, savedByReader } from "../../directory/service.js";
+import {
+  photoPublishedInDirectory,
+  photoPublishedOnPublicSurface,
+  savedByReader,
+} from "../../directory/service.js";
 import { helperPhotoShown, mayOpenHelper, mayOpenRequester } from "../../helpdesk/helpers.js";
 import { SCANNER_ROSTER_CAPABILITIES } from "../../logistics/scanner-sync.js";
 import { hasEventAccess } from "../role.js";
@@ -74,6 +78,9 @@ async function canSeePhoto(req: FastifyRequest, subjectId: number): Promise<bool
   ) {
     return true;
   }
+  // H44, H48: a speaker's or company representative's shared photo, on the
+  // schedule and company pages every signed-in user can open.
+  if (await photoPublishedOnPublicSurface(pool, subjectId)) return true;
   // H63: a published helper's card photo, for anyone who may browse helpers.
   if ((await mayOpenHelper(req, pool, subjectId)) && (await helperPhotoShown(pool, subjectId))) {
     return true;

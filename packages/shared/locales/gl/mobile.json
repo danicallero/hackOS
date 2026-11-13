@@ -1115,5 +1115,13 @@
   "rsvpUnanswered": "Sen resposta",
   "couldNotSaveRsvps": "Non se puideron gardar as túas respostas",
   "rsvpClosed": "Pechado",
-  "rsvpNoItems": "Non hai actividades que che pidan RSVP."
+  "rsvpNoItems": "Non hai actividades que che pidan RSVP.",
+  "companyRepresentatives": "Representantes",
+  "companyChallenges": "Retos",
+  "companyActivities": "Actividades",
+  "companyMore": "Máis",
+  "companyNotFound": "Empresa non dispoñible",
+  "scheduleSpeakers": "Ponentes",
+  "scheduleCompanies": "Empresas",
+  "personTalks": "Charlas"
 }

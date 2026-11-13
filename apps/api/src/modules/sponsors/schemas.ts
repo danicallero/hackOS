@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { publicActivitySchema } from "../logistics/schemas.js";
 
 /** Schemas for enterprise (sponsor) management (H43-H45). */
 
@@ -179,3 +180,24 @@ export const standTagParams = z.object({
 
 /** #935: staff turn an enterprise's stand scanning on or off. */
 export const standScannableBody = z.object({ scannable: z.boolean() }).strict();
+
+/** H44: a company's page for signed-in attendees (mobile company screen). */
+export const enterpriseProfileResponse = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  logoUrl: z.string().nullable(),
+  logoNegativeUrl: z.string().nullable(),
+  website: z.string().nullable(),
+  description: z.string().nullable(),
+  representatives: z.array(
+    z.object({
+      userId: z.number().int(),
+      name: z.string(),
+      avatarUrl: z.string().nullable(),
+    }),
+  ),
+  challenges: z.array(
+    z.object({ id: z.number().int(), title: z.string(), summary: z.string().nullable() }),
+  ),
+  activities: z.array(publicActivitySchema),
+});

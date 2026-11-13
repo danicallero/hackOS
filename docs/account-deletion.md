@@ -598,6 +598,7 @@ synthetic identity-shaped `users` row.
 | `food_intolerances`: label/proposer | Shared catalog | Food option catalog | Null subject proposer | No | Labels survive; authorship does not. |
 | `universities`: name/proposer | Shared catalog | Demographic lookup | Null subject proposer | University text copied to anonymous subject if required | Catalog is not a person record. |
 | `schedule_owners`: user/assigner/free-text name | Staff ownership | Operations | Delete subject-owned row; null subject assigner; never copy real name to free text | No | Avoid hidden name snapshot. |
+| `schedule_speakers`: user | Public programme | Schedule, public profile, company page | Delete subject row (FK cascade covers a hard delete; the removal workflow deletes it explicitly because anonymized accounts keep their `users` row) | No | Speaker links are identity-bearing. |
 | `announcements`: author/payload | Staff content | Notifications | Null subject author; inspect payload/provider logs operationally | No | Personal authorship/payload is not audit data. |
 | `enterprise_invite_link_redemptions`: user/email/name/IP/user-agent | Invite history | Access provisioning | Delete by FK and normalized email | No | Denormalized invitee identity and claim provenance. |
 | `user_invite_link_redemptions`: user/email/name/IP/user-agent | Invite history | Access provisioning | Delete by FK and normalized email | No | Denormalized invitee identity and claim provenance. |

@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { IconButton } from "@/components/common/icon-button";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { TabBar } from "@/components/common/tab-bar";
+import { ScheduleLinks } from "@/components/public/schedule-links";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useNow } from "@/hooks/use-now";
@@ -475,6 +476,7 @@ export function ScheduleTimeline({
             {selectedItem.description && (
               <p className="whitespace-pre-wrap text-pretty">{selectedItem.description}</p>
             )}
+            <ScheduleLinks item={selectedItem} />
             {showResponsible && selectedItem.owners && selectedItem.owners.length > 0 && (
               <div>
                 <h3 className="type-subheading">{t("ownersLabel")}</h3>

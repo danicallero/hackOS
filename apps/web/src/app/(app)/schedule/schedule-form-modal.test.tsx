@@ -18,7 +18,11 @@ vi.mock("@/lib/logistics", () => ({
   logisticsApi: {
     scheduleTranslateAvailability: vi.fn().mockResolvedValue({ available: false }),
     saveScheduleTranslations: vi.fn(),
+    scheduleOwnerCandidates: vi.fn().mockResolvedValue({ users: [] }),
   },
+}));
+vi.mock("@/lib/queue", () => ({
+  listEnterprises: vi.fn().mockResolvedValue([{ id: 7, name: "Acme" }]),
 }));
 vi.mock("@/hooks/use-audience-roles", () => ({
   useAudienceRoles: () => ({
@@ -193,5 +197,29 @@ describe("scheduleDuplicateForm", () => {
       key === "scheduleCopyTitle" ? `${params?.title} (copy)` : key,
     );
     expect(form).toMatchObject({ title: "Workshop (copy)", visibility: "hidden", publishAt: null });
+  });
+});
+
+describe("ScheduleFormModal speakers and companies", () => {
+  const save = () => [...document.querySelectorAll("button")].find((b) => b.textContent === "save");
+
+  it("shows the item's speakers and removes one on submit", async () => {
+    const user = userEvent.setup();
+    await render({ ...base, speakerUserIds: [3, 4], enterpriseIds: [7] });
+    expect(document.body.textContent).toContain("scheduleSpeakersLabel");
+    const remove = document.querySelectorAll<HTMLButtonElement>('[aria-label="removeSpeakerAria"]');
+    expect(remove).toHaveLength(2);
+    await act(async () => user.click(remove[0] as HTMLButtonElement));
+    await act(async () => user.click(save() as HTMLButtonElement));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ speakerUserIds: [4], enterpriseIds: [7] }),
+      [],
+    );
+  });
+
+  it("cleanScheduleForm always sends both lists", () => {
+    const cleaned = cleanScheduleForm(base);
+    expect(cleaned.speakerUserIds).toEqual([]);
+    expect(cleaned.enterpriseIds).toEqual([]);
   });
 });

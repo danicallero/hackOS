@@ -85,7 +85,6 @@ import {
   checkInBody,
   checkInUserBody,
   hoursExportQuery,
-  languageSchema,
   lookupBody,
   lookupUserBody,
   mealPlanActivityParam,
@@ -98,6 +97,7 @@ import {
   presenceLookupBody,
   presenceScanBody,
   presenceSignalBody,
+  publicActivitySchema,
   removeBadgeBody,
   rotateBody,
   scanLogQuery,
@@ -179,34 +179,6 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     },
     keyByUser,
   );
-  const publicActivitySchema = z.object({
-    id: z.number().int(),
-    title: z.string(),
-    description: z.string().nullable(),
-    location: z.string().nullable(),
-    type: z.string().nullable(),
-    startsAt: z.string(),
-    endsAt: z.string(),
-    publishAt: z.string().nullable(),
-    audiences: z.array(z.string()),
-    contactNote: z.string().nullable().optional(),
-    owners: z
-      .array(
-        z.object({
-          id: z.number().int(),
-          userId: z.number().int().nullable(),
-          name: z.string().nullable(),
-          surname: z.string().nullable(),
-          freeTextName: z.string().nullable(),
-        }),
-      )
-      .optional(),
-    notes: z.string().nullable().optional(),
-    visibility: z.enum(["shown", "hidden"]).optional(),
-    primaryLanguage: languageSchema,
-    titleI18n: z.partialRecord(languageSchema, z.string()),
-    descriptionI18n: z.partialRecord(languageSchema, z.string().nullable()),
-  });
 
   const accredit = requireCapability(CAPABILITIES.ACCREDIT_SCAN);
   const presence = requireCapability(CAPABILITIES.PRESENCE_SCAN);
@@ -865,7 +837,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
           "Every schedule item, drafts included, with owners, for the staff run-of-show " +
           "(H48, H59). Open to `schedule:read` (view only) and `schedule:manage` holders. " +
           "`liveActivityAudience` says whether the item's audience gets an " +
-          "attendee Live Activity (#966).",
+          "attendee Live Activity (#966). Each item carries its `speakers` (ordered) and linked `enterprises`.",
       },
     },
     async () => listSchedule(),
@@ -900,7 +872,9 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
           "Creates a schedule item and its linked scanner activity (H48, H25, H26). " +
           "`audiences` decides who sees it once shown (H59); `liveActivityAudience` " +
           "(default false) also gives that audience an attendee Live Activity (#966). " +
-          "`rsvp` marks the activity as asking attendance to those kinds from creation.",
+          "`rsvp` marks the activity as asking attendance to those kinds from creation. " +
+          "`speakerUserIds` (ordered) and `enterpriseIds` link speakers and companies; " +
+          "an unknown id answers 400 and nothing is saved.",
       },
     },
     async (req, reply) =>
@@ -921,6 +895,8 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
           liveActivityAudience: req.body.liveActivityAudience,
           titleLanguage: req.body.titleLanguage,
           rsvp: req.body.rsvp,
+          speakerUserIds: req.body.speakerUserIds,
+          enterpriseIds: req.body.enterpriseIds,
         }),
       ),
   );
@@ -936,7 +912,9 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         summary: "Edit a schedule item",
         description:
           "Partial edit: only the fields sent change (H48, H59). `liveActivityAudience` " +
-          "turns the attendee Live Activity for the item's audience on or off (#966). Audited.",
+          "turns the attendee Live Activity for the item's audience on or off (#966). " +
+          "`speakerUserIds` and `enterpriseIds` replace the whole list when sent; an unknown id " +
+          "answers 400 and nothing changes. Audited.",
       },
     },
     async (req) =>
@@ -955,6 +933,8 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         notes: req.body.notes,
         liveActivityAudience: req.body.liveActivityAudience,
         titleLanguage: req.body.titleLanguage,
+        speakerUserIds: req.body.speakerUserIds,
+        enterpriseIds: req.body.enterpriseIds,
       }),
   );
 

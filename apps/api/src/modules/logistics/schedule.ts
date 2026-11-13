@@ -8,6 +8,7 @@ import { audit } from "../../lib/audit.js";
 import { type AuthorizationContext, getEffectiveCapabilities } from "../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { likeContains } from "../../lib/like.js";
+import { photoUrl } from "../../lib/profile-files.js";
 import { broadcast } from "../../lib/sse.js";
 import { currentEventKey } from "../event/context.js";
 import { computeMembershipFlags, mentorOrParticipantType } from "../identity/role.js";
@@ -16,6 +17,7 @@ import { normalizeLanguage } from "../notifications/templates.js";
 import type { Language } from "../notifications/translate/index.js";
 import { isTranslationAvailable, translateFields } from "../notifications/translate/index.js";
 import { assertRsvpRoles, validateRsvpSettings } from "../rsvps/settings.js";
+import { ENTERPRISE_HAS_SYNTHETIC } from "../sponsors/service.js";
 import { roleAudienceTagsForUsers } from "./role-audiences.js";
 
 const SCHEDULE_COLUMNS =
@@ -103,6 +105,10 @@ export interface ScheduleInput {
   titleLanguage?: Language;
   /** Create the item already asking attendance to these kinds. */
   rsvp?: { enabled: boolean; kinds: AttendanceKind[]; roleIds?: number[] };
+  /** Speakers, in display order. */
+  speakerUserIds?: number[];
+  /** Companies the item is linked to, with or without a speaker. */
+  enterpriseIds?: number[];
 }
 
 export interface SchedulePatch {
@@ -121,6 +127,31 @@ export interface SchedulePatch {
   liveActivityAudience?: boolean;
   /** Language `title`/`description` are written in; defaults to the editor's account language. */
   titleLanguage?: Language;
+  /** Replaces the whole speaker list, in display order; omitted keeps it. */
+  speakerUserIds?: number[];
+  /** Replaces the whole company list; omitted keeps it. */
+  enterpriseIds?: number[];
+}
+
+/** A person speaking at an item, with the company they belong to when it is shown. */
+export interface ScheduleSpeaker {
+  userId: number;
+  name: string;
+  avatarUrl: string | null;
+  enterpriseId: number | null;
+  enterpriseName: string | null;
+}
+
+/** A company an item is linked to. */
+export interface ScheduleEnterprise {
+  id: number;
+  name: string;
+  logoUrl: string | null;
+}
+
+export interface ScheduleLinks {
+  speakers: ScheduleSpeaker[];
+  enterprises: ScheduleEnterprise[];
 }
 
 function serialize(row: Record<string, unknown>) {
@@ -243,6 +274,165 @@ export async function revealDueScheduleItems(client: Queryable = pool): Promise<
   return rows.map((r: { id: number }) => Number(r.id));
 }
 
+/**
+ * Speakers and companies for a batch of items, two queries in all. A hidden
+ * (or fixture) company is invisible to anyone who is not staff; a speaker's
+ * photo is only linked while they share it on their public profile.
+ */
+export async function loadScheduleLinks(
+  ids: number[],
+  isStaff: boolean,
+  db: Queryable = pool,
+): Promise<Map<number, ScheduleLinks>> {
+  const links = new Map<number, ScheduleLinks>();
+  if (ids.length === 0) return links;
+  const entry = (id: number) => {
+    let current = links.get(id);
+    if (!current) {
+      current = { speakers: [], enterprises: [] };
+      links.set(id, current);
+    }
+    return current;
+  };
+  const [{ rows: speakerRows }, { rows: enterpriseRows }] = await Promise.all([
+    db.query(
+      `SELECT ss.schedule_id, u.id AS user_id, btrim(u.name || ' ' || COALESCE(u.surname, '')) AS name,
+              CASE WHEN p.directory_visible AND p.show_photo
+                        AND u.is_test_account = false
+                        AND EXISTS (SELECT 1 FROM user_event_access a WHERE a.user_id = u.id)
+                   THEN u.photo_key END AS photo_key,
+              ent.id AS enterprise_id, ent.name AS enterprise_name
+         FROM schedule_speakers ss
+         JOIN users u ON u.id = ss.user_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
+         LEFT JOIN user_public_profiles p ON p.user_id = u.id
+         LEFT JOIN LATERAL (
+           SELECT e.id, e.name
+             FROM sponsors sp
+             JOIN enterprises e ON e.id = sp.enterprise_id
+            WHERE sp.user_id = u.id
+              AND ($2::boolean OR (e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))
+            ORDER BY sp.id
+            LIMIT 1
+         ) ent ON true
+        WHERE ss.schedule_id = ANY($1::int[])
+        ORDER BY ss.schedule_id, ss.position, ss.user_id`,
+      [ids, isStaff],
+    ),
+    db.query(
+      `SELECT se.schedule_id, e.id, e.name, e.logo_url
+         FROM schedule_enterprises se
+         JOIN enterprises e ON e.id = se.enterprise_id
+        WHERE se.schedule_id = ANY($1::int[])
+          AND ($2::boolean OR (e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))
+        ORDER BY se.schedule_id, e.name, e.id`,
+      [ids, isStaff],
+    ),
+  ]);
+  for (const row of speakerRows as Record<string, unknown>[]) {
+    const userId = Number(row.user_id);
+    entry(Number(row.schedule_id)).speakers.push({
+      userId,
+      name: String(row.name),
+      avatarUrl: photoUrl(userId, (row.photo_key as string | null) ?? null),
+      enterpriseId: row.enterprise_id == null ? null : Number(row.enterprise_id),
+      enterpriseName: (row.enterprise_name as string | null) ?? null,
+    });
+  }
+  for (const row of enterpriseRows as Record<string, unknown>[]) {
+    entry(Number(row.schedule_id)).enterprises.push({
+      id: Number(row.id),
+      name: String(row.name),
+      logoUrl: (row.logo_url as string | null) ?? null,
+    });
+  }
+  return links;
+}
+
+const NO_LINKS: ScheduleLinks = { speakers: [], enterprises: [] };
+
+/** Ids currently linked to an item, for the audit trail. */
+async function currentLinkIds(client: Queryable, scheduleId: number) {
+  const [{ rows: speakers }, { rows: enterprises }] = await Promise.all([
+    client.query<{ user_id: number }>(
+      `SELECT user_id FROM schedule_speakers WHERE schedule_id = $1 ORDER BY position, user_id`,
+      [scheduleId],
+    ),
+    client.query<{ enterprise_id: number }>(
+      `SELECT enterprise_id FROM schedule_enterprises WHERE schedule_id = $1 ORDER BY enterprise_id`,
+      [scheduleId],
+    ),
+  ]);
+  return {
+    speakerUserIds: speakers.map((r) => Number(r.user_id)),
+    enterpriseIds: enterprises.map((r) => Number(r.enterprise_id)),
+  };
+}
+
+/**
+ * Replace-all write of an item's speakers (order = position) and companies.
+ * An omitted list is left alone; an unknown id fails the whole write.
+ */
+async function replaceScheduleLinks(
+  client: Queryable,
+  scheduleId: number,
+  links: { speakerUserIds?: number[]; enterpriseIds?: number[] },
+) {
+  if (links.speakerUserIds) {
+    const ids = [...new Set(links.speakerUserIds)];
+    if (ids.length > 0) {
+      const { rows } = await client.query<{ id: number }>(
+        `SELECT id FROM users WHERE id = ANY($1::int[]) AND account_state = 'active' AND anonymized_at IS NULL`,
+        [ids],
+      );
+      const known = new Set(rows.map((r) => Number(r.id)));
+      const unknown = ids.filter((id) => !known.has(id));
+      if (unknown.length > 0)
+        throw new BadRequestError("Speakers must be existing active users", {
+          unknownSpeakerUserIds: unknown,
+        });
+    }
+    await client.query(`DELETE FROM schedule_speakers WHERE schedule_id = $1`, [scheduleId]);
+    if (ids.length > 0)
+      await client.query(
+        `INSERT INTO schedule_speakers (schedule_id, user_id, position)
+         SELECT $1, t.user_id, t.ord - 1 FROM unnest($2::int[]) WITH ORDINALITY AS t(user_id, ord)`,
+        [scheduleId, ids],
+      );
+  }
+  if (links.enterpriseIds) {
+    const ids = [...new Set(links.enterpriseIds)];
+    if (ids.length > 0) {
+      const { rows } = await client.query<{ id: number }>(
+        `SELECT id FROM enterprises WHERE id = ANY($1::int[])`,
+        [ids],
+      );
+      const known = new Set(rows.map((r) => Number(r.id)));
+      const unknown = ids.filter((id) => !known.has(id));
+      if (unknown.length > 0)
+        throw new BadRequestError("Companies must be existing enterprises", {
+          unknownEnterpriseIds: unknown,
+        });
+    }
+    await client.query(`DELETE FROM schedule_enterprises WHERE schedule_id = $1`, [scheduleId]);
+    if (ids.length > 0)
+      await client.query(
+        `INSERT INTO schedule_enterprises (schedule_id, enterprise_id)
+         SELECT $1, e FROM unnest($2::int[]) AS e`,
+        [scheduleId, ids],
+      );
+  }
+}
+
+/** A written item as staff get it back: the plain row plus its speakers and companies. */
+async function withLinks<T extends { id: number }>(
+  client: Queryable,
+  item: T,
+): Promise<T & ScheduleLinks> {
+  const links = (await loadScheduleLinks([item.id], true, client)).get(item.id) ?? NO_LINKS;
+  return { ...item, ...links };
+}
+
 /** Shared by listSchedule and listScheduleForAudiences (H59) — one owners query for a batch of ids. */
 async function loadOwnersByScheduleId(ids: number[]): Promise<Map<number, ScheduleOwner[]>> {
   const ownersByScheduleId = new Map<number, ScheduleOwner[]>();
@@ -278,11 +468,16 @@ export async function listSchedule() {
        FROM schedule
       ORDER BY starts_at ASC, id ASC`,
   );
-  const ownersByScheduleId = await loadOwnersByScheduleId(rows.map((r) => Number(r.id)));
+  const ids = rows.map((r) => Number(r.id));
+  const [ownersByScheduleId, linksByScheduleId] = await Promise.all([
+    loadOwnersByScheduleId(ids),
+    loadScheduleLinks(ids, true),
+  ]);
   return {
     items: rows.map((row) => ({
       ...serialize(row),
       owners: ownersByScheduleId.get(Number(row.id)) ?? [],
+      ...(linksByScheduleId.get(Number(row.id)) ?? NO_LINKS),
     })),
   };
 }
@@ -301,7 +496,7 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
   // comment above ScheduleTranslation.
   const primaryLanguage =
     input.titleLanguage ?? (actorId == null ? "es" : await getUserLanguage(actorId));
-  const item = await withTransaction(async (client) => {
+  const created = await withTransaction(async (client) => {
     const { rows } = await client.query(
       `INSERT INTO schedule
          (title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at, audiences, contact_note, notes, primary_language, live_activity_audience)
@@ -340,6 +535,7 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
     );
     const activityId = activities[0]?.id;
     if (activityId === undefined) throw new Error("Activity insert returned no id");
+    await replaceScheduleLinks(client, item.id, input);
     const rsvp = input.rsvp;
     if (rsvp?.enabled) {
       const settings = {
@@ -365,12 +561,16 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
       entityType: "schedule",
       entityId: item.id,
       action: "create",
-      after: { ...item, rsvp: rsvp?.enabled ? rsvp : null },
+      after: {
+        ...item,
+        rsvp: rsvp?.enabled ? rsvp : null,
+        ...(await currentLinkIds(client, item.id)),
+      },
     });
-    return item;
+    return { item, withLinks: await withLinks(client, item) };
   });
-  await emitScheduleChanged({ action: "create", item });
-  return autoTranslateOnCreate(actorId, item);
+  await emitScheduleChanged({ action: "create", item: created.item });
+  return autoTranslateOnCreate(actorId, created.withLinks);
 }
 
 /**
@@ -381,7 +581,10 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
  * this can never clobber anything; a provider hiccup (or none configured)
  * just leaves the item exactly as created, no error surfaced.
  */
-async function autoTranslateOnCreate(actorId: number | null, item: ReturnType<typeof serialize>) {
+async function autoTranslateOnCreate<T extends ReturnType<typeof serialize>>(
+  actorId: number | null,
+  item: T,
+) {
   if (!isTranslationAvailable() || !item.title.trim()) return item;
   try {
     return await translateScheduleContent(
@@ -433,7 +636,7 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
   // editor's own (the editor filled only that one), so the client names it.
   const actorLanguage =
     patch.titleLanguage ?? (actorId == null ? null : await getUserLanguage(actorId));
-  const item = await withTransaction(async (client) => {
+  const updated = await withTransaction(async (client) => {
     const current = await client.query(
       `SELECT ${SCHEDULE_COLUMNS}
          FROM schedule WHERE id = $1 FOR UPDATE`,
@@ -444,7 +647,7 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
         id,
         code: ERROR_REASONS.SCHEDULE_ITEM_NOT_FOUND,
       });
-    const before = serialize(current.rows[0]);
+    const before = { ...serialize(current.rows[0]), ...(await currentLinkIds(client, id)) };
     const nextStartsAt = patch.startsAt ?? (current.rows[0].starts_at as Date);
     const nextEndsAt = patch.endsAt ?? (current.rows[0].ends_at as Date);
     const nextType =
@@ -512,7 +715,9 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
         patch.liveActivityAudience ?? current.rows[0].live_activity_audience,
       ],
     );
-    const after = serialize(rows[0]);
+    await replaceScheduleLinks(client, id, patch);
+    const plain = serialize(rows[0]);
+    const after = { ...plain, ...(await currentLinkIds(client, id)) };
     await client.query(
       `UPDATE activities
           SET name = $2,
@@ -542,10 +747,10 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
       before,
       after,
     });
-    return after;
+    return { plain, withLinks: await withLinks(client, plain) };
   });
-  await emitScheduleChanged({ action: "update", item });
-  return item;
+  await emitScheduleChanged({ action: "update", item: updated.plain });
+  return updated.withLinks;
 }
 
 export async function deleteScheduleItem(actorId: number | null, id: number) {
@@ -591,7 +796,7 @@ export async function saveScheduleTranslations(
   id: number,
   translations: ScheduleTranslations,
 ) {
-  const item = await withTransaction(async (client) => {
+  const saved = await withTransaction(async (client) => {
     const current = await client.query(
       `SELECT ${SCHEDULE_COLUMNS} FROM schedule WHERE id = $1 FOR UPDATE`,
       [id],
@@ -631,10 +836,10 @@ export async function saveScheduleTranslations(
       before: { titleI18n: before.titleI18n, descriptionI18n: before.descriptionI18n },
       after: { titleI18n: after.titleI18n, descriptionI18n: after.descriptionI18n },
     });
-    return after;
+    return { plain: after, withLinks: await withLinks(client, after) };
   });
-  await emitScheduleChanged({ action: "update", item });
-  return item;
+  await emitScheduleChanged({ action: "update", item: saved.plain });
+  return saved.withLinks;
 }
 
 /**
@@ -1046,6 +1251,8 @@ export interface AudienceScheduleItem {
     surname: string | null;
     freeTextName: string | null;
   }[];
+  speakers: ScheduleSpeaker[];
+  enterprises: ScheduleEnterprise[];
   /** Staff-only free-form notes (the escaleta's "Observaciones"). */
   notes?: string | null;
   /** Staff-only — lets a staff client tell a draft/hidden item apart from a live one. */
@@ -1058,6 +1265,8 @@ export interface AudienceScheduleItem {
 
 export async function listScheduleForAudiences(
   caller: CallerScheduleAudience,
+  /** Narrow to the items of one company: linked to it, or spoken at by one of its members. */
+  filter: { enterpriseId?: number } = {},
 ): Promise<AudienceScheduleItem[]> {
   // Staff run the whole show, not just staff-tagged items, and not only the
   // *live* run-of-show either — an item still in draft (visibility='hidden')
@@ -1069,17 +1278,28 @@ export async function listScheduleForAudiences(
     `SELECT id, title, description, location, type, starts_at, ends_at, publish_at,
             audiences, contact_note, notes, visibility, primary_language, title_i18n, description_i18n
        FROM schedule
-      WHERE $2
+      WHERE ($2
          OR (
            visibility = 'shown'
            AND (publish_at IS NULL OR publish_at <= now())
            AND audiences && $1::text[]
-         )
+         ))
+        AND ($3::int IS NULL
+         OR EXISTS (SELECT 1 FROM schedule_enterprises se
+                     WHERE se.schedule_id = schedule.id AND se.enterprise_id = $3)
+         OR EXISTS (SELECT 1 FROM schedule_speakers ss
+                      JOIN sponsors sp ON sp.user_id = ss.user_id
+                      JOIN users su ON su.id = ss.user_id
+                       AND su.account_state = 'active' AND su.anonymized_at IS NULL
+                     WHERE ss.schedule_id = schedule.id AND sp.enterprise_id = $3))
       ORDER BY starts_at ASC, id ASC`,
-    [Array.from(caller.audiences), caller.isStaff],
+    [Array.from(caller.audiences), caller.isStaff, filter.enterpriseId ?? null],
   );
   const ids = rows.map((r: Record<string, unknown>) => Number(r.id));
-  const ownersByScheduleId = await loadOwnersByScheduleId(ids);
+  const [ownersByScheduleId, linksByScheduleId] = await Promise.all([
+    loadOwnersByScheduleId(ids),
+    loadScheduleLinks(ids, caller.isStaff),
+  ]);
 
   return rows.map((row: Record<string, unknown>) => {
     const itemAudiences = new Set((row.audiences as string[]) ?? []);
@@ -1105,6 +1325,7 @@ export async function listScheduleForAudiences(
       primaryLanguage: ((row.primary_language as Language | null) ?? "es") as Language,
       titleI18n: (row.title_i18n as Record<string, string> | null) ?? {},
       descriptionI18n: (row.description_i18n as Record<string, string | null> | null) ?? {},
+      ...(linksByScheduleId.get(Number(row.id)) ?? NO_LINKS),
     };
     // Staff sees owners/contact/notes for every item, regardless of that
     // item's own audience tags — operational detail is a staff concern, not

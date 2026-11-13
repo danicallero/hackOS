@@ -1335,6 +1335,15 @@ Table schedule {
   visibility text [not null, default: `'hidden'::text`]
 }
 
+Table schedule_enterprises {
+  enterprise_id integer [not null]
+  schedule_id integer [not null]
+
+  indexes {
+  (schedule_id, enterprise_id) [pk]
+  }
+}
+
 Table schedule_owners {
   assigned_at "timestamp with time zone" [not null, default: `now()`]
   assigned_by integer
@@ -1345,6 +1354,16 @@ Table schedule_owners {
 
   indexes {
   (schedule_id, user_id) [unique]
+  }
+}
+
+Table schedule_speakers {
+  position integer [not null, default: `0`]
+  schedule_id integer [not null]
+  user_id integer [not null]
+
+  indexes {
+  (schedule_id, user_id) [pk]
   }
 }
 
@@ -1840,9 +1859,13 @@ Ref: room_queue_groups.assigned_by > users.id
 Ref: room_queue_groups.queue_group_id > queue_groups.id
 Ref: room_queue_groups.room_id > rooms.id
 Ref: room_queue_state.room_id > rooms.id
+Ref: schedule_enterprises.enterprise_id > enterprises.id
+Ref: schedule_enterprises.schedule_id > schedule.id
 Ref: schedule_owners.assigned_by > users.id
 Ref: schedule_owners.schedule_id > schedule.id
 Ref: schedule_owners.user_id > users.id
+Ref: schedule_speakers.schedule_id > schedule.id
+Ref: schedule_speakers.user_id > users.id
 Ref: sessions.user_id > users.id
 Ref: sponsor_stand_tags.enterprise_id > enterprises.id
 Ref: sponsors.enterprise_id > enterprises.id

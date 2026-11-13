@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppRefreshControl } from "@/components/app-refresh-control";
+import { AvatarRow } from "@/components/avatar-row";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { HeaderBackButton } from "@/components/header-back-button";
 import {
@@ -360,6 +361,42 @@ export function ScheduleDetailScreen({
                 >
                   {collapseBlankLines(detailItem.description)}
                 </Text>
+              </View>
+            ) : null}
+
+            {(detailItem?.speakers ?? []).length > 0 ? (
+              <View style={{ gap: 10 }}>
+                <Text style={sectionHeaderStyle}>{t("scheduleSpeakers")}</Text>
+                <View>
+                  <AvatarRow
+                    inset={0}
+                    items={(detailItem?.speakers ?? []).map((speaker) => ({
+                      key: String(speaker.userId),
+                      name: speaker.name,
+                      uri: speaker.avatarUrl,
+                      subtitle: speaker.enterpriseName,
+                      onPress: () => router.push(`/people/${speaker.userId}`),
+                    }))}
+                  />
+                </View>
+              </View>
+            ) : null}
+
+            {(detailItem?.enterprises ?? []).length > 0 ? (
+              <View style={{ gap: 10 }}>
+                <Text style={sectionHeaderStyle}>{t("scheduleCompanies")}</Text>
+                <View>
+                  <AvatarRow
+                    inset={0}
+                    kind="sponsor"
+                    items={(detailItem?.enterprises ?? []).map((company) => ({
+                      key: String(company.id),
+                      name: company.name,
+                      uri: company.logoUrl,
+                      onPress: () => router.push(`/companies/${company.id}`),
+                    }))}
+                  />
+                </View>
               </View>
             ) : null}
 

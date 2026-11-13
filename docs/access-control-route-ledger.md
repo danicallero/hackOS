@@ -104,7 +104,7 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | POST | `/api/degrees/:id/normalize` | capability:intolerances:manage + email-verification:caller |
 | GET | `/api/directory/:userId` | contextual:directory-person-access (params.userId) |
 | GET | `/api/directory/:userId/cv` | contextual:directory-person-access (params.userId) |
-| GET | `/api/enterprises` | capability:anyOf(sponsors:manage,queue:admin) |
+| GET | `/api/enterprises` | capability:anyOf(sponsors:manage,queue:admin,schedule:manage) |
 | POST | `/api/enterprises` | capability:sponsors:manage + email-verification:caller |
 | GET | `/api/enterprises/:id` | contextual:enterprise-access (params.id) |
 | PATCH | `/api/enterprises/:id` | contextual:enterprise-access (params.id) + email-verification:caller |
@@ -127,6 +127,7 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | DELETE | `/api/enterprises/:id/stand-tags/:tagId` | capability:sponsors:manage + email-verification:caller |
 | PATCH | `/api/enterprises/:id/stand-tags/:tagId` | capability:sponsors:manage + email-verification:caller |
 | GET | `/api/enterprises/:id/stand-tags/:tagId/qr.svg` | contextual:enterprise-access (params.id) |
+| GET | `/api/enterprises/:id/profile` | authenticated |
 | GET | `/api/enterprises/mine` | authenticated |
 | POST | `/api/enterprises/reorder` | capability:sponsors:manage + email-verification:caller |
 | GET | `/api/enterprises/stands` | capability:sponsors:manage |

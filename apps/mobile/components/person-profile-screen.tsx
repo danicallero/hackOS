@@ -5,6 +5,7 @@ import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ActivityLinkSection } from "@/components/activity-link-rows";
 import { AppRefreshControl } from "@/components/app-refresh-control";
 import { CvViewer } from "@/components/cv-viewer";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
@@ -30,6 +31,7 @@ import {
 import { ProfileCard } from "@/components/profile-card";
 import { NoteRow, QuickAction } from "@/components/profile-parts";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { SymbolView } from "@/components/symbol";
 import { alert } from "@/lib/alert";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { DiaryEntry } from "@/lib/diary";
@@ -346,6 +348,50 @@ export function PersonProfileScreen({
                 ) : null
               }
             />
+
+            {person.enterprise ? (
+              <Section>
+                <PressableFeedback
+                  feedback="row"
+                  accessibilityRole="button"
+                  accessibilityLabel={person.enterprise.name}
+                  onPress={() => router.push(`/companies/${person.enterprise?.id}`)}
+                  style={{
+                    alignItems: "center",
+                    flexDirection: "row",
+                    gap: 12,
+                    minHeight: 60,
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                  }}
+                >
+                  <PersonAvatar
+                    size={40}
+                    kind="sponsor"
+                    name={person.enterprise.name}
+                    uri={person.enterprise.logoUrl}
+                  />
+                  <Text
+                    style={{
+                      color: colors.label,
+                      flex: 1,
+                      fontSize: type.body.fontSize,
+                      fontWeight: "600",
+                    }}
+                  >
+                    {person.enterprise.name}
+                  </Text>
+                  <SymbolView
+                    name="chevron.right"
+                    size={13}
+                    tintColor={colors.tertiaryLabel}
+                    accessible={false}
+                  />
+                </PressableFeedback>
+              </Section>
+            ) : null}
+
+            <ActivityLinkSection title={t("personTalks")} items={person.activities ?? []} />
 
             {helper ? (
               <Section title={t("helpSchedule")} footer={t("helpScheduleNote")}>

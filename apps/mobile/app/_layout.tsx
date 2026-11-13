@@ -660,6 +660,14 @@ function RootLayoutNav({
             }}
           />
           <Stack.Screen
+            name="companies/[id]"
+            options={{
+              // Hero over a transparent native header; the name joins the bar on scroll.
+              ...transparentDetailHeaderOptions,
+              headerShown: process.env.EXPO_OS === "ios",
+            }}
+          />
+          <Stack.Screen
             name="profile-tasks"
             options={{ contentStyle: noSidePadding, headerShown: false, presentation: "modal" }}
           />

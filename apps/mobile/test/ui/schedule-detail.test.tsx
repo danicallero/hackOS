@@ -46,6 +46,7 @@ jest.mock("expo-router/stack", () => ({
     },
   },
 }));
+jest.mock("@/components/avatar-row", () => ({ AvatarRow: () => null }));
 jest.mock("@/components/glass-view", () => ({
   GlassView: () => null,
   isRealLiquidGlassAvailable: () => false,

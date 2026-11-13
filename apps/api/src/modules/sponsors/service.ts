@@ -9,10 +9,12 @@ import {
   assertFixtureEnterpriseScopes,
 } from "../../lib/fixture-queue-scope.js";
 import { assertFixtureSubjectScope, isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
+import { photoUrl } from "../../lib/profile-files.js";
 import { broadcast } from "../../lib/sse.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
 import { applyRoleGrantRule } from "../identity/role-grants.js";
 import { broadcastForActiveUser } from "../logistics/active-broadcast.js";
+import { type CallerScheduleAudience, listScheduleForAudiences } from "../logistics/schedule.js";
 import { reconcileTicketAccess } from "../logistics/tickets.js";
 import { enqueueWalletSync } from "../logistics/wallet-sync.js";
 import type {
@@ -101,6 +103,83 @@ export async function getEnterprise(id: number) {
   const { rows } = await pool.query(`SELECT ${COLUMNS} FROM enterprises WHERE id = $1`, [id]);
   if (!rows[0]) throw new NotFoundError("Enterprise not found", { id });
   return rows[0];
+}
+
+const SUMMARY_MAX = 240;
+
+/**
+ * A company's page (H44, H45): what signed-in attendees see when they open it.
+ * Staff see any enterprise; everyone else only a visible one, 404 otherwise so a
+ * hidden company cannot be probed. Challenges count once revealed (H45), the
+ * activities are the caller's own schedule feed (audiences, H59) narrowed to the
+ * ones linked to the company or spoken at by one of its members. A person's
+ * photo is linked only while they share it on their public profile (#934).
+ */
+export async function getEnterpriseProfile(
+  enterpriseId: number,
+  viewerId: number,
+  caller: CallerScheduleAudience,
+) {
+  const { rows } = await pool.query(
+    `SELECT e.id, e.name, e.website, e.logo_url,
+            COALESCE(e.logo_negative_url, e.logo_url) AS logo_negative_url, e.description
+       FROM enterprises e
+      WHERE e.id = $1
+        AND ($2::boolean OR (e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))`,
+    [enterpriseId, caller.isStaff],
+  );
+  const enterprise = rows[0];
+  if (!enterprise) throw new NotFoundError("Enterprise not found", { id: enterpriseId });
+  if (caller.isStaff) await assertEnterpriseScope(pool, viewerId, enterpriseId);
+
+  const [{ rows: people }, { rows: challengeRows }, activities] = await Promise.all([
+    pool.query(
+      `SELECT u.id AS user_id, btrim(u.name || ' ' || COALESCE(u.surname, '')) AS name,
+              CASE WHEN p.directory_visible AND p.show_photo
+                        AND u.is_test_account = false
+                        AND EXISTS (SELECT 1 FROM user_event_access a WHERE a.user_id = u.id)
+                   THEN u.photo_key END AS photo_key
+         FROM sponsors sp
+         JOIN users u ON u.id = sp.user_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
+         LEFT JOIN user_public_profiles p ON p.user_id = u.id
+        WHERE sp.enterprise_id = $1
+        ORDER BY sp.id`,
+      [enterpriseId],
+    ),
+    pool.query(
+      `SELECT c.id, c.title, c.description
+         FROM challenges c
+         JOIN sponsors sp ON sp.id = c.author
+        WHERE sp.enterprise_id = $1
+          AND ($2::boolean OR (c.visibility = 'visible' AND c.is_test_account = false))
+        ORDER BY c.title, c.id`,
+      [enterpriseId, caller.isStaff],
+    ),
+    listScheduleForAudiences(caller, { enterpriseId }),
+  ]);
+  return {
+    id: Number(enterprise.id),
+    name: String(enterprise.name),
+    logoUrl: (enterprise.logo_url as string | null) ?? null,
+    logoNegativeUrl: (enterprise.logo_negative_url as string | null) ?? null,
+    website: (enterprise.website as string | null) ?? null,
+    description: (enterprise.description as string | null) ?? null,
+    representatives: people.map((row: Record<string, unknown>) => ({
+      userId: Number(row.user_id),
+      name: String(row.name),
+      avatarUrl: photoUrl(Number(row.user_id), (row.photo_key as string | null) ?? null),
+    })),
+    challenges: challengeRows.map((row: Record<string, unknown>) => {
+      const summary = ((row.description as string | null) ?? "").trim();
+      return {
+        id: Number(row.id),
+        title: String(row.title),
+        summary: summary === "" ? null : summary.slice(0, SUMMARY_MAX),
+      };
+    }),
+    activities,
+  };
 }
 
 export async function listEnterprises(actorId: number) {

@@ -10,6 +10,7 @@ import {
 } from "../../lib/errors.js";
 import { photoUrl, safePdfFilename } from "../../lib/profile-files.js";
 import { hasEventAccess } from "../identity/role.js";
+import { ENTERPRISE_HAS_SYNTHETIC } from "../sponsors/service.js";
 import { readPublishedMentor } from "./mentor.js";
 import type { PublicProfileInput, SocialLink } from "./schemas.js";
 
@@ -42,6 +43,18 @@ export interface DirectoryEntry {
   mentor: { expertise: string[] } | null;
   /** H61: knowledge of a published helper profile; `[]` otherwise. */
   helpTopics: { id: number; name: string }[];
+  /** H48: shown schedule items the person speaks at, by start time. */
+  activities: DirectoryActivity[];
+  /** The visible company the person represents, if any. */
+  enterprise: { id: number; name: string; logoUrl: string | null } | null;
+}
+
+export interface DirectoryActivity {
+  id: number;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  location: string | null;
 }
 
 export interface DirectoryProject {
@@ -62,6 +75,8 @@ interface EntryRow {
   projects: DirectoryProject[];
   challenges: DirectoryEntry["challenges"];
   help_topics: DirectoryEntry["helpTopics"];
+  activities: DirectoryActivity[];
+  enterprise: DirectoryEntry["enterprise"];
 }
 
 /**
@@ -194,7 +209,24 @@ function entrySql(profiles: string, accountLinks = true): string {
              JOIN helper_topics ht ON ht.user_id = hp.user_id
              JOIN help_topics t ON t.id = ht.topic_id
             WHERE hp.user_id = u.id AND hp.published
-         ), '[]'::jsonb) AS help_topics
+         ), '[]'::jsonb) AS help_topics,
+         COALESCE((
+           SELECT jsonb_agg(jsonb_build_object('id', s.id, 'title', s.title, 'startsAt', s.starts_at,
+                                               'endsAt', s.ends_at, 'location', s.location)
+                            ORDER BY s.starts_at, s.id)
+             FROM schedule_speakers ss
+             JOIN schedule s ON s.id = ss.schedule_id
+            WHERE ss.user_id = u.id
+              AND s.visibility = 'shown'
+              AND (s.publish_at IS NULL OR s.publish_at <= now())
+              AND 'participant' = ANY (s.audiences)
+         ), '[]'::jsonb) AS activities,
+         (SELECT jsonb_build_object('id', e.id, 'name', e.name, 'logoUrl', e.logo_url)
+            FROM sponsors sp
+            JOIN enterprises e ON e.id = sp.enterprise_id
+           WHERE sp.user_id = u.id AND e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}
+           ORDER BY sp.id
+           LIMIT 1) AS enterprise
     FROM ${profiles}
     JOIN users u ON u.id = p.user_id
     ${DISPLAY_NAME_JOIN}
@@ -225,6 +257,20 @@ function toEntry(row: EntryRow, cvPath = `/api/directory/${row.user_id}/cv`): Di
     challenges: row.challenges.map((c) => ({ id: Number(c.id), name: c.name })),
     mentor: null,
     helpTopics: (row.help_topics ?? []).map((t) => ({ id: Number(t.id), name: t.name })),
+    activities: (row.activities ?? []).map((a) => ({
+      id: Number(a.id),
+      title: a.title,
+      startsAt: new Date(a.startsAt).toISOString(),
+      endsAt: new Date(a.endsAt).toISOString(),
+      location: a.location ?? null,
+    })),
+    enterprise: row.enterprise
+      ? {
+          id: Number(row.enterprise.id),
+          name: row.enterprise.name,
+          logoUrl: row.enterprise.logoUrl ?? null,
+        }
+      : null,
   };
 }
 
@@ -249,6 +295,30 @@ export async function photoPublishedInDirectory(db: Queryable, userId: number): 
     [userId],
   );
   return rows.length > 0;
+}
+
+/**
+ * Whether the person's shared photo also appears on a public surface any
+ * signed-in user can open: a speaker of a shown, participant-visible schedule
+ * item, or a representative of a visible company (H44, H48).
+ */
+export async function photoPublishedOnPublicSurface(
+  db: Queryable,
+  userId: number,
+): Promise<boolean> {
+  if (!(await photoPublishedInDirectory(db, userId))) return false;
+  const { rowCount } = await db.query(
+    `SELECT 1 WHERE EXISTS (
+         SELECT 1 FROM schedule_speakers ss JOIN schedule s ON s.id = ss.schedule_id
+          WHERE ss.user_id = $1 AND s.visibility = 'shown'
+            AND (s.publish_at IS NULL OR s.publish_at <= now())
+            AND 'participant' = ANY (s.audiences))
+       OR EXISTS (
+         SELECT 1 FROM sponsors sp JOIN enterprises e ON e.id = sp.enterprise_id
+          WHERE sp.user_id = $1 AND e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC})`,
+    [userId],
+  );
+  return (rowCount ?? 0) > 0;
 }
 
 async function assertReaderAdmitted(userId: number): Promise<void> {
