@@ -104,12 +104,12 @@ function sampleLogoColor(img: HTMLImageElement): string | null {
 
 const inFlight = new Map<string, Promise<string | null>>();
 
-function readLogoColor(url: string): Promise<string | null> {
+function readLogoColor(url: string, credentials = false): Promise<string | null> {
   const pending = inFlight.get(url);
   if (pending) return pending;
   const promise = new Promise<string | null>((resolve) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    img.crossOrigin = credentials ? "use-credentials" : "anonymous";
     img.onload = () => resolve(sampleLogoColor(img));
     img.onerror = () => resolve(null);
     img.src = url;
@@ -133,20 +133,26 @@ export function precomputeLogoColor(url: string | null | undefined): void {
   else setTimeout(run, 200);
 }
 
-/** Client-side hero colour of a logo URL, cached per URL; null until read or when unavailable (nothing is stored server-side). */
-export function useLogoColor(url: string | null | undefined): string | null {
+/** Client-side hero colour of an image URL, cached per URL (`credentials` for authenticated API assets); null until read or when unavailable (nothing is stored server-side). */
+export function useLogoColor(
+  url: string | null | undefined,
+  options?: { credentials?: boolean },
+): string | null {
+  const credentials = options?.credentials ?? false;
   const [color, setColor] = useState<string | null>(url ? (colorCache.get(url) ?? null) : null);
   useEffect(() => {
     if (!url) return;
     let cancelled = false;
     void (
-      colorCache.has(url) ? Promise.resolve(colorCache.get(url) ?? null) : readLogoColor(url)
+      colorCache.has(url)
+        ? Promise.resolve(colorCache.get(url) ?? null)
+        : readLogoColor(url, credentials)
     ).then((next) => {
       if (!cancelled) setColor(next);
     });
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [url, credentials]);
   return color;
 }

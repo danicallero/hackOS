@@ -10,10 +10,13 @@ import { cn } from "@/lib/utils";
 export function HeroBleed({
   color,
   className,
+  contentClassName,
   children,
 }: {
   color: string | null | undefined;
   className?: string;
+  /** Overrides the reading-width cap of the content. */
+  contentClassName?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -30,7 +33,9 @@ export function HeroBleed({
         className="pointer-events-none fixed inset-x-0 top-0 z-0 h-[28rem]"
         style={{ backgroundImage: heroGradient(color) }}
       />
-      <div className="relative mx-auto w-full max-w-(--page-width-reading)">{children}</div>
+      <div className={cn("relative mx-auto w-full max-w-(--page-width-reading)", contentClassName)}>
+        {children}
+      </div>
     </div>
   );
 }

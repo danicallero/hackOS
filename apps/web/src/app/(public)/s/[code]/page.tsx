@@ -8,12 +8,14 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { HeroBleed } from "@/components/common/hero-bleed";
 import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { PublicTopBar } from "@/components/layout/public-top-bar";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { useLogoColor } from "@/lib/company";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
 import { withReturnPath } from "@/lib/return-path";
@@ -52,42 +54,53 @@ export default function CompanyTagPage() {
       });
   }, [status, code, t]);
 
+  const sponsorView =
+    status === "authenticated" &&
+    state.status === "collected" &&
+    state.result.kind !== "person" &&
+    !!state.result.sponsor;
+  const shell = sponsorView
+    ? "contents"
+    : "mx-auto flex min-h-[calc(100dvh-4rem)] max-w-md flex-col items-center gap-5 px-5 py-10 text-center";
+
   return (
     <div className="min-h-dvh">
       <PublicTopBar access={false} />
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-md flex-col items-center gap-5 px-5 py-10 text-center"
+        className="min-h-[calc(100dvh-4rem)]"
         aria-live="polite"
       >
-        {status === "loading" || (status === "authenticated" && state.status === "collecting") ? (
-          <div className="grid place-items-center py-24" role="status" aria-busy="true">
-            <Spinner className="size-7" />
-            <span className="sr-only">{t("companyTagCollecting")}</span>
-          </div>
-        ) : status === "unauthenticated" ? (
-          <>
-            <h1 className="type-page-title">{t("companyTagSignInTitle")}</h1>
-            <p className="text-muted-foreground max-w-xs">{t("companyTagSignInBody")}</p>
-            <Button asChild size="lg" className="w-full max-w-xs">
-              <Link href={withReturnPath("/login", path)}>{t("signIn")}</Link>
-            </Button>
-            <p className="text-muted-foreground max-w-xs text-sm">{t("companyTagAppHint")}</p>
-          </>
-        ) : state.status === "collected" ? (
-          <Collected result={state.result} />
-        ) : state.status === "error" ? (
-          <>
-            <h1 className="type-page-title">{t("companyTagNotCollected")}</h1>
-            <p className="text-muted-foreground max-w-xs" role="alert">
-              {state.key ? t(state.key) : state.text}
-            </p>
-            <Button asChild variant="outline">
-              <Link href="/people?tab=companies">{t("companyTagOpenDiary")}</Link>
-            </Button>
-          </>
-        ) : null}
+        <div className={shell}>
+          {status === "loading" || (status === "authenticated" && state.status === "collecting") ? (
+            <div className="grid place-items-center py-24" role="status" aria-busy="true">
+              <Spinner className="size-7" />
+              <span className="sr-only">{t("companyTagCollecting")}</span>
+            </div>
+          ) : status === "unauthenticated" ? (
+            <>
+              <h1 className="type-page-title">{t("companyTagSignInTitle")}</h1>
+              <p className="text-muted-foreground max-w-xs">{t("companyTagSignInBody")}</p>
+              <Button asChild size="lg" className="w-full max-w-xs">
+                <Link href={withReturnPath("/login", path)}>{t("signIn")}</Link>
+              </Button>
+              <p className="text-muted-foreground max-w-xs text-sm">{t("companyTagAppHint")}</p>
+            </>
+          ) : state.status === "collected" ? (
+            <Collected result={state.result} />
+          ) : state.status === "error" ? (
+            <>
+              <h1 className="type-page-title">{t("companyTagNotCollected")}</h1>
+              <p className="text-muted-foreground max-w-xs" role="alert">
+                {state.key ? t(state.key) : state.text}
+              </p>
+              <Button asChild variant="outline">
+                <Link href="/people?tab=companies">{t("companyTagOpenDiary")}</Link>
+              </Button>
+            </>
+          ) : null}
+        </div>
       </main>
     </div>
   );
@@ -107,28 +120,42 @@ function Collected({ result }: { result: ScanResult }) {
       </>
     );
   }
-  const sponsor = result.sponsor;
+  return <CollectedCompany sponsor={result.sponsor} />;
+}
+
+function CollectedCompany({ sponsor }: { sponsor: NonNullable<ScanResult["sponsor"]> }) {
+  const { t } = useLocale();
+  const logoColor = useLogoColor(sponsor.logoUrl);
   return (
-    <>
-      <div className="ring-primary/30 grid size-32 place-items-center overflow-hidden rounded-full bg-white shadow-sm ring-4">
-        {sponsor.logoUrl ? (
-          <SponsorLogo
-            logoUrl={sponsor.logoUrl}
-            logoNegativeUrl={sponsor.logoNegativeUrl}
-            alt=""
-            className="size-20 object-contain"
-          />
-        ) : (
-          <span className="text-3xl font-semibold text-neutral-700">{initials(sponsor.name)}</span>
-        )}
+    <HeroBleed
+      color={logoColor}
+      className="mx-0 mt-0 mb-0 flex min-h-[calc(100dvh-4rem)] w-full flex-col justify-center pt-10 pb-16 sm:mx-0 sm:px-6 md:mt-0 lg:mt-0"
+    >
+      <div className="mx-auto flex max-w-md flex-col items-center gap-6 text-center">
+        <div className="flex size-40 items-center justify-center rounded-surface bg-white p-6 shadow-md dark:bg-card">
+          {sponsor.logoUrl ? (
+            <SponsorLogo
+              logoUrl={sponsor.logoUrl}
+              logoNegativeUrl={sponsor.logoNegativeUrl}
+              alt=""
+              className="max-h-full max-w-full object-contain"
+            />
+          ) : (
+            <span className="text-4xl font-medium text-muted-foreground">
+              {initials(sponsor.name)}
+            </span>
+          )}
+        </div>
+        <div className="space-y-1">
+          <p className="text-muted-foreground text-sm">{t("companyTagCollected")}</p>
+          <h1 className="font-display text-3xl leading-tight wrap-anywhere sm:text-5xl">
+            {sponsor.name}
+          </h1>
+        </div>
+        <Button asChild size="lg" className="w-full max-w-xs">
+          <Link href="/people?tab=companies">{t("companyTagOpenDiary")}</Link>
+        </Button>
       </div>
-      <div className="space-y-1">
-        <p className="text-muted-foreground text-sm">{t("companyTagCollected")}</p>
-        <h1 className="type-page-title">{sponsor.name}</h1>
-      </div>
-      <Button asChild size="lg" className="w-full max-w-xs">
-        <Link href="/people?tab=companies">{t("companyTagOpenDiary")}</Link>
-      </Button>
-    </>
+    </HeroBleed>
   );
 }
