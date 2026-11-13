@@ -20,6 +20,7 @@ export function ProjectOverview({
   review,
   showQueue = false,
   asideExtra,
+  omitFieldKeys,
 }: {
   project: NativeProject;
   language: Language;
@@ -37,6 +38,8 @@ export function ProjectOverview({
   showQueue?: boolean;
   /** Extra content after the team. */
   asideExtra?: React.ReactNode;
+  /** Answers shown elsewhere on the page (the cover gallery). */
+  omitFieldKeys?: string[];
 }) {
   return (
     <div className="grid w-full items-start gap-8 lg:grid-cols-[22rem_minmax(0,1fr)]">
@@ -88,6 +91,7 @@ export function ProjectOverview({
           project={project}
           language={language}
           fallbackTitle={labels.details}
+          omitFieldKeys={omitFieldKeys}
           assetUrl={assetUrl}
         />
       </div>

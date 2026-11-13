@@ -6,18 +6,14 @@
 // diary scan as the app; signed out, the page offers sign-in and returns here.
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { HeroBleed } from "@/components/common/hero-bleed";
 import { Spinner } from "@/components/common/spinner";
-import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { PublicTopBar } from "@/components/layout/public-top-bar";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { useLogoColor } from "@/lib/company";
 import { type MessageKey, useLocale } from "@/lib/i18n";
-import { initials } from "@/lib/initials";
 import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 import { collectErrorKey, type ScanResult } from "./collect";
@@ -31,6 +27,7 @@ export default function CompanyTagPage() {
   const { t } = useLocale();
   const { code } = useParams<{ code: string }>();
   const { status } = useSessionContext();
+  const router = useRouter();
   const [state, setState] = useState<State>({ status: "collecting" });
   const started = useRef<string | null>(null);
   const path = `/s/${encodeURIComponent(code)}`;
@@ -42,7 +39,12 @@ export default function CompanyTagPage() {
     api
       .post<ScanResult>("/api/me/diary/scan", { code })
       .then((result) => {
-        if (started.current === code) setState({ status: "collected", result });
+        if (started.current !== code) return;
+        setState({ status: "collected", result });
+        // A scanned stand opens the company's own page; it already says who they are.
+        if (result.kind !== "person" && result.sponsor) {
+          router.replace(`/companies/${result.sponsor.enterpriseId}`);
+        }
       })
       .catch((err: unknown) => {
         if (started.current !== code) return;
@@ -52,16 +54,12 @@ export default function CompanyTagPage() {
           text: apiErrorText(err, t, ""),
         });
       });
-  }, [status, code, t]);
+  }, [status, code, t, router]);
 
-  const sponsorView =
-    status === "authenticated" &&
-    state.status === "collected" &&
-    state.result.kind !== "person" &&
-    !!state.result.sponsor;
-  const shell = sponsorView
-    ? "contents"
-    : "mx-auto flex min-h-[calc(100dvh-4rem)] max-w-md flex-col items-center gap-5 px-5 py-10 text-center";
+  const redirecting =
+    state.status === "collected" && state.result.kind !== "person" && !!state.result.sponsor;
+  const shell =
+    "mx-auto flex min-h-[calc(100dvh-4rem)] max-w-md flex-col items-center gap-5 px-5 py-10 text-center";
 
   return (
     <div className="min-h-dvh">
@@ -73,7 +71,8 @@ export default function CompanyTagPage() {
         aria-live="polite"
       >
         <div className={shell}>
-          {status === "loading" || (status === "authenticated" && state.status === "collecting") ? (
+          {status === "loading" ||
+          (status === "authenticated" && (state.status === "collecting" || redirecting)) ? (
             <div className="grid place-items-center py-24" role="status" aria-busy="true">
               <Spinner className="size-7" />
               <span className="sr-only">{t("companyTagCollecting")}</span>
@@ -120,42 +119,5 @@ function Collected({ result }: { result: ScanResult }) {
       </>
     );
   }
-  return <CollectedCompany sponsor={result.sponsor} />;
-}
-
-function CollectedCompany({ sponsor }: { sponsor: NonNullable<ScanResult["sponsor"]> }) {
-  const { t } = useLocale();
-  const logoColor = useLogoColor(sponsor.logoUrl);
-  return (
-    <HeroBleed
-      color={logoColor}
-      className="mx-0 mt-0 mb-0 flex min-h-[calc(100dvh-4rem)] w-full flex-col justify-center pt-10 pb-16 sm:mx-0 sm:px-6 md:mt-0 lg:mt-0"
-    >
-      <div className="mx-auto flex max-w-md flex-col items-center gap-6 text-center">
-        <div className="flex size-40 items-center justify-center rounded-surface bg-white p-6 shadow-md dark:bg-card">
-          {sponsor.logoUrl ? (
-            <SponsorLogo
-              logoUrl={sponsor.logoUrl}
-              logoNegativeUrl={sponsor.logoNegativeUrl}
-              alt=""
-              className="max-h-full max-w-full object-contain"
-            />
-          ) : (
-            <span className="text-4xl font-medium text-muted-foreground">
-              {initials(sponsor.name)}
-            </span>
-          )}
-        </div>
-        <div className="space-y-1">
-          <p className="text-muted-foreground text-sm">{t("companyTagCollected")}</p>
-          <h1 className="font-display text-3xl leading-tight wrap-anywhere sm:text-5xl">
-            {sponsor.name}
-          </h1>
-        </div>
-        <Button asChild size="lg" className="w-full max-w-xs">
-          <Link href="/people?tab=companies">{t("companyTagOpenDiary")}</Link>
-        </Button>
-      </div>
-    </HeroBleed>
-  );
+  return null;
 }

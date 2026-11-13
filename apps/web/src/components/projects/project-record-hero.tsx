@@ -5,8 +5,9 @@ import { BackLink } from "@/components/common/back-link";
 import { HeroBleed } from "@/components/common/hero-bleed";
 import { useLogoColor } from "@/lib/company";
 import { useLocale } from "@/lib/i18n";
-import { initials } from "@/lib/initials";
 import type { NativeProject } from "@/lib/native-projects";
+import { cn } from "@/lib/utils";
+import { ProjectCarousel, projectGallery } from "./project-carousel";
 
 /**
  * Tinted top of a project record (H47, H48): back link, title, state and
@@ -29,33 +30,28 @@ export function ProjectRecordHero({
   actions?: React.ReactNode;
 }) {
   const { t } = useLocale();
-  const gallery = usePathname().startsWith("/gallery");
-  const cover = files?.find((file) => file.mimeType.startsWith("image/"));
+  const inGallery = usePathname().startsWith("/gallery");
+  const gallery = projectGallery(files);
+  const cover = gallery?.images[0];
   // Project assets are authenticated API paths: the sampler sends cookies.
   const color = useLogoColor(cover ? assetUrl(cover.thumbnailUrl ?? cover.url) : null, {
     credentials: true,
   });
-  const backHref = management ? "/projects" : gallery ? "/gallery" : "/my-project?view=all";
-  const backLabel = t(management ? "manageProjects" : gallery ? "projectGallery" : "myProjects");
+  const backHref = management ? "/projects" : inGallery ? "/gallery" : "/my-project?view=all";
+  const backLabel = t(management ? "manageProjects" : inGallery ? "projectGallery" : "myProjects");
   return (
     <HeroBleed color={color} contentClassName="max-w-6xl">
       <BackLink href={backHref} label={backLabel} />
-      <header className="grid gap-6 pt-4 lg:grid-cols-[22rem_minmax(0,1fr)] lg:gap-8">
-        <div className="mx-auto aspect-square w-full max-w-xs overflow-hidden rounded-2xl bg-card shadow-lg ring-1 ring-black/5 lg:mx-0 lg:max-w-none">
-          {cover ? (
-            // biome-ignore lint/performance/noImgElement: authenticated API asset.
-            <img
-              src={assetUrl(cover.url)}
-              alt=""
-              crossOrigin="use-credentials"
-              className="size-full object-cover"
-            />
-          ) : (
-            <span className="flex size-full items-center justify-center text-6xl font-medium text-muted-foreground">
-              {initials(name)}
-            </span>
-          )}
-        </div>
+      <header
+        className={cn("grid gap-6 pt-4 lg:gap-8", gallery && "lg:grid-cols-[22rem_minmax(0,1fr)]")}
+      >
+        {gallery && (
+          <ProjectCarousel
+            images={gallery.images}
+            assetUrl={assetUrl}
+            className="mx-auto w-full max-w-sm lg:mx-0 lg:max-w-none"
+          />
+        )}
         <div className="flex min-w-0 flex-col justify-end gap-4">
           <h1 className="font-display text-3xl leading-tight text-balance wrap-anywhere sm:text-5xl">
             {name}

@@ -72,3 +72,16 @@ body:has([data-hero-bleed]) [data-slot="sidebar-inner"] {
   background-color: color-mix(in srgb, var(--sidebar) 78%, transparent);
   backdrop-filter: blur(24px);
 }
+
+/* On phones the back link shares the row with the floating sidebar button. */
+[data-hero-bleed] [data-back-link] {
+  min-height: 2.5rem;
+}
+@media (max-width: 767px) {
+  [data-app-main] [data-hero-bleed] {
+    padding-top: 0.75rem;
+  }
+  [data-app-main] [data-hero-bleed] [data-back-link] {
+    padding-left: 3rem;
+  }
+}

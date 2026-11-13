@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PageLayout } from "@/components/common/page-layout";
+import { projectGallery } from "@/components/projects/project-carousel";
 import { ProjectOverview } from "@/components/projects/project-overview";
 import { ProjectRecordActions } from "@/components/projects/project-record-actions";
 import { ProjectRecordHero } from "@/components/projects/project-record-hero";
@@ -69,6 +70,7 @@ export default async function ProjectGalleryPage({ params }: { params: Promise<{
       <PageLayout className="max-w-6xl">
         <GalleryRefresh />
         <ProjectOverview
+          omitFieldKeys={coverFieldKeys(project.files)}
           showQueue={project.isMember === true || project.canInspect === true}
           project={project}
           language={language}
@@ -86,4 +88,9 @@ export default async function ProjectGalleryPage({ params }: { params: Promise<{
       </PageLayout>
     </>
   );
+}
+
+function coverFieldKeys(files: Parameters<typeof projectGallery>[0]): string[] {
+  const gallery = projectGallery(files);
+  return gallery ? [gallery.fieldKey] : [];
 }

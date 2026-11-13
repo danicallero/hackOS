@@ -23,7 +23,7 @@ export function HeroBleed({
     <div
       data-hero-bleed=""
       className={cn(
-        "-mx-4 -mt-3 mb-6 px-4 pt-16 pb-10 [--hero-mix:60%] sm:-mx-6 sm:px-6 md:-mt-6 md:pt-10 lg:-mt-8 dark:[--hero-mix:40%]",
+        "-mx-4 -mt-3 mb-6 px-4 pt-6 pb-10 [--hero-mix:60%] sm:-mx-6 sm:px-6 md:-mt-6 md:pt-10 lg:-mt-8 dark:[--hero-mix:40%]",
         className,
       )}
     >
