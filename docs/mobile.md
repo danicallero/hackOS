@@ -689,8 +689,7 @@ per H18. Challenge rows on the project page and editor open the challenge brief
 company (logo, name, website), description, public evaluation criteria and
 prizes from `GET /api/public/challenges`, plus a Projects row to the filtered
 gallery only once the gallery answers with projects for it (it is 403 before
-publication). A company's challenges in the diary open the same brief as a
-sheet stacked over the company sheet. Each project on a profile opens its page;
+publication). A company's challenges open the same brief from the company page. Each project on a profile opens its page;
 the server decides who may read it. Company pages (`companies/[id]`) and person profiles open from a logo or avatar with the iOS zoom transition (`Link.AppleZoom` in `avatar-row.tsx` and the company rows; the profile's own logo/avatar is the `Link.AppleZoomTarget`): swipe from the edge or pull down to zoom back, and there is no grabber because they are pushed screens, not sheets. Their native bar stays transparent with no blur or title until the large name has scrolled under it. The challenge filter is the native filter menu (multi-select, kept open while choosing; the glass toolbar button is the only filter control) so it scales past a dozen challenges.
 
 Several projects list as one grouped row section (name, draft/submitted,
@@ -1201,11 +1200,14 @@ glyph) only marks a saved person and drives the Favourites filter; the row menu
 holds Note (500 characters; `components/diary-note-editor.tsx` is a native
 page sheet with circular Cancel and Save and a field above the keyboard, the
 same editor for people and stands) and an explicit "Remove from diary" with
-confirmation. Un-starring never removes anyone. Search filters saved cards
+confirmation. Un-starring never removes anyone. A speaker or company
+representative opened from the schedule or a company page without a scan has
+no diary entry, so their profile shows no star, note, remove action or CV row
+(the API sends no `cvUrl` and the CV route answers 404 until the scan). Search filters saved cards
 locally by name, headline, project, challenges, location and the owner's note,
 ignoring accents and case; cards never carry an email, so contact details are
 not searchable. Rows (`components/diary-person-row.tsx`) are one full-width
-pressable that opens the profile; the trailing star and menu are separate
+pressable that opens the profile, with the avatar zooming into it on iOS; the trailing star and menu are separate
 siblings so they never also open it. A profile hidden after it was saved keeps
 only the menu (no star). The diary's header owns the status-bar area on both
 platforms; the profile keeps an Android status-bar scrim, so scrolled content
@@ -1467,12 +1469,12 @@ rebuilt development client and store build.
 **Companies** is a sticker album (`components/company-album.tsx`) from
 `GET /api/me/diary/sponsors`: a progress ring with collected / total, then a
 three-column grid in the API's order (sponsor priority, then name, as the public logo grid; collected and uncollected interleaved). Collected companies are full-colour logos on a white disc
-and open a company sheet (logo, collected date, Favourite / Note (or Edit
-note) / Web, the
-description, challenges, note and "Remove from collection"); companies still to
-find (every revealed scannable one, even before its tags are generated) are dashed slots with a silhouette of the logo, a lock and their name
-only (never opened; the sheet and its description, challenges and website
-exist only once collected).
+and zoom (`Link.AppleZoom` on the disc, `AppleZoomTarget` on the company page's logo card) into
+the company page. When the reader has scanned that stand, the page also shows
+a "Collected <date>" line, Favourite / Note (or Edit note), the note and "Remove from collection" (same
+`PATCH`/`DELETE` below, read from `GET /api/me/diary/sponsors`); without a scan they are absent. Companies in the album that are not collected yet are the same disc with the logo desaturated and faded (`Desaturate`, a saturation blend overlay: RN's `filter` has no grayscale on iOS), on the page too with a neutral hero and "Visit their booth to collect it"; they open the page like collected ones, while companies outside the album (not scannable) keep the normal full-colour look. The album lists
+every revealed scannable company, even before its tags are generated. The zoom source is a plain
+untransformed view (the scan celebration animates inside it), so open and dismiss zoom work.
 Stand favourites and notes use the same `PATCH`/`DELETE /api/me/diary/:entryId`.
 
 Scanning follows R008: the primary "Scan with NFC" control opens the existing

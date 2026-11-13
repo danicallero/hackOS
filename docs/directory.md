@@ -208,11 +208,12 @@ removal, like any other upload.
 
 A reader is an attendee who saved the person in their diary by scanning their
 badge or ticket. Without a scan, any attendee with event access may also read
-the card (and the shared CV) of an opted-in person (`directory_visible`) who
+the card of an opted-in person (`directory_visible`) who
 speaks at a shown, published, participant-audience schedule item or is a member
 of a visible, non-synthetic company (H44, H48): the people the schedule and
-company pages already show. Nobody else is readable unsaved, and no field is
-added by this rule.
+company pages already show. Opened this way the card carries no `cvUrl` and
+the CV route answers 404: the CV stays scan-only. Nobody else is readable
+unsaved, and no field is added by this rule.
 
 `DirectoryEntry` is the complete list of exposed fields:
 
@@ -249,7 +250,7 @@ a test account. The same rule decides whether a scan saves the person
 | `GET /api/me/public-profile` | authenticated + event access |
 | `PUT /api/me/public-profile` | authenticated + event access, `Idempotency-Key` |
 | `GET /api/directory/:userId` | event access + the person is in the caller's diary (#935) |
-| `GET /api/directory/:userId/cv` | as above; visible profile with `share_cv`. Also help desk readers (`helpdesk:request`/`offer`/`coverage`) for a published helper with `share_cv`, no scan needed (H61, H63) |
+| `GET /api/directory/:userId/cv` | readers who saved the person only (not the speaker/representative rule); visible profile with `share_cv`. Also help desk readers (`helpdesk:request`/`offer`/`coverage`) for a published helper with `share_cv`, no scan needed (H61, H63) |
 | `POST /api/me/public-profile/cv` | authenticated + event access, multipart, `Idempotency-Key` |
 | `DELETE /api/me/public-profile/cv` | authenticated + event access, `Idempotency-Key` |
 | `GET /api/me/public-profile/cv` | authenticated (own CV, shared or not) |
@@ -299,7 +300,9 @@ and challenges. Empty rows are omitted. A 404 (hidden or missing) shows
 "Person not found"; other failures keep an inline error with Retry. It
 refetches on `domain.changed` for the `directory` topic. Only attendees who
 saved the person, or who is a shown speaker or company representative, may
-open it; the API answers the same 404 to anyone else.
+open it; the API answers the same 404 to anyone else. A person opened without
+a diary entry shows no CV row, favourite star, note or remove action: those
+need the reader's diary entry.
 
 Every CV link on the web (the person page, the owner's file name and the
 "View CV" link of the My profile preview) opens the shared viewer

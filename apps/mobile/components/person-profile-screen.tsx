@@ -99,6 +99,8 @@ export function PersonProfileScreen({
   const [cvOpen, setCvOpen] = useState(false);
   const [editingNote, setEditingNote] = useState(false);
   const requestId = useRef(0);
+  // Opened without a scan (a speaker or representative), there is no CV, star or note.
+  const showCv = source !== "diary" || entry !== null;
   const usesCustomAndroidHeader = process.env.EXPO_OS === "android";
   // iOS keeps the native back button, a circle on iOS 26, whenever there is a
   // screen to return to. A custom headerLeft is wrapped in a wide glass pill,
@@ -257,7 +259,7 @@ export function PersonProfileScreen({
           }}
         />
       ) : null}
-      {person?.cvUrl ? (
+      {person?.cvUrl && showCv ? (
         <CvViewer
           visible={cvOpen}
           title={person.displayName}
@@ -354,7 +356,7 @@ export function PersonProfileScreen({
                       onPress={() => setEditingNote(true)}
                     />
                   ) : null}
-                  {person.cvUrl ? (
+                  {person.cvUrl && showCv ? (
                     <QuickAction
                       icon="doc.text"
                       label={t("directoryCv")}

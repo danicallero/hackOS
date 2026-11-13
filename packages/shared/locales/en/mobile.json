@@ -822,6 +822,7 @@
   "diaryCompaniesEmpty": "No companies",
   "diaryCompanyLocked": "{name}, not collected yet",
   "diaryCompanyCollectedOn": "Collected {date}",
+  "diaryCompanyVisitBooth": "Visit their booth to collect it",
   "diaryCompanyRemove": "Remove from collection",
   "accountStands": "Company tags",
   "standsTitle": "Company tags",

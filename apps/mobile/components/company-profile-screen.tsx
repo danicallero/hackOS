@@ -14,6 +14,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActivityLinkSection } from "@/components/activity-link-rows";
 import { AppRefreshControl } from "@/components/app-refresh-control";
 import { AvatarRow } from "@/components/avatar-row";
+import { Desaturate } from "@/components/company-album";
+import { DiaryNoteEditor } from "@/components/diary-note-editor";
+import { FavouriteStar } from "@/components/favourite-star";
 import { GlassView } from "@/components/glass-view";
 import {
   AndroidStatusBarScrim,
@@ -24,11 +27,15 @@ import {
 } from "@/components/native-ui";
 import { loadingImageStyle, useApiImage } from "@/components/person-avatar";
 import { PressableFeedback } from "@/components/pressable-feedback";
+import { NoteRow, QuickAction } from "@/components/profile-parts";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { useColorScheme } from "@/components/useColorScheme";
-import { ApiError } from "@/lib/api";
+import { alert } from "@/lib/alert";
+import { ApiError, apiFetch } from "@/lib/api";
 import { type CompanyProfile, fetchCompanyProfile, heroTint } from "@/lib/company";
+import type { SponsorCollection, SponsorCollectionEntry } from "@/lib/diary-sponsors";
+import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { safeBack } from "@/lib/navigation";
 import { resolveScheduleText } from "@/lib/schedule";
@@ -45,42 +52,63 @@ type State =
   | { status: "missing" }
   | { status: "error"; error: Error };
 
-function Logo({ profile, dark }: { profile: CompanyProfile; dark: boolean }) {
+function Logo({
+  profile,
+  dark,
+  muted,
+}: {
+  profile: CompanyProfile;
+  dark: boolean;
+  muted: boolean;
+}) {
   // The negative artwork is drawn for dark grounds.
   const photo = useApiImage(
     dark && profile.logoNegativeUrl ? profile.logoNegativeUrl : profile.logoUrl,
   );
+  const ground = dark && profile.logoNegativeUrl ? colors.elevatedSurface : colors.accentText;
   return (
     <View
       style={{
-        alignItems: "center",
-        backgroundColor:
-          dark && profile.logoNegativeUrl ? colors.elevatedSurface : colors.accentText,
+        backgroundColor: ground,
         borderCurve: "continuous",
         borderRadius: radius.sheet,
         boxShadow: "0 10px 28px rgba(0, 0, 0, 0.25)",
         height: LOGO,
-        justifyContent: "center",
         overflow: "hidden",
         width: LOGO,
       }}
     >
-      {photo.loaded ? null : (
-        <SymbolView
-          name="building.2"
-          size={52}
-          tintColor={colors.tertiaryLabel}
-          accessible={false}
-        />
-      )}
-      {photo.props ? (
-        <Image
-          {...photo.props}
-          accessible={false}
-          contentFit="contain"
-          style={[{ height: LOGO - 36, width: LOGO - 36 }, !photo.loaded && loadingImageStyle]}
-        />
-      ) : null}
+      {/* Its own blend group with the card's ground, so Desaturate drains the logo, not the page. */}
+      <View
+        style={{
+          alignItems: "center",
+          backgroundColor: ground,
+          flex: 1,
+          isolation: "isolate",
+          justifyContent: "center",
+        }}
+      >
+        {photo.loaded ? null : (
+          <SymbolView
+            name="building.2"
+            size={52}
+            tintColor={colors.tertiaryLabel}
+            accessible={false}
+          />
+        )}
+        {photo.props ? (
+          <Image
+            {...photo.props}
+            accessible={false}
+            contentFit="contain"
+            style={[
+              { height: LOGO - 36, opacity: muted ? 0.5 : 1, width: LOGO - 36 },
+              !photo.loaded && loadingImageStyle,
+            ]}
+          />
+        ) : null}
+        {muted ? <Desaturate /> : null}
+      </View>
     </View>
   );
 }
@@ -133,6 +161,70 @@ export function CompanyProfileScreen() {
     }
   }, [companyId]);
 
+  // The reader's own diary entry for this company (#935), when they scanned its stand: favourite,
+  // private note and removal live here now that the Contacts album opens this page.
+  const [entry, setEntry] = useState<SponsorCollectionEntry | null>(null);
+  // A company in the reader's album with no scan yet: shown greyed out, with no diary controls.
+  const [uncollected, setUncollected] = useState(false);
+  const [entryBusy, setEntryBusy] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
+  useEffect(() => {
+    let live = true;
+    apiFetch<SponsorCollection>("/api/me/diary/sponsors")
+      .then((collection) => {
+        if (!live) return;
+        const item = collection.items.find((candidate) => candidate.enterpriseId === companyId);
+        setEntry(item?.entry ?? null);
+        setUncollected(item !== undefined && item.entry === null);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [companyId]);
+
+  async function changeEntry(action: () => Promise<void>) {
+    if (entryBusy) return;
+    setEntryBusy(true);
+    try {
+      await action();
+    } catch {
+      void haptic("error");
+      alert(t("tabDiary"), t("diaryActionError"));
+    } finally {
+      setEntryBusy(false);
+    }
+  }
+
+  function patchEntry(patch: { starred?: boolean; note?: string }) {
+    if (!entry) return;
+    void changeEntry(async () => {
+      const next = await apiFetch<SponsorCollectionEntry>(`/api/me/diary/${entry.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      setEntry({ ...entry, starred: next.starred, note: next.note });
+      void haptic("selection");
+    });
+  }
+
+  function removeEntry() {
+    if (!entry) return;
+    alert(t("diaryRemoveTitle"), undefined, [
+      { text: t("cancel"), style: "cancel" },
+      {
+        text: t("remove"),
+        style: "destructive",
+        onPress: () =>
+          void changeEntry(async () => {
+            await apiFetch(`/api/me/diary/${entry.id}`, { method: "DELETE" });
+            setEntry(null);
+          }),
+      },
+    ]);
+  }
+
   useEffect(() => {
     setState({ status: "loading" });
     void load();
@@ -163,7 +255,8 @@ export function CompanyProfileScreen() {
     }
   }
 
-  const hero = heroTint(profile?.logoColor, dark);
+  // An uncollected company keeps the neutral grey hero instead of its logo colour.
+  const hero = heroTint(uncollected ? null : profile?.logoColor, dark);
   const site = profile?.website;
   const descriptionStyle = {
     color: colors.label,
@@ -229,7 +322,7 @@ export function CompanyProfileScreen() {
           <>
             <View style={{ alignItems: "center", gap: 18, paddingHorizontal: 24 }}>
               <Link.AppleZoomTarget>
-                <Logo profile={profile} dark={dark} />
+                <Logo profile={profile} dark={dark} muted={uncollected} />
               </Link.AppleZoomTarget>
               <Text
                 onLayout={({ nativeEvent: { layout } }) =>
@@ -310,6 +403,65 @@ export function CompanyProfileScreen() {
                 </PressableFeedback>
               ) : null}
             </View>
+
+            {uncollected ? (
+              <Text
+                style={{
+                  color: colors.secondaryLabel,
+                  fontSize: type.subhead.fontSize,
+                  textAlign: "center",
+                }}
+              >
+                {t("diaryCompanyVisitBooth")}
+              </Text>
+            ) : null}
+
+            {entry ? (
+              <View style={{ gap: 24, ...readable.content }}>
+                <Text
+                  style={{
+                    color: colors.secondaryLabel,
+                    fontSize: type.subhead.fontSize,
+                    textAlign: "center",
+                  }}
+                >
+                  {t("diaryCompanyCollectedOn", {
+                    date: new Date(entry.createdAt).toLocaleDateString(language, {
+                      day: "numeric",
+                      month: "long",
+                    }),
+                  })}
+                </Text>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <QuickAction
+                    icon={entry.starred ? "star.fill" : "star"}
+                    iconTint={entry.starred ? colors.warning : colors.accent}
+                    label={t(entry.starred ? "diaryUnfavourite" : "diaryFavourite")}
+                    title={t("diaryFavourite")}
+                    selected={entry.starred}
+                    busy={entryBusy}
+                    onPress={() => patchEntry({ starred: !entry.starred })}
+                    iconNode={<FavouriteStar on={entry.starred} size={22} />}
+                  />
+                  <QuickAction
+                    icon="note.text"
+                    label={t(entry.note ? "diaryEditNote" : "diaryNote")}
+                    title={t(entry.note ? "diaryEditNote" : "diaryNote")}
+                    busy={false}
+                    onPress={() => setNoteOpen(true)}
+                  />
+                </View>
+                {entry.note ? (
+                  <Section title={t("diaryNote")}>
+                    <NoteRow
+                      note={entry.note}
+                      hint={t("diaryEditNote")}
+                      onPress={() => setNoteOpen(true)}
+                    />
+                  </Section>
+                ) : null}
+              </View>
+            ) : null}
 
             {profile.representatives.length > 0 ? (
               <View style={{ gap: 8 }}>
@@ -405,10 +557,41 @@ export function CompanyProfileScreen() {
                   location: item.location,
                 }))}
               />
+
+              {entry ? (
+                <Section>
+                  <PressableFeedback
+                    feedback="row"
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: entryBusy }}
+                    disabled={entryBusy}
+                    onPress={removeEntry}
+                    style={{
+                      alignItems: "center",
+                      justifyContent: "center",
+                      minHeight: 50,
+                      paddingHorizontal: 16,
+                    }}
+                  >
+                    <Text style={{ color: colors.destructive, fontSize: type.callout.fontSize }}>
+                      {t("diaryCompanyRemove")}
+                    </Text>
+                  </PressableFeedback>
+                </Section>
+              ) : null}
             </View>
           </>
         )}
       </Animated.ScrollView>
+      <DiaryNoteEditor
+        visible={noteOpen}
+        initialNote={entry?.note ?? null}
+        onClose={() => setNoteOpen(false)}
+        onSave={(note) => {
+          setNoteOpen(false);
+          patchEntry({ note });
+        }}
+      />
       <AndroidStatusBarScrim />
     </View>
   );

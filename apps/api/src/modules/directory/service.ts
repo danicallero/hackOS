@@ -365,18 +365,17 @@ export async function savedByReader(
  * (H44, H48); hidden, missing and other people are deliberately
  * indistinguishable (#934, #935).
  */
-async function assertMayReadPerson(readerId: number, userId: number) {
+async function assertMayReadPerson(readerId: number, userId: number): Promise<boolean> {
   await assertReaderAdmitted(readerId);
-  if (
-    !(await savedByReader(pool, readerId, userId)) &&
-    !(await profilePublishedOnPublicSurface(pool, userId))
-  ) {
+  const saved = await savedByReader(pool, readerId, userId);
+  if (!saved && !(await profilePublishedOnPublicSurface(pool, userId))) {
     throw new NotFoundError("Person not found");
   }
+  return saved;
 }
 
 export async function getDirectoryEntry(readerId: number, userId: number): Promise<DirectoryEntry> {
-  await assertMayReadPerson(readerId, userId);
+  const saved = await assertMayReadPerson(readerId, userId);
   const { rows } = await pool.query<EntryRow>(
     `${entrySql("user_public_profiles p")} WHERE ${VISIBLE_WHERE} AND u.id = $1`,
     [userId],
@@ -393,7 +392,10 @@ export async function getDirectoryEntry(readerId: number, userId: number): Promi
     if (!only[0]) throw new NotFoundError("Person not found");
     return { ...toEntry(only[0]), mentor };
   }
-  return { ...toEntry(rows[0]), mentor };
+  // The CV needs a scan: someone opened only as a speaker or representative
+  // exposes no CV (the CV route stays scan-only too).
+  const entry = toEntry(rows[0]);
+  return { ...entry, cvUrl: saved ? entry.cvUrl : null, mentor };
 }
 
 /**
@@ -418,12 +420,13 @@ async function readSharedCv(
   return { key: rows[0].cv_key, filename: rows[0].cv_filename };
 }
 
-/** The shared CV of an opted-in person the reader saved (#935). */
+/** The shared CV of an opted-in person the reader saved (#935); a scan is required. */
 export async function getDirectoryCv(
   readerId: number,
   userId: number,
 ): Promise<{ key: string; filename: string }> {
-  await assertMayReadPerson(readerId, userId);
+  await assertReaderAdmitted(readerId);
+  if (!(await savedByReader(pool, readerId, userId))) throw new NotFoundError("Person not found");
   return readSharedCv(userId, VISIBLE_WHERE);
 }
 

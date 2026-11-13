@@ -512,6 +512,36 @@ describe("speakers and company representatives (H44, H48)", () => {
     expect(res.json().enterprise).toMatchObject({ name: "Acme" });
   });
 
+  it("exposes no CV without a scan, and both with one", async () => {
+    const ada = await person("Ada", "Lovelace");
+    const cvKey = `profiles/${ada}/cv/${"b".repeat(32)}.pdf`;
+    await putProfile(ada, VISIBLE);
+    await pool.query(
+      `UPDATE user_public_profiles SET cv_key = $2, cv_filename = 'ada.pdf', cv_uploaded_at = now(), share_cv = true WHERE user_id = $1`,
+      [ada, cvKey],
+    );
+    const { putObject } = await import("../../src/lib/storage.js");
+    await putObject(cvKey, Buffer.from("%PDF-1.7\n%%EOF\n"), "application/pdf");
+    await speakerOf(ada);
+    const unscanned = await card(ada);
+    expect(unscanned.statusCode).toBe(200);
+    expect(unscanned.json().cvUrl).toBeNull();
+    const cv = await app.inject({
+      method: "GET",
+      url: `/api/directory/${ada}/cv`,
+      headers: asUser(reader),
+    });
+    expect(cv.statusCode).toBe(404);
+    await save(ada);
+    expect((await card(ada)).json().cvUrl).toBe(`/api/directory/${ada}/cv`);
+    const scanned = await app.inject({
+      method: "GET",
+      url: `/api/directory/${ada}/cv`,
+      headers: asUser(reader),
+    });
+    expect(scanned.statusCode).toBe(200);
+  });
+
   it("keeps opted-out speakers and representatives unreadable", async () => {
     const speaker = await person("Out", "Speaker");
     await putProfile(speaker, { ...VISIBLE, directoryVisible: false });

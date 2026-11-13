@@ -822,6 +822,7 @@
   "diaryCompaniesEmpty": "No hay empresas",
   "diaryCompanyLocked": "{name}, aún sin conseguir",
   "diaryCompanyCollectedOn": "Conseguida el {date}",
+  "diaryCompanyVisitBooth": "Visita su stand para conseguirla",
   "diaryCompanyRemove": "Quitar de la colección",
   "accountStands": "Etiquetas de empresa",
   "standsTitle": "Etiquetas de empresa",
