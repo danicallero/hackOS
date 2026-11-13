@@ -45,6 +45,7 @@ import { ApiError, api, apiDownload } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
+import { normalizeSearchText } from "@/lib/search-text";
 import { useCan } from "@/lib/session";
 import { normalizeUid, type StandSummary, type StandTag, standQrSvgPath } from "@/lib/stands";
 import { toast } from "@/lib/toast";
@@ -419,15 +420,15 @@ export default function CompanyTagsPage() {
   }
 
   const filtered = useMemo(() => {
-    const query = q.trim().toLocaleLowerCase();
+    const query = normalizeSearchText(q);
     return stands.filter((stand) => {
       // Staff also look a wristband up by its serial number or a tag by label.
-      const haystack = [stand.name, ...stand.tags.flatMap((tag) => [tag.code, tag.label ?? ""])]
-        .join(" ")
-        .toLocaleLowerCase();
+      const haystack = normalizeSearchText(
+        [stand.name, ...stand.tags.flatMap((tag) => [tag.code, tag.label ?? ""])].join(" "),
+      );
       if (
         query &&
-        !haystack.includes(normalizeUid(query).toLocaleLowerCase()) &&
+        !haystack.includes(normalizeSearchText(normalizeUid(q))) &&
         !haystack.includes(query)
       )
         return false;

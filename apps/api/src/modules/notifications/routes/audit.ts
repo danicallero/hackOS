@@ -20,7 +20,7 @@ export function registerAuditRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Query audit log",
         description:
-          "Filtered H53 audit trail. Includes executor type, verified actor, initiating user for automatic work, changed field names, safe operational snapshots and server-generated request correlation. Badge IDs and email/reference identifiers remain visible as operational evidence; private notes, answers and authentication secrets are minimized. Known automatic actions use System for executor and source, including legacy entries. actorId/actorQuery match actors and initiators; requestId groups related actions.",
+          "Filtered H53 audit trail. Includes executor type, verified actor, initiating user for automatic work, changed field names, safe operational snapshots and server-generated request correlation. Badge IDs and email/reference identifiers remain visible as operational evidence; private notes, answers and authentication secrets are minimized. Known automatic actions use System for executor and source, including legacy entries. actorId/actorQuery match actors and initiators; actorQuery ignores case and accents. requestId groups related actions.",
         querystring: auditQuerySchema,
       },
     },

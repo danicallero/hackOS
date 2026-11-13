@@ -114,7 +114,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Search announcement recipient candidates",
         description:
-          "Case- and accent-insensitive account name search for an ANNOUNCEMENTS_MANAGE holder picking specific recipients — deliberately not gated by the broader USERS_READ.",
+          "Case- and accent-insensitive account name and email search for an ANNOUNCEMENTS_MANAGE holder picking specific recipients — deliberately not gated by the broader USERS_READ.",
         querystring: announcementRecipientCandidatesQuerySchema,
       },
     },

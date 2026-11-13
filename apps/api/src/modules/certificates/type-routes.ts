@@ -99,7 +99,7 @@ export function registerCertificateTypeRoutes(app: FastifyInstance) {
     async (req) => {
       const scope = await fixtureReadFilter(pool, req.userId as number, "u");
       const { rows } = await pool.query(
-        `SELECT u.id,u.name,u.surname,u.email FROM users u WHERE u.account_state='active' AND u.anonymized_at IS NULL ${scope} AND (unaccent(concat_ws(' ',u.name,u.surname)) ILIKE unaccent($1) OR u.email ILIKE $1) ORDER BY u.name,u.surname,u.id LIMIT 30`,
+        `SELECT u.id,u.name,u.surname,u.email FROM users u WHERE u.account_state='active' AND u.anonymized_at IS NULL ${scope} AND (unaccent(concat_ws(' ',u.name,u.surname)) ILIKE unaccent($1) OR unaccent(u.email) ILIKE unaccent($1)) ORDER BY u.name,u.surname,u.id LIMIT 30`,
         [likeContains(req.query.q)],
       );
       return { items: rows };

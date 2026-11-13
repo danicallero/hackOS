@@ -75,6 +75,13 @@ icons use the library's regular weight without React context. `components.json`
 also selects `phosphor`, so new shadcn primitives follow the same convention.
 See the [web icon standard](../../docs/DESIGN.md#web-icon-standard) for details.
 
+## Search
+
+Every web text search uses `normalizeSearchText` from `src/lib/search-text.ts`
+on both the query and the text being matched. Server-side substring searches use
+parameterized SQL in the form `unaccent(column) ILIKE unaccent($n)` (with
+`likeContains` for the bound pattern), so case and accents do not affect results.
+
 ## Browser server state
 
 `lib/server-state.ts` is the small shared policy for authenticated read models,

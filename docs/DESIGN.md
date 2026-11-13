@@ -315,6 +315,8 @@ Use `components/common/filter-menu.tsx` (`FilterMenu`) for management toolbars
 with several categorical filters. Users, review history and the schedule use
 this shared control instead of one dropdown per property. Keep text search
 separate, and keep filtering, persistence and API parameters owned by the page.
+Every text search uses `normalizeSearchText` on both query and matched text;
+server substring searches use parameterized `unaccent(column) ILIKE unaccent($n)`.
 
 - One **Filters** button opens the category menu; desktop categories open
   adjacent submenus. Below 768px, options replace the category list in the

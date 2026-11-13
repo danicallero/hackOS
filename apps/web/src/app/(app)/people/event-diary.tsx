@@ -15,6 +15,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
+import { normalizeSearchText } from "@/lib/search-text";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { useUrlTab } from "@/lib/url-tab";
@@ -63,17 +64,9 @@ function sortEntries(entries: DiaryEntry[]): DiaryEntry[] {
   );
 }
 
-/** Accent- and case-insensitive text for the People search. */
-function fold(text: string): string {
-  return text
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLocaleLowerCase();
-}
-
 function searchText(entry: DiaryEntry): string {
   const person = entry.person;
-  return fold(
+  return normalizeSearchText(
     [
       person?.displayName,
       person?.headline,
@@ -224,7 +217,7 @@ function DiaryPage() {
   );
 
   const columns = useMemo(() => personColumns<PeopleRow>(t, nameOf), [t, nameOf]);
-  const needle = fold(search.trim());
+  const needle = normalizeSearchText(search);
   const rows = useMemo<PeopleRow[]>(
     () =>
       people

@@ -256,7 +256,7 @@ describe("EventDiary (#935)", () => {
     await render();
     const user = userEvent.setup();
     const field = container.querySelector<HTMLInputElement>("#diary-search")!;
-    await act(async () => user.type(field, "cafe"));
+    await act(async () => user.type(field, "CAFE"));
     expect(table().textContent).toContain("Ana P.");
     expect(table().textContent).not.toContain("Dan E.");
     await act(async () => user.clear(field));

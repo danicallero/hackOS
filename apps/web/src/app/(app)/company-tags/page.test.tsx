@@ -159,6 +159,21 @@ describe("Stands page (#935)", () => {
     expect(text).not.toContain("Gamma");
   });
 
+  it("finds stands without case or accent sensitivity", async () => {
+    stands = [
+      stand({ enterpriseId: 1, name: "A Coruña José" }),
+      stand({ enterpriseId: 2, name: "Other" }),
+    ];
+    get.mockImplementation((() => Promise.resolve({ stands })) as typeof api.get);
+    await render();
+    const user = userEvent.setup();
+    const search = document.getElementById("stand-search") as HTMLInputElement;
+    await act(async () => user.type(search, "A CORUNA jose"));
+    const text = container.textContent ?? "";
+    expect(text).toContain("A Coruña José");
+    expect(text).not.toContain("Other");
+  });
+
   it("toggles scanning and rolls back on failure", async () => {
     put.mockResolvedValueOnce({ enterpriseId: 3, scannable: true, changed: true });
     await render();
