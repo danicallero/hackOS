@@ -84,15 +84,18 @@ export default function PublicChallengePage() {
 
   return (
     <>
-      {authenticated && challenge ? (
+      {challenge ? (
         <HeroBleed color={logoColor}>
-          <BackLink href="/event" label={t("eventInformation")} />
+          <BackLink
+            href={authenticated ? "/event" : "/"}
+            label={t(authenticated ? "eventInformation" : "home")}
+          />
           <header className="space-y-4 pt-4">
             <h2 className="font-display text-3xl leading-tight text-balance sm:text-5xl">
               {displayText(challenge.title, language)}
             </h2>
             <CompanyLink
-              href={`/companies/${challenge.enterprise.id}`}
+              href={authenticated ? `/companies/${challenge.enterprise.id}` : null}
               className="flex items-center gap-3"
             >
               <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-white p-1.5 shadow-sm dark:bg-card">
@@ -110,37 +113,21 @@ export default function PublicChallengePage() {
           </header>
         </HeroBleed>
       ) : (
-        <PageHeader
-          headingLevel={authenticated ? 2 : 1}
-          title={challenge ? displayText(challenge.title, language) : t("challenges")}
-          meta={
-            challenge && (
-              <CompanyLink
-                href={authenticated ? `/companies/${challenge.enterprise.id}` : null}
-                className="mt-2 flex items-center gap-3"
-              >
-                {challenge.enterprise.logoUrl && (
-                  <SponsorLogo
-                    logoUrl={challenge.enterprise.logoUrl}
-                    logoNegativeUrl={challenge.enterprise.logoNegativeUrl}
-                    alt=""
-                    className="h-8 max-w-36 object-contain"
-                  />
-                )}
-                <span className="text-sm text-muted-foreground">{challenge.enterprise.name}</span>
-              </CompanyLink>
-            )
-          }
-          context={
-            <BackLink
-              href={authenticated ? "/event" : "/"}
-              label={t(authenticated ? "eventInformation" : "home")}
-            />
-          }
-        />
+        <PageLayout width="reading">
+          <PageHeader
+            headingLevel={authenticated ? 2 : 1}
+            title={t("challenges")}
+            context={
+              <BackLink
+                href={authenticated ? "/event" : "/"}
+                label={t(authenticated ? "eventInformation" : "home")}
+              />
+            }
+          />
+        </PageLayout>
       )}
 
-      <Body wrap={authenticated}>
+      <Body>
         {challengeError ? (
           <ContextualError
             message={apiErrorText(challengeError, t, t("couldNotLoadChallenge"))}
@@ -273,9 +260,9 @@ export default function PublicChallengePage() {
   );
 }
 
-/** Signed-in pages leave the hero full-bleed, so the body sets its own reading width. */
-function Body({ wrap, children }: { wrap: boolean; children: React.ReactNode }) {
-  return wrap ? <PageLayout width="reading">{children}</PageLayout> : <>{children}</>;
+/** The hero is full-bleed, so the body sets its own reading width. */
+function Body({ children }: { children: React.ReactNode }) {
+  return <PageLayout width="reading">{children}</PageLayout>;
 }
 
 function CompanyLink({

@@ -17,7 +17,7 @@ export default function HomeLayout({ children }: { children: React.ReactNode }) 
   const { status } = useSessionContext();
   const pathname = usePathname();
   // A challenge is a record page: its hero runs full-bleed, so no Home tabs or width wrapper.
-  if (status === "authenticated" && pathname.startsWith("/challenge/")) return <>{children}</>;
+  if (pathname.startsWith("/challenge/")) return <>{children}</>;
   return (
     <PageLayout>
       {status === "authenticated" ? (
