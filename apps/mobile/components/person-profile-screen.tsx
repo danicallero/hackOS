@@ -39,7 +39,7 @@ import type { DiaryEntry } from "@/lib/diary";
 import type { DirectoryEntry } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
 import { availabilityDays, type HelperDetail } from "@/lib/help-desk";
-import { heroTint } from "@/lib/hero-tint";
+import { heroTint, NO_PHOTO_TINT } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
 import { useImageTint } from "@/lib/image-tint";
 import { safeBack } from "@/lib/navigation";
@@ -227,9 +227,10 @@ export function PersonProfileScreen({
   const goBack = () => safeBack(router, "/");
   const person = state.status === "ready" ? state.person : null;
   const helper = state.status === "ready" ? state.helper : null;
-  // Tinted from the photo's colour; no photo or colour keeps the plain background.
+  // Tinted from the photo's colour, blue without a photo; a photo whose colour is still loading keeps the plain background.
   const photoTint = useImageTint(person?.photoUrl);
-  const hero = photoTint.color ? heroTint(photoTint.color, dark) : null;
+  const heroColor = person && !person.photoUrl ? NO_PHOTO_TINT : photoTint.color;
+  const hero = heroColor ? heroTint(heroColor, dark) : null;
 
   return (
     <View ref={avatarCollapse.hostRef} onLayout={avatarCollapse.onHostLayout} style={{ flex: 1 }}>

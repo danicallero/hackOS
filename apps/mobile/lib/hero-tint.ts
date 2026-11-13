@@ -1,5 +1,8 @@
 const NEUTRAL: RGB = [142, 142, 147];
 
+/** The hero of a person without a photo (system blue). */
+export const NO_PHOTO_TINT = "#007aff";
+
 type RGB = [number, number, number];
 
 function parseHex(hex: string | null | undefined): RGB | null {
@@ -29,7 +32,7 @@ export function heroTint(
 ): { gradient: string; foreground: "white" | "black" } {
   const base = parseHex(color) ?? NEUTRAL;
   const tint = (dark ? base.map((v) => Math.round(v * 0.6)) : base) as RGB;
-  const alpha = dark ? 0.7 : 0.5;
+  const alpha = dark ? 0.85 : 0.8;
   const ground = dark ? 0 : 255;
   const shown = tint.map((v) => Math.round(v * alpha + ground * (1 - alpha))) as RGB;
   // Contrast against white vs black text: pick the better one.

@@ -10,13 +10,13 @@ describe("hero tint", () => {
   });
 
   it("uses the logo colour as is in light mode and darkens it in dark mode", () => {
-    expect(heroTint("#3366cc", false).gradient).toContain("rgba(51,102,204,0.5)");
-    expect(heroTint("#3366cc", true).gradient).toContain("rgba(31,61,122,0.7)");
+    expect(heroTint("#3366cc", false).gradient).toContain("rgba(51,102,204,0.8)");
+    expect(heroTint("#3366cc", true).gradient).toContain("rgba(31,61,122,0.85)");
   });
 
   it("picks the foreground by luminance", () => {
-    // Light mode: the tint is at most half strength over white, so it stays light.
-    expect(heroTint("#001f5c", false).foreground).toBe("black");
+    // Light mode: a dark tint at strength reads with white, a light one with black.
+    expect(heroTint("#001f5c", false).foreground).toBe("white");
     expect(heroTint("#ffe066", false).foreground).toBe("black");
     // Dark mode: the darkened tint over black reads with white.
     expect(heroTint("#001f5c", true).foreground).toBe("white");

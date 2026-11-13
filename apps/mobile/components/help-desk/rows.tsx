@@ -148,14 +148,14 @@ export function RoleBadge({ role }: { role: string | null }) {
     <View
       style={{
         alignSelf: "center",
-        backgroundColor: colors.primaryAction,
+        backgroundColor: colors.accentSurface,
         borderRadius: radius.full,
         paddingHorizontal: space.sm,
         paddingVertical: space.xxs,
         flexShrink: 1,
       }}
     >
-      <Text style={{ ...type.footnote, fontWeight: "600", color: colors.primaryActionText }}>
+      <Text style={{ ...type.footnote, fontWeight: "600", color: colors.interactiveText }}>
         {role}
       </Text>
     </View>
