@@ -7,6 +7,7 @@ import {
   createRole,
   createUser,
   createUserWithCapabilities,
+  expectIdempotentReplay,
   useTestApp,
 } from "../helpers.js";
 import {
@@ -19,28 +20,6 @@ import {
 /** H11 (APPLICATIONS_MANAGE): CRUD of application forms + public read of open ones. */
 
 const getApp = useTestApp();
-
-async function expectIdempotentReplay(
-  app: Awaited<ReturnType<typeof getApp>>,
-  actorId: number,
-  method: "POST" | "PATCH",
-  url: string,
-  key: string,
-  payload: Record<string, unknown>,
-) {
-  const request = {
-    method,
-    url,
-    headers: { ...asUser(actorId), "Idempotency-Key": key },
-    payload,
-  };
-  const first = await app.inject(request);
-  const replay = await app.inject(request);
-  expect(replay.statusCode).toBe(first.statusCode);
-  expect(replay.headers["idempotency-replayed"]).toBe("true");
-  expect(replay.json()).toEqual(first.json());
-  return first;
-}
 
 /**
  * Test roles get a random position in [1e6, ~1e9) (see helpers.ts). Push a
@@ -67,12 +46,15 @@ describe("applications CRUD (H11)", () => {
     const created = await expectIdempotentReplay(
       app,
       manager,
-      "POST",
-      "/api/applications",
-      "application-create",
-      { name: "Idempotent form", template: sampleTemplate() },
+      {
+        method: "POST",
+        url: "/api/applications",
+        key: "application-create",
+        payload: { name: "Idempotent form", template: sampleTemplate() },
+      },
+      201,
+      { entityType: "application", entityId: (body) => Number(body.id), action: "created" },
     );
-    expect(created.statusCode).toBe(201);
     const applicationId = created.json().id as number;
 
     const updatedTemplate = [
@@ -87,12 +69,15 @@ describe("applications CRUD (H11)", () => {
     const updated = await expectIdempotentReplay(
       app,
       manager,
-      "PATCH",
-      `/api/applications/${applicationId}`,
-      "application-schema-update",
-      { template: updatedTemplate },
+      {
+        method: "PATCH",
+        url: `/api/applications/${applicationId}`,
+        key: "application-schema-update",
+        payload: { template: updatedTemplate },
+      },
+      200,
+      { entityType: "application", entityId: applicationId, action: "updated" },
     );
-    expect(updated.statusCode).toBe(200);
     expect(updated.json().current_form_version).toBe(2);
 
     const { rows: auditRows } = await pool.query<{ action: string }>(

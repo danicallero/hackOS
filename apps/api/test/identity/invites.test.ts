@@ -7,6 +7,7 @@ import {
   authorizationContextFor,
   createUser,
   createUserWithCapabilities,
+  expectIdempotentReplay,
   useTestApp,
 } from "../helpers.js";
 
@@ -74,28 +75,6 @@ async function createUserInviteLink(
   });
   expect(res.statusCode).toBe(201);
   return res.json();
-}
-
-async function expectIdempotentReplay(
-  app: App,
-  actorId: number,
-  method: "POST" | "PUT",
-  url: string,
-  key: string,
-  payload: Record<string, unknown>,
-) {
-  const request = {
-    method,
-    url,
-    headers: { ...asUser(actorId), "Idempotency-Key": key },
-    payload,
-  };
-  const first = await app.inject(request);
-  const replay = await app.inject(request);
-  expect(replay.statusCode).toBe(first.statusCode);
-  expect(replay.headers["idempotency-replayed"]).toBe("true");
-  expect(replay.json()).toEqual(first.json());
-  return first;
 }
 
 const ACCEPT_BASE = {
@@ -1295,35 +1274,45 @@ describe("H10 reusable user invite links", () => {
     const created = await expectIdempotentReplay(
       app,
       actor,
-      "POST",
-      "/api/invites/user-links",
-      "user-link-create",
       {
-        kind: "sponsor",
-        enterpriseId,
-        roleIds: [],
-        maxRedeems: 3,
-        expiresInMinutes: 60,
+        method: "POST",
+        url: "/api/invites/user-links",
+        key: "user-link-create",
+        payload: {
+          kind: "sponsor",
+          enterpriseId,
+          roleIds: [],
+          maxRedeems: 3,
+          expiresInMinutes: 60,
+        },
+      },
+      201,
+      {
+        entityType: "user_invite_link",
+        entityId: (body) => Number(body.id),
+        action: "create",
       },
     );
-    expect(created.statusCode).toBe(201);
     const linkId = created.json().id as number;
 
-    const updated = await expectIdempotentReplay(
+    await expectIdempotentReplay(
       app,
       actor,
-      "PUT",
-      `/api/invites/user-links/${linkId}`,
-      "user-link-update",
       {
-        kind: "sponsor",
-        enterpriseId,
-        roleIds: [],
-        maxRedeems: 4,
-        expiresInMinutes: 30,
+        method: "PUT",
+        url: `/api/invites/user-links/${linkId}`,
+        key: "user-link-update",
+        payload: {
+          kind: "sponsor",
+          enterpriseId,
+          roleIds: [],
+          maxRedeems: 4,
+          expiresInMinutes: 30,
+        },
       },
+      200,
+      { entityType: "user_invite_link", entityId: linkId, action: "update" },
     );
-    expect(updated.statusCode).toBe(200);
 
     const { rows } = await pool.query<{ action: string }>(
       `SELECT action FROM audit_log
