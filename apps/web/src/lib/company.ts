@@ -37,7 +37,7 @@ const HEX = /^#[0-9a-f]{6}$/i;
  * background. Strength comes from `--hero-mix` so dark mode can soften it.
  */
 export function heroGradient(logoColor: string | null | undefined): string {
-  const base = logoColor && HEX.test(logoColor) ? logoColor : "#8e8e93";
+  const base = logoColor && HEX.test(logoColor) ? logoColor : "#007aff";
   return `linear-gradient(to bottom, color-mix(in srgb, ${base} var(--hero-mix, 40%), transparent) 0%, transparent 100%)`;
 }
 

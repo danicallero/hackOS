@@ -6,6 +6,7 @@ import { useState } from "react";
 import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
+import { HeroBleed } from "@/components/common/hero-bleed";
 import { PageLayout } from "@/components/common/page-layout";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { UserAvatar } from "@/components/common/user-avatar";
@@ -77,13 +78,10 @@ export function CompanyView({ company, context }: { company: Company; context: R
   const long = (company.description?.length ?? 0) > 280;
 
   return (
-    <PageLayout width="reading">
-      <div className="space-y-5">
+    <>
+      <HeroBleed color={logoColor} className="space-y-5">
         {context}
-        <header
-          className="-mx-1 flex min-h-64 flex-col items-center justify-center gap-5 rounded-t-surface px-6 pt-10 pb-12 text-center [--hero-mix:45%] sm:min-h-72 sm:flex-row sm:justify-start sm:gap-8 sm:px-10 sm:text-left dark:[--hero-mix:28%]"
-          style={{ backgroundImage: heroGradient(logoColor) }}
-        >
+        <header className="flex flex-col items-center gap-5 text-center sm:flex-row sm:gap-8 sm:text-left">
           <div className="flex size-36 shrink-0 items-center justify-center rounded-surface bg-white p-5 shadow-md sm:size-44 dark:bg-card">
             {company.logoUrl ? (
               <SponsorLogo
@@ -115,109 +113,111 @@ export function CompanyView({ company, context }: { company: Company; context: R
             )}
           </div>
         </header>
-      </div>
-      {company.description && (
-        <div className="space-y-1">
-          <p
-            className={
-              expanded || !long
-                ? "max-w-prose whitespace-pre-line wrap-anywhere text-pretty"
-                : "line-clamp-4 max-w-prose wrap-anywhere text-pretty"
-            }
-          >
-            {company.description}
-          </p>
-          {long && (
-            <Button
-              type="button"
-              variant="link"
-              size="sm"
-              className="h-auto p-0"
-              aria-expanded={expanded}
-              onClick={() => setExpanded((v) => !v)}
+      </HeroBleed>
+      <PageLayout width="reading">
+        {company.description && (
+          <div className="space-y-1">
+            <p
+              className={
+                expanded || !long
+                  ? "max-w-prose whitespace-pre-line wrap-anywhere text-pretty"
+                  : "line-clamp-4 max-w-prose wrap-anywhere text-pretty"
+              }
             >
-              {expanded ? t("showLess") : t("more")}
-            </Button>
-          )}
-        </div>
-      )}
-      {company.representatives.length > 0 && (
-        <section aria-labelledby="company-representatives" className="space-y-2">
-          <h2 id="company-representatives" className="type-subheading">
-            {t("companyRepresentatives")}
-          </h2>
-          <ul className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
-            {company.representatives.map((person) => (
-              <li key={person.userId} className="min-w-0">
-                <Link
-                  href={`/people/${person.userId}`}
-                  className="button-interaction -mx-1 flex min-w-0 items-center gap-3 rounded-sm px-1 py-1 hover:bg-muted"
-                >
-                  <UserAvatar
-                    name={person.name}
-                    image={person.avatarUrl}
-                    className="size-10"
-                    showInitials
-                    decorative
-                  />
-                  <span className="min-w-0 truncate text-sm font-medium">{person.name}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {company.challenges.length > 0 && (
-        <section aria-labelledby="company-challenges" className="space-y-2">
-          <h2 id="company-challenges" className="type-subheading">
-            {t("challenges")}
-          </h2>
-          <ul className="divide-y divide-border/60">
-            {company.challenges.map((challenge) => (
-              <li key={challenge.id}>
-                <Link
-                  href={`/challenge/${challenge.id}`}
-                  className="button-interaction -mx-1 block rounded-sm px-1 py-2 hover:bg-muted"
-                >
-                  <span className="block text-sm font-medium">{challenge.title}</span>
-                  {challenge.summary && (
-                    <span className="line-clamp-2 block text-sm text-muted-foreground">
-                      {challenge.summary}
+              {company.description}
+            </p>
+            {long && (
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="h-auto p-0"
+                aria-expanded={expanded}
+                onClick={() => setExpanded((v) => !v)}
+              >
+                {expanded ? t("showLess") : t("more")}
+              </Button>
+            )}
+          </div>
+        )}
+        {company.representatives.length > 0 && (
+          <section aria-labelledby="company-representatives" className="space-y-2">
+            <h2 id="company-representatives" className="type-subheading">
+              {t("companyRepresentatives")}
+            </h2>
+            <ul className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+              {company.representatives.map((person) => (
+                <li key={person.userId} className="min-w-0">
+                  <Link
+                    href={`/people/${person.userId}`}
+                    className="button-interaction -mx-1 flex min-w-0 items-center gap-3 rounded-sm px-1 py-1 hover:bg-muted"
+                  >
+                    <UserAvatar
+                      name={person.name}
+                      image={person.avatarUrl}
+                      className="size-10"
+                      showInitials
+                      decorative
+                    />
+                    <span className="min-w-0 truncate text-sm font-medium">{person.name}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {company.challenges.length > 0 && (
+          <section aria-labelledby="company-challenges" className="space-y-2">
+            <h2 id="company-challenges" className="type-subheading">
+              {t("challenges")}
+            </h2>
+            <ul className="divide-y divide-border/60">
+              {company.challenges.map((challenge) => (
+                <li key={challenge.id}>
+                  <Link
+                    href={`/challenge/${challenge.id}`}
+                    className="button-interaction -mx-1 block rounded-sm px-1 py-2 hover:bg-muted"
+                  >
+                    <span className="block text-sm font-medium">{challenge.title}</span>
+                    {challenge.summary && (
+                      <span className="line-clamp-2 text-sm text-muted-foreground">
+                        {challenge.summary}
+                      </span>
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {company.activities.length > 0 && (
+          <section aria-labelledby="company-activities" className="space-y-2">
+            <h2 id="company-activities" className="type-subheading">
+              {t("activities")}
+            </h2>
+            <ul className="divide-y divide-border/60">
+              {company.activities.map((activity) => (
+                <li key={activity.id}>
+                  <Link
+                    href={`/timetable?activity=${activity.id}`}
+                    className="button-interaction -mx-1 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 rounded-sm px-1 py-2 hover:bg-muted"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium">{activity.title}</span>
+                      <span className="block truncate text-xs text-muted-foreground capitalize">
+                        {day.format(new Date(activity.startsAt))} ·{" "}
+                        {clock.format(new Date(activity.startsAt))}
+                        {activity.location ? ` · ${activity.location}` : ""}
+                      </span>
                     </span>
-                  )}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {company.activities.length > 0 && (
-        <section aria-labelledby="company-activities" className="space-y-2">
-          <h2 id="company-activities" className="type-subheading">
-            {t("activities")}
-          </h2>
-          <ul className="divide-y divide-border/60">
-            {company.activities.map((activity) => (
-              <li key={activity.id}>
-                <Link
-                  href={`/timetable?activity=${activity.id}`}
-                  className="button-interaction -mx-1 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 rounded-sm px-1 py-2 hover:bg-muted"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">{activity.title}</span>
-                    <span className="block truncate text-xs text-muted-foreground capitalize">
-                      {day.format(new Date(activity.startsAt))} ·{" "}
-                      {clock.format(new Date(activity.startsAt))}
-                      {activity.location ? ` · ${activity.location}` : ""}
-                    </span>
-                  </span>
-                  <SpeakerStack speakers={activity.speakers ?? []} max={3} />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </PageLayout>
+                    <SpeakerStack speakers={activity.speakers ?? []} max={3} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </PageLayout>
+    </>
   );
 }

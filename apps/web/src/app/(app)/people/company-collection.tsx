@@ -1,12 +1,14 @@
 "use client";
 
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
+import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { LockKeyIcon } from "@phosphor-icons/react/dist/csr/LockKey";
 import { NotePencilIcon } from "@phosphor-icons/react/dist/csr/NotePencil";
 import { StarIcon } from "@phosphor-icons/react/dist/csr/Star";
 import { StorefrontIcon } from "@phosphor-icons/react/dist/csr/Storefront";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -309,10 +311,9 @@ export function CompanyCollection({ nameOf }: { nameOf: ChallengeName }) {
       ) : (
         <ul className="grid grid-cols-3 gap-x-2 gap-y-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6">
           {visible.map((item) => (
-            <li key={item.enterpriseId}>
-              <button
-                type="button"
-                onClick={() => setOpenId(item.enterpriseId)}
+            <li key={item.enterpriseId} className="relative">
+              <Link
+                href={`/companies/${item.enterpriseId}`}
                 aria-label={item.entry ? item.name : `${item.name}: ${t("diaryNotCollected")}`}
                 className="button-interaction hover:bg-muted/60 focus-visible:ring-ring flex w-full flex-col items-center gap-2 rounded-lg px-1 py-3 outline-none transition-colors focus-visible:ring-2 active:bg-muted"
               >
@@ -325,7 +326,18 @@ export function CompanyCollection({ nameOf }: { nameOf: ChallengeName }) {
                 >
                   {item.name}
                 </span>
-              </button>
+              </Link>
+              {item.entry && (
+                <IconButton
+                  type="button"
+                  variant="ghost"
+                  label={t("moreActions")}
+                  className="absolute top-0 right-0 size-8"
+                  onClick={() => setOpenId(item.enterpriseId)}
+                >
+                  <DotsThreeIcon aria-hidden="true" weight="bold" />
+                </IconButton>
+              )}
             </li>
           ))}
         </ul>

@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
+import { HeroBleed } from "@/components/common/hero-bleed";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
@@ -19,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useLiveQuery } from "@/hooks/use-live-query";
 import { api, isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { precomputeLogoColor } from "@/lib/company";
+import { precomputeLogoColor, useLogoColor } from "@/lib/company";
 import { eventDateFormat } from "@/lib/datetime";
 import { apiAssetUrl, type DirectoryEntry, personCompanies } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
@@ -113,6 +114,7 @@ export function PersonProfile({
   const { t } = useLocale();
   const { nameOf } = useChallengeNames();
   const { language } = useLocale();
+  const photoColor = useLogoColor(entry.photoUrl);
   const companies = personCompanies(entry);
   useEffect(() => {
     for (const c of companies) precomputeLogoColor(c.logoUrl);
@@ -242,61 +244,65 @@ export function PersonProfile({
   }
 
   return (
-    <PageLayout width="reading">
-      <PageHeader
-        context={context}
-        leading={
-          <UserAvatar
-            name={entry.displayName}
-            image={entry.photoUrl}
-            className="size-16"
-            fallbackClassName="text-lg"
-            showInitials
-            decorative
-            presenceLabel={present ? t("helpDeskPresent") : undefined}
-          />
-        }
-        title={entry.displayName}
-        meta={
-          entry.headline ? (
-            <span className="text-muted-foreground wrap-anywhere text-sm">{entry.headline}</span>
-          ) : undefined
-        }
-        secondaryActions={
-          visibleRole ? <Badge variant="secondary">{visibleRole}</Badge> : undefined
-        }
-        primaryAction={
-          entry.cvUrl ? (
-            <CvViewer
-              path={entry.cvUrl}
+    <>
+      <HeroBleed color={photoColor}>
+        <PageHeader
+          context={context}
+          leading={
+            <UserAvatar
               name={entry.displayName}
-              trigger={
-                <Button type="button" variant="outline" size="sm">
-                  <FilePdfIcon aria-hidden="true" />
-                  {t("viewCv")}
-                </Button>
-              }
+              image={entry.photoUrl}
+              className="size-16"
+              fallbackClassName="text-lg"
+              showInitials
+              decorative
+              presenceLabel={present ? t("helpDeskPresent") : undefined}
             />
-          ) : undefined
-        }
-      />
-      {entry.bio && (
-        <p className="max-w-prose whitespace-pre-line wrap-anywhere text-pretty">{entry.bio}</p>
-      )}
-      {rows.length > 0 && (
-        <dl className="divide-y divide-border/60">
-          {rows.map((row) => (
-            <div
-              key={row.id}
-              className="grid min-w-0 gap-1 py-3 text-sm sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-4"
-            >
-              <dt className="text-muted-foreground">{row.label}</dt>
-              <dd className="min-w-0">{row.value}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-      {children}
-    </PageLayout>
+          }
+          title={entry.displayName}
+          meta={
+            entry.headline ? (
+              <span className="text-muted-foreground wrap-anywhere text-sm">{entry.headline}</span>
+            ) : undefined
+          }
+          secondaryActions={
+            visibleRole ? <Badge variant="secondary">{visibleRole}</Badge> : undefined
+          }
+          primaryAction={
+            entry.cvUrl ? (
+              <CvViewer
+                path={entry.cvUrl}
+                name={entry.displayName}
+                trigger={
+                  <Button type="button" variant="outline" size="sm">
+                    <FilePdfIcon aria-hidden="true" />
+                    {t("viewCv")}
+                  </Button>
+                }
+              />
+            ) : undefined
+          }
+        />
+      </HeroBleed>
+      <PageLayout width="reading">
+        {entry.bio && (
+          <p className="max-w-prose whitespace-pre-line wrap-anywhere text-pretty">{entry.bio}</p>
+        )}
+        {rows.length > 0 && (
+          <dl className="divide-y divide-border/60">
+            {rows.map((row) => (
+              <div
+                key={row.id}
+                className="grid min-w-0 gap-1 py-3 text-sm sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-4"
+              >
+                <dt className="text-muted-foreground">{row.label}</dt>
+                <dd className="min-w-0">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {children}
+      </PageLayout>
+    </>
   );
 }
