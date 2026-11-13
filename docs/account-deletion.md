@@ -38,8 +38,12 @@ it is reconciled.  `POST
 /api/me/anonymize` is explicit and requires `{ "confirm": true }`.  Admin
 equivalents are capability-gated under `/api/users/:id`.
 
-The authoritative implementation is `getAccountRemovalEligibility()` and the
-locked preflight in `apps/api/src/modules/identity/removal.ts`. A row in
+The authoritative eligibility check is `getAccountRemovalEligibility()` in
+`apps/api/src/modules/identity/eligibility.ts`; the locked preflight is in
+`preparation.ts`, and the public `removal.ts` entry point re-exports the
+removal workflow. Orchestration, relation scrubbing, finalization and retry
+processing live in `orchestrator.ts`, `scrub.ts`, `finalization.ts` and
+`worker.ts`. A row in
 `check_in_logs` is the canonical accreditation boundary. Door/activity/badge
 history is inspected as an integrity signal when accreditation is absent; it
 does not, by itself, turn the account into a permanent anonymous-audit case.
@@ -85,8 +89,8 @@ The old implementation on `origin/main` (`anonymizeUser()` in the former
 `apps/api/src/modules/identity/anonymize.ts`) changed a user in place to an
 `anonymized+<id>@deleted.invalid` row.  That left the original numeric row and
 all its foreign-key relationships available as an identity-shaped audit
-subject.  The obsolete compatibility module has been removed; the only
-implementation is now the shared lifecycle in `removal.ts`.
+subject.  The obsolete compatibility module has been removed; the current
+implementation is the split lifecycle exposed through `removal.ts`.
 
 Degree proposals remain in the shared catalogue after their proposer leaves.
 Removal clears `university_degrees.proposed_by` and its `suggested_by` reference,
@@ -659,9 +663,12 @@ suite alone.
 
 ### Backend and schema
 
-- `apps/api/src/modules/identity/removal.ts`: eligibility, pending state,
-  external cleanup, demographic extraction, presence aggregation, relation
-  scrubbing, anonymous UUID creation, retry worker.
+- `apps/api/src/modules/identity/`: `removal.ts` is the public entry point;
+  `eligibility.ts` owns eligibility and pending state, `artifacts.ts` and
+  `preparation.ts` prepare external cleanup, `sanitize.ts` extracts retained
+  demographics, `scrub.ts` handles presence aggregation and relationship
+  scrubbing, `finalization.ts` creates the anonymous UUID, `orchestrator.ts`
+  runs the workflow, and `worker.ts` retries cleanup.
 - `apps/api/src/modules/directory/`: opt-in public profile; the removal
   transaction deletes it (#934, [`directory.md`](./directory.md)).
 - `apps/api/src/modules/diary/`: event diary; the removal transaction deletes

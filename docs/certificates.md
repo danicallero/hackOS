@@ -252,7 +252,7 @@ Mobile screens are not built yet.
   still locks the settings, type and person and re-reads the person's award, so a concurrent review
   or type edit is honoured (an edited type drops the preload for that person).
 - Account removal (H54) revokes the person's certificates and clears their
-  snapshot, explicit recipient identity fields and the manual award (`identity/removal.ts`).
+  snapshot, explicit recipient identity fields and the manual award (`identity/scrub.ts`).
 - Issue, revoke and settings changes are audited (H53):
   `certificate.issue`, `certificate.approve`, `certificate.revoke`, `certificate.supersede`,
   `certificate_settings.update`, `certificate_type.create`, `certificate_type.update` and university `export` actions.
