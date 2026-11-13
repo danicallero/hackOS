@@ -10,15 +10,25 @@ without making event day depend on perfect Wi-Fi. It is built as a Fastify API,
 a Next.js web app and an Expo mobile app, with Postgres as the source of truth
 for all three.
 
-The product is defined by the 59 user stories in
-[`plan/historias-hackos.md`](plan/historias-hackos.md). This README is the short
-tour and the quickest way to get a development environment running.
+## Where to go
+
+| You want to | Read |
+|---|---|
+| Run it on your machine | [Run it locally](#run-it-locally) below |
+| Change code (people and coding agents) | [`AGENTS.md`](AGENTS.md), then [`CLAUDE.md`](CLAUDE.md) |
+| Know what the product must do | [`plan/historias-hackos.md`](plan/historias-hackos.md) (stories H1–H67) |
+| Know the rules that can never break | [`plan/07-datos-relevantes-ers.md`](plan/07-datos-relevantes-ers.md) |
+| Find the doc for a module, screen or system | [`docs/README.md`](docs/README.md) |
+| See every API route | `/documentation` on a running API |
+| Deploy or operate it | [`deploy/README.md`](deploy/README.md) |
+
+If two documents disagree, the user stories win.
 
 ## What it covers
 
 Before the event, hackOS handles account verification, configurable application
 forms, review and acceptance, place confirmation, sponsor profiles, challenge
-publishing, schedules and project submissions. An account whose primary email is
+publishing, schedules and project submissions. An account whose email is
 still unverified can sign in, browse its workspace and save preparation drafts,
 but event transactions—such as submitting an application, confirming a place,
 or changing event operations—require verification. Participants can follow
@@ -46,7 +56,7 @@ export/deletion workflows and a queryable audit trail.
 
 | App                          | Who it is for                                 | Main jobs                                                                                                   |
 | ---------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| [`apps/web`](apps/web)       | Participants, organisers, judges and sponsors | Applications, administration, project import, judging, logistics dashboards, public schedule and TV screens |
+| [`apps/web`](apps/web)       | Participants, organisers, judges and sponsors | Applications, administration, projects, judging,        logistics dashboards, public schedule and TV screens |
 | [`apps/mobile`](apps/mobile) | Participants and on-site operators            | Schedule, queue status, passes, notifications, queue operations and offline-capable scanners                |
 | [`apps/api`](apps/api)       | Both clients and external consumers           | Authentication, domain rules, OpenAPI, background work, realtime streams and storage access                 |
 
@@ -92,17 +102,14 @@ You need Docker, Node 22 or newer, and pnpm 10.
 
 ```sh
 pnpm install
-pnpm infra:up
+pnpm infra:up     # Postgres, Valkey, MinIO and Mailpit in Docker
 pnpm migrate
-pnpm dev
+pnpm dev          # API and web on the host
 ```
 
-`pnpm infra:up` starts Postgres, Valkey, MinIO and Mailpit. The API and web app
-then run on the host with development defaults, so no environment file is
-required for the first start.
-
-Once everything is up:
-
+No environment file is needed for the first start. To change credentials or
+ports, copy [`.env.example`](.env.example) to `apps/api/.env` and edit only
+what you need.
 
 | Service           | Address                                                                    |
 | ----------------- | -------------------------------------------------------------------------- |
@@ -112,58 +119,42 @@ Once everything is up:
 | Mailpit inbox     | [http://localhost:8025](http://localhost:8025)                             |
 | MinIO console     | [http://localhost:9001](http://localhost:9001)                             |
 
-
-If you need different local credentials or ports, copy [`.env.example`](.env.example)
-to `apps/api/.env` and change only the values you need.
-
 ### Create the first administrator
 
-`system:superadmin` is CLI-only (H8): a break-glass role that carries the `*`
-(all-capabilities) wildcard, sits above every other role, and can never be
-granted, revoked, edited, reordered, or deleted through the HTTP API — not
-even by another `*`-holding admin. It's also never shown as anyone's public
-role (`is_visible = false`) and is excluded from every role picker in the web
-app (invites, application role-grants, automatic grant rules). The only way
-to add, look up, or remove it is one of these three scripts, run on a machine
-with `DATABASE_URL` pointing at the target database:
+`system:superadmin` holds every capability and can only be managed from the
+command line, never through the HTTP API (H8). Run these with `DATABASE_URL`
+pointing at the target database:
 
 ```sh
-# Add — creates a brand-new account and grants it superadmin in one step.
 pnpm --filter @hackos/api superadmin:create \
-  --email admin@example.com \
-  --password 'choose-a-local-password' \
-  --name Local \
-  --surname Admin
-
-# Add — grants superadmin to an account that already exists.
-pnpm --filter @hackos/api superadmin:grant --email admin@example.com
-
-# Look up — lists every account currently holding superadmin.
+  --email admin@example.com --password 'choose-a-local-password' \
+  --name Local --surname Admin                                      # new account
+pnpm --filter @hackos/api superadmin:grant --email admin@example.com   # existing account
 pnpm --filter @hackos/api superadmin:list
-
-# Remove — revokes superadmin from an account.
 pnpm --filter @hackos/api superadmin:revoke --email admin@example.com
 ```
 
-`superadmin:create`/`superadmin:grant` both refuse to mint a second
-superadmin unless `--allow-existing-admin` is passed deliberately.
-`superadmin:revoke` refuses if it would leave zero active superadmins, so
-you can never accidentally lock yourself out of the platform. Every
-add/remove is written to `audit_log` (`grant_superadmin`/`create_superadmin`/
-`revoke_superadmin`).
+Creating or granting refuses to add a second superadmin unless you pass
+`--allow-existing-admin`, and revoking refuses to remove the last one. Every
+change is written to the audit log. On a deployed host use
+`/opt/hackos/services.sh <environment> superadmin`
+([`deploy/README.md`](deploy/README.md)); the design rationale is in
+[`docs/audits/access-control-audit-plan.md`](docs/audits/access-control-audit-plan.md).
 
-In production, run the same commands from a shell on the API container/host
-(`node dist/create-superadmin.js ...`, `node scripts/grant-superadmin.mjs
---email ...`, `node scripts/list-superadmins.mjs`, `node
-scripts/revoke-superadmin.mjs --email ...`) with `DATABASE_URL` set to the
-production database. The deployed `/opt/hackos/services.sh production shell`
-also provides this flow interactively. See
-`docs/audits/access-control-audit-plan.md`'s "`system:superadmin` is CLI-only"
-section for the full design rationale.
+### Demo data
+
+Against a disposable local database:
+
+```sh
+pnpm --filter @hackos/api seed        # bootstrap admin role and user
+pnpm --filter @hackos/api seed:mock   # realistic people, companies, applications, projects, tickets
+```
+
+Details are in [`docs/ui-testing.md`](docs/ui-testing.md).
 
 ### Start the mobile app
 
-The root `pnpm dev` command starts the API and web app only. Run Expo separately:
+`pnpm dev` starts the API and web app only. Run Expo separately:
 
 ```sh
 cd apps/mobile
@@ -171,10 +162,9 @@ EXPO_PUBLIC_API_URL=http://localhost:3000 pnpm start
 ```
 
 Then press `w`, `i` or `a` for web, iOS or Android. A phone cannot reach your
-computer through `localhost`; use the computer's LAN address instead. Native
-features such as the camera, push notifications, encrypted scanner storage and
-Wallet passes need a development build or real device, not just Expo's web
-target. The complete setup is in
+computer through `localhost`; use the computer's LAN address. The camera, push
+notifications, encrypted scanner storage and Wallet passes need a development
+build or a real device. The complete setup is in
 [`docs/mobile-release.md`](docs/mobile-release.md).
 
 ## Everyday commands
@@ -183,96 +173,45 @@ target. The complete setup is in
 pnpm dev                              # API :3000 and web :3001
 pnpm dev:api                          # API only
 pnpm dev:web                          # web only
-pnpm build                            # build every workspace with a build script
-pnpm typecheck                        # API, web and mobile TypeScript checks
+pnpm build                            # build every workspace
+pnpm typecheck                        # API, web and mobile
 
-pnpm lint                             # Biome, copy/i18n, size and retired-runtime guards
-pnpm --filter @hackos/api test        # API integration tests
-pnpm --filter @hackos/web typecheck   # web TypeScript check
+pnpm lint                             # Biome plus the copy, story-ID and size guards
+pnpm --filter @hackos/api test        # API integration tests (needs pnpm infra:up)
+pnpm --filter @hackos/api test:serial test/<file>.test.ts   # one API test file
 pnpm --filter @hackos/web test        # web unit tests
-pnpm --filter @hackos/shared test     # shared contracts
-pnpm --filter @hackos/mobile typecheck
 pnpm --filter @hackos/mobile test     # mobile Jest tests
-
-# Representative event-day load (H22-H42, H46, #544)
-pnpm --filter @hackos/api event-day:load -- --mode smoke
-
-# Disposable pre-event qualification on the actual host (exact release image)
-RELEASE_IMAGE=ghcr.io/example/hackos-api@sha256:<64-hex-release-digest> \
-  QUALIFICATION_ARTIFACT_DIR="$PWD/artifacts/event-day-qualification" \
-  ./deploy/qualification/run.sh
-
-pnpm test:ui                          # Playwright + fast native screen tests
+pnpm --filter @hackos/shared test     # shared contracts
 pnpm test:ui:install                  # install Playwright browsers once
-pnpm test:ui:native                   # Detox on a simulator/device
+pnpm test:ui                          # Playwright + fast native screen tests
+pnpm test:ui:native                   # Detox on a simulator or device
 
 pnpm migrate                          # apply pending SQL migrations
-pnpm schema:dump                      # regenerate the current-schema DBML ERD
+pnpm schema:dump                      # regenerate the schema ERD
 pnpm schema:check                     # compare a migrated DB with the checked-in ERD
 pnpm infra:down                       # stop local infrastructure
 ```
 
-API tests use real Postgres and Valkey. The runner discovers every
-`apps/api/test/**/*.test.ts` and checks that each belongs to exactly one of four
-shards before starting Vitest with explicit include lists. Unknown test directories
-fail this check; add them to `apps/api/scripts/test-integration.mjs`. Root-level
-suites belong to the fourth shard. The measured domain allocation is defined
-in that script. Each shard resets and migrates its own
-`hackos_test_shard_N` database and runs files serially, then drops its database.
-The runner creates/reuses a separate `${S3_BUCKET:-hackos}-shard-N` bucket for
-each shard locally and in CI, checking storage before launching the suites.
-It waits for every shard to finish before reporting aggregate failures.
-Use `pnpm --filter @hackos/api test:serial test/<file>.test.ts` for focused runs.
-For isolated local services, set `TEST_DATABASE_URL`, both `TEST_VALKEY_URL` and
-`VALKEY_URL`, the `S3_*` variables, and `SMTP_HOST`/`SMTP_PORT`. Set
-`TEST_MAILPIT_URL` to that SMTP server's Mailpit HTTP origin (default
-`http://localhost:8025`): email tests clear that inbox, so never point it at a
-shared instance. Keep unrelated dev-server variables such as `WEB_URL` unset
-when running tests that assert the default local origins.
-The full runner assigns each shard a separate Valkey logical database, starting
-at the database in `TEST_VALKEY_URL` (otherwise `VALKEY_URL`, default 0). The
-base index must leave room for four databases within 0–15. Standalone serial
-suites retain their domain defaults unless overridden. Concurrent full runs
-need distinct database names, bucket prefixes and Valkey database ranges.
+API tests run against real Postgres, Valkey, MinIO and Mailpit, in four shards
+with their own databases. How the runner works, and how to point it at
+isolated services, is in [`docs/testing.md`](docs/testing.md). Load tests and
+the pre-event qualification run are in
+[`docs/big-event-readiness.md`](docs/big-event-readiness.md).
 
-Open every pull request as a draft. Feature PRs may target protected `staging`
-or `main`; `staging` is the development branch and `main` is production. Draft
-updates run lint, shared contract tests, memory-collector tests and typecheck;
-marking one ready runs the complete test matrix.
-Container images are not built for individual PRs.
+## Contributing
 
-The release paths are:
-
-| Branch | CD behavior |
-| --- | --- |
-| `staging` | Merge an approved development PR here. CD builds only affected API/web images on native `linux/amd64` and `linux/arm64` runners; the protected private-network SSH workflow deploys only the changed unit to the ARM64 staging host. |
-| `main` | Merge an approved PR from any branch. CD builds only affected API/web images on native `linux/amd64` and `linux/arm64` runners. An operator later starts the protected Incus workflow, or deploys the selected immutable tag from the production operator shell. |
-
-`main` and `staging` are independent environments. Merging into either branch
-publishes its release artifact and starts the corresponding protected
-deployment workflow after the image build succeeds. Staging reaches its host
-through a private network before using SSH; production uses a self-hosted
-Incus runner. To test the current production tree in staging, open an explicit
-pull request from `main` to `staging`.
-
-The Build images workflow also supports a manual rebuild of `api`, `web`, or
-`both` for the selected branch. On `staging`, the selected images are deployed
-after they publish successfully; on other branches, manual rebuilds only
-publish the requested image tags.
-
-The merge to either protected branch builds only the affected release artifact.
-Mobile and documentation-only changes skip image publication and host
-deployment. Runtime deployment changes skip image publication but trigger a
-file-only staging rollout; the current API and web image tags are retained and
-only the deployment files are refreshed. Production remains image-gated and
-does not roll out deploy-only changes automatically. The staging and production
-stacks use the same multi-architecture image repositories, Compose file, and
-SHA tag format, with separate host configuration and secret files. Protect
-exactly `staging` and `main`; CI accepts PRs into either branch, while the
-protected environments control deployment approval.
-The API test job provides fresh Postgres, Valkey and Mailpit service containers
-plus health-checked MinIO, then provisions the test bucket; local API runs
-still use `pnpm infra:up` and the commands above.
+- Read [`AGENTS.md`](AGENTS.md) first. It says what else to read for the area
+  you are touching, and applies to people and coding agents alike.
+- [`CLAUDE.md`](CLAUDE.md) lists the conventions every change follows:
+  capability-based permissions, audited mutations in the same transaction,
+  idempotent and row-locked state transitions, raw parameterised SQL,
+  es/gl/en copy, and which doc to update with which code.
+- Reference the story (`H29`) or the issue (`#934`) in every commit and PR.
+- Open every pull request as a draft against `staging` (development) or
+  `main` (production). Drafts run lint, contract tests and typecheck; marking
+  a PR ready runs the full test matrix.
+- A change that alters a screen ships screenshots in a PR comment
+  ([`docs/ui-testing.md`](docs/ui-testing.md)).
 
 ## Repository guide
 
@@ -280,74 +219,36 @@ still use `pnpm infra:up` and the commands above.
 apps/api/             Fastify routes, domain services, workers and migrations
 apps/web/             Next.js app, public site, operator workspaces and TVs
 apps/mobile/          Expo app, native integrations and offline scanner data
-packages/shared/      capability, event and cross-client test contracts
+packages/shared/      capability, event and cross-client contracts
 e2e/                  Playwright and Detox flows
 plan/                 normative user stories and hard invariants
-docs/                 current architecture and implementation notes
-deploy/               Canonical Docker Compose runtime and host runbook
+docs/                 how the current code works, one doc per topic
+deploy/               canonical Docker Compose runtime and host runbook
+.claude/              agent skills and lessons learned from corrections
 ```
 
-The backend is split by domain under `apps/api/src/modules`: identity,
-applications, projects, challenges, sponsors, event configuration, logistics,
-queue and judging, notifications, help desk, exports and more (the full map is
-in [`docs/api-reference.md`](docs/api-reference.md)). Each module owns its routes and
-services; background processors are registered from the same module.
-
-The web app has a stable personal area plus capability-gated workspaces for
-applications, projects, live judging, logistics, programme, sponsors,
-communications, event setup, and access/audit. The mobile app uses the same
-capability catalogue to choose between participant tabs, queue operations and
-scanner tools.
-
-## Rules that matter here
-
-A few conventions are part of the architecture rather than style preferences:
-
-- Authorisation checks concrete capabilities, never the display role.
-- Sensitive mutations write their audit entry in the same transaction as the
-domain change.
-- Critical transitions are idempotent and lock the relevant Postgres rows, so
-concurrent requests have one winner.
-- Every queue action produces one history row and one realtime broadcast.
-- H1 email verification is the boundary for event transactions: unverified
-  users may read and prepare, but cannot advance event state; H3 resend limits
-  remain part of the account-verification flow.
-- User-facing copy is kept in Spanish, Galician and English.
-- Capability and event strings come from `@hackos/shared`; clients and the API
-do not invent their own copies.
-
-Read [`AGENTS.md`](AGENTS.md) and [`CLAUDE.md`](CLAUDE.md) before changing code. `CLAUDE.md` is the concise list of
-non-negotiable conventions and tells you which documentation must change with
-each part of the system. If two documents disagree, the user stories in
-[`plan/historias-hackos.md`](plan/historias-hackos.md) win; the hard concurrency
-and state rules are in
-[`plan/07-datos-relevantes-ers.md`](plan/07-datos-relevantes-ers.md).
-
-Useful next reads:
-
-- [`docs/README.md`](docs/README.md) — documentation index
-- [`apps/web/README.md`](apps/web/README.md) — frontend conventions and shared components
-- [`docs/mobile.md`](docs/mobile.md) — mobile implementation and device-QA status
-- [`docs/background-workers.md`](docs/background-workers.md) — tick workers, retries and event boundaries
-- [`docs/navigation.md`](docs/navigation.md) — capability-to-workspace and tab mapping
-- [`docs/ui-testing.md`](docs/ui-testing.md) — browser, native and screenshot testing
+The backend is split by domain under `apps/api/src/modules`; the map of what
+each module owns is in [`docs/api-reference.md`](docs/api-reference.md). Web
+conventions and the component library are in
+[`apps/web/README.md`](apps/web/README.md), the mobile app in
+[`docs/mobile.md`](docs/mobile.md), and the design rules for every surface in
+[`docs/DESIGN.md`](docs/DESIGN.md).
 
 ## Deployment
 
-Production and staging are isolated Compose projects: production runs in a
-Linux/x86_64 LXC and staging runs on an ARM64 host. The API, worker and web run
-from pinned GHCR SHA images; Postgres, Valkey and MinIO stay on private
-networks, while the environment's external proxy reaches only the published
-API and web HTTP ports. A one-shot migration command runs before the API starts
-and uses a Postgres advisory lock to make concurrent deploys safe.
-The API repeats this no-op-safe migration check immediately before listening so
-a reused one-shot container cannot leave the running image ahead of the schema.
+Staging and production are separate Compose projects built from the same
+images: staging on an ARM64 host, production in a Linux/x86_64 LXC. Merging
+into `staging` or `main` builds only the affected API or web image; staging
+then deploys automatically and production is rolled out by an operator.
+Postgres, Valkey and MinIO stay on private networks, and migrations run under
+an advisory lock before the API starts.
 
-[`deploy/README.md`](deploy/README.md) documents the canonical Compose runtime,
-private-network deployment paths, secrets, health gates, and rollback. Use
-[`docs/env-vars.md`](docs/env-vars.md) as the per-service environment checklist.
+[`deploy/README.md`](deploy/README.md) is the runbook (CI/CD paths, secrets,
+health gates, rollback) and [`docs/env-vars.md`](docs/env-vars.md) the
+per-service environment checklist. Checks that still need real devices before
+a mobile release are tracked in
+[`docs/mobile-store-release.md`](docs/mobile-store-release.md#before-release).
 
-The mobile implementation and automated tests are in place. Offline recovery,
-APNs/FCM delivery, camera behaviour, encrypted SQLite and Wallet flows still
-need to be checked on real devices before release. The remaining checks are
-tracked in [`docs/mobile-store-release.md`](docs/mobile-store-release.md#before-release).
+## License
+
+[AGPL-3.0-only](LICENSE.md).
