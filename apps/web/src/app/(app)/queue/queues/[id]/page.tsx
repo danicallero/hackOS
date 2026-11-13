@@ -98,11 +98,9 @@ export default function QueueDetailPage() {
 
   useEffect(() => {
     if (!Number.isFinite(queueGroupId)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStatus("error");
       return;
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load, queueGroupId]);
 

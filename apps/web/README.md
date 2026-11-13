@@ -102,6 +102,13 @@ read goes to the API. Do not add module-level
 caches or `useEffect` + `api.get` reads, and never turn a failed read into an
 empty or hard-coded list: expose `error` and render `ContextualError` with a
 retry.
+
+`useServerResource` returns `data`, `error`, `loading` and a stable `reload`
+callback (plus `mutate` for a mutation response). It only applies a result to
+the mounted resource key, so a late response cannot replace a newer parameter's
+data or update an unmounted component. `reload()` invalidates the exact key;
+when there is no data it returns to the loading state, while an existing result
+stays visible during refresh. Use it for one-resource reads with a complete key.
 A page that owns its own loader (form state it must not clobber, optimistic
 local rows) keeps a `load()` callback and adds `useLiveReload(scope, events,
 load)`, which calls it once per debounced burst of events; there is no nonce to

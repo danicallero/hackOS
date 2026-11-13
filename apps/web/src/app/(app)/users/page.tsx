@@ -403,7 +403,6 @@ export default function UsersPage() {
   // hydration diffs against the server-rendered DEFAULT_COLUMNS markup),
   // then persist any change back to localStorage.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setVisibleColumns(loadStoredColumns());
     setColumnsHydrated(true);
   }, []);
@@ -439,7 +438,6 @@ export default function UsersPage() {
   }, [showPresence]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     return loadPresence();
   }, [loadPresence]);
 

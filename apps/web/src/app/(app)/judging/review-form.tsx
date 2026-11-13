@@ -211,7 +211,6 @@ export function ReviewForm({
     if (!entryId) return;
     let cancelled = false;
     currentEntryRef.current = entryId;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Data-fetch-on-mount.
     setLoading(true);
     setSaveError(null);
     setOwnedFields(new Set());

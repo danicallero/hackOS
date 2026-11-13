@@ -122,7 +122,6 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isKiosk) return;
     // Safe: syncing language state to async user preference loaded after mount.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isLanguage(me?.language)) setLanguage(me.language);
   }, [me?.language, isKiosk]);
   useEffect(() => {

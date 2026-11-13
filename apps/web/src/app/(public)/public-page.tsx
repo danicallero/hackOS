@@ -108,7 +108,6 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
     // `t` is read through a ref: a locale change must not refetch the whole page (#1227).
   }, [embedded]);
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
   // The browser tab should read the configured event's name, not a generic
