@@ -34,6 +34,8 @@ export interface ScannerPerson {
   revokedBadgeIds: string[];
   name: string | null;
   surname: string | null;
+  /** Authenticated photo URL when the person enabled public photo sharing. */
+  photoUrl?: string | null;
   dni: string | null;
   accepted: boolean;
   confirmed: boolean;

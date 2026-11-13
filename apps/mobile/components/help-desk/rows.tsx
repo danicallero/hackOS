@@ -36,9 +36,9 @@ const chevron = (
   />
 );
 
-/** Who asked: the team for a team request, else the person. */
+/** Who asked: always the one requester. */
 export function requestOwner(request: HelpRequest, fallback: string): string {
-  return request.project?.name ?? request.requester?.displayName ?? fallback;
+  return request.requester?.displayName ?? fallback;
 }
 
 /**
@@ -67,7 +67,7 @@ export function RequestRow({
       accessibilityRole="button"
       accessibilityLabel={[
         request.description,
-        own ? request.project?.name : meta,
+        own ? null : meta,
         position ?? t(status.label),
         context,
       ]

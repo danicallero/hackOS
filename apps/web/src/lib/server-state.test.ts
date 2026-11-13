@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  expireServerStatePrefix,
   invalidateServerState,
   peekServerState,
   readServerState,
@@ -60,6 +61,18 @@ describe("browser server state (#720)", () => {
       version: 2,
     });
     expect(fresh).toHaveBeenCalledOnce();
+  });
+
+  it("expires a prefix so unmounted views re-read, keeping them paintable", async () => {
+    setServerStateIdentity(1);
+    await readServerState(["helpdesk", "home", "mine"], async () => "list");
+    await readServerState(["helpdesk-other"], async () => "other");
+    expireServerStatePrefix(["helpdesk"]);
+    const reread = vi.fn(async () => "fresh");
+    expect(peekServerState(["helpdesk", "home", "mine"])).toBe("list");
+    await expect(readServerState(["helpdesk", "home", "mine"], reread)).resolves.toBe("fresh");
+    await expect(readServerState(["helpdesk-other"], reread)).resolves.toBe("other");
+    expect(reread).toHaveBeenCalledTimes(1);
   });
 
   describe("stale-while-revalidate", () => {

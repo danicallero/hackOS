@@ -14,6 +14,7 @@ jest.mock("./auth-client", () => ({
 }));
 jest.mock("./env", () => ({ API_URL: "https://api.hackos.test" }));
 jest.mock("expo-application", () => ({ nativeBuildVersion: "42" }));
+jest.mock("expo-device", () => ({}));
 
 import { EVENTS } from "@hackos/shared/events";
 import {

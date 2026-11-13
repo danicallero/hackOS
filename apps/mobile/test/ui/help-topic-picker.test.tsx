@@ -15,16 +15,18 @@ jest.mock("@/lib/api", () => ({
 }));
 jest.mock("@/lib/haptics", () => ({ haptic: jest.fn() }));
 jest.mock("@/lib/help-desk", () => ({ helpMutation: jest.fn() }));
+const mockSetTopicSelection = jest.fn();
+const mockSelection = {
+  selected: [] as { id: number; name: string }[],
+  maximum: 5,
+  other: false,
+  allowOther: false,
+  allowAdd: false,
+};
 jest.mock("@/lib/help-topic-selection", () => ({
   setOtherSelection: jest.fn(),
-  setTopicSelection: jest.fn(),
-  useTopicSelection: () => ({
-    selected: [],
-    maximum: 5,
-    other: false,
-    allowOther: false,
-    allowAdd: false,
-  }),
+  setTopicSelection: (...args: unknown[]) => mockSetTopicSelection(...args),
+  useTopicSelection: () => mockSelection,
 }));
 jest.mock("@/lib/i18n", () => ({
   useLocale: () => ({
@@ -107,5 +109,40 @@ describe("help topic picker: a failed search", () => {
     });
     expect(await screen.findByText("Kubernetes")).toBeTruthy();
     expect(screen.queryByText("search failed")).toBeNull();
+  });
+});
+
+describe("help topic picker: what a request can ask for (H64)", () => {
+  const backEnd = { id: 9, name: "Back End" };
+  const docker = { id: 1, name: "Docker" };
+  beforeEach(() => {
+    jest.useFakeTimers();
+    mockApiFetch.mockReset();
+    mockSetTopicSelection.mockReset();
+    mockApiFetch.mockResolvedValue({ topics: [docker] });
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+    Object.assign(mockSelection, { selected: [], allowOther: false, allowAdd: false });
+  });
+  const open = async () => {
+    await renderMobile(<HelpTopicPickerScreen />);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10);
+    });
+  };
+
+  it("offers a request only covered topics and drops a chosen one that lost its helper", async () => {
+    Object.assign(mockSelection, { selected: [backEnd, docker], allowOther: true });
+    await open();
+    expect(mockApiFetch).toHaveBeenCalledWith(expect.stringContaining("&available=1"));
+    expect(mockSetTopicSelection).toHaveBeenCalledWith([docker]);
+  });
+
+  it("leaves a helper's own knowledge on the whole catalogue", async () => {
+    Object.assign(mockSelection, { selected: [backEnd], allowAdd: true });
+    await open();
+    expect(mockApiFetch).toHaveBeenCalledWith(expect.not.stringContaining("available"));
+    expect(mockSetTopicSelection).not.toHaveBeenCalled();
   });
 });

@@ -2,10 +2,32 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import helpDeskEn from "@hackos/shared/locales/en/mobile.json";
 import helpDeskEs from "@hackos/shared/locales/es/mobile.json";
 import helpDeskGl from "@hackos/shared/locales/gl/mobile.json";
-import { canBrowseHelpDesk, planDays } from "./help-desk";
+import { apiFetch } from "./api";
+import {
+  canBrowseHelpDesk,
+  dayPieces,
+  helpMutation,
+  minuteAt,
+  minutesBefore,
+  planDays,
+  slotInterval,
+} from "./help-desk";
 
 jest.mock("./api", () => ({ apiFetch: jest.fn() }));
 describe("help desk boundaries (H61–H67)", () => {
+  it("sends body-less actions without a JSON content type (H64, H66)", async () => {
+    // The API rejects an empty body declared as JSON, which broke cancel, release and resolve.
+    await helpMutation("/api/helpdesk/requests/3/cancel");
+    expect(apiFetch).toHaveBeenLastCalledWith("/api/helpdesk/requests/3/cancel", {
+      method: "POST",
+    });
+    await helpMutation("/api/helpdesk/requests/3/claim", { mode: "on_my_way" });
+    expect(apiFetch).toHaveBeenLastCalledWith("/api/helpdesk/requests/3/claim", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "on_my_way" }),
+    });
+  });
   it("combines capabilities without granting access from a display role", () => {
     expect(canBrowseHelpDesk([])).toBe(false);
     expect(canBrowseHelpDesk([CAPABILITIES.HELPDESK_MANAGE])).toBe(false);
@@ -78,6 +100,14 @@ describe("planDays (H62)", () => {
     expect(days.map((day) => day.key)).toEqual(["2026-11-27", "2026-11-28", "2026-11-29"]);
     expect(days.map((day) => day.ranges.length)).toEqual([0, 1, 0]);
   });
+  it("includes the last day when the event ends earlier in the day than it starts", () => {
+    const days = planDays(
+      { startsAt: "2026-11-27T19:00:00.000Z", endsAt: "2026-11-28T15:00:00.000Z" },
+      [],
+      "en",
+    );
+    expect(days.map((day) => day.key)).toEqual(["2026-11-27", "2026-11-28"]);
+  });
   it("keeps a day outside the window that holds a range, and works without a window", () => {
     const days = planDays(
       null,
@@ -85,5 +115,46 @@ describe("planDays (H62)", () => {
       "en",
     );
     expect(days.map((day) => day.key)).toEqual(["2026-12-01"]);
+  });
+});
+
+describe("availability timeline (H62)", () => {
+  const zone = "Europe/Madrid";
+  it("draws a stretch crossing midnight on both day lines", () => {
+    // 23:00 on the 27th to 02:00 on the 28th, Madrid time (UTC+1).
+    const night = { startsAt: "2026-11-27T22:00:00.000Z", endsAt: "2026-11-28T01:00:00.000Z" };
+    const morning = { startsAt: "2026-11-27T09:00:00.000Z", endsAt: "2026-11-27T11:00:00.000Z" };
+    expect(dayPieces([night, morning], "2026-11-27", zone)).toEqual([
+      { index: 1, interval: morning, start: 600, end: 720, fromPrev: false, toNext: false },
+      { index: 0, interval: night, start: 1380, end: 1440, fromPrev: false, toNext: true },
+    ]);
+    expect(dayPieces([night, morning], "2026-11-28", zone)).toEqual([
+      { index: 0, interval: night, start: 0, end: 120, fromPrev: true, toNext: false },
+    ]);
+    expect(dayPieces([night], "2026-11-29", zone)).toEqual([]);
+  });
+  it("dims only the time before hacking starts", () => {
+    const hacking = "2026-11-27T19:00:00.000Z"; // 20:00 in Madrid
+    expect(minutesBefore("2026-11-27", hacking, zone)).toBe(1200);
+    expect(minutesBefore("2026-11-28", hacking, zone)).toBe(0);
+    expect(minutesBefore("2026-11-27", null, zone)).toBe(0);
+  });
+  it("snaps a touch to the half hour it falls in", () => {
+    expect(minuteAt(0, 240)).toBe(0);
+    expect(minuteAt(125, 240)).toBe(750);
+    expect(minuteAt(999, 240)).toBe(1440);
+    expect(minuteAt(10, 0)).toBe(0);
+  });
+  it("starts a touched stretch after hacking begins and before the next one", () => {
+    const hacking = "2026-11-27T19:00:00.000Z";
+    expect(slotInterval("2026-11-27", 600, [], hacking, zone)).toEqual({
+      startsAt: hacking,
+      endsAt: "2026-11-27T21:00:00.000Z",
+    });
+    const next = { startsAt: "2026-11-28T10:00:00.000Z", endsAt: "2026-11-28T12:00:00.000Z" };
+    expect(slotInterval("2026-11-28", 600, [next], hacking, zone)).toEqual({
+      startsAt: "2026-11-28T09:00:00.000Z",
+      endsAt: "2026-11-28T10:00:00.000Z",
+    });
   });
 });

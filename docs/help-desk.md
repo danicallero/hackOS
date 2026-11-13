@@ -12,7 +12,7 @@ Migration: `0901_help_desk.sql` includes the complete unmerged PR schema, challe
 | Capability | Seeded on | Grants |
 | --- | --- | --- |
 | `helpdesk:offer` | Mentor, Sponsor, Organizer, Day Staff, Event Director | Own helper profile and availability, helper inbox, claim/release/resolve |
-| `helpdesk:request` | Participant, Event Director | Browse helpers, open/cancel/resolve own and team requests |
+| `helpdesk:request` | Participant, Event Director | Browse helpers, open/cancel/resolve own requests |
 | `helpdesk:coverage` | Organizer, Event Director | Coverage view (H67) |
 | `helpdesk:manage` | Event Director | Rename, merge and delete unused catalogue topics (Libraries › Knowledge areas); set the opening hours (H64) |
 
@@ -113,16 +113,18 @@ creates no diary contact and returns nothing beyond the card.
 
 ## Requests (H64-H66)
 
-A request is always for the caller (the team option was removed; requests
-stored with a project keep their team rules). Opening one requires event
-access. At most one request is active (open or claimed) per person (partial
-unique indexes plus a
-locked check), so double submits cannot open two.
+A request always belongs to one person, the requester (H64): there are no
+team requests, and teammates neither see nor act on each other's requests
+(0902 dropped `help_requests.repo_id`). Opening one requires event access. At
+most one request is active (open or claimed) per person (a partial unique
+index plus a locked check), so
+double submits cannot open two. Cancelling withdraws the request and keeps its
+audited history; it does not physically delete the record.
 
 **Routing (H65)** runs once, at creation, inside the creating transaction:
 
 1. The audience is every listed helper currently present at the venue,
-   excluding the requesting side. Planned availability intervals do not gate it.
+   excluding the requester. Planned availability intervals do not gate it.
 2. Without Other, helpers knowing **any** requested topic are notified
    (`routing: matched`).
 3. With Other, or when no audience member matches, the whole audience is
@@ -146,7 +148,7 @@ order (`queued_at`, then id); `viewer.notified` marks the ones routed to them.
 Open requests carry `queuedAt` and `queuePosition` (1-based among all open
 requests).
 
-**Editing (H64).** The requester or a team member can `PATCH` an open request
+**Editing (H64).** The requester can `PATCH` an open request
 (same fields and validation as creation). The row is locked `FOR UPDATE`, so a
 simultaneous claim and edit serialize: an edit after a claim answers 409
 `help_request_already_claimed`, a claim after an edit takes the edited request.
@@ -160,7 +162,7 @@ It is audited (`edited`, changed field names only) and broadcast once.
 open ──claim──▶ claimed ──resolve──▶ resolved
   ▲               │
   └───release─────┘
-open / claimed ──cancel (requesting side)──▶ cancelled
+open / claimed ──cancel (requester)──▶ cancelled
 ```
 
 - **Claim** (H66): a published, eligible helper picks `on_my_way` (to the
@@ -168,12 +170,12 @@ open / claimed ──cancel (requesting side)──▶ cancelled
   is locked `FOR UPDATE`, so exactly one concurrent claim wins and the rest
   get 409 `help_request_already_claimed`. A retry by the winner with the same
   meeting returns the claim without another notice; the route also has an
-  `Idempotency-Key` guard. Helpers cannot claim their own or their team's
+  `Idempotency-Key` guard. Helpers cannot claim their own
   request. Changing the meeting means release and claim again.
-- **Release**: only the claimer; back to `open`, the requesting side is
+- **Release**: only the claimer; back to `open`, the requester is
   told, the original audience is not notified again.
-- **Resolve**: only from `claimed`, by the claimer or the requesting side.
-- **Cancel**: requesting side, from `open` or `claimed`; a claimer is told.
+- **Resolve**: only from `claimed`, by the claimer or the requester.
+- **Cancel**: requester, from `open` or `claimed`; a claimer is told.
 
 **Requester profile and presence.** `GET /api/helpdesk/requests/:id` adds
 `requesterProfile` (the requester's directory entry) for helpers the request
@@ -185,7 +187,7 @@ for the claimer and the requester (see the logistics section of
 
 Every transition is audited (`help_request` entity) in the same
 transaction, and broadcasts `helpdesk.request.changed` `{requestId, status}`
-to the personal stream of the requesting side, the routed helpers and the
+to the personal stream of the requester, the routed helpers and the
 claimer, plus a payload-free `domain:helpdesk` refresh.
 
 ## Coverage (H67)
@@ -212,9 +214,8 @@ requests that no available helper covers.
 
 Anonymization deletes the helper profile (topics and availability cascade)
 and routed-audience rows, clears `help_topics.proposed_by`, and detaches the
-person from requests: their individual requests lose description and
-location and are cancelled if active; team requests keep their text for the
-team but lose the requester; a claim they held returns to `open`. The data
+person from requests: their requests lose description, location and
+requester and are cancelled if active; a claim they held returns to `open`. The data
 export includes `helperProfile` and the requests they opened.
 
 ## Knowledge areas and staff edits

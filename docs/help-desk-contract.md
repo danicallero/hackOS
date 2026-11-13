@@ -14,7 +14,7 @@ key + same body = same response, no second write or delivery).
 | Constant | String | Grants | Seeded on |
 | --- | --- | --- | --- |
 | `HELPDESK_OFFER` | `helpdesk:offer` | Own helper profile and availability; helper inbox; claim/release/resolve | Mentor, Sponsor, Organizer, Day Staff, Event Director |
-| `HELPDESK_REQUEST` | `helpdesk:request` | Browse helpers; create, follow and cancel own/team requests | Participant, Event Director |
+| `HELPDESK_REQUEST` | `helpdesk:request` | Browse helpers; create, follow and cancel own requests | Participant, Event Director |
 | `HELPDESK_COVERAGE` | `helpdesk:coverage` | Coverage view (H67) | Organizer, Event Director |
 | `HELPDESK_MANAGE` | `helpdesk:manage` | Rename and merge knowledge topics; set the opening hours | Event Director |
 
@@ -34,15 +34,15 @@ claim, even if previously published.
 
 | Name | Where | Payload | Meaning |
 | --- | --- | --- | --- |
-| `EVENTS.HELPDESK_REQUEST_CHANGED` = `helpdesk.request.changed` | personal stream (`user:<id>`) of the requester, every team member, every routed helper and the claimer | `{ requestId: number, status: HelpRequestStatus }` | Refetch that request / your lists |
+| `EVENTS.HELPDESK_REQUEST_CHANGED` = `helpdesk.request.changed` | personal stream (`user:<id>`) of the requester, every routed helper and the claimer | `{ requestId: number, status: HelpRequestStatus }` | Refetch that request / your lists |
 | `EVENTS.DOMAIN_CHANGED` | `domain:helpdesk` (`SSE_TOPICS.HELPDESK` = `"helpdesk"`) | none | Helper directory, open-request inbox or coverage changed; refetch. Subscribing needs any help desk capability. |
 
 Notifications (H51 inbox + push, category `helpdesk`; email never):
 
 - to routed helpers on creation: `{ kind: "request_created", requestId }`
-- to requester + team on claim: `{ kind: "request_claimed", requestId, mode, meetingLocation, helperName }`
-- to requester + team on release: `{ kind: "request_released", requestId }`
-- to the claimer when the requesting side cancels: `{ kind: "request_cancelled", requestId }`
+- to the requester on claim: `{ kind: "request_claimed", requestId, mode, meetingLocation, helperName }`
+- to the requester on release: `{ kind: "request_released", requestId }`
+- to the claimer when the requester cancels: `{ kind: "request_cancelled", requestId }`
 
 Inbox rows render server-side titles/bodies in the recipient's language
 (es/gl/en); clients only deep-link `requestId` to the request screen.
@@ -105,7 +105,6 @@ type HelpRequest = {
   other: boolean;
   challenge: { id: number; name: string } | null; // optional target challenge
   preferSponsor: boolean;       // requester prefers a sponsor to come
-  project: { id: number; name: string } | null; // team request when set
   requester: { userId: number; displayName: string } | null; // null after the requester's account removal
   routing: RoutingOutcome;      // sponsor: preferSponsor applied; matched: knowledge match; fallback: Other / no match → all available helpers; none: nobody available
   notifiedCount: number;
@@ -122,7 +121,7 @@ type HelpRequest = {
   cancelledAt: string | null;
   viewer: {                     // what the caller may do now
     canCancel: boolean;
-    canEdit: boolean;           // open and caller on the requesting side
+    canEdit: boolean;           // open and caller is the requester
     canClaim: boolean;
     canRelease: boolean;
     canResolve: boolean;
@@ -166,7 +165,7 @@ means always open. Only creating requests is gated.
 
 | Method & path | Guard | Body / query | Response |
 | --- | --- | --- | --- |
-| `GET /api/helpdesk/topics` | browse or eligible helper | `?q=<text>&limit=1..50` (default 20; `q` matches anywhere, case/accent-insensitive) | `{ topics: HelpTopic[] }` |
+| `GET /api/helpdesk/topics` | browse or eligible helper | `?q=<text>&limit=1..50&available=1` (default 20; `q` matches anywhere, case/accent-insensitive; `available=1` limits results to topics offered by published helpers currently at the venue) | `{ topics: HelpTopic[] }` |
 | `POST /api/helpdesk/topics` | eligible helper or `helpdesk:manage` (else 403 `helper_not_eligible`) | `{ name: string }` (1-60 chars, trimmed, inner spaces collapsed) | `201 { topic, created: true }` or `200 { topic, created: false }` when an equivalent name exists. Rate-limited (20/hour/user). |
 | `PATCH /api/helpdesk/topics/:id` | `helpdesk:manage` | `{ name }` | `HelpTopic`; 409 `topic_name_taken` |
 | `POST /api/helpdesk/topics/:id/merge` | `helpdesk:manage` | `{ targetId }` | `HelpTopic` (target); moves profiles and requests, deletes source |
@@ -195,12 +194,13 @@ readable by browsers through the existing photo route.
 
 | Method & path | Guard | Body | Response |
 | --- | --- | --- | --- |
+| `GET /api/helpdesk/projects` | `helpdesk:request` | — | Retired: always `{ projects: [] }`, kept only so installed mobile builds open the request form; do not call it |
 | `GET /api/helpdesk/challenges` | `helpdesk:request` | — | `{ challenges: {id, name, mine}[] }` visible non-test challenges, the caller's own project challenges first (`mine: true`) |
-| `POST /api/helpdesk/requests` | `helpdesk:request` + event access | `{ description (1-500), location (1-120), topicIds: number[] (0-5), other: boolean, challengeId?: number \| null (visible challenge, else 400), preferSponsor?: boolean (default false) }` — needs ≥1 topic or `other` | `201 HelpRequest`. 409 `help_request_active` when the caller (individual) or the team (project) already has an open/claimed request; 409 `helpdesk_closed` outside the configured opening hours; 403 when not a member of `projectId`. |
-| `GET /api/helpdesk/requests/mine` | `helpdesk:request` | — | `{ requests: HelpRequest[] }` own + teams', newest first |
-| `GET /api/helpdesk/requests/:id` | requester, team member, helper (`helpdesk:offer` eligible), coverage, `helpdesk:manage` | — | `HelpRequest & { requesterProfile: DirectoryEntry \| null }` — the profile only for a routed helper, the claimer or `helpdesk:manage`, and only while the requester shares their public profile; 404 otherwise |
-| `PATCH /api/helpdesk/requests/:id` | requester or team member | `{ description, location, topicIds, other, challengeId?, preferSponsor? }` (creation rules) | `HelpRequest`, moved to the end of the queue and re-routed (only new matches are notified); 409 `help_request_already_claimed` when claimed, `help_request_closed` when resolved/cancelled |
-| `POST /api/helpdesk/requests/:id/cancel` | requester or team member | — | `HelpRequest` (`cancelled`); 409 `help_request_closed` when resolved/cancelled |
+| `POST /api/helpdesk/requests` | `helpdesk:request` + event access | `{ description (1-500), location (1-120), topicIds: number[] (0-5), other: boolean, challengeId?: visible challenge id or null, preferSponsor?: boolean (default false) }` — needs ≥1 topic or `other` | `201 HelpRequest`. 409 `help_request_active` when the caller already has an open/claimed request; 409 `helpdesk_closed` outside the configured opening hours; 403 without event access or active membership in `projectId`. |
+| `GET /api/helpdesk/requests/mine` | `helpdesk:request` | — | `{ requests: HelpRequest[] }` the caller's own, newest first |
+| `GET /api/helpdesk/requests/:id` | requester, helper (`helpdesk:offer` eligible), coverage, `helpdesk:manage` | — | `HelpRequest & { requesterProfile: DirectoryEntry \| null }` — the profile only for a routed helper, the claimer or `helpdesk:manage`, and only while the requester shares their public profile; 404 otherwise |
+| `PATCH /api/helpdesk/requests/:id` | requester | `{ description, location, topicIds, other, challengeId?, preferSponsor? }` (creation rules) | `HelpRequest`, moved to the end of the queue and re-routed (only new matches are notified); 409 `help_request_already_claimed` when claimed, `help_request_closed` when resolved/cancelled |
+| `POST /api/helpdesk/requests/:id/cancel` | requester | — | `HelpRequest` (`cancelled`, retained in history); 409 `help_request_closed` when resolved/cancelled |
 
 ### Requests — helper side (H65, H66)
 
@@ -209,7 +209,7 @@ readable by browsers through the existing photo route.
 | `GET /api/helpdesk/inbox` | eligible helper | `?scope=open\|mine` (default `open`) | `{ requests: HelpRequest[] }` — `open`: every open request in first-come, first-served order (`queuedAt`, id); `mine`: claimed by me (claimed, then resolved) |
 | `POST /api/helpdesk/requests/:id/claim` | eligible + published helper | `{ mode: "on_my_way" } \| { mode: "meet_at", meetingLocation: string (1-120) }` | `HelpRequest` (`claimed`). Exactly one concurrent claim wins; others get 409 `help_request_already_claimed`. A retry by the winner returns the same claim without a second notification. |
 | `POST /api/helpdesk/requests/:id/release` | the claimer | — | `HelpRequest` back to `open` (claim cleared, requester notified; audience not re-notified); 409 `help_request_not_claimer` |
-| `POST /api/helpdesk/requests/:id/resolve` | the claimer, requester or team member | — | `HelpRequest` (`resolved`); 409 `help_request_not_claimed` while open, `help_request_closed` once closed |
+| `POST /api/helpdesk/requests/:id/resolve` | the claimer or requester | — | `HelpRequest` (`resolved`); 409 `help_request_not_claimed` while open, `help_request_closed` once closed |
 
 ### Coverage (H67)
 
@@ -234,7 +234,7 @@ Localized text: `apiError_<code>` in `packages/shared/locales/*/common.json`.
 | `helpdesk_closed` | 409 (`details.nextChangeAt`: next opening, or null) |
 | `help_request_already_claimed` | 409 |
 | `help_request_closed` | 409 |
-| `help_request_not_claimable` | 409 (own or team request) |
+| `help_request_not_claimable` | 409 (own request) |
 | `help_request_not_claimer` | 409 |
 | `help_request_not_claimed` | 409 |
 | `topic_name_taken` | 409 |
@@ -245,7 +245,7 @@ Localized text: `apiError_<code>` in `packages/shared/locales/*/common.json`.
 
 
 Resolution queues `helpdesk.resolved` through the existing in-app and push
-channels for the requester/team and claimer, excluding the actor. The payload
+channels for the requester and claimer, excluding the actor. The payload
 contains `kind: "request_resolved"`, `requestId` and the actor name; a repeated
 transition returns 409 and does not enqueue another notification. Claims retain
 `helpdesk.onMyWay` and `helpdesk.meetAt`, including the support person's name and

@@ -1,7 +1,21 @@
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { pool } from "../../db/pool.js";
 import { isSyntheticOperator, scannerSubjectScope } from "../../lib/fixture-subject-scope.js";
+import { photoUrl } from "../../lib/profile-files.js";
 import type { Language } from "../notifications/translate/index.js";
 import { scannableActivitySql, scannableCategoriesParam } from "./scannable.js";
+
+/**
+ * Who may read the scanner roster. The photo route admits the same holders to
+ * the shared photos the roster links, so both read this one list.
+ */
+export const SCANNER_ROSTER_CAPABILITIES = [
+  CAPABILITIES.ACCREDIT_SCAN,
+  CAPABILITIES.PRESENCE_SCAN,
+  CAPABILITIES.ACTIVITY_SCAN,
+  CAPABILITIES.LOGISTICS_STATS,
+  CAPABILITIES.SCHEDULE_MANAGE,
+] as const;
 
 /**
  * H22-H26 scanner seed/sync payload. Native scanners keep this deliberately
@@ -30,6 +44,9 @@ export async function scannerSnapshot(actorId?: number) {
     pool.query(
       `SELECT u.id, u.email, u.name, u.surname, u.dni, u.badge_id, u.badge_id_history,
               u.food_intolerance_notes, u.notes,
+              CASE WHEN pp.directory_visible AND pp.show_photo AND u.is_test_account = false
+                     AND EXISTS (SELECT 1 FROM user_event_access a WHERE a.user_id = u.id)
+                   THEN u.photo_key ELSE NULL END AS photo_key,
               CASE WHEN EXISTS (
                 SELECT 1 FROM user_event_access uea WHERE uea.user_id = u.id
               ) THEN t.token ELSE NULL END AS ticket_token,
@@ -73,6 +90,7 @@ export async function scannerSnapshot(actorId?: number) {
               last_presence.scanned_at AS last_presence_at
          FROM users u
          LEFT JOIN user_effective_role_name uern ON uern.user_id = u.id
+         LEFT JOIN user_public_profiles pp ON pp.user_id = u.id
          LEFT JOIN tickets t ON t.user_id = u.id
          -- Anonymized profiles (H54) must never reach a scanner's local store.
          LEFT JOIN LATERAL (
@@ -121,6 +139,7 @@ export async function scannerSnapshot(actorId?: number) {
       revokedBadgeIds: (row.badge_id_history as string[]) ?? [],
       name: (row.name as string | null) ?? null,
       surname: (row.surname as string | null) ?? null,
+      photoUrl: photoUrl(Number(row.id), (row.photo_key as string | null) ?? null),
       dni: (row.dni as string | null) ?? null,
       accepted: Boolean(row.accepted),
       confirmed: Boolean(row.confirmed),

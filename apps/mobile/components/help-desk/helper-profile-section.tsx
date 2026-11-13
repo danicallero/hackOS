@@ -1,46 +1,51 @@
+import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { SheetModal } from "@/components/app-sheet";
 import { DateTimeField } from "@/components/date-time-field";
 import { FloatingGlassButton, Section, Separator, ToggleRow } from "@/components/native-ui";
-import { PressableFeedback } from "@/components/pressable-feedback";
 import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import type { DirectoryEntry } from "@/lib/directory";
+import { eventDayKey } from "@/lib/event-time";
 import {
   type AvailabilityInterval,
+  dayLabel,
   type HelpTopic,
   helpMutation,
   type MyHelperProfile,
+  type PlanDay,
   planDays,
+  slotInterval,
   validAvailability,
 } from "@/lib/help-desk";
 import { useLocale } from "@/lib/i18n";
 import { colors, type } from "@/theme";
+import { AppText } from "../app-text";
+import { AvailabilityTimeline } from "./availability-timeline";
 import { TopicField } from "./primitives";
 
 const HOUR = 3_600_000;
-let nextRangeId = 0;
 
-/** One day's ranges being edited in the sheet. */
-interface DayDraft {
-  key: string;
+/** One stated stretch being added or changed in the sheet. */
+interface Draft {
+  /** The day line it was opened from. */
   label: string;
-  /** Positions in the saved intervals this draft replaces. */
-  replaces: number[];
-  ranges: { id: number; startsAt: Date; endsAt: Date }[];
+  /** Position in the saved intervals; null for a new one. */
+  index: number | null;
+  startsAt: Date;
+  endsAt: Date;
 }
 
 /**
  * H61, H62: the help desk part of the public profile editor, below the card
  * (which supplies the bio and identity), in the order a helper decides:
  * Available to mentor (and, for sponsors, only their own challenges), what they
- * can help with, and the hours they plan to be around. Typical working hours
- * fill the plan in one tap; each day is one row whose sheet edits that day's
- * ranges by clock only. Every change saves at once.
+ * can help with, and the hours they plan to be around: one 24-hour line per
+ * hacking day, as on the web. Touching a line adds a stretch there and touching
+ * a stretch opens it, in a sheet that sets it by clock. Every change saves at once.
  */
 export function HelperProfileSection({
   onProfileChange,
@@ -48,11 +53,11 @@ export function HelperProfileSection({
   onProfileChange?: (profile: MyHelperProfile<DirectoryEntry>) => void;
 } = {}) {
   const { t, language } = useLocale();
+  const router = useRouter();
   const [profile, setProfile] = useState<MyHelperProfile<DirectoryEntry> | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const [draft, setDraft] = useState<DayDraft | null>(null);
-  const [picking, setPicking] = useState(false);
+  const [draft, setDraft] = useState<Draft | null>(null);
   const latest = useRef<{
     profile: MyHelperProfile<DirectoryEntry> | null;
     saveProfile: (
@@ -70,9 +75,11 @@ export function HelperProfileSection({
       setError(cause instanceof Error ? cause : new Error(String(cause)));
     }
   }, []);
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
   useEffect(() => {
     if (profile) onProfileChange?.(profile);
   }, [profile, onProfileChange]);
@@ -151,76 +158,68 @@ export function HelperProfileSection({
   const window = profile.suggestedInterval;
   const days = planDays(window, intervals, language);
 
-  function openDay(day: ReturnType<typeof planDays>[number]) {
+  function openNew(day: PlanDay, minute: number | null) {
     setError(null);
-    const ranges = day.ranges.map((range) => ({
-      id: nextRangeId++,
-      startsAt: new Date(range.interval.startsAt),
-      endsAt: new Date(range.interval.endsAt),
-    }));
+    // The day's plus continues after what is already stated, else starts at the usual hour.
+    const last = day.ranges[day.ranges.length - 1];
+    const interval =
+      minute === null
+        ? (() => {
+            const start = Math.max(
+              last ? Date.parse(last.interval.endsAt) + HOUR : day.anchor.getTime(),
+              window ? Date.parse(window.startsAt) : 0,
+            );
+            return {
+              startsAt: new Date(start).toISOString(),
+              endsAt: new Date(start + 2 * HOUR).toISOString(),
+            };
+          })()
+        : slotInterval(day.key, minute, intervals, window?.startsAt);
     setDraft({
-      key: day.key,
       label: day.label,
-      replaces: day.ranges.map((range) => range.index),
-      ranges:
-        ranges.length > 0
-          ? ranges
-          : [
-              {
-                id: nextRangeId++,
-                startsAt: day.anchor,
-                endsAt: new Date(day.anchor.getTime() + 2 * HOUR),
-              },
-            ],
+      index: null,
+      startsAt: new Date(interval.startsAt),
+      endsAt: new Date(interval.endsAt),
     });
   }
-  function commitDay() {
-    if (!draft) return;
-    const kept = intervals.filter((_, index) => !draft.replaces.includes(index));
-    const replaced = [
-      ...kept,
-      ...draft.ranges.map((range) => ({
-        startsAt: range.startsAt.toISOString(),
-        endsAt: range.endsAt.toISOString(),
-      })),
-    ];
-    if (!validAvailability(replaced)) {
+  function openExisting(index: number) {
+    const interval = intervals[index];
+    if (!interval) return;
+    setError(null);
+    setDraft({
+      label: dayLabel(interval.startsAt, language),
+      index,
+      startsAt: new Date(interval.startsAt),
+      endsAt: new Date(interval.endsAt),
+    });
+  }
+  function commit(next: AvailabilityInterval[]) {
+    if (!validAvailability(next)) {
       setError(new Error(t("helpInvalidInterval")));
       return;
     }
     // Nobody is available before the hacking time (H62).
-    if (
-      window &&
-      replaced.some((item) => Date.parse(item.startsAt) < Date.parse(window.startsAt))
-    ) {
+    if (window && next.some((item) => Date.parse(item.startsAt) < Date.parse(window.startsAt))) {
       setError(new Error(t("helpBeforeHacking")));
       return;
     }
     setBusy(true);
-    void saveAvailability(replaced).then((saved) => {
+    void saveAvailability(next).then((saved) => {
       setBusy(false);
       if (saved) setDraft(null);
     });
   }
-  function addRange() {
+  function commitDraft() {
     if (!draft) return;
-    const last = draft.ranges[draft.ranges.length - 1];
-    const start = last ? last.endsAt.getTime() + HOUR : Date.now();
-    setDraft({
-      ...draft,
-      ranges: [
-        ...draft.ranges,
-        { id: nextRangeId++, startsAt: new Date(start), endsAt: new Date(start + 2 * HOUR) },
-      ],
-    });
+    commit([
+      ...intervals.filter((_, index) => index !== draft.index),
+      { startsAt: draft.startsAt.toISOString(), endsAt: draft.endsAt.toISOString() },
+    ]);
   }
-  function updateRange(index: number, patch: Partial<{ startsAt: Date; endsAt: Date }>) {
-    if (!draft) return;
-    setDraft({
-      ...draft,
-      ranges: draft.ranges.map((range, i) => (i === index ? { ...range, ...patch } : range)),
-    });
-  }
+  const endsNextDay =
+    draft !== null && eventDayKey(draft.endsAt) !== eventDayKey(draft.startsAt)
+      ? dayLabel(draft.endsAt.toISOString(), language)
+      : null;
 
   return (
     <>
@@ -240,7 +239,7 @@ export function HelperProfileSection({
                   ? t("helpAlertsAll")
                   : profile.challenges.map((challenge) => challenge.name).join(", ")
               }
-              onPress={() => setPicking(true)}
+              onPress={() => router.push("/help-helper-challenges")}
             />
           </>
         ) : null}
@@ -249,16 +248,13 @@ export function HelperProfileSection({
         <TopicField selected={profile.topics} onChange={changeTopics} maximum={20} allowAdd />
       </Section>
       <Section title={t("helpHoursTitle")}>
-        {days.map((day, index) => (
-          <View key={day.key}>
-            <NavRow
-              title={day.label}
-              value={day.ranges.map((range) => range.label).join(", ") || undefined}
-              onPress={() => openDay(day)}
-            />
-            {index < days.length - 1 ? <Separator inset={16} /> : null}
-          </View>
-        ))}
+        <AvailabilityTimeline
+          days={days}
+          intervals={intervals}
+          notBefore={window?.startsAt}
+          onAdd={openNew}
+          onEdit={openExisting}
+        />
       </Section>
       {error && !draft ? <RequestFeedback error={error} message={error.message} /> : null}
       <SheetModal
@@ -278,26 +274,22 @@ export function HelperProfileSection({
           {draft ? (
             <View style={{ gap: 24, paddingHorizontal: 16 }}>
               <Section>
-                {draft.ranges.map((range, index) => (
-                  <View key={range.id}>
-                    <RangeRow
-                      range={range}
-                      onChange={(patch) => updateRange(index, patch)}
-                      onRemove={() =>
-                        setDraft({ ...draft, ranges: draft.ranges.filter((_, i) => i !== index) })
-                      }
-                      removeLabel={t("helpRemoveInterval")}
-                    />
-                    <Separator inset={16} />
-                  </View>
-                ))}
-                <NavRow
-                  icon="plus.circle.fill"
-                  chevron={false}
-                  title={t("helpAddInterval")}
-                  disabled={draft.ranges.length >= 6}
-                  onPress={addRange}
+                <RangeRow
+                  range={draft}
+                  onChange={(patch) => setDraft({ ...draft, ...patch })}
+                  endsNextDay={endsNextDay}
                 />
+                {draft.index !== null ? (
+                  <>
+                    <Separator inset={16} />
+                    <NavRow
+                      destructive
+                      title={t("helpRemoveInterval")}
+                      disabled={busy}
+                      onPress={() => commit(intervals.filter((_, index) => index !== draft.index))}
+                    />
+                  </>
+                ) : null}
               </Section>
               {error ? <RequestFeedback error={error} message={error.message} /> : null}
             </View>
@@ -318,54 +310,7 @@ export function HelperProfileSection({
             accessibilityLabel={t("save")}
             accessibilityState={{ busy }}
             disabled={busy}
-            onPress={commitDay}
-          />
-        </AdaptiveFrame>
-      </SheetModal>
-      <SheetModal visible={picking} animationType="slide" onRequestClose={() => setPicking(false)}>
-        <AdaptiveFrame>
-          <View style={{ alignItems: "center", height: 76, justifyContent: "center" }}>
-            <Text
-              accessibilityRole="header"
-              style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "600" }}
-            >
-              {t("helpChallengeAlerts")}
-            </Text>
-          </View>
-          <View style={{ gap: 24, paddingHorizontal: 16 }}>
-            <Section footer={t("helpChallengeAlertsNote")}>
-              {profile.challengeOptions.map((option, index) => {
-                const selected = profile.challengeIds.includes(option.id);
-                return (
-                  <View key={option.id}>
-                    <NavRow
-                      title={option.name}
-                      chevron={false}
-                      icon={selected ? "checkmark.circle.fill" : "circle"}
-                      accessibilityLabel={option.name}
-                      onPress={() =>
-                        void saveProfile(
-                          profile.published,
-                          profile.topics,
-                          selected
-                            ? profile.challengeIds.filter((id) => id !== option.id)
-                            : [...profile.challengeIds, option.id],
-                        )
-                      }
-                    />
-                    {index < profile.challengeOptions.length - 1 ? <Separator inset={16} /> : null}
-                  </View>
-                );
-              })}
-            </Section>
-          </View>
-          <FloatingGlassButton
-            top={16}
-            side="right"
-            icon="checkmark"
-            tintColor={colors.accent}
-            accessibilityLabel={t("save")}
-            onPress={() => setPicking(false)}
+            onPress={commitDraft}
           />
         </AdaptiveFrame>
       </SheetModal>
@@ -373,17 +318,18 @@ export function HelperProfileSection({
   );
 }
 
-/** One range of the day: from and to by clock, and a remove control. */
+/**
+ * One stretch by clock. An end at or before the start means the next day, so a
+ * night shift needs no date field; the day it then ends on is shown beside it.
+ */
 function RangeRow({
   range,
   onChange,
-  onRemove,
-  removeLabel,
+  endsNextDay,
 }: {
   range: { startsAt: Date; endsAt: Date };
   onChange: (patch: Partial<{ startsAt: Date; endsAt: Date }>) => void;
-  onRemove: () => void;
-  removeLabel: string;
+  endsNextDay: string | null;
 }) {
   const { t } = useLocale();
   return (
@@ -413,19 +359,21 @@ function RangeRow({
       <DateTimeField
         timeOnly
         value={range.endsAt}
-        onChange={(endsAt) => onChange({ endsAt })}
+        onChange={(picked) => {
+          let end = picked.getTime();
+          const start = range.startsAt.getTime();
+          while (end <= start) end += 24 * HOUR;
+          while (end - start > 24 * HOUR) end -= 24 * HOUR;
+          onChange({ endsAt: new Date(end) });
+        }}
         dateAccessibilityLabel={t("helpEnd")}
         timeAccessibilityLabel={t("helpEnd")}
       />
-      <PressableFeedback
-        feedback="opacity"
-        accessibilityRole="button"
-        accessibilityLabel={removeLabel}
-        onPress={onRemove}
-        hitSlop={8}
-      >
-        <SymbolView name="minus.circle.fill" size={22} tintColor={colors.destructive} />
-      </PressableFeedback>
+      {endsNextDay ? (
+        <AppText variant="footnote" tone="secondary">
+          {endsNextDay}
+        </AppText>
+      ) : null}
     </View>
   );
 }

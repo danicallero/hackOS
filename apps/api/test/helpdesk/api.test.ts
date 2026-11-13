@@ -425,6 +425,85 @@ describe("H63 helper profile detail", () => {
 });
 
 describe("H64-H65 requests and routing", () => {
+  it("keeps a request with its one requester, even when they have a team", async () => {
+    const p = await createUserWithCapabilities(participantCaps);
+    const mate = await createUserWithCapabilities(participantCaps);
+    const projectId = await team([p, mate]);
+
+    // Installed mobile builds still ask for the retired team list.
+    const teams = await call("GET", "/api/helpdesk/projects", p);
+    expect(teams.statusCode).toBe(200);
+    expect(teams.json()).toEqual({ projects: [] });
+    // An older client may still send the retired team field; it is ignored.
+    const created = await call("POST", "/api/helpdesk/requests", p, {
+      description: "I am stuck",
+      location: "Table 12",
+      topicIds: [],
+      other: true,
+      projectId,
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({
+      requester: { userId: p },
+      viewer: { canCancel: true, canEdit: true },
+    });
+    expect(created.json()).not.toHaveProperty("project");
+    const id = created.json().id;
+
+    const mateRequests = await call("GET", "/api/helpdesk/requests/mine", mate);
+    expect(mateRequests.json().requests).toEqual([]);
+    expect((await call("GET", `/api/helpdesk/requests/${id}`, mate)).statusCode).toBe(404);
+    expect((await call("POST", `/api/helpdesk/requests/${id}/cancel`, mate)).statusCode).toBe(404);
+
+    // The teammate's own request is independent of their teammate's active one.
+    const own = await call("POST", "/api/helpdesk/requests", mate, {
+      description: "Me too",
+      location: "Table 12",
+      topicIds: [],
+      other: true,
+    });
+    expect(own.statusCode).toBe(201);
+    const second = await call("POST", "/api/helpdesk/requests", p, {
+      description: "Again",
+      location: "Table 12",
+      topicIds: [],
+      other: true,
+    });
+    expect(second.statusCode).toBe(409);
+  });
+
+  it("accepts a body-less action sent as JSON, as installed mobile builds do (H64)", async () => {
+    const p = await createUserWithCapabilities(participantCaps);
+    const created = await call("POST", "/api/helpdesk/requests", p, {
+      description: "Stuck",
+      location: "Table 1",
+      topicIds: [],
+      other: true,
+    });
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/helpdesk/requests/${created.json().id}/cancel`,
+      headers: { ...asUser(p), "idempotency-key": key(), "content-type": "application/json" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("cancelled");
+
+    const malformed = await app.inject({
+      method: "POST",
+      url: "/api/helpdesk/requests",
+      headers: { ...asUser(p), "idempotency-key": key(), "content-type": "application/json" },
+      payload: "{not json",
+    });
+    expect(malformed.statusCode).toBe(400);
+    expect(malformed.json().error.code).toBe("bad_request");
+    const empty = await app.inject({
+      method: "POST",
+      url: "/api/helpdesk/requests",
+      headers: { ...asUser(p), "idempotency-key": key(), "content-type": "application/json" },
+    });
+    expect(empty.statusCode).toBe(400);
+  });
+
   it("notifies available, present helpers who match any topic", async () => {
     const p = await createUserWithCapabilities(participantCaps);
     const fe = await topic("Frontend", p);
@@ -1788,5 +1867,50 @@ describe("who may request help (H64)", () => {
     await call("PUT", "/api/helpdesk/schedule", manager, { windows: [], eventAccessOnly: true });
     await pool.query("DELETE FROM help_requests");
     expect((await call("POST", "/api/helpdesk/requests", outsider, body)).statusCode).toBe(403);
+  });
+});
+
+describe("account removal and export of help requests (H54, H64)", () => {
+  it("exports the person's requests, then withdraws and blanks them on anonymization", async () => {
+    const admin = await createUserWithCapabilities(["*"]);
+    const p = await createUserWithCapabilities(participantCaps);
+    const created = await call("POST", "/api/helpdesk/requests", p, {
+      description: "Private detail",
+      location: "Table 3",
+      topicIds: [],
+      other: true,
+    });
+    expect(created.statusCode).toBe(201);
+
+    const { buildExportBundle } = await import("../../src/modules/exports/bundle.js");
+    const bundle = await buildExportBundle(p);
+    expect(bundle.helpRequests).toEqual([
+      expect.objectContaining({ id: created.json().id, description: "Private detail" }),
+    ]);
+
+    // Operational history forces anonymization instead of a hard delete.
+    const badge = `04${crypto.randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
+    await pool.query(`UPDATE users SET badge_id = $2 WHERE id = $1`, [p, badge]);
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, staff_id) VALUES ($1, $2, $3)`,
+      [p, badge, admin],
+    );
+    const removal = await app.inject({
+      method: "POST",
+      url: "/api/exports/requests",
+      headers: asUser(admin),
+      payload: { subjectUserId: p, type: "deletion" },
+    });
+    expect(removal.statusCode).toBe(201);
+    const { processDataSubjectRequest } = await import("../../src/modules/exports/worker.js");
+    await processDataSubjectRequest(removal.json().id);
+
+    const { rows } = await pool.query(
+      `SELECT status, description, location, requester_id FROM help_requests WHERE id = $1`,
+      [created.json().id],
+    );
+    expect(rows).toEqual([
+      { status: "cancelled", description: "", location: "", requester_id: null },
+    ]);
   });
 });

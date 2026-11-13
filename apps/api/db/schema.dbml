@@ -757,14 +757,13 @@ Table help_requests {
   other boolean [not null, default: `false`]
   prefer_sponsor boolean [not null, default: `false`]
   queued_at "timestamp with time zone" [not null, default: `now()`]
-  repo_id integer
   requester_id integer
   resolved_at "timestamp with time zone"
   routing text [not null]
   status text [not null, default: `'open'::text`]
   updated_at "timestamp with time zone" [not null, default: `now()`]
 
-  Note: 'H64-H66 help requests (individual or team via repo_id) and their single claim.'
+  Note: 'H64-H66 help requests, each from one requester, and their single claim.'
 }
 
 Table help_topics {
@@ -1772,7 +1771,6 @@ Ref: help_request_topics.request_id > help_requests.id
 Ref: help_request_topics.topic_id > help_topics.id
 Ref: help_requests.challenge_id > challenges.id
 Ref: help_requests.claimed_by > users.id
-Ref: help_requests.repo_id > repos.id
 Ref: help_requests.requester_id > users.id
 Ref: help_topics.proposed_by > users.id
 Ref: helper_availability.user_id > helper_profiles.user_id

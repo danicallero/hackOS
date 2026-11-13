@@ -31,12 +31,13 @@ import { assertTopicsExist } from "./topics.js";
 /**
  * H64-H66 help requests.
  *
- * Lifecycle: open → claimed → resolved, with two exits: the requester (or any
- * team member) cancels an open or claimed request, and the claiming helper
- * releases a claim back to open (to hand it over or change where to meet).
- * Resolving is allowed only once claimed, by the claimer or the requesting
- * side. At most one request per team (or per person, for individual requests)
- * is active at a time.
+ * A request always belongs to one person, the requester.
+ *
+ * Lifecycle: open → claimed → resolved, with two exits: the requester cancels
+ * an open or claimed request, and the claiming helper releases a claim back
+ * to open (to hand it over or change where to meet). Resolving is allowed
+ * only once claimed, by the claimer or the requester. At most one request per
+ * person is active at a time.
  *
  * Routing (H65) happens once, at creation: the audience is every listed
  * helper who is both inside a stated availability interval (H62) and present
@@ -62,7 +63,6 @@ export interface HelpRequestView {
   other: boolean;
   challenge: { id: number; name: string } | null;
   preferSponsor: boolean;
-  project: { id: number; name: string } | null;
   requester: { userId: number; displayName: string } | null;
   routing: RoutingOutcome;
   notifiedCount: number;
@@ -108,8 +108,6 @@ interface RequestRow {
   routing: RoutingOutcome;
   requester_id: number | null;
   requester_name: string | null;
-  repo_id: number | null;
-  repo_name: string | null;
   claimed_by: number | null;
   claimed_at: Date | null;
   meeting_mode: MeetingMode | null;
@@ -122,7 +120,7 @@ interface RequestRow {
   topics: HelpTopic[];
   notified_count: number;
   viewer_notified: boolean;
-  viewer_on_team: boolean;
+  viewer_is_requester: boolean;
 }
 
 /** `$1` is always the viewer id. */
@@ -132,7 +130,6 @@ function requestSelect(where: string, order: string, limit = 100): string {
          hr.challenge_id, ch.title AS challenge_name, hr.prefer_sponsor,
          hr.requester_id,
          CASE WHEN u.id IS NOT NULL THEN ${DISPLAY_NAME_SQL} END AS requester_name,
-         hr.repo_id, rp.name AS repo_name,
          hr.claimed_by, hr.claimed_at, hr.meeting_mode, hr.meeting_location,
          hr.resolved_at, hr.cancelled_at, hr.created_at, hr.queued_at,
          CASE WHEN hr.status = 'open' THEN (
@@ -145,13 +142,10 @@ function requestSelect(where: string, order: string, limit = 100): string {
          (SELECT count(*)::int FROM help_request_recipients rr WHERE rr.request_id = hr.id) AS notified_count,
          EXISTS (SELECT 1 FROM help_request_recipients rr
                   WHERE rr.request_id = hr.id AND rr.user_id = $1) AS viewer_notified,
-         (hr.requester_id = $1 OR (hr.repo_id IS NOT NULL AND EXISTS (
-            SELECT 1 FROM submissions s WHERE s.repo_id = hr.repo_id AND s.user_id = $1
-               AND s.status = 'active'))) AS viewer_on_team
+         (hr.requester_id = $1) AS viewer_is_requester
     FROM help_requests hr
     LEFT JOIN users u ON u.id = hr.requester_id
     LEFT JOIN user_public_profiles pp ON pp.user_id = u.id
-    LEFT JOIN repos rp ON rp.id = hr.repo_id
     LEFT JOIN challenges ch ON ch.id = hr.challenge_id
    WHERE ${where}
    ORDER BY ${order}
@@ -196,10 +190,6 @@ async function toViews(
           ? { id: Number(r.challenge_id), name: r.challenge_name }
           : null,
       preferSponsor: r.prefer_sponsor,
-      project:
-        r.repo_id != null && r.repo_name != null
-          ? { id: Number(r.repo_id), name: r.repo_name }
-          : null,
       requester:
         r.requester_id != null && r.requester_name != null
           ? { userId: Number(r.requester_id), displayName: r.requester_name }
@@ -230,15 +220,15 @@ async function toViews(
       resolvedAt: r.resolved_at?.toISOString() ?? null,
       cancelledAt: r.cancelled_at?.toISOString() ?? null,
       viewer: {
-        canCancel: active && r.viewer_on_team,
-        canEdit: r.status === "open" && r.viewer_on_team,
+        canCancel: active && r.viewer_is_requester,
+        canEdit: r.status === "open" && r.viewer_is_requester,
         canClaim:
           r.status === "open" &&
           viewerIsHelper &&
-          !r.viewer_on_team &&
+          !r.viewer_is_requester &&
           (limit === null || (r.challenge_id != null && limit.includes(Number(r.challenge_id)))),
         canRelease: r.status === "claimed" && isClaimer,
-        canResolve: r.status === "claimed" && (isClaimer || r.viewer_on_team),
+        canResolve: r.status === "claimed" && (isClaimer || r.viewer_is_requester),
         notified: r.viewer_notified,
       },
     };
@@ -286,8 +276,8 @@ export async function getRequest(
   access: { canSeeAll: boolean; canManage: boolean },
 ): Promise<HelpRequestView & { requesterProfile: DirectoryEntry | null }> {
   const view = await viewOne(pool, viewerId, id);
-  const onTeam = view.viewer.canCancel || (await onRequestTeam(pool, viewerId, id));
-  if (!onTeam && !access.canSeeAll && !access.canManage) {
+  const mine = view.viewer.canCancel || (await isRequester(pool, viewerId, id));
+  if (!mine && !access.canSeeAll && !access.canManage) {
     if (!(await isEligibleHelper(pool, viewerId)))
       throw new NotFoundError("Help request not found");
     // H65: a helper limited to some challenges only reads those requests
@@ -299,8 +289,7 @@ export async function getRequest(
     }
   }
   const mayOpenRequester =
-    !onTeam &&
-    (access.canManage || view.viewer.notified || view.claim?.helper?.userId === viewerId);
+    !mine && (access.canManage || view.viewer.notified || view.claim?.helper?.userId === viewerId);
   const requesterProfile =
     mayOpenRequester && view.requester
       ? ((await visibleDirectoryEntries(pool, [view.requester.userId])).get(
@@ -310,12 +299,9 @@ export async function getRequest(
   return { ...view, requesterProfile };
 }
 
-async function onRequestTeam(db: Queryable, userId: number, id: number): Promise<boolean> {
+async function isRequester(db: Queryable, userId: number, id: number): Promise<boolean> {
   const { rows } = await db.query(
-    `SELECT 1 FROM help_requests hr
-      WHERE hr.id = $2 AND (hr.requester_id = $1 OR (hr.repo_id IS NOT NULL AND EXISTS (
-        SELECT 1 FROM submissions s WHERE s.repo_id = hr.repo_id AND s.user_id = $1
-           AND s.status = 'active')))`,
+    "SELECT 1 FROM help_requests WHERE id = $2 AND requester_id = $1",
     [userId, id],
   );
   return rows.length > 0;
@@ -323,12 +309,7 @@ async function onRequestTeam(db: Queryable, userId: number, id: number): Promise
 
 export async function listMyRequests(userId: number): Promise<HelpRequestView[]> {
   const { rows } = await pool.query<RequestRow>(
-    requestSelect(
-      `(hr.requester_id = $1 OR hr.repo_id IN (
-          SELECT s.repo_id FROM submissions s WHERE s.user_id = $1 AND s.status = 'active'))`,
-      "hr.created_at DESC, hr.id DESC",
-      50,
-    ),
+    requestSelect("hr.requester_id = $1", "hr.created_at DESC, hr.id DESC", 50),
     [userId],
   );
   return toViews(pool, rows, await isActiveHelper(pool, userId), userId);
@@ -391,28 +372,13 @@ async function lockActiveUser(db: Queryable, userId: number): Promise<void> {
   }
 }
 
-async function teamMembers(db: Queryable, repoId: number | null): Promise<number[]> {
-  if (repoId == null) return [];
-  const { rows } = await db.query<{ user_id: number }>(
-    "SELECT DISTINCT user_id FROM submissions WHERE repo_id = $1 AND status = 'active'",
-    [repoId],
-  );
-  return rows.map((r) => Number(r.user_id));
-}
-
-/** Requester plus active team members still able to receive notices. */
-async function requestingSide(
-  db: Queryable,
-  requesterId: number | null,
-  repoId: number | null,
-): Promise<number[]> {
-  const ids = new Set(await teamMembers(db, repoId));
-  if (requesterId != null) ids.add(requesterId);
-  if (ids.size === 0) return [];
+/** The requester while still able to receive notices; empty once removed (H54). */
+async function requestingSide(db: Queryable, requesterId: number | null): Promise<number[]> {
+  if (requesterId == null) return [];
   const { rows } = await db.query<{ id: number }>(
-    `SELECT id FROM users WHERE id = ANY($1::int[])
-        AND account_state = 'active' AND anonymized_at IS NULL ORDER BY id`,
-    [[...ids]],
+    `SELECT id FROM users WHERE id = $1
+        AND account_state = 'active' AND anonymized_at IS NULL`,
+    [requesterId],
   );
   return rows.map((r) => Number(r.id));
 }
@@ -506,8 +472,6 @@ export async function createRequest(
       throw new ForbiddenError("The help desk is only available to event attendees");
     }
     await assertHelpdeskOpen(client);
-    // Always for the caller: a person's request, never a team's.
-    const repoId = null;
     await assertTopicsExist(client, topicIds);
     const challengeId = input.challengeId ?? null;
     if (challengeId != null) {
@@ -518,10 +482,8 @@ export async function createRequest(
       if (!rows[0]) throw new BadRequestError("Choose a visible challenge", { challengeId });
     }
     const active = await client.query<{ id: number }>(
-      `SELECT id FROM help_requests
-        WHERE status IN ('open', 'claimed')
-          AND (${repoId != null ? "repo_id = $1" : "repo_id IS NULL AND requester_id = $1"})`,
-      [repoId ?? userId],
+      "SELECT id FROM help_requests WHERE status IN ('open', 'claimed') AND requester_id = $1",
+      [userId],
     );
     if (active.rows[0]) {
       throw new ConflictError("There is already an active help request", {
@@ -529,7 +491,7 @@ export async function createRequest(
         requestId: Number(active.rows[0].id),
       });
     }
-    const side = await requestingSide(client, userId, repoId);
+    const side = await requestingSide(client, userId);
     const { routing, userIds } = await routeAudience(
       client,
       side,
@@ -542,11 +504,10 @@ export async function createRequest(
     try {
       const { rows } = await client.query<{ id: number }>(
         `INSERT INTO help_requests
-           (requester_id, repo_id, description, location, other, routing, challenge_id, prefer_sponsor)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+           (requester_id, description, location, other, routing, challenge_id, prefer_sponsor)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
         [
           userId,
-          repoId,
           input.description,
           input.location,
           input.other,
@@ -602,7 +563,6 @@ export async function createRequest(
       entityId: id,
       action: "created",
       after: {
-        repoId,
         topicIds,
         other: input.other,
         challengeId,
@@ -633,7 +593,7 @@ export async function editRequest(
   const result = await withTransaction(async (client) => {
     await lockActiveUser(client, userId);
     const req = await lockRequest(client, id);
-    const side = await requestingSide(client, req.requester_id, req.repo_id);
+    const side = await requestingSide(client, req.requester_id);
     if (!side.includes(userId)) throw new NotFoundError("Help request not found");
     if (req.status === "claimed") {
       throw new ConflictError("A helper already claimed this request", {
@@ -756,7 +716,6 @@ interface LockedRequest {
   id: number;
   status: HelpRequestStatus;
   requester_id: number | null;
-  repo_id: number | null;
   claimed_by: number | null;
   meeting_mode: MeetingMode | null;
   meeting_location: string | null;
@@ -766,7 +725,7 @@ interface LockedRequest {
 
 async function lockRequest(client: PoolClient, id: number): Promise<LockedRequest> {
   const { rows } = await client.query<LockedRequest>(
-    `SELECT id, status, requester_id, repo_id, claimed_by, meeting_mode, meeting_location, location,
+    `SELECT id, status, requester_id, claimed_by, meeting_mode, meeting_location, location,
             challenge_id
        FROM help_requests WHERE id = $1 FOR UPDATE`,
     [id],
@@ -829,7 +788,7 @@ export async function claimRequest(
         code: ERROR_REASONS.HELP_REQUEST_CLOSED,
       });
     }
-    const side = await requestingSide(client, req.requester_id, req.repo_id);
+    const side = await requestingSide(client, req.requester_id);
     if (side.includes(helperId) || req.requester_id === helperId) {
       throw new ConflictError("You cannot claim your own request", {
         code: ERROR_REASONS.HELP_REQUEST_NOT_CLAIMABLE,
@@ -893,7 +852,7 @@ export async function releaseRequest(helperId: number, id: number): Promise<Help
         WHERE id = $1`,
       [id],
     );
-    const side = await requestingSide(client, req.requester_id, req.repo_id);
+    const side = await requestingSide(client, req.requester_id);
     if (side.length > 0) {
       await notifyMany(
         client,
@@ -929,7 +888,7 @@ export async function cancelRequest(userId: number, id: number): Promise<HelpReq
   const result = await withTransaction(async (client) => {
     await lockActiveUser(client, userId);
     const req = await lockRequest(client, id);
-    const side = await requestingSide(client, req.requester_id, req.repo_id);
+    const side = await requestingSide(client, req.requester_id);
     if (!side.includes(userId)) throw new NotFoundError("Help request not found");
     if (req.status !== "open" && req.status !== "claimed") {
       throw new ConflictError("This help request is closed", {
@@ -984,7 +943,7 @@ export async function resolveRequest(userId: number, id: number): Promise<HelpRe
   const result = await withTransaction(async (client) => {
     await lockActiveUser(client, userId);
     const req = await lockRequest(client, id);
-    const side = await requestingSide(client, req.requester_id, req.repo_id);
+    const side = await requestingSide(client, req.requester_id);
     const isClaimer = req.claimed_by != null && Number(req.claimed_by) === userId;
     if (!isClaimer && !side.includes(userId)) throw new NotFoundError("Help request not found");
     if (req.status !== "claimed") {

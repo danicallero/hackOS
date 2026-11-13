@@ -29,7 +29,7 @@ const VIEW_LABEL: Record<RequestView, MessageKey> = {
 };
 
 /**
- * H64-H67: Help desk tab root. Participants land on their own/team requests,
+ * H64-H67: Help desk tab root. Participants land on their own requests,
  * helpers on the open inbox; people holding both switch between the views.
  * Request help is the trailing toolbar action; directory, helper setup and
  * coverage are one grouped list.

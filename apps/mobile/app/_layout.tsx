@@ -45,6 +45,7 @@ import {
   shouldPresentProfileTasks,
 } from "@/lib/profile-tasks";
 import { registerForPushNotifications } from "@/lib/push";
+import { useRouterTabBarInsets } from "@/lib/router-tabs-inset";
 import { useOrientationPolicy } from "@/lib/screen-orientation";
 import { startPersonalEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { sideRegionForInsets, useSideRegion } from "@/lib/side-region";
@@ -679,6 +680,7 @@ function RootLayoutNav({
           <Stack.Screen name="helper-profile" options={{ headerShown: true }} />
           <Stack.Screen name="help-challenges" options={helpSheetOptions} />
           <Stack.Screen name="help-topics" options={helpSheetOptions} />
+          <Stack.Screen name="help-helper-challenges" options={helpSheetOptions} />
         </Stack.Protected>
         {/* #935 company-tag links resolve for any session state. */}
         <Stack.Screen name="s/[code]" options={{ headerShown: false }} />
@@ -687,12 +689,22 @@ function RootLayoutNav({
   );
 }
 
+/** The smallest top inset of a Dynamic Island iPhone; a notch stops at 50. */
+const DYNAMIC_ISLAND_TOP_INSET = 54;
+
 /** A persistent, non-interactive safety cue whenever requests target development. */
 function DevelopmentIndicator() {
   const insets = useSafeAreaInsets();
+  const tabBarInsets = useRouterTabBarInsets();
   // Outside the frame that provides the side region, so derived from the insets.
   const sideInsets = useSideInsets();
   const sideRegion = sideRegionForInsets(sideInsets);
+  const indicatorHeight = type.caption.lineHeight + 4;
+  // Only a Dynamic Island leaves a free band under the status icons. A notch,
+  // a plain status bar and Android's bar are all filled to their bottom edge.
+  const topSafeAreaHasRoom =
+    process.env.EXPO_OS === "ios" && insets.top >= DYNAMIC_ISLAND_TOP_INSET;
+  const useBottomCorner = sideRegion.edge || !topSafeAreaHasRoom;
   return (
     <View
       pointerEvents="none"
@@ -704,15 +716,15 @@ function DevelopmentIndicator() {
         borderCurve: "continuous",
         borderRadius: radius.full,
         paddingHorizontal: 9,
-        paddingVertical: 4,
+        paddingVertical: 2,
         position: "absolute",
-        // Beside a side column it sits in the bottom corner away from it, clear of the
-        // column's bars; elsewhere top-right below the status indicators.
-        ...(sideRegion.edge
-          ? { bottom: Math.max(insets.bottom, 8) + 4, left: 12 }
+        // Under the status icons it stays clear of every header control; without
+        // that band it sits above the tabs instead.
+        ...(useBottomCorner
+          ? { bottom: tabBarInsets.contentBottomInset + 4, left: 12 }
           : {
               right: sideInsets.right + 12,
-              top: Math.max(0, insets.top - 4),
+              top: insets.top - indicatorHeight - 4,
             }),
         zIndex: 10,
       }}

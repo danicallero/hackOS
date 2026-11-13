@@ -14,6 +14,8 @@ import {
 } from "@/lib/help-topic-selection";
 import { useLocale } from "@/lib/i18n";
 
+const PAGE = 50;
+
 /**
  * H61/H64: the shared knowledge catalogue in the same searchable sheet as the
  * project challenge picker. Tapping a row toggles it in the draft the form
@@ -33,18 +35,31 @@ export function HelpTopicPickerScreen() {
   const [addError, setAddError] = useState<Error | null>(null);
   const [adding, setAdding] = useState(false);
   const [retry, setRetry] = useState(0);
+  // H64: a request can only ask for what an available helper covers right now;
+  // a helper editing their own knowledge sees the whole catalogue.
+  const availableOnly = !allowAdd;
+  const latestSelected = useRef(selected);
+  latestSelected.current = selected;
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry repeats the catalogue request after an error.
   useEffect(() => {
     let active = true;
     const timer = setTimeout(
       () => {
+        const search = query.trim();
         void apiFetch<{ topics: HelpTopic[] }>(
-          `/api/helpdesk/topics?q=${encodeURIComponent(query.trim())}&limit=50`,
+          `/api/helpdesk/topics?q=${encodeURIComponent(search)}&limit=${PAGE}${availableOnly ? "&available=1" : ""}`,
         )
           .then((result) => {
             if (!active) return;
             setTopics(result.topics);
             setError(null);
+            // A complete, unfiltered answer is the whole current offer: a topic
+            // chosen earlier that left it would route the request to nobody.
+            if (availableOnly && !search && result.topics.length < PAGE) {
+              const offered = new Set(result.topics.map((topic) => topic.id));
+              const kept = latestSelected.current.filter((topic) => offered.has(topic.id));
+              if (kept.length !== latestSelected.current.length) setTopicSelection(kept);
+            }
           })
           .catch((cause) => {
             if (!active) return;
@@ -59,7 +74,7 @@ export function HelpTopicPickerScreen() {
       active = false;
       clearTimeout(timer);
     };
-  }, [query, retry]);
+  }, [availableOnly, query, retry]);
   const name = query.trim().replace(/\s+/g, " ");
   const known = [...selected, ...(topics ?? [])].some(
     (topic) => topic.name.toLocaleLowerCase() === name.toLocaleLowerCase(),

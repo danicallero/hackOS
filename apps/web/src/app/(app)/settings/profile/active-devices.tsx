@@ -19,9 +19,15 @@ interface DeviceSession {
   updatedAt: Date | string;
 }
 
-/** "Safari on macOS" from a user-agent string; empty when nothing is recognisable. */
+// The native app's own user-agent, `hackOS/42 (iPhone 15 Pro; iOS 18.1)`
+// (apps/mobile/lib/client-build.ts); older builds send the platform default.
+const APP_USER_AGENT = /^hackOS(?:\/\S+)? \(([^;)]+)/;
+
+/** "Safari · macOS" from a user-agent string; empty when nothing is recognisable. */
 export function deviceName(userAgent: string | null | undefined): string {
   if (!userAgent) return "";
+  const appModel = APP_USER_AGENT.exec(userAgent)?.[1]?.trim();
+  if (appModel) return `hackOS app · ${appModel}`;
   const browser = /Edg\//.test(userAgent)
     ? "Edge"
     : /Firefox\//.test(userAgent)
@@ -48,7 +54,7 @@ export function deviceName(userAgent: string | null | undefined): string {
 }
 
 const isMobile = (userAgent: string | null | undefined) =>
-  /iPhone|iPad|Android|Expo|okhttp|CFNetwork/i.test(userAgent ?? "");
+  /iPhone|iPad|Android|Expo|okhttp|CFNetwork|^hackOS\b/i.test(userAgent ?? "");
 
 /** The sessions signed in to this account: this one first, each other one can be closed. */
 export function ActiveDevices() {

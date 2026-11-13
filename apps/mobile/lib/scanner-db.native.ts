@@ -73,6 +73,7 @@ interface PersonPayload {
   eventAccess: boolean;
   name: string | null;
   surname: string | null;
+  photoUrl: string | null;
   dni: string | null;
   accepted: boolean;
   confirmed: boolean;
@@ -575,6 +576,7 @@ export async function applyScannerSnapshot(
           eventAccess: person.eventAccess,
           name: person.name,
           surname: person.surname,
+          photoUrl: person.photoUrl ?? null,
           dni: person.dni,
           accepted: person.accepted ?? person.confirmed,
           confirmed: person.confirmed,
@@ -683,6 +685,8 @@ async function personFromRow(row: PersonRow): Promise<ScannerPerson> {
     badgeId: row.badge_id,
     revokedBadgeIds: [],
     ...payload,
+    // Existing encrypted rosters predate opt-in directory photos.
+    photoUrl: payload.photoUrl ?? null,
     // A roster encrypted before event-access was added is safe to treat as
     // not entitled until the next server snapshot replaces it.
     eventAccess: payload.eventAccess ?? false,

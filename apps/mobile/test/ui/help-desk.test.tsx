@@ -74,12 +74,7 @@ jest.mock("@/components/searchable-picker", () => ({
 }));
 jest.mock("@/lib/use-help-resource", () => ({
   useHelpResource: (path: string | null) => ({
-    data:
-      path === null
-        ? null
-        : path === "/api/helpdesk/projects"
-          ? { projects: [{ id: 9, name: "Team Nine" }] }
-          : mockRequest,
+    data: path === null ? null : mockRequest,
     loading: false,
     error: null,
     load: mockLoad,
@@ -286,7 +281,6 @@ beforeEach(() => {
     queuePosition: 1,
     challenge: null,
     preferSponsor: false,
-    project: { id: 9, name: "Team Nine" },
     requester: { userId: 7, displayName: "Ada" },
     routing: "matched",
     notifiedCount: 2,
@@ -353,10 +347,9 @@ it("uses server-provided action permissions and displays team meeting instructio
   expect(screen.getByText(/Meet at Mentor corner/)).toBeTruthy();
   expect(screen.getByLabelText("Mark resolved")).toBeTruthy();
 });
-it("submits a team request using Other without inventing a topic (H64/H65)", async () => {
+it("submits a request using Other without inventing a topic (H64/H65)", async () => {
   mockMutate.mockResolvedValue({ ...mockRequest, id: 42 });
   await render(<NewHelpRequestScreen />);
-  await fireEvent.press(screen.getByLabelText("Team Nine"));
   await fireEvent.changeText(screen.getByLabelText("What do you need?"), "Need hardware help");
   await fireEvent.changeText(screen.getByLabelText("Where are you?"), "Desk 5");
   await fireEvent.press(screen.getByLabelText("Other"));
@@ -374,7 +367,6 @@ it("submits a team request using Other without inventing a topic (H64/H65)", asy
     location: "Desk 5",
     topicIds: [],
     other: true,
-    projectId: 9,
     challengeId: 5,
     preferSponsor: true,
   });
@@ -457,13 +449,6 @@ describe("editing a help request while its data is unavailable", () => {
     expect(mockAlert).not.toHaveBeenCalled();
     expect(mockMutate).not.toHaveBeenCalled();
   });
-});
-
-it("reports a failed team list on a new request instead of hiding it", async () => {
-  mockOverrides = { "/api/helpdesk/projects": { data: null, error: new Error("Teams down") } };
-  await render(<NewHelpRequestScreen />);
-  expect(screen.getByText("Teams down")).toBeTruthy();
-  mockOverrides = {};
 });
 
 describe("HelpRequestList states", () => {

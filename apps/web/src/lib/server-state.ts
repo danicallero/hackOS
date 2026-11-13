@@ -84,6 +84,23 @@ export function invalidateServerState(key: ServerStateKey): void {
 }
 
 /**
+ * Age every settled resource under a key prefix past the TTL, so its next read
+ * goes to the API. For a change that reaches views that are not mounted (a list
+ * left behind while its detail page mutates it): unlike `invalidateServerState`
+ * the data stays paintable and in-flight reads are left alone.
+ */
+export function expireServerStatePrefix(prefix: ServerStateKey): void {
+  const start = `${identity ?? "anonymous"}:${serialize(prefix).slice(0, -1)}`;
+  const expired = Date.now() - DATA_TTL_MS;
+  for (const [key, entry] of entries) {
+    if (!key.startsWith(start)) continue;
+    const next = key[start.length];
+    if (next !== "," && next !== "]") continue;
+    if (entry.at !== undefined && entry.at > expired) entry.at = expired;
+  }
+}
+
+/**
  * Settled data for an exact resource, fresh or stale (up to five minutes), or
  * `undefined`. For painting a mount instantly; it never starts a request, so
  * callers still revalidate in the background (stale-while-revalidate).

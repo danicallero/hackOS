@@ -4174,7 +4174,7 @@
   "capabilityDescriptionHelpdeskRequest": "Browse helpers and request help for yourself or your team.",
   "capabilityDescriptionHelpdeskCoverage": "View scheduled helper coverage and current venue presence.",
   "capabilityDescriptionHelpdeskManage": "Rename and merge shared knowledge topics.",
-  "helpDeskCancelConsequence": "This closes the request for you and your team. You can send a new request later.",
+  "helpDeskCancelConsequence": "This closes the request. You can send a new one later.",
   "helpDeskIntervalIncomplete": "Choose a day, a start and an end.",
   "helpDeskIntervalOverlap": "Overlaps availability you already added.",
   "helpDeskIntervalTooLong": "An interval can last up to 24 hours.",

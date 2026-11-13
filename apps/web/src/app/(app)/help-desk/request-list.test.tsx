@@ -40,7 +40,6 @@ const request: HelpRequest = {
   location: "Table 12",
   topics: [{ id: 1, name: "Frontend" }],
   other: false,
-  project: null,
   requester: { userId: 1, displayName: "Ana" },
   routing: "matched",
   challenge: null,
@@ -364,20 +363,15 @@ describe("request list parity (H64-H66)", () => {
     challenge: { id: 4, name: "Data challenge" },
     viewer: { ...request.viewer, canClaim: false },
   };
-  it("omits self identity and location in own requests, retaining team context", async () => {
+  it("omits self identity and location in own requests", async () => {
     await act(async () =>
       root.render(
-        <RequestTable
-          requests={[request, { ...resolved, project: { id: 8, name: "Rover team" } }]}
-          audience="requester"
-          reload={vi.fn()}
-        />,
+        <RequestTable requests={[request, resolved]} audience="requester" reload={vi.fn()} />,
       ),
     );
     expect(container.textContent).not.toContain("Ana");
     expect(container.textContent).not.toContain("Table 12");
     expect(container.textContent).not.toContain("helpDeskMyself");
-    expect(container.textContent).toContain("Rover team");
     expect(container.textContent).toContain("helpDeskWaiting");
     await act(async () =>
       root.render(<RequestTable requests={[request]} audience="helper" reload={vi.fn()} />),

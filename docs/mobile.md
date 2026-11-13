@@ -132,8 +132,9 @@ below.
   `GET /api/me/wallet/apple/:purpose.pkpass` + `GET /api/me/wallet/google/:purpose`
   (H28), `GET`/`PUT /api/me/notification-preferences` (H51).
 - `GET /api/scanner/snapshot` — capability-guarded, replace-all seed for the
-  device SQLite store. It contains only the lightweight person cards, ticket
-  and current/revoked badge mappings, scannable activities, meal/activity
+  device SQLite store. It contains only the lightweight person cards, an
+  authenticated photo URL when the person opted into public photo sharing,
+  ticket and current/revoked badge mappings, scannable activities, meal/activity
   scan counts, last door state, and the current `eventAccess` entitlement
   needed by H22-H26. Ticket tokens are included only while the person's live
   role set grants event access. A full snapshot
@@ -430,7 +431,9 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   `scan/person/[id]`; a new scan replaces the person, Android back clears the pane, and the person
   route hands a deep link or a people-list/history tap to the scanner as `personId` params. Compact
   windows still push the route.
-  "View people" opens the people finder over the scanner pane only. On iOS the pane is its own
+  "View people" opens the people finder over the scanner pane only. Rows show a
+  person's photo when their public profile shares it; hidden photos stay absent
+  from the local roster. On iOS the pane is its own
   native stack (`components/pane-people-stack.ios.tsx`, an independent react-navigation tree):
   its root bar carries the title, role filter and sync status, `People` is pushed with the native
   large title, back item, integrated search and filter, and the route's header is hidden
@@ -531,6 +534,11 @@ only for its framework-neutral principles.
 
 - `lib/auth-client.ts` — Better Auth client using `expo-secure-store` for
   session storage instead of a cookie jar (H4's explicit requirement).
+- `lib/client-build.ts` — headers on every request: the build number (#999)
+  and a `hackOS/<build> (<model>; <system>)` user-agent. Better Auth stores it
+  on the session at sign-in, so the web's Active devices list names the phone;
+  a session opened by an older build keeps the generic "hackOS app" label
+  until it signs in again.
 - `lib/api.ts` — thin wrapper around the auth client's underlying fetch so
   every API call (not just `/api/auth/*`) carries the restored session.
 - `app/(auth)/sign-in.tsx` — email/password only; no in-app registration. The
@@ -1221,7 +1229,10 @@ speed, for that extra distance (`profileAvatarCarryDistance`); the in-content
 avatar stays visible through that carry and the mask takes over only as the
 morph starts, so a lower avatar (Account below the Wallet button, the person
 profile under its header) never shoots up ahead of the text. The 120 pt range
-then begins after the carry. The Android gooey view below already rises with
+then begins after the carry. The floating overlay clips at the measured top of
+the name block, with its height driven by the same Reanimated scroll value, so
+the photo cannot paint over the name and the clip stays on the UI thread while
+scrolling. The Android gooey view below already rises with
 the content, so it has no carry. A released drag never rests half-morphed: inside
 that range direction decides, from the last non-zero scroll delta (the release velocity only
 without one). Moving up, with the merge started, auto-collapses; moving down,
@@ -1644,7 +1655,7 @@ access gate lets only that route and `app/help-topics.tsx` through
 (`use-helper-preparation-access`).
 
 **Root (`components/help-desk/home-screen.tsx`).** Participants default to
-their own and team requests (`/api/helpdesk/requests/mine`); eligible helpers
+their own requests (`/api/helpdesk/requests/mine`); eligible helpers
 default to the open inbox (`inbox?scope=open`) with My claims; people with both
 get a segmented control over all three lists. Request rows show the ask, who and
 where, topics and a status pill; an empty list uses the shared empty state.
@@ -1674,8 +1685,10 @@ transparent *sheet* bar, `HelpPage` pads sheets by `HeaderHeightContext`.
 Contacts-style rows (avatar or status symbol, title, secondary line, chevron);
 status is a symbol plus label, not a pill. Catalogue selection (`TopicField`)
 is one row that opens `app/help-topics.tsx`, built on the same
-`SearchablePickerSheet` / `CheckRow` as the project challenge picker; the form
-and the sheet share one draft through `lib/help-topic-selection.ts`. Loading
+`SearchablePickerSheet` / `CheckRow` as the project challenge picker; request
+forms filter to knowledge areas currently offered by helpers present at the
+venue, while helper profiles use the full catalogue. The form and the sheet share
+one draft through `lib/help-topic-selection.ts`. Loading
 and live refresh live in `lib/use-help-resource.ts`: the last response stays on
 screen and only a user pull spins the refresh control.
 
@@ -1695,13 +1708,21 @@ mentor" switch (the published state; it needs no knowledge area: a helper with n
 is a generalist who receives every request; publishing also turns the public profile's share
 switch on, and the screen mirrors it; unpublishing leaves sharing as is); for
 any eligible helper with challenges in the event, a "Challenge alerts" row
-(All requests, or the chosen challenge names) that opens a multi-select sheet
-(`challengeIds`; none selected = every request); the knowledge topics; then
-"When you plan to be here": one row per hacking day (`planDays` from
-`suggestedInterval`: hacking window, else event window) whose value lists that
-day's ranges. A day row opens a sheet with that day's ranges edited by clock
-only (`DateTimeField timeOnly`), Add and remove, and Save; nobody can be
-available before the hacking time (checked on the client and by the API). Saves
+(All requests, or the chosen challenge names) that opens the same searchable
+multi-select sheet used by the request creator (`challengeIds`; none selected
+= every request; the checkmark saves the draft, Close discards it); the
+knowledge topics; then
+"When you plan to be here" (`availability-timeline.tsx`), the web timeline on
+a phone: one 24-hour line per hacking day (`planDays` from `suggestedInterval`:
+hacking window, else event window, always including its last day), the stated
+stretches marked on it and listed beside the day, the time before hacking
+dimmed, the hours under the last line. A stretch crossing midnight continues on
+the next day's line (`dayPieces`). Touching a free spot starts a two-hour
+stretch at that half hour (`slotInterval`), the day's plus adds one at the usual
+hour, and touching a stretch opens it; the sheet sets one stretch by clock
+(`DateTimeField timeOnly`; an end at or before the start means the next day,
+named beside it), with Remove for a saved one. There is no dragging. Nobody can
+be available before the hacking time (checked on the client and by the API). Saves
 are optimistic (controls never disable or fade while one is in flight, so toggles
 do not flicker); the server's last answer replaces the guess.
 
@@ -1711,15 +1732,16 @@ search as People, and Schedule's persistent `FilterMenu` beside it (Role and
 Knowledge multi-selects over the loaded list, `filterHelpers` in
 `lib/help-desk.ts`). The root's first row opens it with "N available".
 
-**Requests (H64–H66).** New request (sheet, Close / Send): for me or one of my teams
-(checkmark rows, only when the person has teams), details and location in one
+**Requests (H64–H66).** New request (sheet, Close / Send), always for the person sending it: details and location in one
 group, Knowledge topics and Challenge rows in another, and a "Prefer a sponsor"
 switch with its one-line consequence. "Other" is its own group above the catalogue in the topic
 picker (`app/help-topics.tsx`, laid out like the challenge picker's None; the
 draft in `lib/help-topic-selection.ts` carries `other`). Other and catalogue
 topics exclude each other (choosing one clears the other); the API still gets
-`other: true` with `topicIds: []`. The form row shows the choice. Every picker
-sheet (`SearchablePickerSheet`) has xmark (Close: restores the draft as it was
+`other: true` with `topicIds: []`. The form row shows the choice; requests
+only list knowledge areas currently offered by helpers present at the venue.
+Every picker sheet (`SearchablePickerSheet`) has xmark (Close: restores the
+draft as it was
 when the sheet opened) left and checkmark (confirm) right; the project
 challenges picker saves each tap, so its Close only dismisses. Challenge opens
 `app/help-challenges.tsx` (`challenge-picker-screen.tsx`, draft in
@@ -1728,8 +1750,8 @@ the requester's own project challenges first; one tap chooses and closes.
 Request rows show the challenge and "Prefers a sponsor" on a secondary line;
 the detail has Challenge and Prefer a sponsor rows. Detail reads like a Calendar
 event: the ask as the title with a status row and time, then location,
-requester, team and topics, then a Helper section whose row opens the claiming
-helper's profile (the API lets the requester and team read it) followed by the
+requester and topics, then a Helper section whose row opens the claiming
+helper's profile (the API lets the requester read it) followed by the
 meeting row ("On the way to Table 20" / "Meet at …"). Actions follow the
 server's `viewer` permissions: Claim is the prominent toolbar item with a menu
 (On my way / Meet elsewhere…, the latter asking for the place), Resolve likewise;
