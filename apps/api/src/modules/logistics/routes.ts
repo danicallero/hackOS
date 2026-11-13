@@ -337,7 +337,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: lookupBody,
         description:
-          "Resolve an entrance-ticket QR token to the full person card staff needs to accredit (H22): identity fields (name, DNI, email, shirt size), intolerances, notes, confirmed-spot history, current badge if already accredited, and hasEventAccess (H43) — whether this ticket's owner currently holds real role-derived event access; false means the historical ticket token still exists (permanent, plan/07 invariant 10) but check-in will be refused. Read-only.",
+          "Resolve an entrance-ticket QR token to the full person card staff needs to accredit (H22): identity fields (name, DNI, email, shirt size), intolerances, notes, confirmed-spot history, current badge if already accredited, and hasEventAccess (H43) — whether this ticket's owner currently holds real role-derived event access; false means the historical ticket token still exists (permanent, plan/07 invariant 7) but check-in will be refused. Read-only.",
       },
     },
     async (req) => lookupByTicket(req.body.ticketToken, actor(req.userId)),
@@ -1034,7 +1034,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         querystring: scheduleOwnerCandidatesQuery,
         summary: "Search schedule owner candidates",
         description:
-          "Case- and accent-insensitive account name search for a SCHEDULE_MANAGE holder assigning a schedule item's responsible person(s) (H59) — deliberately not gated by the broader USERS_READ.",
+          "Case- and accent-insensitive account name and email search for a SCHEDULE_MANAGE holder assigning a schedule item's responsible person(s) (H59) — deliberately not gated by the broader USERS_READ.",
       },
     },
     async (req) => ({

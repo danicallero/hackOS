@@ -256,7 +256,7 @@ export function ScheduleFormModal({
     const previous = previousInitialRef.current;
     const nextTranslations = initialTranslations ?? {};
     if (previous.scheduleId !== scheduleId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- switching records resets the editor to that record's server snapshot.
+      // Switching records resets the editor to that record's server snapshot.
       setValues(initial);
       setAdvancedOpen(false);
       setTranslationsOpen(false);
@@ -269,7 +269,7 @@ export function ScheduleFormModal({
       !sameValue(previous.initial, initial) ||
       !sameValue(previous.translations, nextTranslations)
     ) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- live refresh updates untouched fields while preserving local edits.
+      // Live refresh updates untouched fields while preserving local edits.
       setValues((current) => mergeScheduleRefresh(current, previous.initial, initial));
       setTranslations((current) =>
         mergeScheduleTranslationsRefresh(current, previous.translations, nextTranslations),
@@ -896,7 +896,6 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
   }, [scheduleId, t]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadOwners(); // Load owners when viewing/editing an existing schedule item.
   }, [loadOwners]);
 

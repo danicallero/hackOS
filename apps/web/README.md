@@ -75,6 +75,13 @@ icons use the library's regular weight without React context. `components.json`
 also selects `phosphor`, so new shadcn primitives follow the same convention.
 See the [web icon standard](../../docs/DESIGN.md#web-icon-standard) for details.
 
+## Search
+
+Every web text search uses `normalizeSearchText` from `src/lib/search-text.ts`
+on both the query and the text being matched. Server-side substring searches use
+parameterized SQL in the form `unaccent(column) ILIKE unaccent($n)` (with
+`likeContains` for the bound pattern), so case and accents do not affect results.
+
 ## Browser server state
 
 `lib/server-state.ts` is the small shared policy for authenticated read models,
@@ -102,6 +109,13 @@ read goes to the API. Do not add module-level
 caches or `useEffect` + `api.get` reads, and never turn a failed read into an
 empty or hard-coded list: expose `error` and render `ContextualError` with a
 retry.
+
+`useServerResource` returns `data`, `error`, `loading` and a stable `reload`
+callback (plus `mutate` for a mutation response). It only applies a result to
+the mounted resource key, so a late response cannot replace a newer parameter's
+data or update an unmounted component. `reload()` invalidates the exact key;
+when there is no data it returns to the loading state, while an existing result
+stays visible during refresh. Use it for one-resource reads with a complete key.
 A page that owns its own loader (form state it must not clobber, optimistic
 local rows) keeps a `load()` callback and adds `useLiveReload(scope, events,
 load)`, which calls it once per debounced burst of events; there is no nonce to

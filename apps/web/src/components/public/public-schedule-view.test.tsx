@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,9 +18,16 @@ vi.mock("@/lib/logistics", () => ({
   logisticsApi: {
     viewerSchedule: async () => ({
       items: [
-        { id: 1, title: "Opening", location: null, type: "activity", audiences: [] },
+        {
+          id: 1,
+          title: "Opening",
+          description: "José Núñez",
+          location: null,
+          type: "activity",
+          audiences: [],
+        },
         { id: 2, title: "Workshop", location: null, type: "workshop", audiences: [] },
-        { id: 3, title: "Dinner", location: null, type: "meal", audiences: [] },
+        { id: 3, title: "Dinner", location: "A Coruña", type: "meal", audiences: [] },
       ],
     }),
   },
@@ -28,10 +36,19 @@ vi.mock("@/lib/logistics", () => ({
 vi.mock("@/components/common/list-toolbar", () => ({
   ListToolbar: ({
     filters,
+    search,
   }: {
     filters: { id: string; label: string; onChange: (v: string[]) => void }[];
+    search?: { label: string; value: string; onValueChange: (value: string) => void };
   }) => (
     <div>
+      {search && (
+        <input
+          aria-label={search.label}
+          value={search.value}
+          onChange={(event) => search.onValueChange(event.target.value)}
+        />
+      )}
       {filters.map((filter) => (
         <button key={filter.id} type="button" onClick={() => filter.onChange(["yes"])}>
           {`filter:${filter.id}`}
@@ -104,5 +121,16 @@ describe("PublicScheduleView attendance filter", () => {
         ?.click(),
     );
     expect(titles()).toEqual(["Workshop"]);
+  });
+
+  it("searches schedule text without case or accent sensitivity", async () => {
+    await render();
+    const user = userEvent.setup();
+    const search = container.querySelector<HTMLInputElement>('input[aria-label="search"]')!;
+    await act(async () => user.type(search, "JOSE nunez"));
+    expect(titles()).toEqual(["Opening"]);
+    await act(async () => user.clear(search));
+    await act(async () => user.type(search, "coruna"));
+    expect(titles()).toEqual(["Dinner"]);
   });
 });

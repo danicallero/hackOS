@@ -9,7 +9,6 @@ export function useInlineEditState(value: string) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!editing) setDraft(value);
   }, [value, editing]);
 

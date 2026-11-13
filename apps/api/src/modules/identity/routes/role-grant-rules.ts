@@ -7,6 +7,7 @@ import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import { requireCapability } from "../../../lib/capabilities.js";
 import { BadRequestError, NotFoundError } from "../../../lib/errors.js";
+import { idempotencyGuard } from "../../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import {
   assertNotProtectedRole,
@@ -260,7 +261,7 @@ export function registerRoleGrantRuleRoutes(app: FastifyInstance): void {
   api.post(
     "/api/role-grant-rules",
     {
-      preHandler: manage,
+      preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
         summary: "Create an automatic role grant/revoke rule",
@@ -313,7 +314,7 @@ export function registerRoleGrantRuleRoutes(app: FastifyInstance): void {
   api.patch(
     "/api/role-grant-rules/:ruleId",
     {
-      preHandler: manage,
+      preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
         summary: "Update an automatic role grant/revoke rule",

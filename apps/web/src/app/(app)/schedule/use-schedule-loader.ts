@@ -48,7 +48,6 @@ export function useScheduleLoader({
   );
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (canRead) load();
   }, [canRead, load]);
 

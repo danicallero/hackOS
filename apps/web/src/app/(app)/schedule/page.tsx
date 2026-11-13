@@ -112,7 +112,6 @@ export default function SchedulePage() {
     (id: ColumnId, width: number) => {
       setTableConfig({ ...tableConfig, widths: { ...tableConfig.widths, [id]: width } });
       setLiveWidths((prev) => {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { [id]: _removed, ...rest } = prev;
         return rest;
       });

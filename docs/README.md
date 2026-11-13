@@ -2,7 +2,7 @@
 
 Living documentation for how the current code implements the product. The
 normative functional source of truth remains `plan/historias-hackos.md`
-(stories H1–H59) and `plan/07-datos-relevantes-ers.md` (hard invariants);
+(stories H1–H67) and `plan/07-datos-relevantes-ers.md` (hard invariants);
 this folder explains *how* the code implements the relevant slices. If a doc
 here disagrees with `plan/`, the plan wins and the doc (or the code) is the bug.
 
@@ -14,9 +14,9 @@ orientation** below → whichever module doc matches your task.
 **One-paragraph orientation.** hackOS is a Fastify API (`apps/api`, raw SQL,
 no ORM) plus a Next.js web app and an Expo mobile app, all reading/writing the
 same Postgres database and sharing capability names and realtime event names
-from `packages/shared`. Every domain — applications, projects, queue,
-logistics, notifications, identity, sponsors, challenges, event, exports —
-lives in its own `apps/api/src/modules/<domain>/` directory and follows the
+from `packages/shared`. Every domain (identity, applications, projects, queue,
+logistics, notifications, help desk and the rest registered in
+`apps/api/src/modules/index.ts`) lives in its own `apps/api/src/modules/<domain>/` directory and follows the
 same conventions: capability-based authorization (never role checks),
 audited mutations in the same transaction as the write, `SELECT ... FOR
 UPDATE` + idempotency keys on state transitions, and SSE realtime fan-out
@@ -26,186 +26,95 @@ folder goes deeper on one system, module, or client at a time.
 
 ## Index
 
-Architecture & modules:
+One line per doc. Each topic has one home: link to it instead of restating it.
 
-- [Audit trail](./audit-trail.md) — private change metadata, actor/initiator selection, request correlation and autosave grouping (H53).
-- [API reference — module and convention overview](./api-reference.md) — what
-  each `apps/api` module owns, and the conventions that hold across all of
-  them: capability-based authorization, route-access-policy kinds, the
-  `AppError` shape, audit, concurrency/idempotency, realtime, and background
-  work. Start here for "what does the API do and how is it organized";
-  `/documentation` (Swagger UI, generated from route schemas) is the
-  route-by-route reference this page deliberately doesn't duplicate.
-- [Architecture & infrastructure](./architecture.md) — the system view: the
-  services and their private/egress network boundary, state ownership
-  (Postgres truth vs. ephemeral Valkey), realtime SSE fan-out, the one-image
-  model, scalability (more workers, the Postgres ceiling, multi-instance
-  tenancy), the reasoning behind the big decisions, and the small-vs-real
-  deployment profiles. Start here for the whole-system picture;
-  `deploy/README.md` is the operational runbook.
-- [API request admission and priorities](./request-admission.md) — the exact
-  lane ordering, P0–P3 lane definitions, route/topic classification,
-  reserved capacity, best-effort shedding, and multi-replica limitations.
-- [Database schema](./database-schema.md) — the generated DBML ERD for the
-  current post-migration schema, plus the migration identity/checksum rules.
-- [Realtime transport](./realtime-transport.md) — multiplexed scope authorization,
-  client lifecycle/recovery, bounds, metrics, qualification and compatibility.
-- [Background processing & workers](./background-workers.md) — the BullMQ +
-  Postgres worker subsystem: job flows, queue structure, retries, concurrency,
-  the failure/dead-letter model, and (critically) the **sync-vs-async** event
-  map that shows which module work runs in the request and which is handed off.
-- [Mutation idempotency matrix](./idempotency-matrix.md) — the retry
-  classification for every state-changing API route, including durable
-  outbox/object-storage and SSE boundaries.
-- [Question-owned libraries](./form-libraries.md) — dynamic library fields, unlimited
-  participant proposals, inline bulk curation and confirmed cascading deletion.
-- [Attendance certificates](./certificates.md) — policy (hours, demo), variants,
-  organisation-issued PDF with public verification code, staff override and revoke.
-- [Native projects](./projects.md) — drafts, autosave, form snapshots,
-  phases, gallery/consent, uploads, invitations, queue eligibility and winner
-  publication.
-- [HackUDC 2027 onboarding](./onboarding.md) — edition identity, attendance evidence, resumable steps, RSVP answers and mentor publication.
-- [Public profile (#934)](./directory.md) — the opt-in profile shown to the
-  people who scan you, what they can see, access, moderation and
-  account-removal coverage.
-- [Onboarding, web](./onboarding-web.md) — the resumable `/onboarding` journey,
-  mentor profile section and organizer onboarding settings.
-- [Onboarding social sharing](./onboarding-social-sharing.md) — the share
-  step's card component.
-- [Help desk (H61-H67)](./help-desk.md) — helper profiles sharing the public
-  bio, knowledge catalogue, planned availability versus presence, request
-  routing, atomic claims and coverage; client contract in
-  [`help-desk-contract.md`](./help-desk-contract.md).
-- [Content reports (H18)](./content-reports.md) — attendee reports of projects and
-  public profiles, and the organiser inbox that closes them.
-- [Event diary (#935)](./diary.md) — saving people and sponsor stands by
-  NFC/QR scan, privacy rules, stand tags and account-removal coverage.
-- [Queue groups (H46)](./queue-groups.md) — the enterprise-scoped grouping
-  layer between challenges and the rooms/queues that judge them: why
-  `queue_entries.challenge_id` stays untouched, the two database-enforced
-  invariants (a group never spans enterprises; every challenge has exactly one
-  group), the 1:1 backfill, and the admin merge that turns several of an
-  enterprise's challenges into one shared judging queue with one form.
-- [Queue operator console](./queue-operator.md) — the live arrival board for
-  queue operators: shared-queue deduplication, local team search, room
-  destinations, capability-gated actions, and the integration boundary with
-  queue configuration.
-- [Event config & the Apple Wallet pass](./event-config-wallet.md) — the
-  `event_config` singleton (identity, doors-open vs hacking window, venue) and
-  how the Wallet pass renders from it (field visibility, captions, back fields),
-  plus the session-less scoped-token path from the acceptance email.
-- [Backups, restore and the maintenance lock](./backup-restore.md) — S3 backups, restore flow, the restore lock and the waiting screens.
-- [Email delivery with Amazon SES](./email-ses.md) — production sender subdomains, Cloudflare DNS, SES setup and rollout.
-- [Notifications & announcements](./notifications.md) — the announcement
-  model (screen placement vs. delivery vs. targeting), the notify-only vs.
-  screen-window distinction, audience/recipient targeting and per-announcement
-  channel candidates, and the generic notify/outbox/dispatch pipeline (H50,
-  H51, H52, H53) every other module plugs into.
-- [Live Activities / Live Updates (#966)](./live-activities.md) — the
-  participant queue (H38) and staff activity (H25, H26) Live Activities: state
-  builders, device/session registry, the push worker's state machine, APNs and
-  Android push formats, gating rules, HIG rationale, and APNs/EAS setup.
-- [Schedule categories (activity kinds)](./schedule-categories.md) — the one
-  registry every schedule/activity category comes from, how to add or retire
-  one, and the four guardrails (typed label keys, the web icon map, the mobile
-  Android-symbol map, `pnpm check:copy`) that keep the API, web and mobile from
-  drifting apart.
-- [GitHub activity](./github-activity.md) — linking a project to a GitHub repo
-  (private included) through a GitHub App, commit/PR tracking and the TV ranking.
-- [TV screens](./tv-screens.md) — what the venue's screens show and why: the
-  manual-selection / default precedence, the combined live screen and its
-  payload, venue Wi-Fi, and how each mode adapts to any screen size or aspect
-  ratio.
-- [Generated API route-policy ledger](./access-control-route-ledger.md) — the
-  complete sorted runtime declaration inventory and public/token allowlist
-  snapshot; regenerate it with `pnpm --filter @hackos/api route-policy:audit`.
-- [Rate limiting](./rate-limiting.md) — the Valkey-backed distributed limiter
-  shared by Better Auth's own paths and this app's routes, the endpoint-class
-  limits table, fail-open behavior and its metrics, and the trusted-proxy
-  requirement it depends on.
-- [Account deletion and irreversible anonymization](./account-deletion.md) —
-  the H54 data-flow inventory, authoritative retention boundary, anonymous
-  audit-subject design, operational/dietary retention, venue-presence
-  calculation, mobile/web flows, offline-cache behavior, concurrency controls,
-  App Store review risks, assumptions, and test matrix.
-- [Synthetic reviewer fixtures](./reviewer-fixtures.md) — the isolated account
-  generation workflow, marked participant queue, synthetic-operator scope,
-  credential-use signal, and deployment assumptions.
-- [Statistics dashboard](./statistics-dashboard.md) — the generic scope and
-  panel catalog, configurable question publication, server-side aggregation
-  and transformations, layout persistence, and granular statistics ACLs.
+### Start here
 
-Frontend (web & mobile):
+| Doc | Read it for |
+|---|---|
+| [API reference](./api-reference.md) | What each `apps/api` module owns and the conventions shared by all of them |
+| [Architecture & infrastructure](./architecture.md) | Services, network boundary, state ownership, scaling and the big decisions |
+| [Database schema](./database-schema.md) | Generated ERD and the migration identity/checksum rules |
+| [Design system, UI & UX](./DESIGN.md) | Tokens, containers, page hierarchy, accessibility and copy rules for every surface |
+| [Navigation](./navigation.md) | Capability-to-workspace mapping on web and tabs on mobile |
+| [Test coverage and execution](./testing.md) | Suite inventory, coverage map and runtime policy |
+| [UI testing](./ui-testing.md) | Browser and native UI tests, selectors, and screenshots on UI PRs |
 
-- [Web help desk](./help-desk-web.md) — published helpers, shared bio and knowledge, dated availability, team requests, helper inbox and coverage (H61–H67).
+`/documentation` (Swagger UI) is the route-by-route reference, generated from
+route schemas. Root [`README.md`](../README.md) covers local setup,
+[`apps/web/README.md`](../apps/web/README.md) the web component library.
 
-- [Design system, UI & UX](./DESIGN.md) — the consolidated design rulebook,
-  indexed and summarized per section: principles, tokens (with intent and
-  boundaries), the landing-derived edition theme and `/design-system` preview,
-  container and component decision logic, page/action hierarchy,
-  accessibility, the domain state models that must stay visually distinct,
-  the copy rules `pnpm check:copy` enforces, web- and mobile-specific
-  constraints, and an explicit don'ts list. Read before building or styling
-  any screen; `apps/web/README.md` covers the component library itself.
-- [Web accessibility audit](./accessibility-audit.md) — the 2026-11-01 audit of
-  `apps/web`: fixed defects by WCAG principle with before/after and user
-  impact, the Safari Tab-key note, honest per-route coverage of all 72 routes,
-  the regression specs, and explicit limitations (no screen-reader
-  certification, no conformance claim).
-- [Navigation: capability-based workspaces](./navigation.md) — the personal
-  area + additive work-workspace model on web, and the one-action mobile scan
-  entry, with the full capability-to-workspace mapping.
-- [RouterTabs component](./router-tabs.md) — the reusable Expo Router tab shell:
-  public API, Liquid Glass and opaque fallback behaviour, scrub interaction,
-  overflow-menu contract, safe-area geometry, testing, and the publishing
-  checklist for a future package.
-- [Catering and activity RSVPs](./catering-rsvp.md) — per-activity yes/no/unsure answers,
-  options, participant exclusion, edition history and headcounts.
-- [Mobile app](./mobile.md) — the Expo Router app (`apps/mobile`): Better Auth
-  Expo integration, capability-driven tabs, offline scanners, and participant
-  screens, with the per-story status registry.
-- [Mobile surface states](./mobile-surface-states.md) — route/component matrix for
-  loading, empty, stale, error, refresh and mutation recovery across mobile screens and sheets.
-- [Mobile builds and release](./mobile-release.md) — index into three
-  focused runbooks: [local dev/builds](./mobile-dev-setup.md) (EAS profiles,
-  prebuild, local/cloud compilation), [credentials](./mobile-credentials.md)
-  (signing, push, Wallet certs), and
-  [store release](./mobile-store-release.md) (artwork, privacy declarations,
-  submission, release checklist).
-- [Test coverage and execution](./testing.md) — suite inventory, behavioral
-  coverage map, audit corrections, runtime policy and verification limits.
-- [UI testing](./ui-testing.md) — the shared browser/native selector contract,
-  Playwright browser projects, fast React Native screen tests, optional
-  Detox simulator/device runs, and the screenshot-on-UI-PRs rule.
+### Cross-cutting API systems
 
-Deployment:
+| Doc | Read it for |
+|---|---|
+| [Audit trail](./audit-trail.md) | What an audit entry stores, private-value minimization, autosave grouping (H53) |
+| [Background workers](./background-workers.md) | BullMQ queues, retries, dead letters and the sync-vs-async map |
+| [Idempotency matrix](./idempotency-matrix.md) | Retry classification of every state-changing route |
+| [Rate limiting](./rate-limiting.md) | The Valkey-backed limiter, limits per endpoint class, fail-open behaviour |
+| [Realtime transport](./realtime-transport.md) | The multiplexed stream, scopes, recovery and metrics |
+| [Request admission](./request-admission.md) | P0–P3 priority lanes, reserved capacity and shedding |
+| [Route-policy ledger](./access-control-route-ledger.md) | Generated list of every route and its access policy |
 
-- [Environment variables per service](./env-vars.md) — production combined env
-  and staging split env files
-  and the exact least-privilege variables delivered to each Compose service.
-- [Deployment runbook](../deploy/README.md) — GHCR build tags, protected
-  workflows, host transfer/exec, health gates and rollback limits.
-- [Big-event readiness](./big-event-readiness.md) — the concrete pre-event
-  checklist for ~600 concurrent event identities: pool sizing, the fixed
-  Compose memory limits, load testing the hot paths, and the monitoring queries
-  to watch.
-- [Production capacity and operations](./production-capacity.md) — the
-  authoritative 500-connection model: RAM/swap ceilings, API/SSE channels,
-  P0–P3 priorities, Valkey retention, mail diagnostics, Grafana signals and
-  manual rollback holds.
+### Domains
 
-Historical (not required reading — see [`audits/README.md`](./audits/README.md)):
+| Doc | Read it for |
+|---|---|
+| [Account deletion](./account-deletion.md) | Data inventory, retention boundary and anonymization flows (H54) |
+| [Attendance certificates](./certificates.md) | Policy, variants, PDF, verification code, override and revoke |
+| [Catering and activity RSVPs](./catering-rsvp.md) | Per-activity answers, options, exclusions and headcounts |
+| [Content reports](./content-reports.md) | Reports of projects and profiles, and the organiser inbox (H18) |
+| [Event config & Wallet pass](./event-config-wallet.md) | The `event_config` singleton, pass rendering and the scoped-token page |
+| [Event diary](./diary.md) | Saving people and sponsor stands by scan, privacy rules, stand tags (#935) |
+| [GitHub activity](./github-activity.md) | Repo linking through the GitHub App, activity tracking, TV ranking |
+| [Help desk](./help-desk.md) | Helper profiles, availability, routing, claims, coverage (H61–H67) |
+| [Help desk client contract](./help-desk-contract.md) | Request/response contract the web and mobile clients rely on |
+| [Judging timing](./project-lifecycle-audit.md) | Track targets, preparation allowances, timing rules (H30, H33–H37) |
+| [Live Activities / Live Updates](./live-activities.md) | State builders, device registry, push worker, APNs/Android formats (#966) |
+| [Native projects](./projects.md) | Drafts, snapshots, phases, gallery, invitations, winners |
+| [Notifications & announcements](./notifications.md) | Announcement model, targeting, and the outbox/dispatch pipeline (H50–H53) |
+| [Onboarding](./onboarding.md) | Edition identity, resumable steps, RSVP answers, mentor publication |
+| [Public profile](./directory.md) | The opt-in profile, who sees it, moderation (#934) |
+| [Question-owned libraries](./form-libraries.md) | Library fields, participant proposals, curation |
+| [Queue groups](./queue-groups.md) | Enterprise-scoped grouping of challenges into shared judging queues (H46) |
+| [Queue operator console](./queue-operator.md) | Arrival board, team search, capability-gated actions |
+| [Schedule categories](./schedule-categories.md) | The activity-kind registry and how to add or retire a kind |
+| [Statistics dashboard](./statistics-dashboard.md) | Scopes, panel catalogue, aggregation, statistics ACLs |
+| [Synthetic reviewer fixtures](./reviewer-fixtures.md) | Isolated reviewer accounts for store review |
+| [TV screens](./tv-screens.md) | Modes, manual/default precedence, the combined live screen |
 
-- [Access-control audit and consolidation plan](./audits/access-control-audit-plan.md)
-- [Web UX simplification audit and task plan](./audits/ux-audit-tasks.md)
-- [Application form builder UX audit](./audits/ux-audit-application-builder.md)
-- [Applications & identity: implementation notes](./audits/implementation-notes.md)
+### Web
 
-See also the root [`README.md`](../README.md) for local dev setup, the API's
-own `/documentation` (Swagger UI, generated from route schemas — not a file in
-this folder), [`apps/web/README.md`](../apps/web/README.md) for web frontend
-conventions and the component library, and
-[`deploy/README.md`](../deploy/README.md) for the full deployment story
-(networking, secrets, Caddy and rollout order).
+| Doc | Read it for |
+|---|---|
+| [Accessibility audit](./accessibility-audit.md) | The 2026-11-01 audit: fixed defects, per-route coverage, limits |
+| [Help desk, web](./help-desk-web.md) | Web screens for helpers, requests, inbox and coverage |
+| [Onboarding, web](./onboarding-web.md) | The `/onboarding` journey and organizer settings |
+| [Onboarding social sharing](./onboarding-social-sharing.md) | The share step's card component |
 
-- [Judging timing](./project-lifecycle-audit.md) — track targets, preparation allowances and timing clarifications.
+### Mobile
+
+| Doc | Read it for |
+|---|---|
+| [Mobile app](./mobile.md) | Auth, tabs, participant and operator screens, scanners, story status |
+| [Mobile surface states](./mobile-surface-states.md) | Loading/empty/error/refresh matrix per route and sheet |
+| [RouterTabs](./router-tabs.md) | The reusable tab shell: API, Liquid Glass, overflow, safe areas |
+| [Builds and release](./mobile-release.md) | Index of the three runbooks below |
+| [Local dev and builds](./mobile-dev-setup.md) | EAS profiles, prebuild, local and cloud compilation |
+| [Credentials](./mobile-credentials.md) | Signing, push and Wallet certificates |
+| [Store release](./mobile-store-release.md) | Artwork, privacy declarations, submission checklist |
+
+### Deployment and operations
+
+| Doc | Read it for |
+|---|---|
+| [Deployment runbook](../deploy/README.md) | Images, protected workflows, networking, secrets, rollout, rollback |
+| [Environment variables](./env-vars.md) | Which variable reaches which Compose service |
+| [Backups and restore](./backup-restore.md) | S3 backups, restore flow, the maintenance lock |
+| [Email with Amazon SES](./email-ses.md) | Sender subdomains, DNS, SES setup |
+| [Production capacity](./production-capacity.md) | The 500-connection model, RAM ceilings, Grafana signals |
+| [Big-event readiness](./big-event-readiness.md) | Pre-event checklist for ~600 concurrent identities |
+
+### Historical
+
+Closed audits and task plans, not required reading: [`audits/README.md`](./audits/README.md).

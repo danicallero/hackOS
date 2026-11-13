@@ -3,11 +3,11 @@
 // Audit trail for this person (H53).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { useEffect, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
+import { useServerResource } from "@/hooks/use-server-resource";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
@@ -40,35 +40,24 @@ interface AuditRow {
 function AuditLogSection({ userId }: { userId: number }) {
   const { language, t } = useLocale();
   const canAudit = useCan(CAPABILITIES.AUDIT_READ);
-  const [items, setItems] = useState<AuditRow[]>([]);
-  const [state, setState] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
-
-  useEffect(() => {
-    if (!canAudit) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setState("forbidden");
-      return;
-    }
-    let cancelled = false;
-    setState("loading");
-    // Audit entries about this user's record (entity_type=user, entity_id=:id).
-    api
-      .get<{ items: AuditRow[]; total: number }>("/api/audit", {
+  const resource = useServerResource(
+    ["user", userId, "audit"],
+    (signal) =>
+      api.get<{ items: AuditRow[]; total: number }>("/api/audit", {
         query: { entityType: "user", entityId: String(userId), limit: 100 },
-      })
-      .then((r) => {
-        if (cancelled) return;
-        setItems(r.items);
-        setState("ready");
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setState(err instanceof ApiError && err.status === 403 ? "forbidden" : "error");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, canAudit]);
+        signal,
+      }),
+    { enabled: canAudit },
+  );
+  const state =
+    !canAudit || (resource.error instanceof ApiError && resource.error.status === 403)
+      ? "forbidden"
+      : resource.loading
+        ? "loading"
+        : resource.error
+          ? "error"
+          : "ready";
+  const items = resource.data?.items ?? [];
 
   if (state === "forbidden") {
     return <EmptyState title={t("auditLogUnavailableTitle")} description={t("needAuditReadCap")} />;

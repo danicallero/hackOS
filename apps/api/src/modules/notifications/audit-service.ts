@@ -57,7 +57,7 @@ export async function queryAuditLog(
     const needle = likeContains(filters.actorQuery);
     params.push(needle, needle);
     conditions.push(
-      `(u.name || ' ' || u.surname ILIKE $${params.length - 1} OR u.email ILIKE $${params.length} OR i.name || ' ' || i.surname ILIKE $${params.length - 1} OR i.email ILIKE $${params.length})`,
+      `(unaccent(concat_ws(' ', u.name, u.surname)) ILIKE unaccent($${params.length - 1}) OR unaccent(u.email) ILIKE unaccent($${params.length}) OR unaccent(concat_ws(' ', i.name, i.surname)) ILIKE unaccent($${params.length - 1}) OR unaccent(i.email) ILIKE unaccent($${params.length}))`,
     );
   }
   if (filters.action) addCondition("LOWER(al.action) = LOWER(?)", filters.action);

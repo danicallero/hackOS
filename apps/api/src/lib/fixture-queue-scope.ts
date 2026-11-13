@@ -443,14 +443,9 @@ export async function assertFixtureQueueScope(
   resource: FixtureQueueResource,
   resourceId: number,
   actorIsSyntheticHint?: boolean | Promise<boolean>,
-): Promise<void> {
-  // The actor marker is independent of the resource lookup, so read it beside
-  // it (or reuse the request's memoized read). Verdict order is unchanged:
-  // resource-graph errors still surface before the actor-side check.
-  const actorIsSynthetic = Promise.resolve(
-    actorIsSyntheticHint ?? isSyntheticOperator(db, actorId),
-  );
-  actorIsSynthetic.catch(() => undefined);
+): Promise<boolean> {
+  // Validate the resource before reading the actor marker so graph errors keep
+  // their existing precedence. The reads stay serial when `db` is a client.
   let isSynthetic = false;
   if (resource === "challenge" || resource === "repo") {
     const table = resource === "challenge" ? "challenges" : "repos";
@@ -483,7 +478,9 @@ export async function assertFixtureQueueScope(
   } else {
     isSynthetic = roomSynthetic(await inspectFixtureRoomScope(db, resourceId), resourceId);
   }
-  assertActorSide(isSynthetic, await actorIsSynthetic);
+  const actorIsSynthetic = await (actorIsSyntheticHint ?? isSyntheticOperator(db, actorId));
+  assertActorSide(isSynthetic, actorIsSynthetic);
+  return actorIsSynthetic;
 }
 
 /**

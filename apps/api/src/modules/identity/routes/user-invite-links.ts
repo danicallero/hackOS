@@ -16,6 +16,7 @@ import {
   ForbiddenError,
   NotFoundError,
 } from "../../../lib/errors.js";
+import { idempotencyGuard } from "../../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import {
   lockRoleGraph,
@@ -231,7 +232,7 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
   api.post(
     "/api/invites/user-links",
     {
-      preHandler: manage,
+      preHandler: [manage, idempotencyGuard],
       config: policy,
       schema: {
         body: z.object({
@@ -342,7 +343,7 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
   api.put(
     "/api/invites/user-links/:id",
     {
-      preHandler: manage,
+      preHandler: [manage, idempotencyGuard],
       config: policy,
       schema: {
         params: z.object({ id: z.coerce.number().int().positive() }),

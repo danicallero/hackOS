@@ -68,7 +68,8 @@ retain anonymous wildcard CORS.
 ## Gallery and files
 
 `GET /api/public/projects` accepts page/pageSize, challengeId, search and winnersOnly=true and
-returns `{items,total,page,pageSize}`. The winner filter applies before pagination
+returns `{items,total,page,pageSize}`. Project-name search ignores case and accents using
+parameterized `unaccent(r.name) ILIKE unaccent($n)`. The winner filter applies before pagination
 and includes only published, visible winners; combined with challengeId it
 selects winners of that challenge. Unpublished selections never affect its count. Detail is `/api/public/projects/:id`.
 The same paths accept optional authenticated sessions for attendee galleries.

@@ -82,7 +82,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List a form's responses",
         description:
-          "Staff read of every response to a form (H13), with optional status and name/email search filters, each response's aggregate review score, and the caller's own review. Managers may reveal all reviews.",
+          "Staff read of every response to a form (H13), with optional status and case- and accent-insensitive name/email search filters, each response's aggregate review score, and the caller's own review. Managers may reveal all reviews.",
         params: idParamSchema,
         querystring: listResponsesQuerySchema,
       },
@@ -105,7 +105,9 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       }
       if (req.query.search) {
         params.push(likeContains(req.query.search));
-        filters.push(`(u.name ILIKE $${params.length} OR u.email ILIKE $${params.length})`);
+        filters.push(
+          `(unaccent(u.name) ILIKE unaccent($${params.length}) OR unaccent(u.email) ILIKE unaccent($${params.length}))`,
+        );
       }
       const { rows } = await pool.query(
         `SELECT r.id, r.user_id, NULLIF(concat_ws(' ', u.name, u.surname), '') AS name,

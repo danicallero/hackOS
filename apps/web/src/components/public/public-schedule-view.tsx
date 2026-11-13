@@ -27,6 +27,7 @@ import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, resolveScheduleText } from "@/lib/logistics";
 import { getPublicEvent } from "@/lib/public-content";
+import { normalizeSearchText } from "@/lib/search-text";
 import { useSessionContext } from "@/lib/session";
 
 /**
@@ -95,7 +96,6 @@ export function PublicScheduleView() {
   // Fetch event and schedule on mount or language change; callbacks manage independent
   // error/loading states for decoupled failure recovery, making setState expected here.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void Promise.all([loadEvent(), loadSchedule()]);
   }, [loadEvent, loadSchedule]);
 
@@ -109,11 +109,11 @@ export function PublicScheduleView() {
           matchesScheduleKindFilter(item, kindFilter) &&
           (!attendanceFilter.size || attendanceFilter.has(answers.get(item.id) ?? "")) &&
           (!locations.length || locations.includes(item.location ?? "")) &&
-          `${item.title} ${item.description ?? ""} ${item.location ?? ""}`
-            .toLocaleLowerCase(language)
-            .includes(search.trim().toLocaleLowerCase(language)),
+          normalizeSearchText(
+            `${item.title} ${item.description ?? ""} ${item.location ?? ""}`,
+          ).includes(normalizeSearchText(search)),
       ) ?? null,
-    [items, segmentFilter, kindFilter, attendanceFilter, answers, locations, search, language],
+    [items, segmentFilter, kindFilter, attendanceFilter, answers, locations, search],
   );
   const answered = [...answers.values()].some((answer) => answer === "yes" || answer === "unsure");
   const filters: FilterDefinition[] = [
