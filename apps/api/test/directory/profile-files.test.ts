@@ -592,7 +592,7 @@ describe("account photo (#934)", () => {
     expect((await get(`/api/users/${me}`, staff)).json().image).toBe(image);
   });
 
-  it("shows scanner operators the photo their roster links only while it is shared", async () => {
+  it("shows scanner operators every roster photo, shared publicly or not", async () => {
     const me = await person();
     const image = (await upload("/api/me/photo", me, PNG, "me.png", "image/png")).json().image;
     const operator = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
@@ -601,17 +601,21 @@ describe("account photo (#934)", () => {
         .json()
         .people.find((entry: { userId: number }) => entry.userId === me).photoUrl;
 
-    await putProfile(me, VISIBLE);
-    expect(await rosterPhoto()).toBeNull();
-    expect((await get(image, operator)).statusCode).toBe(404);
+    // No public profile at all: staff still identify the person.
+    expect(await rosterPhoto()).toBe(image);
+    expect((await get(image, operator)).statusCode).toBe(200);
 
-    await putProfile(me, { ...VISIBLE, showPhoto: true });
+    await putProfile(me, VISIBLE);
     expect(await rosterPhoto()).toBe(image);
     expect((await get(image, operator)).statusCode).toBe(200);
 
     await putProfile(me, { ...VISIBLE, directoryVisible: false, showPhoto: true });
-    expect(await rosterPhoto()).toBeNull();
-    expect((await get(image, operator)).statusCode).toBe(404);
+    expect(await rosterPhoto()).toBe(image);
+    expect((await get(image, operator)).statusCode).toBe(200);
+
+    // The switch still hides it from attendees without a staff capability.
+    const attendee = await person();
+    expect((await get(image, attendee)).statusCode).toBe(404);
   });
 
   it("rejects unsupported, oversize and empty images and the old URL field", async () => {

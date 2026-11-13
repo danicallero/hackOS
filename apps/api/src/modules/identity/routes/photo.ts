@@ -42,9 +42,9 @@ import { hasEventAccess } from "../role.js";
  * Account photo (#934). The owner uploads it to private object storage; it
  * is never served from a public bucket URL. `GET /api/users/:id/photo`
  * re-checks access on every request: the person, staff who can read users,
- * and, while the person shows the photo on their public profile, a scanner
- * operator (whose roster links it) or an attendee who saved the person in
- * their diary (#935).
+ * a scanner operator (whose roster links every photo) and, while the person
+ * shows the photo on their public profile, an attendee who saved the person
+ * in their diary (#935).
  */
 
 const photoParams = z.object({ id: z.coerce.number().int().positive() });
@@ -57,8 +57,7 @@ async function canSeePhoto(req: FastifyRequest, subjectId: number): Promise<bool
   const context = getRequestAuthorizationContext(req);
   const staffReader =
     (await userHasCapability(context, CAPABILITIES.USERS_READ)) ||
-    ((await userHasAnyCapability(context, SCANNER_ROSTER_CAPABILITIES)) &&
-      (await photoPublishedInDirectory(pool, subjectId)));
+    (await userHasAnyCapability(context, SCANNER_ROSTER_CAPABILITIES));
   if (staffReader) {
     try {
       await assertFixtureSubjectScope(pool, readerId, subjectId);
@@ -273,7 +272,7 @@ export function registerPhotoRoutes(app: FastifyInstance): void {
         params: photoParams,
         summary: "Read a person's photo",
         description:
-          "Streams an account photo after checking this request: the person themself, a user reader, a logistics-capability holder when the person shares the photo in their public profile, an attendee with event access who saved the person in their diary, or an authorized help desk reader. Any other case, and a missing photo, answer 404. The `v` query parameter only versions the URL. Cached privately for 5 minutes (#934).",
+          "Streams an account photo after checking this request: the person themself, a user reader, a logistics-capability holder (scanner roster), an attendee with event access who saved the person in their diary while the person shares the photo in their public profile, or an authorized help desk reader. Any other case, and a missing photo, answer 404. The `v` query parameter only versions the URL. Cached privately for 5 minutes (#934).",
       },
     },
     async (req, reply) => {
