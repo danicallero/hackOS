@@ -81,6 +81,7 @@ export default async function ProjectGalleryPage({ params }: { params: Promise<{
             rank: copy.rankLabel,
             noMembers: copy.noMembers,
             noChallenges: copy.noChallenges,
+            description: copy.projectDescriptionFieldLabel,
           }}
         />
       </PageLayout>

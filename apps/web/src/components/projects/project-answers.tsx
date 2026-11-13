@@ -18,12 +18,15 @@ export function ProjectAnswers({
   project,
   language,
   fallbackTitle,
+  descriptionLabel,
   omitFieldKeys = [],
   assetUrl,
 }: {
   project: NativeProject;
   language: Language;
   fallbackTitle?: string;
+  /** Name of the project description, shown when the form has no description question. */
+  descriptionLabel?: string;
   /** Answers the surrounding view already shows, so they are not repeated. */
   omitFieldKeys?: string[];
   assetUrl: (path: string) => string;
@@ -44,9 +47,14 @@ export function ProjectAnswers({
   return (
     <div className="min-w-0 space-y-8">
       {!description && project.description && (
-        <p className="text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap text-pretty">
-          {project.description}
-        </p>
+        <div className="min-w-0 space-y-2">
+          {descriptionLabel && (
+            <h2 className="type-meta font-medium text-muted-foreground">{descriptionLabel}</h2>
+          )}
+          <p className="whitespace-pre-wrap text-pretty text-sm leading-relaxed">
+            {project.description}
+          </p>
+        </div>
       )}
       {groupApplicationFields(visible, project.sections).map((group, index) => (
         <section

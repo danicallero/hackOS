@@ -30,6 +30,7 @@ export function ProjectOverview({
     rank: string;
     noMembers: string;
     noChallenges: string;
+    description: string;
   };
   assetUrl: (path: string) => string;
   review?: React.ReactNode;
@@ -50,7 +51,12 @@ export function ProjectOverview({
             {winner.challengeTitle} · {labels.rank.replace("{rank}", String(winner.rank))}
           </StatusBadge>
         ))}
-        <ProjectAnswers project={project} language={language} assetUrl={assetUrl} />
+        <ProjectAnswers
+          project={project}
+          language={language}
+          descriptionLabel={labels.description}
+          assetUrl={assetUrl}
+        />
       </div>
       <aside className="min-w-0 space-y-8 lg:sticky lg:top-6">
         {(project.members.length === 0 ||

@@ -697,6 +697,7 @@ export function ProjectEditor({
               rank: t("rankLabel"),
               noMembers: t("noMembers"),
               noChallenges: t("noChallenges"),
+              description: t("projectDescriptionFieldLabel"),
             }}
             assetUrl={(path) => new URL(path, API_URL).toString()}
           />

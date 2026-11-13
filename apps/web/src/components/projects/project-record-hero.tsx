@@ -40,12 +40,12 @@ export function ProjectRecordHero({
   return (
     <HeroBleed color={color} contentClassName="max-w-6xl">
       <BackLink href={backHref} label={backLabel} />
-      <header className="flex flex-col gap-4 pt-2 md:flex-row md:items-end md:justify-between">
-        <div className="min-w-0 space-y-3">
-          <h1 className="font-display text-3xl leading-tight text-balance wrap-anywhere sm:text-5xl">
+      <header className="space-y-4 pt-2">
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="min-w-0 font-display text-3xl leading-tight text-balance wrap-anywhere sm:text-5xl">
             {name}
           </h1>
-          {state}
+          {state && <div className="shrink-0 pt-2 sm:pt-4">{state}</div>}
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </header>
