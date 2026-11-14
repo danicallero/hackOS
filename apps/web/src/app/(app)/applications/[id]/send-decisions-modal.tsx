@@ -52,6 +52,8 @@ export function SendDecisionsModal({
       onOpenChange(false);
     } catch (err) {
       toast.error(apiErrorText(err, t, t("couldNotSendDecisions")), t("sendDecisions"));
+      // Rows before the failure were already sent; show the real state.
+      await onSent();
     } finally {
       setBusy(false);
     }

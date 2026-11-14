@@ -1,8 +1,10 @@
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import type { Queryable } from "../../db/pool.js";
-
 import { pool } from "../../db/pool.js";
 
-import { NotFoundError } from "../../lib/errors.js";
+import { AppError, NotFoundError } from "../../lib/errors.js";
+
+import { batchSkipCode } from "./batch-skip.js";
 
 import {
   decide,
@@ -85,26 +87,38 @@ export interface BatchResult {
   // Per-id failures with their reason. Previously batches silently swallowed
   // these (the "flaky batch" symptom): callers saw a count and couldn't tell
   // which rows were skipped or why. Surfacing them makes batches observable.
-  skipped: Array<{ id: number; reason: string }>;
+  // `code` is the stable, translatable reason; `reason` keeps the English
+  // server message for API consumers and logs.
+  skipped: BatchSkip[];
+}
+
+export interface BatchSkip {
+  id: number;
+  code: string;
+  reason: string;
 }
 
 /**
- * Run a per-response operation over a batch: deterministic id order, one row's
- * failure never aborts the rest, and every skip is reported with its reason.
+ * Run a per-response operation over a batch in the caller's order (staff send
+ * their ranked order, so capacity goes to the rows they put first), one row's
+ * business failure never aborts the rest, and every skip carries a stable code.
+ * Each row runs in its own transaction, so input order cannot deadlock.
  */
 async function runBatch(
   responseIds: number[],
   op: (id: number) => Promise<unknown>,
 ): Promise<BatchResult> {
-  const sorted = [...responseIds].sort((a, b) => a - b);
   let processed = 0;
-  const skipped: Array<{ id: number; reason: string }> = [];
-  for (const id of sorted) {
+  const skipped: BatchSkip[] = [];
+  for (const id of responseIds) {
     try {
       await op(id);
       processed++;
     } catch (err) {
-      skipped.push({ id, reason: err instanceof Error ? err.message : "failed" });
+      // Only business errors are per-row skips; infrastructure failures
+      // (deadlock, timeout, lost connection) must surface as a 5xx.
+      if (!(err instanceof AppError)) throw err;
+      skipped.push({ id, code: batchSkipCode(err), reason: err.message });
     }
   }
   return { processed, skipped };
@@ -144,10 +158,10 @@ export async function batchSendDecisions(
 ): Promise<{
   sent: number;
   tokens: Array<{ responseId: number; token: string | null }>;
-  skipped: Array<{ id: number; reason: string }>;
+  skipped: BatchSkip[];
 }> {
   const tokens: Array<{ responseId: number; token: string | null }> = [];
-  const skipped: Array<{ id: number; reason: string }> = [];
+  const skipped: BatchSkip[] = [];
   const sorted = [...responseIds].sort((a, b) => a - b);
   const statusById = new Map<number, string>();
   if (sorted.length > 0) {
@@ -161,17 +175,22 @@ export async function batchSendDecisions(
     try {
       const status = statusById.get(id);
       if (status === undefined) {
-        skipped.push({ id, reason: "not found" });
+        skipped.push({ id, code: ERROR_REASONS.RESPONSE_NOT_FOUND, reason: "not found" });
         continue;
       }
       if (status === "accepted_internal" || status === "rejected_internal") {
         const result = await sendDecision(actorId, id);
         tokens.push({ responseId: id, token: result.confirmationToken });
       } else {
-        skipped.push({ id, reason: `nothing to send from status ${status}` });
+        skipped.push({
+          id,
+          code: ERROR_REASONS.RESPONSE_STATUS_CHANGED,
+          reason: `nothing to send from status ${status}`,
+        });
       }
     } catch (err) {
-      skipped.push({ id, reason: err instanceof Error ? err.message : "failed" });
+      if (!(err instanceof AppError)) throw err;
+      skipped.push({ id, code: batchSkipCode(err), reason: err.message });
     }
   }
   return { sent: tokens.length, tokens, skipped };

@@ -1,3 +1,5 @@
+import type pg from "pg";
+
 import { pool, withTransaction } from "../../db/pool.js";
 
 import { audit } from "../../lib/audit.js";
@@ -7,7 +9,7 @@ import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
 
 import { reconcileTicketAccess } from "../logistics/tickets.js";
-
+import { batchSkipCode } from "./batch-skip.js";
 import {
   enqueueDecisionEmailRow,
   enqueueDecisionNotificationRows,
@@ -15,9 +17,7 @@ import {
   loadUserComms,
   sendOne,
 } from "./decision-delivery.js";
-
 import { requireApplication } from "./forms.js";
-
 import {
   assertCapacityAvailable,
   invalidateConfirmationToken,
@@ -25,8 +25,19 @@ import {
   pushTicketVoid,
   revokeApplicationGrantedRoles,
 } from "./internal.js";
-
 import type { ApplicationRow, ResponseRow } from "./types.js";
+
+/** Lock the form row so capacity checks on it are serialized (plan/07 §2). */
+async function lockApplication(
+  client: pg.PoolClient,
+  applicationId: number,
+): Promise<ApplicationRow> {
+  const { rows } = await client.query(`SELECT * FROM applications WHERE id = $1 FOR UPDATE`, [
+    applicationId,
+  ]);
+  if (!rows[0]) throw new NotFoundError("Application not found");
+  return rows[0] as ApplicationRow;
+}
 
 // ── decide (H14) ─────────────────────────────────────────────────────────────
 
@@ -226,7 +237,11 @@ export async function sendDecisionsBatch(
   actorId: number,
   applicationId: number,
   includeRejected: boolean,
-): Promise<{ sent: number; tokens: Array<{ responseId: number; token: string | null }> }> {
+): Promise<{
+  sent: number;
+  tokens: Array<{ responseId: number; token: string | null }>;
+  skipped: Array<{ id: number; code: string; reason: string }>;
+}> {
   // Validate the requested form before discovering candidates. Without this
   // guard a typo/removed application looked like a successful empty batch.
   await requireApplication(pool, applicationId);
@@ -248,6 +263,7 @@ export async function sendDecisionsBatch(
     [applicationId, statuses],
   );
   const tokens: Array<{ responseId: number; token: string | null }> = [];
+  const skipped: Array<{ id: number; code: string; reason: string }> = [];
   for (const row of rows as Array<{ id: number }>) {
     try {
       const result = await sendDecision(actorId, Number(row.id));
@@ -255,15 +271,20 @@ export async function sendDecisionsBatch(
     } catch (err) {
       if (err instanceof NotFoundError) {
         // A target can enter removal_pending (or be finalized) after the
-        // candidate read. Treat only that expected disappearance as a no-op;
-        // provider, transaction and all other business failures must reach the
-        // caller instead of silently reporting a partial batch.
+        // candidate read. Treat that expected disappearance as a no-op.
         continue;
       }
+      if (err instanceof ConflictError) {
+        // Another staff member sent or reverted this row after the candidate
+        // read. Report it instead of failing the rows still to send (H14).
+        skipped.push({ id: Number(row.id), code: batchSkipCode(err), reason: err.message });
+        continue;
+      }
+      // Provider, transaction and other failures must reach the caller.
       throw err;
     }
   }
-  return { sent: tokens.length, tokens };
+  return { sent: tokens.length, tokens, skipped };
 }
 
 /**
@@ -313,7 +334,12 @@ export async function resendDecision(
         status: resp.status,
       });
     }
-    const app = await requireApplication(client, resp.application_id);
+    const app = await lockApplication(client, resp.application_id);
+    // An expired spot no longer counts towards capacity; taking it back must
+    // re-check it like re-accept does (H15).
+    if (resp.status === "expired" && app.capacity != null) {
+      await assertCapacityAvailable(client, resp.application_id, app.capacity);
+    }
     const user = await loadUserComms(client, resp.user_id);
     const token = await issueConfirmationToken(client, resp, app, user.email);
     // An expired response returns to 'accepted' — the org's explicit second chance.
@@ -354,7 +380,8 @@ export async function reAccept(
       });
     }
 
-    const app = await requireApplication(client, resp.application_id);
+    // Serialize capacity checks with decide/revert on the same form (plan/07 §2).
+    const app = await lockApplication(client, resp.application_id);
 
     if (app.capacity != null) {
       await assertCapacityAvailable(client, resp.application_id, app.capacity);

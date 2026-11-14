@@ -49,6 +49,7 @@ import type { FormSection, ResponseRow, TemplateField } from "@/lib/applications
 import { pickText, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
+import { type BatchResponse, groupSkips, runChunkedBatch, skipReasonText } from "./chunked-batch";
 import { buildResponseColumns } from "./response-columns";
 import { answerValues, hasDietaryRestrictions, matchesResponseSearch } from "./response-filters";
 import { ScoreSelection } from "./score-selection";
@@ -151,6 +152,7 @@ export function ResponsesTab({
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchResult, setBatchResult] = useState<DurableBatchResult | null>(null);
   const [confirmBatchRevoke, setConfirmBatchRevoke] = useState(false);
+  const [confirmBatchResend, setConfirmBatchResend] = useState(false);
   const [exportingKey, setExportingKey] = useState<string | null>(null);
   const [exportFailures, setExportFailures] = useState<ExportFailuresState | null>(null);
   // The table's own search/sort-applied row order, for modal prev/next.
@@ -234,33 +236,41 @@ export function ResponsesTab({
     }
   }
 
-  async function batchAction(label: string, fn: () => Promise<unknown>) {
+  async function batchAction(label: string, path: string, extra: Record<string, unknown> = {}) {
     setBatchBusy(true);
-    try {
-      const result = (await fn()) as
-        | { processed?: number; sent?: number; skipped?: { id: number; reason: string }[] }
-        | undefined;
-      const skipped = (result?.skipped ?? []).map((item) => ({
-        ...item,
-        applicant:
-          allRows.find((row) => row.id === item.id)?.name ??
-          allRows.find((row) => row.id === item.id)?.email ??
-          `#${item.id}`,
-      }));
-      setBatchResult({
-        label,
-        processed:
-          result?.processed ?? result?.sent ?? Math.max(0, selectedIds.size - skipped.length),
-        skipped,
-      });
-      setSelectedIds(new Set());
-      reloadUnlessModalOpen();
-      if (skipped.length === 0) toast.success(label, { compactTitle: t("toastDecisions") });
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("batchActionFailed")), t("toastDecisions"));
-    } finally {
-      setBatchBusy(false);
+    // Send in the table's visible order so that, when capacity runs out, the
+    // rows staff ranked first are the ones processed first (H14).
+    const position = new Map(visibleRows.map((row, index) => [row.id, index]));
+    const ids = selectedArr
+      .map((row) => row.id)
+      .sort((a, b) => (position.get(a) ?? Infinity) - (position.get(b) ?? Infinity));
+    const result = await runChunkedBatch(ids, (response_ids) =>
+      api.post<BatchResponse>(path, { ...extra, response_ids }),
+    );
+    const applicantName = (id: number) => {
+      const row = allRows.find((candidate) => candidate.id === id);
+      return row?.name ?? row?.email ?? `#${id}`;
+    };
+    const skipped = result.skipped.map((item) => ({
+      id: item.id,
+      reason: skipReasonText(item.code, t),
+      applicant: applicantName(item.id),
+    }));
+    const done = ids.length - result.unsent.length;
+    setBatchResult({
+      label,
+      processed: result.processed ?? Math.max(0, done - skipped.length),
+      skipped,
+    });
+    // Rows a failed chunk never reached stay selected so staff can retry them.
+    setSelectedIds(new Set(result.unsent.map(String)));
+    reloadUnlessModalOpen();
+    if (result.error) {
+      toast.error(apiErrorText(result.error, t, t("batchActionFailed")), t("toastDecisions"));
+    } else if (skipped.length === 0) {
+      toast.success(label, { compactTitle: t("toastDecisions") });
     }
+    setBatchBusy(false);
   }
 
   const selectedArr = useMemo(
@@ -495,24 +505,18 @@ export function ResponsesTab({
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
                     onClick={() =>
-                      batchAction(t("decisionsApplied"), () =>
-                        api.post("/api/responses/batch/decide", {
-                          response_ids: selectedArr.map((r) => r.id),
-                          decision: "accepted",
-                        }),
-                      )
+                      batchAction(t("decisionsApplied"), "/api/responses/batch/decide", {
+                        decision: "accepted",
+                      })
                     }
                   >
                     {t("accept")}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() =>
-                      batchAction(t("decisionsApplied"), () =>
-                        api.post("/api/responses/batch/decide", {
-                          response_ids: selectedArr.map((r) => r.id),
-                          decision: "rejected",
-                        }),
-                      )
+                      batchAction(t("decisionsApplied"), "/api/responses/batch/decide", {
+                        decision: "rejected",
+                      })
                     }
                   >
                     {t("reject")}
@@ -526,11 +530,7 @@ export function ResponsesTab({
                 variant="outline"
                 disabled={batchBusy}
                 onClick={() =>
-                  batchAction(t("decisionsSent"), () =>
-                    api.post("/api/responses/batch/send-decision", {
-                      response_ids: selectedArr.map((r) => r.id),
-                    }),
-                  )
+                  batchAction(t("decisionsSent"), "/api/responses/batch/send-decision")
                 }
                 loading={batchBusy}
               >
@@ -543,20 +543,14 @@ export function ResponsesTab({
                 size="sm"
                 variant="outline"
                 disabled={batchBusy}
-                onClick={() =>
-                  batchAction(t("decisionsResent"), () =>
-                    api.post("/api/responses/batch/resend-decision", {
-                      response_ids: selectedArr.map((r) => r.id),
-                    }),
-                  )
-                }
+                onClick={() => setConfirmBatchResend(true)}
                 loading={batchBusy}
               >
                 <PaperPlaneTiltIcon aria-hidden="true" />
                 {t("resend")}
               </Button>
             )}
-            {workspace === "outbox" && (
+            {(workspace === "outbox" || workspace === "sent") && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -573,11 +567,10 @@ export function ResponsesTab({
                   <DropdownMenuLabel>{t("revert")}</DropdownMenuLabel>
                   <DropdownMenuItem
                     onClick={() =>
-                      batchAction(t("revertedToAcceptedInternal"), () =>
-                        api.post("/api/responses/batch/revert-decision", {
-                          response_ids: selectedArr.map((r) => r.id),
-                          decision: "accepted",
-                        }),
+                      batchAction(
+                        t("revertedToAcceptedInternal"),
+                        "/api/responses/batch/revert-decision",
+                        { decision: "accepted" },
                       )
                     }
                   >
@@ -585,11 +578,10 @@ export function ResponsesTab({
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() =>
-                      batchAction(t("revertedToRejectedInternal"), () =>
-                        api.post("/api/responses/batch/revert-decision", {
-                          response_ids: selectedArr.map((r) => r.id),
-                          decision: "rejected",
-                        }),
+                      batchAction(
+                        t("revertedToRejectedInternal"),
+                        "/api/responses/batch/revert-decision",
+                        { decision: "rejected" },
                       )
                     }
                   >
@@ -597,88 +589,31 @@ export function ResponsesTab({
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() =>
-                      batchAction(t("movedBackToReview"), () =>
-                        api.post("/api/responses/batch/revert-decision", {
-                          response_ids: selectedArr.map((r) => r.id),
-                          decision: "review",
-                        }),
-                      )
+                      batchAction(t("movedBackToReview"), "/api/responses/batch/revert-decision", {
+                        decision: "review",
+                      })
                     }
                   >
                     {t("backToReview")}
                   </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            {workspace === "sent" && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    size={isMobile ? "icon-sm" : "sm"}
-                    variant="outline"
-                    disabled={batchBusy}
-                    aria-label={t("more")}
-                  >
-                    <DotsThreeIcon aria-hidden="true" />
-                    {!isMobile && t("more")}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>{t("revert")}</DropdownMenuLabel>
-                  <DropdownMenuItem
-                    onClick={() =>
-                      batchAction(t("revertedToAcceptedInternal"), () =>
-                        api.post("/api/responses/batch/revert-decision", {
-                          response_ids: selectedArr.map((r) => r.id),
-                          decision: "accepted",
-                        }),
-                      )
-                    }
-                  >
-                    {t("toAcceptedUnsend")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() =>
-                      batchAction(t("revertedToRejectedInternal"), () =>
-                        api.post("/api/responses/batch/revert-decision", {
-                          response_ids: selectedArr.map((r) => r.id),
-                          decision: "rejected",
-                        }),
-                      )
-                    }
-                  >
-                    {t("toRejectedUnsend")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() =>
-                      batchAction(t("movedBackToReview"), () =>
-                        api.post("/api/responses/batch/revert-decision", {
-                          response_ids: selectedArr.map((r) => r.id),
-                          decision: "review",
-                        }),
-                      )
-                    }
-                  >
-                    {t("backToReview")}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() =>
-                      batchAction(t("reaccepted"), () =>
-                        api.post("/api/responses/batch/re-accept", {
-                          response_ids: selectedArr.map((r) => r.id),
-                        }),
-                      )
-                    }
-                  >
-                    {t("reacceptDeclinedExpired")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={() => setConfirmBatchRevoke(true)}
-                  >
-                    {t("revokeSpot")}
-                  </DropdownMenuItem>
+                  {workspace === "sent" && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() =>
+                          batchAction(t("reaccepted"), "/api/responses/batch/re-accept")
+                        }
+                      >
+                        {t("reacceptDeclinedExpired")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() => setConfirmBatchRevoke(true)}
+                      >
+                        {t("revokeSpot")}
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -748,9 +683,9 @@ export function ResponsesTab({
                   {t("batchSkippedTitle", { count: batchResult.skipped.length })}
                 </p>
                 <ul className="mt-1 list-disc space-y-1 pl-5">
-                  {batchResult.skipped.map((item) => (
-                    <li key={item.id}>
-                      {item.applicant}: {item.reason}
+                  {groupSkips(batchResult.skipped).map((group) => (
+                    <li key={group.reason}>
+                      {group.applicants.join(", ")}: {group.reason}
                     </li>
                   ))}
                 </ul>
@@ -769,6 +704,21 @@ export function ResponsesTab({
       )}
 
       <AlertModal
+        open={confirmBatchResend}
+        onOpenChange={setConfirmBatchResend}
+        title={t("resendDecisionsConfirmTitle", { count: selectedIds.size })}
+        description={t("resendDecisionsWarning")}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("resend")}
+        pending={batchBusy}
+        onConfirm={() => {
+          void batchAction(t("decisionsResent"), "/api/responses/batch/resend-decision").finally(
+            () => setConfirmBatchResend(false),
+          );
+        }}
+      />
+
+      <AlertModal
         open={confirmBatchRevoke}
         onOpenChange={setConfirmBatchRevoke}
         title={t("revokeSpot")}
@@ -778,11 +728,9 @@ export function ResponsesTab({
         destructive
         pending={batchBusy}
         onConfirm={() => {
-          void batchAction(t("spotsRevoked"), () =>
-            api.post("/api/responses/batch/revoke-spot", {
-              response_ids: selectedArr.map((r) => r.id),
-            }),
-          ).finally(() => setConfirmBatchRevoke(false));
+          void batchAction(t("spotsRevoked"), "/api/responses/batch/revoke-spot").finally(() =>
+            setConfirmBatchRevoke(false),
+          );
         }}
       />
 
