@@ -197,24 +197,6 @@ export async function getRsvps(db: Queryable, userId: number): Promise<RsvpItem[
   return (await offeredRsvps(db, userId, kind, eventKey, language)).map(toRsvpItem);
 }
 
-/**
- * True when the person has an open (unlocked) offered item with no stored
- * answer. `mealsOnly` keeps the legacy profile-task meaning of "meal plan".
- */
-export async function hasPendingRsvps(
-  db: Queryable,
-  userId: number,
-  options: { mealsOnly?: boolean } = {},
-): Promise<boolean> {
-  const [eventKey, kind, language] = await Promise.all([
-    currentEventKey(db),
-    attendanceKind(db, userId),
-    userLanguage(db, userId),
-  ]);
-  const items = await offeredRsvps(db, userId, kind, eventKey, language, options);
-  return items.some((i) => !i.locked && i.answer === null);
-}
-
 export interface RsvpAnswerInput {
   activityId: number;
   answer: RsvpAnswer;
@@ -247,11 +229,9 @@ export async function submitRsvps(
     );
     if (!userRows[0]) throw new NotFoundError("User not found", { userId });
 
-    const [eventKey, kind, language] = await Promise.all([
-      currentEventKey(client),
-      attendanceKind(client, userId),
-      userLanguage(client, userId),
-    ]);
+    const eventKey = await currentEventKey(client);
+    const kind = await attendanceKind(client, userId);
+    const language = await userLanguage(client, userId);
     const mealActivities = new Set<number>();
     if (answers.length > 0) {
       const { rows } = await client.query<{ id: number; is_meal: boolean }>(

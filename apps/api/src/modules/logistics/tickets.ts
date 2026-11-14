@@ -9,7 +9,7 @@ import { PASS_TYPE_IDENTIFIER, voidTicketPasses } from "./wallet-passes.js";
 
 /**
  * Creates the permanent entrance credential for any attendee category. The
- * unique user key makes repeated role transitions safe (plan/07 invariant 10).
+ * unique user key makes repeated role transitions safe (plan/07 invariant 7).
  */
 export async function issueTicket(client: Queryable, userId: number): Promise<string> {
   // H54: ticket issuance is an identity-bearing credential mutation. The
@@ -130,7 +130,7 @@ export async function ticketQrPayload(userId: number, actorId?: number) {
   if (!row) throw new NotFoundError("User not found");
   return {
     userId: row.id as number,
-    // A `tickets` row is permanent once issued (plan/07 invariant 10), but it
+    // A `tickets` row is permanent once issued (plan/07 invariant 7), but it
     // only gets served here while the person currently holds event access —
     // otherwise a declined/revoked spot would keep showing a live QR/ticket.
     ticketToken: eventAccess ? ((row.token as string | null) ?? null) : null,

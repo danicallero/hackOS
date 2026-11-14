@@ -31,6 +31,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <QuickArrival />
           <main
             id={MAIN_CONTENT_ID}
+            data-app-main=""
             tabIndex={-1}
             className="flex min-h-0 min-w-0 flex-1 flex-col px-4 pt-3 pb-6 sm:px-6 md:pt-6 lg:pt-8 lg:pb-8 xl:has-data-judging-page:overflow-hidden outline-none"
           >

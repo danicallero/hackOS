@@ -1,4 +1,3 @@
-import { useRouter } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
 import { FilterMenu } from "@/components/filter-menu";
@@ -15,7 +14,6 @@ import { HelperRow } from "./rows";
 /** H63: published helpers, searchable by name or knowledge, available ones first (server order). */
 export function HelpersScreen() {
   const { t } = useLocale();
-  const router = useRouter();
   const { me } = useMeContext();
   const allowed = canBrowseHelpDesk(me?.capabilities ?? []);
   const result = useHelpResource<{ helpers: HelperCard[] }>(
@@ -111,12 +109,10 @@ export function HelpersScreen() {
                   {index > 0 ? <Separator inset={76} /> : null}
                   <HelperRow
                     helper={helper}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/(tabs)/help-desk/helper/[id]",
-                        params: { id: helper.userId },
-                      })
-                    }
+                    href={{
+                      pathname: "/(tabs)/help-desk/helper/[id]",
+                      params: { id: helper.userId },
+                    }}
                   />
                 </View>
               ))}

@@ -497,7 +497,7 @@ export async function listProjectMemberCandidates(q: string, limit: number, acto
   const marker = await isSyntheticOperator(pool, actorId);
   return (
     await pool.query(
-      `SELECT id,email,name,surname FROM users WHERE is_test_account=$3 AND account_state='active' AND anonymized_at IS NULL AND (email ILIKE $1 OR unaccent(name) ILIKE unaccent($1)) ORDER BY id LIMIT $2`,
+      `SELECT id,email,name,surname FROM users WHERE is_test_account=$3 AND account_state='active' AND anonymized_at IS NULL AND (unaccent(email) ILIKE unaccent($1) OR unaccent(name) ILIKE unaccent($1)) ORDER BY id LIMIT $2`,
       [likeContains(q), limit, marker],
     )
   ).rows;

@@ -476,7 +476,7 @@ Table applications {
   active boolean [default: true]
   open_at timestamptz
   close_at timestamptz
-  capacity integer [note: 'accepting past this is a 409 (invariant #7)']
+  capacity integer [note: 'accepting past this is a 409']
   confirmation_window_hours integer [not null, default: 168]
   created_at timestamptz [default: `now()`]
 }
@@ -531,7 +531,7 @@ Table applicant_reviews {
 
 Table tickets {
   user_id integer [pk]
-  token text [not null, unique, note: 'signed QR payload; permanent, never voided (invariant #10)']
+  token text [not null, unique, note: 'signed QR payload; permanent, never voided (invariant #7)']
   issued_at timestamptz [default: `now()`]
 }
 

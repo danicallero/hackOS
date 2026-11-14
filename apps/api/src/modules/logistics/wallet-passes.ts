@@ -59,7 +59,7 @@ export function resolvePassIdentity(
 async function assertEntitled(userId: number, purpose: Purpose): Promise<void> {
   if (purpose === "ticket") {
     // Not a mere row check: `tickets` is permanent once issued (plan/07
-    // invariant 10), so re-issuing/refreshing a wallet pass must instead gate
+    // invariant 7), so re-issuing/refreshing a wallet pass must instead gate
     // on whether the person currently holds real event access.
     if (!(await hasEventAccess(pool, userId))) throw new NotFoundError("Ticket not issued");
     const { rows } = await pool.query(
@@ -318,7 +318,7 @@ export async function listActiveWalletPassIds(): Promise<number[]> {
  * Voids any active ticket-purpose wallet passes for a user who just lost
  * event access (declined/revoked after confirming) — mirrors
  * `voidBadgePasses` in `accreditation.ts`. The underlying `tickets` row is
- * untouched (plan/07 invariant 10); this only closes off the wallet pass
+ * untouched (plan/07 invariant 7); this only closes off the wallet pass
  * representation, which the caller then pushes to devices via
  * `enqueueWalletSync`.
  */

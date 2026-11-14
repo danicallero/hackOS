@@ -134,10 +134,10 @@ export function EditCard({
   const { reset } = form;
   const _visibility = form.watch("visibility");
 
+  // Resync local edit state from the freshly reloaded challenge after a save.
   useEffect(() => {
     reset(toFormValues(challenge));
     setScheduledPublish(challenge.visibility === "hidden" && Boolean(challenge.available_from));
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Resync local edit state from the freshly reloaded challenge after a save.
     setSaveError(false);
     setPrizes(asPrizes(challenge.prizes));
     setQuestions(asQuestions(challenge.judging_panel_criteria));

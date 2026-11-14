@@ -357,7 +357,7 @@ export async function listAnnouncementRecipientCandidates(
        FROM users
       WHERE account_state = 'active' AND anonymized_at IS NULL
         AND is_test_account = $3
-        AND (email ILIKE $1 OR unaccent(name) ILIKE unaccent($1) OR unaccent(surname) ILIKE unaccent($1))
+        AND (unaccent(email) ILIKE unaccent($1) OR unaccent(name) ILIKE unaccent($1) OR unaccent(surname) ILIKE unaccent($1))
       ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
       LIMIT $2`,
     [filter, limit, fixtureMarker],

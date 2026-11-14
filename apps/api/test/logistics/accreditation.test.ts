@@ -226,7 +226,7 @@ describe("H22 accreditation lookup + check-in", () => {
   });
 
   it("403 when the ticket's owner no longer has event access (revoked spot, stale QR)", async () => {
-    // The tickets row is permanent (plan/07 invariant 10) — a captured QR
+    // The tickets row is permanent (plan/07 invariant 7) — a captured QR
     // never itself expires. Once event access is gone, check-in must refuse
     // it even though the token still resolves (H43).
     const uid = await createUser();

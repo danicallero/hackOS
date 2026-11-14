@@ -15,6 +15,7 @@ import {
   useState,
 } from "react";
 import { ScrollView, Text, TextInput, View } from "react-native";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScrollViewMarker } from "react-native-screens/experimental";
 import { AppRefreshControl } from "@/components/app-refresh-control";
@@ -34,11 +35,14 @@ import { ProjectGithubLink, ProjectRepoRow } from "@/components/project-github";
 import { FieldRow, GlassButton, NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
+import { useColorScheme } from "@/components/useColorScheme";
 import { alert } from "@/lib/alert";
 import { ApiError, apiFetch } from "@/lib/api";
 import { formatEventTime } from "@/lib/event-time";
+import { heroTint, NO_PHOTO_TINT } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
+import { useImageTint } from "@/lib/image-tint";
 import { useEditionList } from "@/lib/me-context";
 import { safeBack } from "@/lib/navigation";
 import {
@@ -191,6 +195,44 @@ function ScrollEdgeMarker({
   );
 }
 
+/**
+ * Hero wash of a project page (H18, H48): tinted from the colour of its first
+ * image, blue without images or a usable colour; an image whose colour is still
+ * loading keeps the plain background.
+ */
+function useProjectHero(files: ProjectFile[] | undefined) {
+  const dark = useColorScheme() === "dark";
+  const first = files?.find((file) => file.mimeType.startsWith("image/"));
+  const tint = useImageTint(first ? (first.thumbnailUrl ?? first.url) : null);
+  const hero = tint.settled ? heroTint(tint.color, dark, NO_PHOTO_TINT) : null;
+  return { hero, fromCache: tint.fromCache };
+}
+
+function ProjectHero({
+  hero,
+  fromCache,
+}: {
+  hero: ReturnType<typeof heroTint> | null;
+  fromCache: boolean;
+}) {
+  if (!hero) return null;
+  return (
+    <Animated.View
+      entering={fromCache ? undefined : FadeIn.duration(400)}
+      testID="project-hero"
+      pointerEvents="none"
+      style={{
+        experimental_backgroundImage: hero.gradient,
+        height: 620,
+        left: 0,
+        position: "absolute",
+        right: 0,
+        top: -300,
+      }}
+    />
+  );
+}
+
 /** H18/H60: display only server-approved photos and published winner fields. */
 export function ProjectReadView({
   project,
@@ -209,6 +251,7 @@ export function ProjectReadView({
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<Error | null>(null);
+  const { hero, fromCache } = useProjectHero(project.files);
   return (
     <ScrollEdgeMarker hideEdges={titleHeader}>
       <ScrollView
@@ -238,6 +281,7 @@ export function ProjectReadView({
         }}
         style={{ backgroundColor: colors.background }}
       >
+        <ProjectHero hero={hero} fromCache={fromCache} />
         {refreshError ? (
           <RequestFeedback
             error={refreshError}
@@ -253,7 +297,10 @@ export function ProjectReadView({
           />
         ) : null}
         {titleHeader ? (
-          <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
+          <Text
+            accessibilityRole="header"
+            style={{ color: hero?.foreground ?? colors.label, ...SCREEN_TITLE }}
+          >
             {project.name}
           </Text>
         ) : null}
@@ -441,6 +488,7 @@ export function ProjectEditor({
   const [name, setName] = useState(project.name);
   const savedName = useRef(project.name);
   const [files, setFiles] = useState(project.files ?? []);
+  const { hero, fromCache } = useProjectHero(files);
   const saveName = useCallback(
     async (next: string) => {
       const trimmed = next.trim();
@@ -592,6 +640,7 @@ export function ProjectEditor({
           paddingBottom: showSubmit ? 96 + insets.bottom : Math.max(32, insets.bottom + 16),
         }}
       >
+        <ProjectHero hero={hero} fromCache={fromCache} />
         <Section
           footer={deadline ? `${saveCaption} · ${t("projectDeadline")}: ${deadline}` : saveCaption}
         >

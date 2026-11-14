@@ -134,7 +134,6 @@ export function ScanTab({
     const raw = searchParams.get("userId");
     if (!raw) return;
     const id = Number(raw);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (Number.isFinite(id)) void openCard(id);
   }, [searchParams, openCard]);
 

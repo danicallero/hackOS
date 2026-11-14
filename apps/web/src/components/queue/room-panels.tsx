@@ -46,7 +46,6 @@ export function AssignmentsEditor({
 
   useEffect(() => {
     // Auto-derive the selected enterprise from async-loaded assignments data.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEnterpriseId(assignedEnterpriseId ? String(assignedEnterpriseId) : "");
   }, [assignedEnterpriseId]);
 

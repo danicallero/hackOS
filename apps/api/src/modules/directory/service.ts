@@ -10,6 +10,7 @@ import {
 } from "../../lib/errors.js";
 import { photoUrl, safePdfFilename } from "../../lib/profile-files.js";
 import { hasEventAccess } from "../identity/role.js";
+import { ENTERPRISE_HAS_SYNTHETIC } from "../sponsors/service.js";
 import { readPublishedMentor } from "./mentor.js";
 import type { PublicProfileInput, SocialLink } from "./schemas.js";
 
@@ -42,6 +43,18 @@ export interface DirectoryEntry {
   mentor: { expertise: string[] } | null;
   /** H61: knowledge of a published helper profile; `[]` otherwise. */
   helpTopics: { id: number; name: string }[];
+  /** H48: shown schedule items the person speaks at, by start time. */
+  activities: DirectoryActivity[];
+  /** Every visible company the person represents, oldest membership first. */
+  enterprises: { id: number; name: string; logoUrl: string | null }[];
+}
+
+export interface DirectoryActivity {
+  id: number;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  location: string | null;
 }
 
 export interface DirectoryProject {
@@ -62,6 +75,8 @@ interface EntryRow {
   projects: DirectoryProject[];
   challenges: DirectoryEntry["challenges"];
   help_topics: DirectoryEntry["helpTopics"];
+  activities: DirectoryActivity[];
+  enterprises: DirectoryEntry["enterprises"];
 }
 
 /**
@@ -196,7 +211,26 @@ function entrySql(profiles: string, accountLinks = true): string {
              JOIN helper_topics ht ON ht.user_id = hp.user_id AND ht.event_key = hp.event_key
              JOIN help_topics t ON t.id = ht.topic_id
             WHERE hp.user_id = u.id AND hp.published AND hp.event_key = current_edition()
-         ), '[]'::jsonb) AS help_topics
+         ), '[]'::jsonb) AS help_topics,
+         COALESCE((
+           SELECT jsonb_agg(jsonb_build_object('id', s.id, 'title', s.title, 'startsAt', s.starts_at,
+                                               'endsAt', s.ends_at, 'location', s.location)
+                            ORDER BY s.starts_at, s.id)
+             FROM schedule_speakers ss
+             JOIN schedule s ON s.id = ss.schedule_id
+            WHERE ss.user_id = u.id AND s.event_key = current_edition()
+              AND s.visibility = 'shown'
+              AND (s.publish_at IS NULL OR s.publish_at <= now())
+              AND 'participant' = ANY (s.audiences)
+         ), '[]'::jsonb) AS activities,
+         COALESCE((
+           SELECT jsonb_agg(jsonb_build_object('id', m.id, 'name', m.name, 'logoUrl', m.logo_url) ORDER BY m.sp_id)
+             FROM (SELECT e.id, e.name, e.logo_url, min(sp.id) AS sp_id
+                     FROM sponsors sp
+                     JOIN enterprises e ON e.id = sp.enterprise_id
+                    WHERE sp.user_id = u.id AND e.event_key = current_edition() AND e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}
+                    GROUP BY e.id, e.name, e.logo_url) m
+         ), '[]'::jsonb) AS enterprises
     FROM ${profiles}
     JOIN users u ON u.id = p.user_id
     ${DISPLAY_NAME_JOIN}
@@ -227,6 +261,18 @@ function toEntry(row: EntryRow, cvPath = `/api/directory/${row.user_id}/cv`): Di
     challenges: row.challenges.map((c) => ({ id: Number(c.id), name: c.name })),
     mentor: null,
     helpTopics: (row.help_topics ?? []).map((t) => ({ id: Number(t.id), name: t.name })),
+    activities: (row.activities ?? []).map((a) => ({
+      id: Number(a.id),
+      title: a.title,
+      startsAt: new Date(a.startsAt).toISOString(),
+      endsAt: new Date(a.endsAt).toISOString(),
+      location: a.location ?? null,
+    })),
+    enterprises: (row.enterprises ?? []).map((e) => ({
+      id: Number(e.id),
+      name: e.name,
+      logoUrl: e.logoUrl ?? null,
+    })),
   };
 }
 
@@ -251,6 +297,44 @@ export async function photoPublishedInDirectory(db: Queryable, userId: number): 
     [userId],
   );
   return rows.length > 0;
+}
+
+/**
+ * Whether the person's shared profile (opt-in on, admitted, not a test
+ * account) is also on a public surface any attendee can open: a speaker of a
+ * shown, published, participant-audience schedule item, or a representative of
+ * a visible, non-synthetic company (H44, H48). The photo and the profile card
+ * both follow this rule; `requirePhoto` adds the photo switch.
+ */
+async function sharedOnPublicSurface(
+  db: Queryable,
+  userId: number,
+  requirePhoto: boolean,
+): Promise<boolean> {
+  const { rowCount } = await db.query(
+    `SELECT 1 FROM user_public_profiles p JOIN users u ON u.id = p.user_id
+      WHERE ${VISIBLE_WHERE} ${requirePhoto ? "AND p.show_photo" : ""} AND u.id = $1
+        AND (EXISTS (
+         SELECT 1 FROM schedule_speakers ss JOIN schedule s ON s.id = ss.schedule_id
+          WHERE ss.user_id = u.id AND s.visibility = 'shown'
+            AND (s.publish_at IS NULL OR s.publish_at <= now())
+            AND 'participant' = ANY (s.audiences))
+       OR EXISTS (
+         SELECT 1 FROM sponsors sp JOIN enterprises e ON e.id = sp.enterprise_id
+          WHERE sp.user_id = u.id AND e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))`,
+    [userId],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+/** The shared photo of a speaker or company representative, readable by any attendee. */
+export function photoPublishedOnPublicSurface(db: Queryable, userId: number): Promise<boolean> {
+  return sharedOnPublicSurface(db, userId, true);
+}
+
+/** The shared profile of a speaker or company representative, readable by any attendee. */
+export function profilePublishedOnPublicSurface(db: Queryable, userId: number): Promise<boolean> {
+  return sharedOnPublicSurface(db, userId, false);
 }
 
 async function assertReaderAdmitted(userId: number): Promise<void> {
@@ -278,18 +362,22 @@ export async function savedByReader(
 }
 
 /**
- * Readers see only the people they saved; hidden, missing and unsaved people
- * are deliberately indistinguishable (#934, #935).
+ * Readers see the people they saved and the opted-in speakers and company
+ * representatives anyone can already see on the schedule and company pages
+ * (H44, H48); hidden, missing and other people are deliberately
+ * indistinguishable (#934, #935).
  */
-async function assertMayReadPerson(readerId: number, userId: number) {
+async function assertMayReadPerson(readerId: number, userId: number): Promise<boolean> {
   await assertReaderAdmitted(readerId);
-  if (!(await savedByReader(pool, readerId, userId))) {
+  const saved = await savedByReader(pool, readerId, userId);
+  if (!saved && !(await profilePublishedOnPublicSurface(pool, userId))) {
     throw new NotFoundError("Person not found");
   }
+  return saved;
 }
 
 export async function getDirectoryEntry(readerId: number, userId: number): Promise<DirectoryEntry> {
-  await assertMayReadPerson(readerId, userId);
+  const saved = await assertMayReadPerson(readerId, userId);
   const { rows } = await pool.query<EntryRow>(
     `${entrySql("user_public_profiles p")} WHERE ${VISIBLE_WHERE} AND u.id = $1`,
     [userId],
@@ -306,7 +394,10 @@ export async function getDirectoryEntry(readerId: number, userId: number): Promi
     if (!only[0]) throw new NotFoundError("Person not found");
     return { ...toEntry(only[0]), mentor };
   }
-  return { ...toEntry(rows[0]), mentor };
+  // The CV needs a scan: someone opened only as a speaker or representative
+  // exposes no CV (the CV route stays scan-only too).
+  const entry = toEntry(rows[0]);
+  return { ...entry, cvUrl: saved ? entry.cvUrl : null, mentor };
 }
 
 /**
@@ -331,12 +422,13 @@ async function readSharedCv(
   return { key: rows[0].cv_key, filename: rows[0].cv_filename };
 }
 
-/** The shared CV of an opted-in person the reader saved (#935). */
+/** The shared CV of an opted-in person the reader saved (#935); a scan is required. */
 export async function getDirectoryCv(
   readerId: number,
   userId: number,
 ): Promise<{ key: string; filename: string }> {
-  await assertMayReadPerson(readerId, userId);
+  await assertReaderAdmitted(readerId);
+  if (!(await savedByReader(pool, readerId, userId))) throw new NotFoundError("Person not found");
   return readSharedCv(userId, VISIBLE_WHERE);
 }
 

@@ -312,6 +312,13 @@ pushed above the tabs from either diary placement (direct tab or Others), the
 same way `app/schedule/[id].tsx` sits above Schedule; its back action falls
 back to `/` when there is nothing to pop.
 
+A company (H44) is the root-level `app/companies/[id].tsx`
+(`components/company-profile-screen.tsx`), pushed from a challenge's company
+row, a schedule item's companies or speaker subtitle, and a person's company
+row; the transparent native header gets the company name on scroll. Its
+representatives open `people/[id]`, its challenges `projects/challenge`, its
+activities `schedule/[id]`.
+
 The direct surface is one continuous scrub surface: on touch-down the Liquid
 Glass selection lens follows the finger in real time, including across several
 tabs. On release, the tab whose cell contains the final finger coordinate is

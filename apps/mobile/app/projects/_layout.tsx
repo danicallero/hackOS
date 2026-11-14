@@ -4,7 +4,7 @@ import { Platform } from "react-native";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { HeaderBackButton, hasScreenBelow } from "@/components/header-back-button";
 import { useLocale } from "@/lib/i18n";
-import { safeBack, useTabStackScreenOptions } from "@/lib/navigation";
+import { safeBack, sheetPresentation, useTabStackScreenOptions } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
 export default function ProjectsLayout() {
   const router = useRouter();
@@ -55,9 +55,10 @@ export default function ProjectsLayout() {
         options={{
           headerBlurEffect: "none",
           headerShadowVisible: false,
-          // The grouped list's page colour, so the sheet's bar and body read as one surface.
-          headerStyle: { backgroundColor: colors.background },
-          presentation: "modal",
+          // An opaque bar would paint over the sheet's grabber: stay transparent, page colour behind.
+          contentStyle: { backgroundColor: colors.background },
+          headerTransparent: true,
+          ...sheetPresentation,
           title: t("projectChallenges"),
         }}
       />
@@ -67,8 +68,9 @@ export default function ProjectsLayout() {
           headerBlurEffect: "none",
           headerShadowVisible: false,
           // Same surface as the challenges sheet.
-          headerStyle: { backgroundColor: colors.background },
-          presentation: "modal",
+          contentStyle: { backgroundColor: colors.background },
+          headerTransparent: true,
+          ...sheetPresentation,
           title: t("githubChooseRepo"),
         }}
       />
@@ -79,7 +81,7 @@ export default function ProjectsLayout() {
           headerBlurEffect: "none",
           headerShadowVisible: false,
           headerTransparent: true,
-          presentation: "modal",
+          ...sheetPresentation,
           title: t("projectInvite"),
         }}
       />

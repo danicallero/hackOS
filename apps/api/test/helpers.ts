@@ -1,6 +1,51 @@
-import { afterAll, beforeEach } from "vitest";
+import { afterAll, beforeEach, expect } from "vitest";
 import type { App } from "../src/app.js";
 import { pool } from "../src/db/pool.js";
+
+type IdempotencyReplayRequest = {
+  method: "POST" | "PUT" | "PATCH" | "DELETE";
+  url: string;
+  key: string;
+  payload?: Record<string, unknown>;
+};
+
+type IdempotencyReplayAudit = {
+  entityType: string;
+  entityId: string | number | ((body: Record<string, unknown>) => string | number);
+  action: string;
+};
+
+/** Assert one mutation is replayed for its key and records exactly one audit row. */
+export async function expectIdempotentReplay(
+  app: App,
+  actorId: number,
+  request: IdempotencyReplayRequest,
+  expectedStatus: number,
+  audit: IdempotencyReplayAudit,
+) {
+  const injectOptions = {
+    method: request.method,
+    url: request.url,
+    headers: { ...asUser(actorId), "Idempotency-Key": request.key },
+    ...(request.payload === undefined ? {} : { payload: request.payload }),
+  };
+  const first = await app.inject(injectOptions);
+  expect(first.statusCode).toBe(expectedStatus);
+  const replay = await app.inject(injectOptions);
+  expect(replay.statusCode).toBe(expectedStatus);
+  expect(replay.headers["idempotency-replayed"]).toBe("true");
+  expect(replay.json()).toEqual(first.json());
+
+  const body = first.json() as Record<string, unknown>;
+  const entityId = typeof audit.entityId === "function" ? audit.entityId(body) : audit.entityId;
+  const { rowCount } = await pool.query(
+    `SELECT 1 FROM audit_log
+      WHERE actor_id = $1 AND entity_type = $2 AND entity_id = $3 AND action = $4`,
+    [actorId, audit.entityType, String(entityId), audit.action],
+  );
+  expect(rowCount).toBe(1);
+  return first;
+}
 
 /**
  * Truncate every domain table (keeps schema + the queue_settings singleton).

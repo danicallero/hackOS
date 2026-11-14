@@ -1,3 +1,4 @@
+import { type Href, Link } from "expo-router";
 import { Text, View } from "react-native";
 import { Section } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
@@ -208,74 +209,82 @@ export function HelperPresence({ helper }: { helper: HelperCard }) {
 }
 
 /** H63: a Contacts-style row with a clear identity, role, company, knowledge and presence. */
-export function HelperRow({ helper, onPress }: { helper: HelperCard; onPress: () => void }) {
+export function HelperRow({ helper, href }: { helper: HelperCard; href: Href }) {
   const { t } = useLocale();
   const topics = helper.topics.map((topic) => topic.name).join(", ");
   return (
-    <PressableFeedback
-      feedback="row"
-      accessibilityRole="button"
-      accessibilityLabel={[
-        helper.displayName,
-        helper.visibleRoleName,
-        helper.affiliation,
-        topics,
-        helperNowLabel(helper, t),
-      ]
-        .filter(Boolean)
-        .join(", ")}
-      onPress={onPress}
-      style={{
-        alignItems: "center",
-        flexDirection: "row",
-        gap: space.md,
-        paddingHorizontal: space.lg,
-        paddingVertical: space.md,
-      }}
-    >
-      <View>
-        <PersonAvatar size={40} name={helper.displayName} uri={helper.photoUrl} />
-        {helper.present ? (
-          <View
-            style={{
-              position: "absolute",
-              bottom: 0,
-              right: 0,
-              backgroundColor: colors.surface,
-              padding: space.hair,
-              borderRadius: radius.full,
-            }}
-          >
-            <SymbolView name="circle.fill" tintColor={colors.success} size={8} accessible={false} />
+    <Link href={href} asChild>
+      <PressableFeedback
+        feedback="row"
+        accessibilityRole="button"
+        accessibilityLabel={[
+          helper.displayName,
+          helper.visibleRoleName,
+          helper.affiliation,
+          topics,
+          helperNowLabel(helper, t),
+        ]
+          .filter(Boolean)
+          .join(", ")}
+        style={{
+          alignItems: "center",
+          flexDirection: "row",
+          gap: space.md,
+          paddingHorizontal: space.lg,
+          paddingVertical: space.md,
+        }}
+      >
+        <Link.AppleZoom>
+          <View>
+            <PersonAvatar size={40} name={helper.displayName} uri={helper.photoUrl} />
+            {helper.present ? (
+              <View
+                style={{
+                  position: "absolute",
+                  bottom: 0,
+                  right: 0,
+                  backgroundColor: colors.surface,
+                  padding: space.hair,
+                  borderRadius: radius.full,
+                }}
+              >
+                <SymbolView
+                  name="circle.fill"
+                  tintColor={colors.success}
+                  size={8}
+                  accessible={false}
+                />
+              </View>
+            ) : null}
           </View>
-        ) : null}
-      </View>
-      <View style={{ flex: 1, gap: space.xxs }}>
-        <View style={{ alignItems: "center", flexDirection: "row", gap: space.sm }}>
-          <Text style={{ ...type.body, fontWeight: "500", color: colors.label, flex: 1 }}>
-            {helper.displayName}
-          </Text>
-          {helper.visibleRoleName ? (
-            <View style={{ maxWidth: "55%", flexShrink: 1 }}>
-              <RoleBadge role={helper.visibleRoleName} />
-            </View>
+        </Link.AppleZoom>
+        <View style={{ flex: 1, gap: space.xxs }}>
+          <View style={{ alignItems: "center", flexDirection: "row", gap: space.sm }}>
+            <Text style={{ ...type.body, fontWeight: "500", color: colors.label, flex: 1 }}>
+              {helper.displayName}
+            </Text>
+            {helper.visibleRoleName ? (
+              <View style={{ maxWidth: "55%", flexShrink: 1 }}>
+                <RoleBadge role={helper.visibleRoleName} />
+              </View>
+            ) : null}
+          </View>
+          {helper.affiliation ? (
+            <Text numberOfLines={1} style={{ ...type.subhead, color: colors.secondaryLabel }}>
+              {helper.affiliation}
+            </Text>
           ) : null}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+            <Text
+              numberOfLines={1}
+              style={{ ...type.footnote, color: colors.secondaryLabel, flex: 1 }}
+            >
+              {topics}
+            </Text>
+          </View>
         </View>
-        {helper.affiliation ? (
-          <Text numberOfLines={1} style={{ ...type.subhead, color: colors.secondaryLabel }}>
-            {helper.affiliation}
-          </Text>
-        ) : null}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-          <Text
-            numberOfLines={1}
-            style={{ ...type.footnote, color: colors.secondaryLabel, flex: 1 }}
-          >
-            {topics}
-          </Text>
-        </View>
-      </View>
-      {chevron}
-    </PressableFeedback>
+        {chevron}
+      </PressableFeedback>
+    </Link>
   );
 }

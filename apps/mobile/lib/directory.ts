@@ -20,6 +20,16 @@ export interface DirectoryEntry {
   projects: { kind: "project"; id: number; name: string }[];
   challenges: { id: number; name: string }[];
   helpTopics?: { id: number; name: string }[];
+  /** Talks the person speaks at (visible schedule items). */
+  activities?: {
+    id: number;
+    title: string;
+    startsAt: string;
+    endsAt: string;
+    location: string | null;
+  }[];
+  /** Every company the person represents (a person can belong to several), oldest membership first. */
+  enterprises?: { id: number; name: string; logoUrl: string | null }[];
 }
 
 /** Absolute URL of an authenticated, root-relative API asset route. */

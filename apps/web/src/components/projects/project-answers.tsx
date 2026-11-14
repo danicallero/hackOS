@@ -3,7 +3,6 @@ import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr/ArrowSquareOu
 import { FileIcon } from "@phosphor-icons/react/dist/ssr/File";
 import ReactMarkdown from "react-markdown";
 import { LinkifiedText } from "@/components/common/linkified-text";
-import { SectionCard } from "@/components/common/section-card";
 
 import { Button } from "@/components/ui/button";
 import { groupApplicationFields } from "@/lib/application-field-groups";
@@ -11,7 +10,7 @@ import { externalUrlHref } from "@/lib/external-url";
 import type { NativeProject } from "@/lib/native-projects";
 import { normalizeProjectMarkdown } from "@/lib/project-text";
 import type { Language } from "@/lib/types";
-import { ProjectImage } from "./project-image";
+import { ProjectCarousel } from "./project-carousel";
 import { ProjectVideo } from "./project-video";
 
 /** H16: public project content keeps the organizer's section order and hides unanswered questions. */
@@ -19,12 +18,15 @@ export function ProjectAnswers({
   project,
   language,
   fallbackTitle,
+  descriptionLabel,
   omitFieldKeys = [],
   assetUrl,
 }: {
   project: NativeProject;
   language: Language;
   fallbackTitle?: string;
+  /** Name of the project description, shown when the form has no description question. */
+  descriptionLabel?: string;
   /** Answers the surrounding view already shows, so they are not repeated. */
   omitFieldKeys?: string[];
   assetUrl: (path: string) => string;
@@ -45,22 +47,27 @@ export function ProjectAnswers({
   return (
     <div className="min-w-0 space-y-8">
       {!description && project.description && (
-        <p className="text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap text-pretty">
-          {project.description}
-        </p>
+        <div className="min-w-0 space-y-2">
+          {descriptionLabel && (
+            <h2 className="type-meta font-medium text-muted-foreground">{descriptionLabel}</h2>
+          )}
+          <p className="whitespace-pre-wrap text-pretty text-sm leading-relaxed">
+            {project.description}
+          </p>
+        </div>
       )}
       {groupApplicationFields(visible, project.sections).map((group, index) => (
-        <SectionCard
+        <section
           key={group.section?.key ?? index}
-          title={
-            group.section
-              ? group.section.title[language] || group.section.title.en
-              : index === 0
-                ? fallbackTitle
-                : undefined
+          className={
+            index > 0 ? "min-w-0 space-y-5 border-t border-border/60 pt-6" : "min-w-0 space-y-5"
           }
-          variant="plain"
         >
+          {group.section && (
+            <h2 className="font-display text-xl">
+              {group.section.title[language] || group.section.title.en}
+            </h2>
+          )}
           {group.section?.description?.[language] && (
             <LinkifiedText
               text={group.section.description[language]}
@@ -86,42 +93,34 @@ export function ProjectAnswers({
               const about = field.key === description?.key;
               return (
                 <div key={field.key} className="min-w-0 space-y-2">
-                  <dt
-                    className={
-                      about ? "font-medium text-balance" : "text-sm font-medium text-balance"
-                    }
-                  >
+                  <dt className="type-meta font-medium text-balance text-muted-foreground">
                     {label}
                   </dt>
                   <dd className="min-w-0 text-sm leading-relaxed wrap-anywhere text-pretty">
                     {field.project_video ? (
                       <ProjectVideo value={value} title={label} />
                     ) : files.length ? (
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {files.map((file) =>
-                          file.mimeType.startsWith("image/") ? (
-                            <ProjectImage
-                              key={file.objectKey}
-                              src={assetUrl(file.url)}
-                              thumbnailSrc={assetUrl(file.thumbnailUrl ?? file.url)}
-                              alt={label}
-                            />
-                          ) : (
-                            <Button
-                              key={file.objectKey}
-                              asChild
-                              variant="outline"
-                              size="sm"
-                              className="justify-start"
-                            >
-                              <a href={assetUrl(file.url)} target="_blank" rel="noreferrer">
-                                <FileIcon aria-hidden="true" />
-                                <span className="truncate">{file.fileName}</span>
-                                <ArrowSquareOutIcon aria-hidden="true" className="ml-auto" />
-                              </a>
-                            </Button>
-                          ),
+                      <div className="space-y-3">
+                        {files.some((file) => file.mimeType.startsWith("image/")) && (
+                          <ProjectCarousel
+                            fit="contain"
+                            images={files.filter((file) => file.mimeType.startsWith("image/"))}
+                            assetUrl={assetUrl}
+                          />
                         )}
+                        <div className="flex flex-wrap gap-2">
+                          {files
+                            .filter((file) => !file.mimeType.startsWith("image/"))
+                            .map((file) => (
+                              <Button key={file.objectKey} asChild variant="outline" size="sm">
+                                <a href={assetUrl(file.url)} target="_blank" rel="noreferrer">
+                                  <FileIcon aria-hidden="true" />
+                                  <span className="truncate">{file.fileName}</span>
+                                  <ArrowSquareOutIcon aria-hidden="true" className="ml-auto" />
+                                </a>
+                              </Button>
+                            ))}
+                        </div>
                       </div>
                     ) : about ? (
                       <div className="space-y-3 text-muted-foreground [&_p]:mb-3 [&_p:last-child]:mb-0 [&_h2]:mt-6 [&_h2]:font-semibold [&_h2]:text-foreground [&_h3]:mt-4 [&_h3]:font-medium [&_a]:underline [&_a]:text-foreground [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5">
@@ -147,7 +146,7 @@ export function ProjectAnswers({
               );
             })}
           </dl>
-        </SectionCard>
+        </section>
       ))}
     </div>
   );

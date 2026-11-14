@@ -246,7 +246,7 @@ export async function checkInUser(
       });
     }
 
-    // The `tickets` row is permanent (plan/07 invariant 10), so a captured
+    // The `tickets` row is permanent (plan/07 invariant 7), so a captured
     // QR/token — screenshotted, printed, or already sitting in an installed
     // Wallet pass — never itself expires. Gate the physical door the same
     // way the served QR and wallet exposure already are (H43): a ticket

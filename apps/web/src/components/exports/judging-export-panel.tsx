@@ -41,7 +41,6 @@ export function JudgingExportPanel({ trigger }: { trigger?: ReactNode }) {
   }, [t]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- challenge list is an external API source.
     void load();
   }, [load]);
 

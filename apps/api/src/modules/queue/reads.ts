@@ -1101,8 +1101,8 @@ export async function roomPace(
   fixtureMarker = false,
   startingEntryId?: number,
 ) {
-  // Independent reads run concurrently (a pooled `db` serves them on separate
-  // connections; a transaction client still queues them in order).
+  // Independent reads run concurrently because all current callers use the
+  // pool, which assigns each query its own client.
   const [roomState, settingsRes, primaryRes] = await Promise.all([
     db.query(`SELECT 1 FROM room_queue_state WHERE room_id = $1`, [roomId]),
     db.query(`SELECT * FROM queue_settings WHERE id = 1`),

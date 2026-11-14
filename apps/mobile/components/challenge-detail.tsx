@@ -1,15 +1,22 @@
-import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { Link, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { Linking, ScrollView, Text, View } from "react-native";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { SheetModal } from "@/components/app-sheet";
 import { EntryBackToolbar } from "@/components/header-back-button";
 import { EmptyState, FloatingGlassButton, Section, Separator } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { SymbolView } from "@/components/symbol";
+import { useColorScheme } from "@/components/useColorScheme";
 import { apiFetch } from "@/lib/api";
+import { heroTint, NO_PHOTO_TINT } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
+import { useImageTint } from "@/lib/image-tint";
+import { transparentDetailHeaderOptions } from "@/lib/navigation";
 import { type ChallengeDetail, fetchChallengeDetail, type GalleryPage } from "@/lib/projects";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { colors, type } from "@/theme";
@@ -67,10 +74,12 @@ function useChallenge(id: number) {
 export function ChallengeDetailBody({
   challenge,
   showTitle = false,
+  titleColor,
   onOpenProjects,
 }: {
   challenge: ChallengeDetail;
   showTitle?: boolean;
+  titleColor?: string;
   onOpenProjects?: () => void;
 }) {
   const { t } = useLocale();
@@ -94,7 +103,7 @@ export function ChallengeDetailBody({
         <Text
           accessibilityRole="header"
           style={{
-            color: colors.label,
+            color: titleColor ?? colors.label,
             fontSize: type.title.fontSize,
             fontWeight: "700",
             paddingHorizontal: 4,
@@ -105,28 +114,48 @@ export function ChallengeDetailBody({
       ) : null}
       {company ? (
         <Section>
-          <View
-            style={{
-              alignItems: "center",
-              flexDirection: "row",
-              gap: 12,
-              minHeight: 60,
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-            }}
-          >
-            <PersonAvatar size={40} name={company.name} uri={company.logoUrl} kind="sponsor" />
-            <Text
+          <Link href={`/companies/${company.id}`} asChild>
+            <PressableFeedback
+              feedback="row"
+              accessibilityRole="button"
+              accessibilityLabel={company.name}
               style={{
-                color: colors.label,
-                flex: 1,
-                fontSize: type.body.fontSize,
-                fontWeight: "600",
+                alignItems: "center",
+                flexDirection: "row",
+                gap: 12,
+                minHeight: 60,
+                paddingHorizontal: 16,
+                paddingVertical: 8,
               }}
             >
-              {company.name}
-            </Text>
-          </View>
+              <Link.AppleZoom>
+                <View>
+                  <PersonAvatar
+                    size={40}
+                    name={company.name}
+                    uri={company.logoUrl}
+                    kind="sponsor"
+                  />
+                </View>
+              </Link.AppleZoom>
+              <Text
+                style={{
+                  color: colors.label,
+                  flex: 1,
+                  fontSize: type.body.fontSize,
+                  fontWeight: "600",
+                }}
+              >
+                {company.name}
+              </Text>
+              <SymbolView
+                name="chevron.right"
+                size={13}
+                tintColor={colors.tertiaryLabel}
+                accessible={false}
+              />
+            </PressableFeedback>
+          </Link>
           {company.website ? (
             <>
               <Separator inset={68} />
@@ -187,13 +216,16 @@ export function ChallengeDetailScreen() {
   const navigation = useNavigation();
   const { challenge, error, load } = useChallenge(id);
   useLayoutEffect(() => {
-    navigation.setOptions({
-      title: challenge?.title ?? "",
-      headerLargeTitle: true,
-      headerLargeTitleShadowVisible: false,
-      headerShadowVisible: false,
-    });
-  }, [navigation, challenge?.title]);
+    // The title is drawn over the hero, so the bar stays transparent and empty.
+    navigation.setOptions(transparentDetailHeaderOptions);
+  }, [navigation]);
+  const dark = useColorScheme() === "dark";
+  // Tinted from the company logo's colour, blue without a usable logo; a logo whose colour is still loading keeps the plain background.
+  const logoTint = useImageTint(challenge?.company?.logoUrl);
+  const hero =
+    logoTint.color || (challenge && logoTint.settled)
+      ? heroTint(logoTint.color, dark, NO_PHOTO_TINT)
+      : null;
   const openProjects = useCallback(
     () => router.push({ pathname: "/projects/gallery", params: { challengeId: String(id) } }),
     [router, id],
@@ -216,8 +248,28 @@ export function ChallengeDetailScreen() {
         }}
         style={{ backgroundColor: colors.background }}
       >
+        {hero ? (
+          <Animated.View
+            entering={logoTint.fromCache ? undefined : FadeIn.duration(400)}
+            testID="challenge-hero"
+            pointerEvents="none"
+            style={{
+              experimental_backgroundImage: hero.gradient,
+              height: 620,
+              left: 0,
+              position: "absolute",
+              right: 0,
+              top: -300,
+            }}
+          />
+        ) : null}
         {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
-        <ChallengeDetailBody challenge={challenge} onOpenProjects={openProjects} />
+        <ChallengeDetailBody
+          challenge={challenge}
+          showTitle
+          titleColor={hero?.foreground}
+          onOpenProjects={openProjects}
+        />
       </ScrollView>
     );
   return (

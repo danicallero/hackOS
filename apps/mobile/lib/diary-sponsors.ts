@@ -41,21 +41,3 @@ export function companyMonogram(name: string): string {
       : Array.from(name).slice(0, 2);
   return letters.join("").toUpperCase();
 }
-
-/**
- * Apply a PATCH response (or a removal, `entry: null`) to one company without
- * reordering the album under the attendee's finger. Counts follow the change.
- */
-export function withCompanyEntry(
-  collection: SponsorCollection,
-  enterpriseId: number,
-  entry: SponsorCollectionEntry | null,
-): SponsorCollection {
-  let collectedDelta = 0;
-  const items = collection.items.map((item) => {
-    if (item.enterpriseId !== enterpriseId) return item;
-    collectedDelta = Number(entry !== null) - Number(item.entry !== null);
-    return { ...item, entry };
-  });
-  return { ...collection, items, collected: collection.collected + collectedDelta };
-}

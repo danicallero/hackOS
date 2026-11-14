@@ -536,33 +536,21 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const userId = req.userId as number;
+      // One repeatable-read snapshot; set by BEGIN because the edition scope
+      // runs a statement first (docs/multi-edition-plan.md).
       const profile = await withTransaction(
         async (client) => {
           const row = await fetchUser(client, userId, true);
-          const [
-            capabilities,
-            membership,
-            hasProject,
-            hasQueueItems,
-            canCreateProject,
-            profileLocked,
-            hasStatisticsPanels,
-            removalStatus,
-            roles,
-            eventAccess,
-            eventTimezone,
-            currentAttendanceKind,
-            scopedEdition,
-          ] = await Promise.all([
-            getEffectiveCapabilities(createAuthorizationContext(userId, client)),
-            computeMembershipFlags(client, userId),
-            hasMyProject(userId, client),
-            hasMyQueueItems(userId, client),
-            canCreateMyProject(userId, client),
-            hasAcceptedApplication(client, userId),
-            client
-              .query(
-                `SELECT EXISTS (
+          const capabilities = await getEffectiveCapabilities(
+            createAuthorizationContext(userId, client),
+          );
+          const membership = await computeMembershipFlags(client, userId);
+          const hasProject = await hasMyProject(userId, client);
+          const hasQueueItems = await hasMyQueueItems(userId, client);
+          const canCreateProject = await canCreateMyProject(userId, client);
+          const profileLocked = await hasAcceptedApplication(client, userId);
+          const statisticsPanels = await client.query(
+            `SELECT EXISTS (
              SELECT 1
              FROM (
                SELECT DISTINCT ON (scope_key, panel_key) state
@@ -579,18 +567,18 @@ export function registerProfileRoutes(app: FastifyInstance): void {
              ) AS effective
              WHERE effective.state = 'allow'
            ) AS "exists"`,
-                [userId],
-              )
-              .then((result) => Boolean(result.rows[0]?.exists)),
+            [userId],
+          );
+          const hasStatisticsPanels = Boolean(statisticsPanels.rows[0]?.exists);
+          const removalStatus: PendingAccountRemovalStatus =
             row.account_state === "active"
-              ? Promise.resolve<PendingAccountRemovalStatus>({ status: "active" })
-              : getPendingAccountRemovalStatus(client, userId),
-            getAssignedRoles(client, userId),
-            hasEventAccess(client, userId),
-            getEventTimezone(client),
-            attendanceKind(client, userId),
-            readScopedEdition(client),
-          ]);
+              ? { status: "active" }
+              : await getPendingAccountRemovalStatus(client, userId);
+          const roles = await getAssignedRoles(client, userId);
+          const eventAccess = await hasEventAccess(client, userId);
+          const eventTimezone = await getEventTimezone(client);
+          const currentAttendanceKind = await attendanceKind(client, userId);
+          const scopedEdition = await readScopedEdition(client);
           const pendingProfileTasks: (typeof PENDING_PROFILE_TASKS)[number][] = [];
           // H7: after acceptance dietary data may be written once; any recorded answer
           // locks it, so a locked profile is never asked and only staff change it.
@@ -938,9 +926,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
              AND is_test_account = false
              AND (unaccent(name) ILIKE unaccent($1)
               OR unaccent(surname) ILIKE unaccent($1)
-              OR email ILIKE $1
-              OR badge_id ILIKE $1
-              OR dni ILIKE $1
+              OR unaccent(email) ILIKE unaccent($1)
+              OR unaccent(badge_id) ILIKE unaccent($1)
+              OR unaccent(dni) ILIKE unaccent($1)
               OR unaccent(name || ' ' || surname) ILIKE unaccent($1)
               OR unaccent(surname || ' ' || name) ILIKE unaccent($1))`
         : `WHERE account_state = 'active' AND anonymized_at IS NULL

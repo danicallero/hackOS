@@ -10,6 +10,15 @@ jest.mock("react-native-screens/experimental", () => ({
   ScrollViewMarker: ({ children }: { children: unknown }) => children,
 }));
 jest.mock("@/theme/colors", () => ({ colors: new Proxy({}, { get: () => "#171717" }) }));
+let mockTint: string | null = null;
+jest.mock("@/lib/image-tint", () => ({
+  prefetchImageTint: jest.fn(),
+  useImageTint: (uri: string | null | undefined) => ({
+    color: uri ? mockTint : null,
+    settled: !uri || mockTint !== null,
+    fromCache: true,
+  }),
+}));
 jest.mock("@/components/my-queue-screen", () => ({
   __esModule: true,
   default: () => null,
@@ -31,6 +40,7 @@ jest.mock("@/components/header-back-button", () => ({
 }));
 jest.mock("expo-router", () => ({
   useScrollToTop: jest.fn(),
+  Link: require("./mock-link").makeLink((href: unknown) => mockPush(href)),
   useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),
   useFocusEffect: (callback: () => undefined | (() => void)) => {
     const { useEffect } = jest.requireActual("react");
@@ -314,6 +324,28 @@ it("does not infer member photos or unpublished winners from directory data (H18
   expect(screen.queryByRole("image")).toBeNull();
   expect(screen.queryByText(/projectWinner/)).toBeNull();
 });
+it("tints the project hero from its first image, blue without one, plain while loading (H48)", async () => {
+  const image = {
+    objectKey: "k1",
+    url: "/api/files/k1",
+    fileName: "a.png",
+    mimeType: "image/png",
+  };
+  mockTint = null;
+  await renderMobile(<ProjectReadView project={{ ...project, files: [image] }} />);
+  expect(screen.queryByTestId("project-hero")).toBeNull();
+  mockTint = "#3366cc";
+  await renderMobile(<ProjectReadView project={{ ...project, files: [image] }} />);
+  expect(screen.getByTestId("project-hero").props.style.experimental_backgroundImage).toContain(
+    "rgba(51,102,204,0.8)",
+  );
+  await renderMobile(<ProjectReadView project={project} />);
+  expect(screen.getByTestId("project-hero").props.style.experimental_backgroundImage).toContain(
+    "rgba(0,122,255,0.8)",
+  );
+  mockTint = null;
+});
+
 it("reports a gallery project from a native sheet, never the team's own (H18)", async () => {
   const sheet = jest
     .spyOn(ActionSheetIOS, "showActionSheetWithOptions")
@@ -868,6 +900,44 @@ it("opens a challenge's public brief instead of the gallery (H45)", async () => 
   expect(screen.getByText("Drone")).toBeTruthy();
   // The gallery is closed (403): no dead-end row to it.
   expect(screen.queryByText("challengeProjects")).toBeNull();
+});
+
+it("tints the challenge hero from the company logo, blue without one (H45, H44)", async () => {
+  mockParams = { challengeId: "4" };
+  const serve = (logoUrl: string | null) =>
+    mockApi.mockImplementation((path: string) =>
+      path === "/api/public/challenges"
+        ? Promise.resolve({
+            items: [
+              {
+                id: 4,
+                title: { en: "Open data" },
+                description: { en: "Build with open data." },
+                criteria: null,
+                prizes: [],
+                enterprise: { id: 1, name: "Gradiant", logoUrl, website: null },
+              },
+            ],
+          })
+        : Promise.reject(new ApiError("closed", 403)),
+    );
+  // The logo's colour is still loading: plain background.
+  serve("/api/logo.png");
+  await renderMobile(<ChallengeDetailScreen />);
+  await screen.findByText("Build with open data.");
+  expect(screen.queryByTestId("challenge-hero")).toBeNull();
+  mockTint = "#3366cc";
+  await renderMobile(<ChallengeDetailScreen />);
+  expect(
+    (await screen.findByTestId("challenge-hero")).props.style.experimental_backgroundImage,
+  ).toContain("rgba(51,102,204,0.8)");
+  serve(null);
+  await renderMobile(<ChallengeDetailScreen />);
+  await screen.findByText("Build with open data.");
+  expect(screen.getByTestId("challenge-hero").props.style.experimental_backgroundImage).toContain(
+    "rgba(0,122,255,0.8)",
+  );
+  mockTint = null;
 });
 
 // Last on purpose: the upload it leaves running after the editor closes

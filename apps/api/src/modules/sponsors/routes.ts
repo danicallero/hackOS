@@ -4,7 +4,12 @@ import { ZipArchive } from "archiver";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { requireAnyCapability, requireAuth, requireCapability } from "../../lib/capabilities.js";
+import {
+  getRequestAuthorizationContext,
+  requireAnyCapability,
+  requireAuth,
+  requireCapability,
+} from "../../lib/capabilities.js";
 import { sendCsv, toCsv } from "../../lib/csv.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { contentDisposition } from "../../lib/http-headers.js";
@@ -12,6 +17,7 @@ import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption as access } from "../../lib/route-policy.js";
 import { sharedCache } from "../../lib/shared-cache.js";
 import { putObject } from "../../lib/storage.js";
+import { callerScheduleAudiences } from "../logistics/schedule.js";
 import {
   enterpriseAccessFor,
   requireEnterpriseAccess,
@@ -25,6 +31,7 @@ import {
   CONTENT_TYPE_EXT,
   createEnterpriseBody,
   enterpriseIdParam,
+  enterpriseProfileResponse,
   judgeParams,
   memberParams,
   OWNER_EDITABLE_KEYS,
@@ -42,6 +49,7 @@ import {
   addEnterpriseMember,
   createEnterprise,
   getEnterprise,
+  getEnterpriseProfile,
   getSponsorFaq,
   listEnterpriseJudges,
   listEnterpriseMembers,
@@ -112,13 +120,21 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     {
       ...access({
         kind: "capability",
-        anyOf: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN],
+        anyOf: [
+          CAPABILITIES.SPONSORS_MANAGE,
+          CAPABILITIES.QUEUE_ADMIN,
+          CAPABILITIES.SCHEDULE_MANAGE,
+        ],
       }),
-      preHandler: requireAnyCapability(CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN),
+      preHandler: requireAnyCapability(
+        CAPABILITIES.SPONSORS_MANAGE,
+        CAPABILITIES.QUEUE_ADMIN,
+        CAPABILITIES.SCHEDULE_MANAGE,
+      ),
       schema: {
         summary: "List enterprises",
         description:
-          "Lists the viewed edition's sponsor enterprises, for global sponsor administrators and the Rooms admin page's enterprise picker. Enterprises belong to one edition; the same name may exist in several (H43, H46).",
+          "Lists the viewed edition's sponsor enterprises (enterprises belong to one edition; a name may repeat across editions), for global sponsor administrators, the Rooms admin page's enterprise picker (H43, H46) and the schedule editor's company picker (H48).",
       },
     },
     async (req) => ({
@@ -189,6 +205,27 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => myEnterprise(actor(req.userId)),
+  );
+
+  r.get(
+    "/api/enterprises/:id/profile",
+    {
+      ...access({ kind: "authenticated" }),
+      preHandler: requireAuth,
+      schema: {
+        params: enterpriseIdParam,
+        summary: "Read a company's profile",
+        description:
+          "H44/H45 company page for signed-in users: name, logos, website and description; `representatives` (the company's sponsor members, with `avatarUrl` only while they share their photo on their public profile); `challenges` (only revealed ones, with a `summary` cut from the description); and `activities`, the caller's own schedule feed (same audience and visibility rules as GET /api/public/activities, H59) narrowed to the items linked to the company plus those a member of the company speaks at, each once, by start time. A hidden or not-yet-revealed company answers 404 unless the caller is staff, who see everything it has.",
+        response: { 200: enterpriseProfileResponse },
+      },
+    },
+    async (req) =>
+      getEnterpriseProfile(
+        req.params.id,
+        actor(req.userId),
+        await callerScheduleAudiences(getRequestAuthorizationContext(req)),
+      ),
   );
 
   r.get(

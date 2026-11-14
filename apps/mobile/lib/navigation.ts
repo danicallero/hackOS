@@ -46,6 +46,21 @@ export function useTabStackScreenOptions() {
 }
 
 /**
+ * Routes presented from the bottom. iOS uses a full-height `formSheet` (one detent, so it
+ * stays as tall as UIKit's page sheet) because only formSheet draws the native grabber that
+ * signals the card can be pulled down. Android keeps its full-screen modal route.
+ */
+export const sheetPresentation = (
+  process.env.EXPO_OS === "ios"
+    ? { presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true }
+    : { presentation: "modal" }
+) as {
+  presentation: "formSheet" | "modal";
+  sheetAllowedDetents?: number[];
+  sheetGrabberVisible?: boolean;
+};
+
+/**
  * H61-H67: the help desk's modal sheets (request form, knowledge picker) share
  * the help desk pages' header: transparent, inline title, soft scroll edge.
  */
@@ -54,7 +69,7 @@ export const helpSheetOptions = {
   headerShadowVisible: false,
   headerShown: true,
   headerTransparent: true,
-  presentation: "modal",
+  ...sheetPresentation,
   scrollEdgeEffects: { top: "soft" },
 } as const;
 

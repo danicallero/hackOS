@@ -4,10 +4,10 @@ import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
-import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { PublicFooter } from "@/components/layout/public-footer";
 import { PublicTopBar } from "@/components/layout/public-top-bar";
+import { ChallengeCard } from "@/components/public/challenge-card";
 import { HomeOverview } from "@/components/public/home-overview";
 import type {
   PublicAnnouncement,
@@ -16,7 +16,6 @@ import type {
   PublicEvent,
   PublicSponsor,
 } from "@/components/public/public-types";
-import { displayText } from "@/components/public/public-types";
 import { SponsorGrid } from "@/components/public/sponsor-grid";
 import { EventPhaseDisplay, useEventPhase } from "@/components/public/timer";
 import { Button } from "@/components/ui/button";
@@ -108,7 +107,6 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
     // `t` is read through a ref: a locale change must not refetch the whole page (#1227).
   }, [embedded]);
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
   // The browser tab should read the configured event's name, not a generic
@@ -350,31 +348,7 @@ function PublicPageContent({
         {challenges.length ? (
           <div className="mt-6 grid auto-rows-fr gap-4 md:grid-cols-2">
             {challenges.map((challenge) => (
-              <SectionCard
-                key={challenge.id}
-                className="flex h-full flex-col"
-                bodyClassName="flex-1"
-                title={displayText(challenge.title, language)}
-                footer={
-                  <Button asChild variant="outline" size="sm">
-                    <Link
-                      href={`/challenge/${challenge.id}`}
-                      aria-label={`${t("viewChallenge")}: ${displayText(challenge.title, language)}`}
-                    >
-                      {t("viewChallenge")}
-                      <ArrowRightIcon aria-hidden="true" />
-                    </Link>
-                  </Button>
-                }
-              >
-                <p className="text-muted-foreground text-sm">{challenge.enterprise.name}</p>
-                <p className="text-muted-foreground text-pretty mt-2 line-clamp-3 text-sm">
-                  {displayText(challenge.description, language)}
-                </p>
-                {Array.isArray(challenge.prizes) && challenge.prizes.length > 0 && (
-                  <p className="text-primary mt-3 text-sm font-medium">{t("prizesAvailable")}</p>
-                )}
-              </SectionCard>
+              <ChallengeCard key={challenge.id} challenge={challenge} />
             ))}
           </div>
         ) : (

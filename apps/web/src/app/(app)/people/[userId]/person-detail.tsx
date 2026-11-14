@@ -2,11 +2,15 @@
 
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
+import Link from "next/link";
+import { useEffect } from "react";
 import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
+import { HeroBleed } from "@/components/common/hero-bleed";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
+import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { UserAvatar } from "@/components/common/user-avatar";
 import { CvViewer } from "@/components/profile/cv-viewer";
 import { SocialLinks } from "@/components/profile/social-links";
@@ -16,7 +20,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useLiveQuery } from "@/hooks/use-live-query";
 import { api, isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { apiAssetUrl, type DirectoryEntry } from "@/lib/directory";
+import { precomputeLogoColor, useLogoColor } from "@/lib/company";
+import { eventDateFormat } from "@/lib/datetime";
+import { apiAssetUrl, type DirectoryEntry, personCompanies } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useChallengeNames } from "../person-row";
 
@@ -107,6 +113,15 @@ export function PersonProfile({
 }) {
   const { t } = useLocale();
   const { nameOf } = useChallengeNames();
+  const { language } = useLocale();
+  const photoColor = useLogoColor(entry.photoUrl);
+  const companies = personCompanies(entry);
+  useEffect(() => {
+    for (const c of companies) precomputeLogoColor(c.logoUrl);
+  }, [companies]);
+  const talks = entry.activities ?? [];
+  const day = eventDateFormat(language, "weekdayDayMonthText");
+  const clock = eventDateFormat(language, "clock");
   const rows: { id: string; label: string; value: React.ReactNode }[] = [];
   if (company)
     rows.push({
@@ -124,6 +139,55 @@ export function PersonProfile({
           ) : null}
           <span className="wrap-anywhere">{company.name}</span>
         </div>
+      ),
+    });
+  if (!company && companies.length > 0)
+    rows.push({
+      id: "companies",
+      label: t(companies.length === 1 ? "helpDeskCompany" : "profileCompanies"),
+      value: (
+        <ul className="space-y-1">
+          {companies.map((c) => (
+            <li key={c.id}>
+              <Link
+                href={`/companies/${c.id}`}
+                className="button-interaction -mx-1 flex min-w-0 items-center gap-3 rounded-sm px-1 py-1 hover:bg-muted"
+              >
+                {c.logoUrl ? (
+                  <SponsorLogo
+                    logoUrl={c.logoUrl}
+                    alt=""
+                    className="max-h-8 max-w-14 shrink-0 object-contain"
+                  />
+                ) : null}
+                <span className="wrap-anywhere">{c.name}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ),
+    });
+  if (talks.length > 0)
+    rows.push({
+      id: "talks",
+      label: t("profileTalks"),
+      value: (
+        <ul className="space-y-1">
+          {talks.map((talk) => (
+            <li key={talk.id}>
+              <Link
+                href={`/timetable?activity=${talk.id}`}
+                className="button-interaction -mx-1 block rounded-sm px-1 py-1 hover:bg-muted"
+              >
+                <span className="block wrap-anywhere font-medium">{talk.title}</span>
+                <span className="block text-xs text-muted-foreground capitalize">
+                  {day.format(new Date(talk.startsAt))} · {clock.format(new Date(talk.startsAt))}
+                  {talk.location ? ` · ${talk.location}` : ""}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
       ),
     });
   if (entry.helpTopics?.length)
@@ -180,61 +244,62 @@ export function PersonProfile({
   }
 
   return (
-    <PageLayout width="reading">
-      <PageHeader
-        context={context}
-        leading={
+    <>
+      <HeroBleed color={entry.photoColor ?? photoColor}>
+        {context}
+        <header className="flex flex-col items-center gap-3 pt-6 text-center sm:flex-row sm:items-center sm:gap-6 sm:text-left">
           <UserAvatar
             name={entry.displayName}
             image={entry.photoUrl}
-            className="size-16"
-            fallbackClassName="text-lg"
+            className="size-28 shrink-0 shadow-md ring-4 ring-background/70 sm:size-32"
+            fallbackClassName="text-3xl"
             showInitials
             decorative
             presenceLabel={present ? t("helpDeskPresent") : undefined}
           />
-        }
-        title={entry.displayName}
-        meta={
-          entry.headline ? (
-            <span className="text-muted-foreground wrap-anywhere text-sm">{entry.headline}</span>
-          ) : undefined
-        }
-        secondaryActions={
-          visibleRole ? <Badge variant="secondary">{visibleRole}</Badge> : undefined
-        }
-        primaryAction={
-          entry.cvUrl ? (
-            <CvViewer
-              path={entry.cvUrl}
-              name={entry.displayName}
-              trigger={
-                <Button type="button" variant="outline" size="sm">
-                  <FilePdfIcon aria-hidden="true" />
-                  {t("viewCv")}
-                </Button>
-              }
-            />
-          ) : undefined
-        }
-      />
-      {entry.bio && (
-        <p className="max-w-prose whitespace-pre-line wrap-anywhere text-pretty">{entry.bio}</p>
-      )}
-      {rows.length > 0 && (
-        <dl className="divide-y divide-border/60">
-          {rows.map((row) => (
-            <div
-              key={row.id}
-              className="grid min-w-0 gap-1 py-3 text-sm sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-4"
-            >
-              <dt className="text-muted-foreground">{row.label}</dt>
-              <dd className="min-w-0">{row.value}</dd>
+          <div className="min-w-0 space-y-2">
+            <h1 className="font-display text-3xl leading-tight wrap-anywhere sm:text-4xl">
+              {entry.displayName}
+            </h1>
+            {entry.headline && (
+              <p className="text-muted-foreground wrap-anywhere text-sm">{entry.headline}</p>
+            )}
+          </div>
+          {(visibleRole || entry.cvUrl) && (
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+              {visibleRole && <Badge variant="secondary">{visibleRole}</Badge>}
+              {entry.cvUrl && (
+                <CvViewer
+                  path={entry.cvUrl}
+                  name={entry.displayName}
+                  trigger={
+                    <Button type="button" variant="outline" size="sm">
+                      <FilePdfIcon aria-hidden="true" />
+                      {t("viewCv")}
+                    </Button>
+                  }
+                />
+              )}
             </div>
-          ))}
-        </dl>
-      )}
-      {children}
-    </PageLayout>
+          )}
+        </header>
+      </HeroBleed>
+      <PageLayout width="reading">
+        {entry.bio && (
+          <p className="max-w-prose whitespace-pre-line wrap-anywhere text-pretty">{entry.bio}</p>
+        )}
+        {rows.map((row) => (
+          <section
+            key={row.id}
+            aria-label={row.label}
+            className="min-w-0 space-y-2 border-t border-border/60 pt-5 text-sm"
+          >
+            <h2 className="type-meta font-medium text-muted-foreground">{row.label}</h2>
+            <div className="min-w-0 text-base">{row.value}</div>
+          </section>
+        ))}
+        {children}
+      </PageLayout>
+    </>
   );
 }

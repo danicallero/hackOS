@@ -315,6 +315,8 @@ Use `components/common/filter-menu.tsx` (`FilterMenu`) for management toolbars
 with several categorical filters. Users, review history and the schedule use
 this shared control instead of one dropdown per property. Keep text search
 separate, and keep filtering, persistence and API parameters owned by the page.
+Every text search uses `normalizeSearchText` on both query and matched text;
+server substring searches use parameterized `unaccent(column) ILIKE unaccent($n)`.
 
 - One **Filters** button opens the category menu; desktop categories open
   adjacent submenus. Below 768px, options replace the category list in the
@@ -659,7 +661,9 @@ artificial reading-width container.
 The shell supplies horizontal margins (16 px mobile, 24 px from `sm`) and top
 clearance. Page blocks share a 24 px rhythm. Within a block use 16 px, between
 closely related values/controls use 8 px; independent form groups may use 32 px.
-Align labels/control tracks, not the bottom of helper text. Rows and tables
+Align labels/control tracks, not the bottom of helper text: multi-column field
+grids use start alignment (`grid items-start`) so one field's help or error
+never shifts its neighbours' label or input. Rows and tables
 retain their compact established density. Do not add a second inset wrapper
 around a `PageLayout` or override its width for visual guesswork.
 

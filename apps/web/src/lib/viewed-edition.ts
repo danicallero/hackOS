@@ -20,6 +20,7 @@ function readCookie(): string | null {
 
 function writeCookie(eventKey: string | null): void {
   if (typeof document === "undefined") return;
+  // biome-ignore lint/suspicious/noDocumentCookie: server-rendered gallery pages forward this edition.
   document.cookie =
     eventKey === null
       ? `${VIEWED_EDITION_COOKIE}=; path=/; max-age=0; samesite=lax`

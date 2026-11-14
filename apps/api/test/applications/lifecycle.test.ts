@@ -1194,7 +1194,7 @@ describe("confirm / decline (H15)", () => {
       `SELECT count(*)::int AS n FROM tickets WHERE user_id = $1`,
       [userId],
     );
-    expect(tickets[0].n).toBe(1); // invariant 10
+    expect(tickets[0].n).toBe(1); // invariant 7
   });
 
   it("decline via public token is idempotent", async () => {
@@ -1275,7 +1275,7 @@ describe("cancel after confirming", () => {
     expect(again.json().already_declined).toBe(true);
   });
 
-  it("decline from confirmed preserves the ticket (invariant 10)", async () => {
+  it("decline from confirmed preserves the ticket (invariant 7)", async () => {
     const a = await getApp();
     const appId = await createApplication();
     const { userId, responseId } = await toAcceptedSent(appId);

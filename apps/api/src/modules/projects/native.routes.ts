@@ -219,7 +219,7 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
         querystring: projectGalleryQuerySchema,
         summary: "List project gallery",
         description:
-          "Paginated no-store project gallery honoring SQL-clock opening, audience, draft visibility and current name/photo consent on every read (#1008,#1009). Optional winnersOnly=true filters published winners before pagination; with challengeId it matches winners of that challenge (H60). Project staff (PROJECTS_READ) may browse before it opens. Scoped to the viewed edition (X-Edition): the opening, audience and draft rules of event settings apply to the current edition only, while the submitted projects of a closed, past edition are public. Each project carries its `edition` (`eventKey`, `name`). The audience-independent projection is computed once and shared through Valkey (30 s TTL, invalidated by project, public-content and directory changes); the viewer's own projects are always read live. A refusal is 403 with `details.reason` `gallery_closed` (with `details.opensAt`, null while unscheduled, and the event `details.timeZone`) or `gallery_audience` (H18).",
+          "Paginated no-store project gallery honoring SQL-clock opening, audience, draft visibility and current name/photo consent on every read (#1008,#1009). Its optional project-name search ignores case and accents. Optional winnersOnly=true filters published winners before pagination; with challengeId it matches winners of that challenge (H60). Project staff (PROJECTS_READ) may browse before it opens. Scoped to the viewed edition (X-Edition): the opening, audience and draft rules of event settings apply to the current edition only, while the submitted projects of a closed, past edition are public. Each project carries its `edition` (`eventKey`, `name`). The audience-independent projection is computed once and shared through Valkey (30 s TTL, invalidated by project, public-content and directory changes); the viewer's own projects are always read live. A refusal is 403 with `details.reason` `gallery_closed` (with `details.opensAt`, null while unscheduled, and the event `details.timeZone`) or `gallery_audience` (H18).",
       },
     },
     async (q, reply) => {
@@ -255,7 +255,7 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
                 .map((winner) => winner.repoId)
             : null;
           const { rows } = await pool.query(
-            `SELECT r.id,count(*) OVER()::int AS total FROM repos r WHERE r.is_test_account=$8 AND r.event_key=current_edition() AND (r.submission_status='submitted' OR ($1<>'team_only' AND ($1='public' OR $2))) AND ($3::text IS NULL OR r.name ILIKE $3) AND ($4::int IS NULL OR EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.repo_id=r.id AND pc.challenge_id=$4)) AND ($7::int[] IS NULL OR r.id=ANY($7)) ORDER BY r.id LIMIT $5 OFFSET $6`,
+            `SELECT r.id,count(*) OVER()::int AS total FROM repos r WHERE r.is_test_account=$8 AND r.event_key=current_edition() AND (r.submission_status='submitted' OR ($1<>'team_only' AND ($1='public' OR $2))) AND ($3::text IS NULL OR unaccent(r.name) ILIKE unaccent($3)) AND ($4::int IS NULL OR EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.repo_id=r.id AND pc.challenge_id=$4)) AND ($7::int[] IS NULL OR r.id=ANY($7)) ORDER BY r.id LIMIT $5 OFFSET $6`,
             [
               draftVisibility,
               viewer.attendee,

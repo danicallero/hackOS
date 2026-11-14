@@ -264,7 +264,7 @@ type settings are global to the current edition (`edition: "current"`).
   batch in set-based queries, then issues each person in their own transaction. Each transaction
   still locks the settings, type and person and re-reads the person's award, so a concurrent review
   or type edit is honoured (an edited type drops the preload for that person).
-- Account removal or anonymization (H54) deletes the person's certificates and manual awards of every edition; their codes and hashes then answer 404 like unknown ones (`identity/removal.ts`).
+- Account removal or anonymization (H54) deletes the person's certificates and manual awards of every edition; their codes and hashes then answer 404 like unknown ones (`identity/scrub.ts`).
 - Issue, revoke and settings changes are audited (H53):
   `certificate.issue`, `certificate.approve`, `certificate.revoke`, `certificate.supersede`,
   `certificate_settings.update`, `certificate_type.create`, `certificate_type.update` and university `export` actions.

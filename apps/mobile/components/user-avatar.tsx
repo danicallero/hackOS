@@ -3,8 +3,14 @@ import { Text, View } from "react-native";
 import { loadingImageStyle, useApiImage } from "@/components/person-avatar";
 import { colors } from "@/theme/colors";
 
-/** Up to two initials: first and last word, or the first letters of one word. */
-export function avatarInitials(name: string): string {
+/**
+ * Up to two initials: first and last word, or the first letters of one word.
+ * With a separate surname, the first letter of the name plus that of the surname.
+ */
+export function avatarInitials(name: string, surname?: string | null): string {
+  const last = surname?.trim();
+  const first = name.trim();
+  if (last && first) return `${Array.from(first)[0]}${Array.from(last)[0]}`.toUpperCase();
   const parts = name
     .trim()
     .split(/\s+/)
@@ -21,12 +27,15 @@ export function avatarInitials(name: string): string {
  */
 export function UserAvatar({
   name,
+  surname,
   image,
   size = 40,
   persist = false,
   testID,
 }: {
   name: string;
+  /** Surname on its own, when known: initials are then name + surname. */
+  surname?: string | null;
   /** Authenticated photo route from the API, or null. */
   image: string | null | undefined;
   size?: number;
@@ -62,7 +71,7 @@ export function UserAvatar({
             fontWeight: "700",
           }}
         >
-          {avatarInitials(name)}
+          {avatarInitials(name, surname)}
         </Text>
       )}
       {photo.props ? (

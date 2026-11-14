@@ -30,9 +30,23 @@ import {
   removeRoomEnterprise,
   updateRoom,
 } from "@/lib/queue";
+import { normalizeSearchText } from "@/lib/search-text";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { EnterpriseSummary } from "@/lib/types";
+
+export function filterRoomsBySearch(rooms: Room[], query: string, statusFilter: string): Room[] {
+  const normalizedQuery = normalizeSearchText(query);
+  return rooms.filter((room) => {
+    const matchesStatus = statusFilter === "all" || room.status === statusFilter;
+    const matchesQuery =
+      !normalizedQuery ||
+      normalizeSearchText(
+        `${room.name} ${room.location ?? ""} ${room.enterprise_name ?? ""} ${room.id}`,
+      ).includes(normalizedQuery);
+    return matchesStatus && matchesQuery;
+  });
+}
 
 export function RoomManagement({ embedded = false }: { embedded?: boolean }) {
   const { t } = useLocale();
@@ -101,13 +115,11 @@ export function RoomManagement({ embedded = false }: { embedded?: boolean }) {
   );
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
   useEffect(() => {
     if (panelMode !== "edit" || selectedRoomId === null) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadRoomDetails(selectedRoomId);
   }, [loadRoomDetails, panelMode, selectedRoomId]);
 
@@ -248,18 +260,10 @@ export function RoomManagement({ embedded = false }: { embedded?: boolean }) {
     toast.success(t("roomDeleted"), { compactTitle: t("deleteRoom") });
   };
 
-  const filteredRooms = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return rooms.filter((room) => {
-      const matchesStatus = statusFilter === "all" || room.status === statusFilter;
-      const matchesQuery =
-        !normalizedQuery ||
-        `${room.name} ${room.location ?? ""} ${room.enterprise_name ?? ""} ${room.id}`
-          .toLowerCase()
-          .includes(normalizedQuery);
-      return matchesStatus && matchesQuery;
-    });
-  }, [query, rooms, statusFilter]);
+  const filteredRooms = useMemo(
+    () => filterRoomsBySearch(rooms, query, statusFilter),
+    [query, rooms, statusFilter],
+  );
 
   const hasFilters = Boolean(query.trim()) || statusFilter !== "all";
   const emptyAction = hasFilters ? (

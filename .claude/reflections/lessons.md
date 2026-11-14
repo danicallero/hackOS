@@ -1,68 +1,22 @@
 # Lessons
 
+Active reflections for hackOS. See `README.md` in this directory for the
+format, classification flow, and promotion path.
+
+Promoted entries are one-line stubs: the rule lives only in the file named by
+`Promoted-To`.
+
 ## [R001] Validate tests before committing
 
-Status: active
-Scope: repository
-Source: user-correction
+Status: promoted
 Date: 2026-09-08
-
-### Trigger
-Before committing any code or documentation change.
-
-### Mistake
-A change was committed and the CI later exposed broken route-policy tests that
-could have been caught locally.
-
-### Lesson
-The pre-commit check must include the tests affected by the change, plus the
-repository's required lint and type checks where applicable.
-
-### Action
-Run the relevant focused tests first, then the required package checks. Do not
-commit until failures are understood and either fixed or explicitly reported
-as an environmental blocker.
-
-### Validation
-Confirm the test command exits successfully and inspect its summary; a test
-process that hangs, is interrupted, or reports failures does not count as
-validated.
-
-### Exceptions
-None for source changes. Documentation-only changes may skip package tests,
-but must still run the checks relevant to the edited documentation or tooling.
+Promoted-To: `AGENTS.md` § Before you finish
 
 ## [R002] Carry implementation requests through to a draft PR
 
-Status: active
-Scope: repository
-Source: user-correction
+Status: promoted
 Date: 2026-11-02
-
-### Trigger
-When the user requests a feature implementation or issue fix, including by
-sending an issue URL, or says “PR” in the context of a completed change.
-
-### Mistake
-The agent stopped after implementing and validating an issue fix locally,
-leaving the user to explicitly request the pull request.
-
-### Lesson
-An implementation or issue-fix request includes delivering a reviewable draft pull request.
-“PR” is an instruction to open it immediately.
-
-### Action
-After completing the fix, use the repository's pull-request workflow: inspect the branch and
-worktree, run the required checks, prepare the required PR body, and open the
-pull request. Ask only if a real external-state blocker prevents opening it.
-
-### Validation
-Confirm the pull-request command succeeds and report the resulting URL or the
-concrete blocker.
-
-### Exceptions
-If the user explicitly requests local-only work or otherwise narrows the
-delivery scope, follow that instruction. Repository restrictions still apply.
+Promoted-To: `CLAUDE.md` § Pull requests and merges
 
 ## [R003] Verify URL synchronization under rerenders
 
@@ -298,65 +252,15 @@ may need a confirmation or method dialog.
 
 ## [R009] Preserve intentional product voice during copy audits
 
-Status: active
-Scope: repository
-Source: user-correction
+Status: promoted
 Date: 2026-10-03
-
-### Trigger
-Auditing interface copy for verbosity or generic wording.
-
-### Mistake
-Removed the Ursula cookie notice's humor and illustration as presumed unwanted copy, although they were deliberate human design choices.
-
-### Lesson
-Intentional humor and brand character are not evidence of poor copy. Evaluate whether wording obstructs the task before removing its personality.
-
-### Action
-Preserve established product voice, including the Ursula cookie notice. Focus edits on redundancy, ambiguity, and unnecessary explanations.
-
-### Validation
-Check that copy revisions improve comprehension while retaining deliberate character and existing visual identity.
-
-### Exceptions
-Change intentional voice when the user requests it or it creates a concrete comprehension problem.
-
-Active reflections for hackOS. See `README.md` in this directory for the
-format, classification flow, and promotion path.
+Promoted-To: `docs/DESIGN.md` §10 Copy and localization (rule 7)
 
 ## [R010] Align multi-column fields independently of helper text
 
-Status: active
-Scope: repository
-Source: user-correction
+Status: promoted
 Date: 2026-10-03
-
-### Trigger
-When building or auditing inputs in two or more columns, especially when only
-some fields have helper text, validation errors, or timezone previews.
-
-### Mistake
-Grid children stretched to the tallest field, distributing a shorter
-FormItem's internal rows and pushing its label and input below its neighbors.
-
-### Lesson
-Align field labels and controls, not the bottom of each field's entire content.
-Helper text and errors belong below the control and must not shift neighboring
-labels or inputs.
-
-### Action
-Use start alignment for field containers (for example, `grid items-start`) and
-inspect mixed-help rows. If translated labels wrap to different heights, use
-shared label/control tracks rather than aligning entire fields to the bottom.
-
-### Validation
-Compare label and input top edges in desktop screenshots and browser geometry.
-Repeat with one help message, multiline help, one validation error, translated
-labels, and the stacked mobile layout.
-
-### Exceptions
-An action deliberately aligned with a control is not a second form field;
-it may align to that control, independently of the help below it.
+Promoted-To: `docs/DESIGN.md` §4b (label/control track alignment)
 
 ## [R011] Keep event settings within their save scope
 
@@ -423,35 +327,8 @@ The plain-text MIME part retains readable labeled links.
 ## [R013] Check reflections throughout each task
 
 Status: promoted
-Scope: repository
-Source: user-correction
 Date: 2026-10-04
-Promoted-To: CLAUDE.md
-
-### Trigger
-Before and during any code, documentation, test, or configuration change.
-
-### Mistake
-An agent reviewed reflections once but did not keep checking later changes
-against the lessons, so a known mistake could recur while completing the task.
-
-### Lesson
-Reflections are an ongoing check for the entire task, not a one-time startup
-reading.
-
-### Action
-Read the entire lessons file before editing. Compare the intended work with
-applicable active lessons, re-check substantive diffs as work proceeds, and
-apply each lesson's validation before commit or PR. Resolve conflicts
-explicitly when higher-priority instructions or current product requirements
-take precedence.
-
-### Validation
-Confirm applicable lessons were considered at planning, during implementation,
-and during final diff/validation review.
-
-### Exceptions
-None.
+Promoted-To: `CLAUDE.md` § Reflections are a required check
 
 ## [R014] Keep nested menus flowing in one direction
 
@@ -657,34 +534,9 @@ Credentials and provider accounts remain deployment-only configuration.
 
 ## [R019] Preserve a matching session during token actions
 
-Status: active
-Scope: module:applications
-Source: user-correction
+Status: promoted
 Date: 2026-10-07
-
-### Trigger
-A public email token action is opened in a browser that already has a session.
-
-### Mistake
-Signing out every session interrupted the ticket holder who was already signed
-in as the account named by the token.
-
-### Lesson
-The token remains scoped to its one action, but a matching existing session
-should stay active. Close a different account's session before offering its app
-entry point.
-
-### Action
-Compare the token result's user ID with the session user ID. Preserve and
-refresh a match; close a mismatch and explain it.
-
-### Validation
-Exercise matching, different-account, and anonymous browser states. Confirm
-Wallet requests still use the scoped token owner.
-
-### Exceptions
-Token endpoints that explicitly require fresh authentication follow their own
-published session contract.
+Promoted-To: `docs/event-config-wallet.md` (scoped-token page and existing sessions)
 
 ## [R020] Cover fresh installs when diagnosing native storage failures
 
@@ -720,33 +572,9 @@ provided the fresh-install path has been checked and does not access it.
 
 ## [R021] Attach PR screenshots with the GitHub CLI
 
-Status: active
-Scope: repository
-Source: user-correction
+Status: promoted
 Date: 2026-10-08
-
-### Trigger
-Posting screenshots or video on a pull request or issue comment.
-
-### Mistake
-The agent stopped at "gh cannot upload images" and left screenshots in a local
-folder, following stale repository docs that described a branch-hosting
-workaround.
-
-### Lesson
-`gh` 2.101+ uploads images and video itself. Do not host files on a throwaway
-branch or ask the user to drag them in.
-
-### Action
-Run `gh pr comment <n> --body … --attach '<abs path>#<alt text>'`, repeating the
-flag for each file. Describe in the text what each image shows. Fix any doc
-that claims otherwise.
-
-### Validation
-Open the returned comment URL's content and confirm the images render.
-
-### Exceptions
-If `gh --version` is older than 2.101, report that blocker.
+Promoted-To: `docs/ui-testing.md` § Screenshots on UI PRs → Posting them
 
 ## [R022] Let a section's layout explain its primary path and alternatives
 
@@ -757,7 +585,7 @@ Date: 2026-10-15
 
 ### Trigger
 Designing a card that offers a main workflow plus an optional alternative
-(for example Devpost submission versus native submission).
+(for example submitting a form now versus deferring or opting out).
 
 ### Mistake
 A secondary-styled alternative sat in the card header, away from the main path,
@@ -787,39 +615,9 @@ Two equal-weight choices may share a chooser instead.
 
 ## [R023] Act on a reported defect instead of confirming it
 
-Status: active
-Scope: repository
-Source: user-correction
+Status: promoted
 Date: 2026-10-11
-
-### Trigger
-When the user reports that something is wrong (a screenshot, "esto está mal",
-"fatal", a crash), especially while background agents are working on it.
-
-### Mistake
-The agent answered several defect reports by agreeing ("tienes razón, está
-mal"), explaining the likely cause and relaying the report to a running
-agent, without taking any corrective action itself. The user had to repeat
-the report and pay for replies that changed nothing.
-
-### Lesson
-A defect report is an instruction to fix it. Agreement and explanation are
-not progress.
-
-### Action
-In the same turn: take the immediate corrective step available (e.g. restore
-a setting, revert a bad state, rerun a broken step), then launch or redirect
-an agent with a concrete fix brief and acceptance criteria. Report only what
-was fixed or is now being fixed, with the evidence that will prove it; skip
-"you're right" preambles and cause narration unless the user asks.
-
-### Validation
-Each reply to a defect report names an action already taken (command run,
-agent launched or redirected, commit pushed), not just an assessment.
-
-### Exceptions
-A genuine product decision the user must make (e.g. a platform trade-off)
-may be asked, but only alongside the fixes that don't depend on it.
+Promoted-To: `AGENTS.md` § Engineering discipline
 
 ## [R024] Keep minimal Live Activities readable at their actual size
 
@@ -880,66 +678,15 @@ Use a custom lifecycle only when the product requires behavior the native contro
 
 ## [R026] Do not drive the user's simulator while they are looking at it
 
-Status: active
-Scope: module:mobile
-Source: user-correction
+Status: promoted
 Date: 2026-10-14
-
-### Trigger
-Taking simulator screenshots for a UI task while the user reviews the same
-simulator.
-
-### Mistake
-A background loop terminated and relaunched the dev client every few seconds.
-The relaunch race crashed the app (`ExpoFabricView` AppContextLost) and the
-user saw crashes and half-rendered screens that were an artefact of the loop.
-
-### Lesson
-Automated relaunches are visible to the user and can crash a dev client.
-
-### Action
-Run screenshot sweeps in the foreground, sequentially, with a settle wait after
-each reload, and never leave one running while the user is iterating. Prefer
-Metro hot reload and deep links over terminate/launch. Make fixture servers
-survive tool shutdown so a stopped task does not leave the app on error states.
-
-### Validation
-No crash report during the sweep; the fixture still answers afterwards.
-
-### Exceptions
-None.
+Promoted-To: `docs/ui-testing.md` § Native: build, drive, capture (gotchas)
 
 ## [R027] Keep form requirements in the dynamic form definition
 
-Status: active
-Scope: module:projects
-Source: user-correction
+Status: promoted
 Date: 2026-10-17
-
-### Trigger
-Adding event or reporting requirements to the configurable project form.
-
-### Mistake
-Saving a form reinserted hardcoded questions, overriding the organizer's choices.
-
-### Lesson
-The saved form definition owns questions, types, order and required flags.
-Exports must derive columns from that definition; presentation behavior must
-be configured independently of question labels and keys.
-
-### Action
-Preserve arbitrary questions and deletions. Export the configured questions
-and answers directly. Use field metadata only for presentation features such as
-video. Do not introduce a preset or special reporting mappings without a request.
-Never silently inject event-specific questions on save or in a migration.
-
-### Validation
-Save empty/custom forms unchanged, rename and delete questions, and verify
-CSV columns follow the current and historical form definitions.
-
-### Exceptions
-Explicit user authorization to populate a particular event's form is allowed.
-
+Promoted-To: `docs/projects.md` (form definition owns questions and exports)
 
 ## [R028] Separate navigator width from reading width on tablets
 
@@ -969,33 +716,8 @@ Sheets and focused single-column editors retain their own readable content bound
 ## [R029] Let state-specific actions replace redundant status badges
 
 Status: promoted
-Scope: module:web
-Source: user-correction
 Date: 2026-11-02
-Promoted-To: docs/DESIGN.md
-
-### Trigger
-A record's state has a visible action that already names that state.
-
-### Mistake
-Displayed a Draft badge beside Delete draft, repeating the same information.
-
-### Lesson
-Use the meaningful state-specific action to carry the state when it is available;
-reserve status badges for states with no corresponding action in that position.
-
-### Action
-Render the action and state badge mutually exclusively. Check list and detail
-headers together, including states whose action is unavailable.
-
-### Validation
-Verify actionable drafts show their control without a Draft badge, while
-submitted, in-review and other non-actionable states retain their status.
-
-### Exceptions
-An action whose label does not communicate the current state may still need
-an independent status indicator.
-
+Promoted-To: `docs/DESIGN.md` (status badges vs state-specific actions)
 
 ## [R030] Test a tab's destination after visiting its settings
 
@@ -1146,39 +868,9 @@ follows its own established configuration.
 
 ## [R033] Keep private content out of change logs
 
-Status: active
-Scope: repository
-Source: user-correction
+Status: promoted
 Date: 2026-11-09
-
-### Trigger
-Adding traceability for reviews, notes, or participant answers.
-
-### Mistake
-Proposed retaining previous and final review text in the audit log.
-
-### Lesson
-Traceability does not require duplicating private content into a second history.
-Classify content by domain and audience: a public event broadcast or catalogue
-label is not private review text just because both are strings.
-
-### Action
-Record actor, subject, changed field names and timing. Limit before/after values
-to explicitly safe operational fields. Group autosaves within an editing session;
-do not persist private note text, answers, or content hashes in audit payloads.
-Keep explicitly public content readable, and retain safe operational flags while
-continuing to suppress private answers and authentication secrets. Retain the
-operational identifiers needed to reconstruct actions (badge IDs, email
-addresses and subject/reference IDs); do not mistake those for passwords or
-access tokens. Keep their histories covered by the account-erasure workflow.
-
-### Validation
-Assert that private sentinel text never appears in serialized audit rows and
-that repeated autosaves do not create one event per pause in typing.
-
-### Exceptions
-A separately authorized content-versioning feature must define its own privacy
-and retention contract before storing private historical content.
+Promoted-To: `docs/audit-trail.md`
 
 ## [R034] A person shown in a new feature uses the existing profile surface
 

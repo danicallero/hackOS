@@ -1,21 +1,20 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { HeaderHeightContext } from "expo-router/react-navigation";
+import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Text, View } from "react-native";
-import Animated from "react-native-reanimated";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { type LayoutChangeEvent, Text, View } from "react-native";
+import Animated, { FadeIn, runOnJS, useAnimatedReaction } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ActivityLinkSection } from "@/components/activity-link-rows";
 import { AppRefreshControl } from "@/components/app-refresh-control";
 import { CvViewer } from "@/components/cv-viewer";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { FavouriteStar } from "@/components/favourite-star";
-import { GlassView } from "@/components/glass-view";
+import { FloatingBackButton } from "@/components/floating-back-button";
 import { HelperCompany, HelperPresence } from "@/components/help-desk/rows";
 import {
   AndroidStatusBarScrim,
   EmptyState,
   InfoRow,
-  LegacyHeaderIconButton,
   Section,
   Separator,
   StatusPill,
@@ -30,17 +29,21 @@ import {
 import { ProfileCard } from "@/components/profile-card";
 import { NoteRow, QuickAction } from "@/components/profile-parts";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { SymbolView } from "@/components/symbol";
+import { useColorScheme } from "@/components/useColorScheme";
 import { alert } from "@/lib/alert";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { DiaryEntry } from "@/lib/diary";
 import type { DirectoryEntry } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
 import { availabilityDays, type HelperDetail } from "@/lib/help-desk";
+import { heroTint, NO_PHOTO_TINT } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
+import { useImageTint } from "@/lib/image-tint";
 import { safeBack } from "@/lib/navigation";
 import { reportContent } from "@/lib/reports";
 import { isPadIdiom } from "@/lib/tabs";
-import { colors, radius, type } from "@/theme";
+import { colors, type } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
 
 const notFound = () => new ApiError("Person not found", 404, "not_found");
@@ -71,13 +74,23 @@ export function PersonProfileScreen({
   const router = useRouter();
   const { t, language } = useLocale();
   const readable = useParticipantLayout("list");
+  const dark = useColorScheme() === "dark";
   const insets = useSafeAreaInsets();
-  // iOS shows the transparent native header, whose height the automatic
-  // inset adds above the avatar's true top (#935).
-  const headerHeight = useContext(HeaderHeightContext) ?? 0;
-  const avatarCollapse = useProfileAvatarCollapse(undefined, {
-    headerHeight: process.env.EXPO_OS === "ios" ? headerHeight : 0,
-  });
+  // iOS pads the content itself instead of an automatic inset under the
+  // transparent header: a cancelled swipe-to-dismiss changes that inset for a
+  // moment and left the page shifted, half-collapsing the avatar.
+  const avatarCollapse = useProfileAvatarCollapse(undefined, { insetAdjusted: false });
+  // The bar's blur and title appear only once the large name has scrolled under it.
+  const [nameBottom, setNameBottom] = useState<number | null>(null);
+  const [titleShown, setTitleShown] = useState(false);
+  const { scrollOffset } = avatarCollapse;
+  useAnimatedReaction(
+    () => nameBottom !== null && scrollOffset.value > nameBottom,
+    (shown, previous) => {
+      if (shown !== previous) runOnJS(setTitleShown)(shown);
+    },
+    [nameBottom],
+  );
   const [state, setState] = useState<State>({ status: "loading" });
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [entry, setEntry] = useState<DiaryEntry | null>(null);
@@ -86,12 +99,12 @@ export function PersonProfileScreen({
   const [cvOpen, setCvOpen] = useState(false);
   const [editingNote, setEditingNote] = useState(false);
   const requestId = useRef(0);
+  // Opened without a scan (a speaker or representative), there is no CV, star or note.
+  const showCv = source !== "diary" || entry !== null;
   const usesCustomAndroidHeader = process.env.EXPO_OS === "android";
-  // iOS keeps the native back button, a circle on iOS 26, whenever there is a
-  // screen to return to. A custom headerLeft is wrapped in a wide glass pill,
-  // so a cold deep link (nothing to pop, H59) floats the same 44pt glass
-  // circle Android uses instead.
-  const [floatingBack] = useState(() => usesCustomAndroidHeader || !router.canGoBack());
+  // The zoom transition's cancelled swipe-to-dismiss leaves the native back
+  // button hidden, so these screens always draw their own glass circle.
+  const floatingBack = true;
 
   const load = useCallback(async () => {
     const request = ++requestId.current;
@@ -208,36 +221,27 @@ export function PersonProfileScreen({
   const goBack = () => safeBack(router, "/");
   const person = state.status === "ready" ? state.person : null;
   const helper = state.status === "ready" ? state.helper : null;
+  // Tinted from the photo's colour, blue without a usable photo; a photo whose colour is still loading keeps the plain background.
+  const photoTint = useImageTint(person?.photoUrl);
+  const hero =
+    photoTint.color || (person && photoTint.settled)
+      ? heroTint(photoTint.color, dark, NO_PHOTO_TINT)
+      : null;
 
   return (
     <View ref={avatarCollapse.hostRef} onLayout={avatarCollapse.onHostLayout} style={{ flex: 1 }}>
-      {floatingBack ? (
-        <View
-          style={{
-            left: 16,
-            position: "absolute",
-            top: insets.top + 8,
-            zIndex: 10,
-          }}
-        >
-          <GlassView
-            colorScheme="auto"
-            glassEffectStyle="regular"
-            isInteractive
-            style={{ borderRadius: radius.full, height: 44, width: 44 }}
-          >
-            <LegacyHeaderIconButton
-              accessibilityLabel={t("back")}
-              icon="chevron.left"
-              onPress={goBack}
-            />
-          </GlassView>
-        </View>
-      ) : null}
+      {floatingBack ? <FloatingBackButton onPress={goBack} /> : null}
       {process.env.EXPO_OS === "ios" ? (
-        <Stack.Screen options={{ title: "", headerBackVisible: !floatingBack }} />
+        <Stack.Screen
+          options={{
+            title: titleShown && person ? person.displayName : "",
+            headerTitle: titleShown && person ? person.displayName : "",
+            headerBackVisible: !floatingBack,
+            scrollEdgeEffects: { top: titleShown ? "soft" : "hidden" },
+          }}
+        />
       ) : null}
-      {person?.cvUrl ? (
+      {person?.cvUrl && showCv ? (
         <CvViewer
           visible={cvOpen}
           title={person.displayName}
@@ -261,10 +265,7 @@ export function PersonProfileScreen({
         onTouchStart={avatarCollapse.onScrollBeginDrag}
         onContentSizeChange={avatarCollapse.onContentSizeChange}
         scrollEventThrottle={16}
-        contentInsetAdjustmentBehavior="automatic"
-        // iOS clamps programmatic scrolls to the raw inset (0), not the
-        // automatic one, so the avatar's true top would land mid-morph (#935).
-        scrollToOverflowEnabled
+        contentInsetAdjustmentBehavior="never"
         style={{ backgroundColor: colors.background, flex: 1 }}
         contentContainerStyle={{
           flexGrow: 1,
@@ -273,12 +274,27 @@ export function PersonProfileScreen({
           minHeight: person ? avatarCollapse.contentMinHeight : undefined,
           paddingBottom: Math.max(40, insets.bottom + 24),
           ...readable.content,
-          paddingTop: usesCustomAndroidHeader ? insets.top + 64 : 8,
+          paddingTop: insets.top + (usesCustomAndroidHeader ? 64 : 52),
         }}
         refreshControl={
           <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
         }
       >
+        {hero ? (
+          <Animated.View
+            entering={photoTint.fromCache ? undefined : FadeIn.duration(400)}
+            testID="person-hero"
+            pointerEvents="none"
+            style={{
+              experimental_backgroundImage: hero.gradient,
+              height: 620,
+              left: 0,
+              position: "absolute",
+              right: 0,
+              top: -300,
+            }}
+          />
+        ) : null}
         {loadError && state.status === "ready" ? (
           <RequestFeedback error={loadError} onRetry={() => void load()} retrying={refreshing} />
         ) : null}
@@ -293,10 +309,22 @@ export function PersonProfileScreen({
             <ProfileCard
               beforeKnowledge={helper ? <HelperCompany helper={helper} /> : undefined}
               data={person}
-              onNameLayout={avatarCollapse.onNameLayout}
+              nameColor={hero?.foreground}
+              onNameLayout={(event: LayoutChangeEvent) => {
+                avatarCollapse.onNameLayout(event);
+                const { y, height } = event.nativeEvent.layout;
+                // Content starts 8 pt below the bar; the name is under it once its bottom edge passes.
+                setNameBottom(y + height + 8);
+              }}
               avatar={
                 <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={avatarSize}>
-                  <PersonAvatar size={avatarSize} name={person.displayName} uri={person.photoUrl} />
+                  <Link.AppleZoomTarget>
+                    <PersonAvatar
+                      size={avatarSize}
+                      name={person.displayName}
+                      uri={person.photoUrl}
+                    />
+                  </Link.AppleZoomTarget>
                 </ProfileAvatarCollapseAnchor>
               }
               actions={
@@ -323,7 +351,7 @@ export function PersonProfileScreen({
                       onPress={() => setEditingNote(true)}
                     />
                   ) : null}
-                  {person.cvUrl ? (
+                  {person.cvUrl && showCv ? (
                     <QuickAction
                       icon="doc.text"
                       label={t("directoryCv")}
@@ -346,6 +374,61 @@ export function PersonProfileScreen({
                 ) : null
               }
             />
+
+            {(person.enterprises ?? []).length > 0 ? (
+              <Section>
+                {(person.enterprises ?? []).map((company, index) => (
+                  <View key={company.id}>
+                    {index > 0 ? <Separator inset={68} /> : null}
+                    <Link href={`/companies/${company.id}`} asChild>
+                      <PressableFeedback
+                        feedback="row"
+                        accessibilityRole="button"
+                        accessibilityLabel={company.name}
+                        style={{
+                          alignItems: "center",
+                          flexDirection: "row",
+                          gap: 12,
+                          minHeight: 60,
+                          paddingHorizontal: 16,
+                          paddingVertical: 8,
+                        }}
+                      >
+                        <Link.AppleZoom>
+                          <View>
+                            <PersonAvatar
+                              size={40}
+                              kind="sponsor"
+                              name={company.name}
+                              uri={company.logoUrl}
+                            />
+                          </View>
+                        </Link.AppleZoom>
+                        <Text
+                          numberOfLines={1}
+                          style={{
+                            color: colors.label,
+                            flex: 1,
+                            fontSize: type.body.fontSize,
+                            fontWeight: "600",
+                          }}
+                        >
+                          {company.name}
+                        </Text>
+                        <SymbolView
+                          name="chevron.right"
+                          size={13}
+                          tintColor={colors.tertiaryLabel}
+                          accessible={false}
+                        />
+                      </PressableFeedback>
+                    </Link>
+                  </View>
+                ))}
+              </Section>
+            ) : null}
+
+            <ActivityLinkSection title={t("personTalks")} items={person.activities ?? []} />
 
             {helper ? (
               <Section title={t("helpSchedule")} footer={t("helpScheduleNote")}>

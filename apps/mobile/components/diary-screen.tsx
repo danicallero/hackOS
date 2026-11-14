@@ -6,7 +6,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AccountWalletOverlay, useAccountWallet, WalletModal } from "@/components/account-wallet";
 import { AppRefreshControl } from "@/components/app-refresh-control";
 import { BadgeLinkActions, type ScanActionLabels } from "@/components/badge-link-actions";
-import { CompanyAlbum, CompanySheet } from "@/components/company-album";
+import { CompanyAlbum } from "@/components/company-album";
+import {
+  CompanyCelebration,
+  type CompanyCelebrationTarget,
+} from "@/components/company-celebration";
 import {
   ConnectionCelebration,
   type ConnectionCelebrationTarget,
@@ -37,11 +41,7 @@ import {
   isOfflineError,
   readPendingScans,
 } from "@/lib/diary-pending";
-import {
-  type SponsorCollection,
-  type SponsorCollectionItem,
-  withCompanyEntry,
-} from "@/lib/diary-sponsors";
+import type { SponsorCollection } from "@/lib/diary-sponsors";
 import { filterDiaryEntries } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -67,7 +67,9 @@ type ScanInput = "nfc" | "qr" | "manual";
 type DiarySection = "people" | "companies";
 
 const SECTIONS: DiarySection[] = ["people", "companies"];
-type NoteTarget = { kind: "person"; entry: DiaryEntry } | { kind: "company"; enterpriseId: number };
+const personHref = (userId: number) => `/people/${userId}` as const;
+
+type NoteTarget = { kind: "person"; entry: DiaryEntry };
 
 const JSON_HEADERS = () => ({
   "content-type": "application/json",
@@ -138,11 +140,14 @@ export function DiaryScreen() {
   // The person met, held back from the list until the celebration ends.
   const metEntry = useRef<DiaryEntry | null>(null);
   const celebrations = useRef(0);
+  const [companyCelebration, setCompanyCelebration] = useState<CompanyCelebrationTarget | null>(
+    null,
+  );
+  const companyId = useRef<number | null>(null);
   const { me } = useMeContext();
   const [highlightId, setHighlightId] = useState<number | null>(null);
   const [busyKeys, setBusyKeys] = useState<ReadonlySet<string>>(new Set());
   const [noteTarget, setNoteTarget] = useState<NoteTarget | null>(null);
-  const [openCompanyId, setOpenCompanyId] = useState<number | null>(null);
   const requestId = useRef(0);
   const collectionRequestId = useRef(0);
   const scanInFlight = useRef(false);
@@ -237,26 +242,6 @@ export function DiaryScreen() {
     setEntries((current) => upsertDiaryEntry(current ?? [], entry));
   }, []);
 
-  const applyCompany = useCallback((enterpriseId: number, entry: DiaryEntry | null) => {
-    collectionRequestId.current += 1;
-    setCollection((current) =>
-      current
-        ? withCompanyEntry(
-            current,
-            enterpriseId,
-            entry
-              ? {
-                  id: entry.id,
-                  starred: entry.starred,
-                  note: entry.note,
-                  createdAt: entry.createdAt,
-                }
-              : null,
-          )
-        : current,
-    );
-  }, []);
-
   async function onRefresh() {
     setRefreshing(true);
     try {
@@ -286,7 +271,7 @@ export function DiaryScreen() {
   async function submitScan(code: string, fromQr = false) {
     const value = code.trim();
     // The camera keeps reading under the celebration; ignore it until it ends.
-    if (!value || scanInFlight.current || metEntry.current) return;
+    if (!value || scanInFlight.current || metEntry.current || companyId.current !== null) return;
     scanInFlight.current = true;
     setScanning(true);
     try {
@@ -318,10 +303,17 @@ export function DiaryScreen() {
         });
         return;
       }
+      if (entry.kind === "sponsor" && entry.sponsor) {
+        // A collected stand: its logo celebrates over the screen, and the
+        // company page opens underneath (revealCompany) as the overlay fades.
+        void loadCollection();
+        celebrations.current += 1;
+        companyId.current = entry.sponsor.enterpriseId;
+        setCompanyCelebration({ key: celebrations.current, sponsor: entry.sponsor });
+        return;
+      }
       if (fromQr) setInput(null);
       if (entry.kind === "sponsor") {
-        // A collected stand: show its badge celebrating at the top of the
-        // album, once the album has the new order.
         setSection("companies");
         setHighlightId(entry.sponsor?.enterpriseId ?? null);
         await loadCollection();
@@ -361,6 +353,18 @@ export function DiaryScreen() {
     setSavedId(entry.id);
     setSection("people");
     if (entry.person) openPerson(entry.person.userId);
+  }
+
+  function revealCompany() {
+    setSection("companies");
+    scrollToTop();
+    if (companyId.current !== null) router.push(`/companies/${companyId.current}`);
+  }
+
+  function finishCompanyCelebration() {
+    companyId.current = null;
+    setCompanyCelebration(null);
+    setInput(null);
   }
 
   function finishCelebration() {
@@ -422,36 +426,7 @@ export function DiaryScreen() {
     );
   }
 
-  const openCompany = collection?.items.find((item) => item.enterpriseId === openCompanyId) ?? null;
-
-  function updateCompany(item: SponsorCollectionItem, patch: { starred?: boolean; note?: string }) {
-    const entry = item.entry;
-    if (!entry) return;
-    return mutate(`company:${item.enterpriseId}`, async () => {
-      applyCompany(item.enterpriseId, await patchEntry(entry.id, patch));
-      void haptic("selection");
-    });
-  }
-
-  function removeCompany(item: SponsorCollectionItem) {
-    const entry = item.entry;
-    if (!entry) return;
-    confirmRemove(
-      () =>
-        void mutate(`company:${item.enterpriseId}`, async () => {
-          await apiFetch(`/api/me/diary/${entry.id}`, {
-            method: "DELETE",
-          });
-          setOpenCompanyId(null);
-          applyCompany(item.enterpriseId, null);
-        }),
-    );
-  }
-
-  const openPerson = useCallback(
-    (userId: number) => router.push({ pathname: "/people/[id]", params: { id: String(userId) } }),
-    [router],
-  );
+  const openPerson = useCallback((userId: number) => router.push(personHref(userId)), [router]);
 
   const inputOpen = input !== null;
   // Search and the favourites filter apply to People only, once there is
@@ -483,7 +458,7 @@ export function DiaryScreen() {
         detailIsNote={Boolean(entry.note)}
         starred={entry.starred}
         busy={busyKeys.has(`entry:${entry.id}`)}
-        onOpen={person ? () => openPerson(person.userId) : undefined}
+        href={person ? personHref(person.userId) : undefined}
         // A hidden profile can no longer be favourited; it keeps only its
         // note and "Remove from diary", so its name is not truncated.
         onToggleStar={
@@ -535,16 +510,8 @@ export function DiaryScreen() {
     });
   }, [glassAvailable, navigation, searchable, t, wallet.open]);
 
-  const noteInitial =
-    noteTarget?.kind === "person"
-      ? noteTarget.entry.note
-      : noteTarget?.kind === "company"
-        ? (collection?.items.find((item) => item.enterpriseId === noteTarget.enterpriseId)?.entry
-            ?.note ?? null)
-        : null;
+  const noteInitial = noteTarget?.entry.note ?? null;
 
-  // One note editor for people and stands; a stand's opens inside the
-  // company sheet so iOS can stack it over that sheet.
   const noteEditor = (
     <DiaryNoteEditor
       visible={noteTarget !== null}
@@ -553,11 +520,7 @@ export function DiaryScreen() {
       onSave={(note) => {
         const target = noteTarget;
         setNoteTarget(null);
-        if (target?.kind === "person") void updatePerson(target.entry, { note });
-        if (target?.kind === "company") {
-          const item = collection?.items.find((i) => i.enterpriseId === target.enterpriseId);
-          if (item) void updateCompany(item, { note });
-        }
+        if (target) void updatePerson(target.entry, { note });
       }}
     />
   );
@@ -611,11 +574,7 @@ export function DiaryScreen() {
       ) : null}
       {section === "companies" ? (
         collection ? (
-          <CompanyAlbum
-            collection={collection}
-            highlightId={highlightId}
-            onOpen={(item) => setOpenCompanyId(item.enterpriseId)}
-          />
+          <CompanyAlbum collection={collection} highlightId={highlightId} />
         ) : (
           <RequestFeedback
             loading={!collectionError}
@@ -663,6 +622,11 @@ export function DiaryScreen() {
   };
   const overlays = (
     <>
+      <CompanyCelebration
+        target={input === "qr" ? null : companyCelebration}
+        onCovered={revealCompany}
+        onDone={finishCompanyCelebration}
+      />
       <ConnectionCelebration
         target={input === "qr" ? null : celebration}
         self={celebrationSelf}
@@ -694,6 +658,12 @@ export function DiaryScreen() {
             onValue={(code) => void submitScan(code, true)}
           />
         ) : null}
+        <CompanyCelebration
+          inline
+          target={input === "qr" ? companyCelebration : null}
+          onCovered={revealCompany}
+          onDone={finishCompanyCelebration}
+        />
         <ConnectionCelebration
           inline
           target={input === "qr" ? celebration : null}
@@ -702,25 +672,7 @@ export function DiaryScreen() {
           onDone={finishCelebration}
         />
       </Modal>
-      <CompanySheet
-        item={openCompany}
-        busy={openCompany ? busyKeys.has(`company:${openCompany.enterpriseId}`) : false}
-        onClose={() => setOpenCompanyId(null)}
-        onToggleStar={() => {
-          if (openCompany)
-            void updateCompany(openCompany, { starred: !openCompany.entry?.starred });
-        }}
-        onEditNote={() => {
-          if (openCompany)
-            setNoteTarget({ kind: "company", enterpriseId: openCompany.enterpriseId });
-        }}
-        onRemove={() => {
-          if (openCompany) removeCompany(openCompany);
-        }}
-      >
-        {noteTarget?.kind === "company" ? noteEditor : null}
-      </CompanySheet>
-      {noteTarget?.kind === "company" ? null : noteEditor}
+      {noteEditor}
     </>
   );
 
