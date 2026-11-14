@@ -93,10 +93,18 @@ export function useProfileAvatarCollapse(
   {
     headerHeight = 0,
     cameraCutoutFrame,
+    insetAdjusted = true,
   }: {
     headerHeight?: number;
     /** Window coordinates of an OEM camera cutout, overriding detection. */
     cameraCutoutFrame?: ProfileCameraCutoutFrame | null;
+    /**
+     * False when the screen pads its own content instead of letting iOS add an
+     * automatic inset: the true top is then offset 0 and never moves, so a
+     * cancelled swipe-to-dismiss (which briefly changes an automatic inset)
+     * cannot shift the page and half-collapse the avatar.
+     */
+    insetAdjusted?: boolean;
   } = {},
 ) {
   const scrollOffset = useSharedValue(0);
@@ -318,7 +326,7 @@ export function useProfileAvatarCollapse(
   // once the host is measured, so it holds even when no scroll event preceded
   // a programmatic scroll or a remount restored the offset at y 0 (#935).
   useEffect(() => {
-    if (Platform.OS !== "ios" || !anchorFrame) return;
+    if (Platform.OS !== "ios" || !insetAdjusted || !anchorFrame) return;
     const bound = profileAvatarRestingOffsetBound(safeAreaTop, hostOrigin.y, headerHeight);
     if (bound >= restingOffset.value) return;
     restingOffset.value = bound;
@@ -328,6 +336,7 @@ export function useProfileAvatarCollapse(
     contentOffset,
     headerHeight,
     hostOrigin.y,
+    insetAdjusted,
     restingOffset,
     safeAreaTop,
     scrollOffset,
@@ -339,7 +348,9 @@ export function useProfileAvatarCollapse(
     viewport > 0 && !simple
       ? profileAvatarMinContentHeight(
           viewport,
-          Platform.OS === "ios" ? profileAvatarRestingOffsetBound(safeAreaTop, hostOrigin.y) : 0,
+          Platform.OS === "ios" && insetAdjusted
+            ? profileAvatarRestingOffsetBound(safeAreaTop, hostOrigin.y)
+            : 0,
           carryDistance + PROFILE_AVATAR_COLLAPSE_DISTANCE,
         )
       : undefined;
