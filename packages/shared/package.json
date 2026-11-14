@@ -15,6 +15,7 @@
     "./events": "./src/events.ts",
     "./onboarding": "./src/onboarding.ts",
     "./public-profile": "./src/public-profile.ts",
+    "./tv-connections": "./src/tv-connections.ts",
     "./live-activities": "./src/live-activities.ts",
     "./maintenance": "./src/maintenance.ts",
     "./locale": "./src/locale.ts",
