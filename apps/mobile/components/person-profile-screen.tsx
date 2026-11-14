@@ -106,9 +106,11 @@ export function PersonProfileScreen({
   // Opened without a scan (a speaker or representative), there is no CV, star or note.
   const showCv = source !== "diary" || entry !== null;
   const usesCustomAndroidHeader = process.env.EXPO_OS === "android";
-  // The zoom transition's cancelled swipe-to-dismiss leaves the native back
-  // button hidden, so these screens always draw their own glass circle.
-  const floatingBack = true;
+  // iOS keeps the native back button, a circle on iOS 26, whenever there is a
+  // screen to return to. A custom headerLeft is wrapped in a wide glass pill,
+  // so a cold deep link (nothing to pop, H59) floats the same 44pt glass
+  // circle Android uses instead.
+  const [floatingBack] = useState(() => usesCustomAndroidHeader || !router.canGoBack());
 
   const load = useCallback(async () => {
     const request = ++requestId.current;
