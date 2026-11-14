@@ -44,6 +44,14 @@ answers were copied to the current edition, and settings were created for all
 currently offered sponsor meals plus meals with historical answers. A
 participant is never offered a meal RSVP, whatever the settings say.
 
+The networking step also discloses (#934, #935) that while the profile is
+shared, the person's name and connections appear on the public TV connections
+graph; declining to create a profile keeps the person off it. There is no
+separate switch. People who already share their profile newly appear on the
+public screens, so an announcement to existing users is needed before launch;
+it is not built and is tracked separately (see the TV connections graph spec).
+Organizer privacy review is required before launch.
+
 Networking completion does not create consent. Only the public-profile editor
 can opt a person in. Declining networking clears `directory_visible` and
 `consented_at` in the same transaction as the onboarding decision; deferring

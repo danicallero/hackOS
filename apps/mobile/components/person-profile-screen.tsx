@@ -199,7 +199,7 @@ export function PersonProfileScreen({
 
   function confirmRemove() {
     if (!entry) return;
-    alert(t("diaryRemoveTitle"), undefined, [
+    alert(t("diaryRemoveTitle"), t("diaryRemoveBody"), [
       { text: t("cancel"), style: "cancel" },
       {
         text: t("remove"),

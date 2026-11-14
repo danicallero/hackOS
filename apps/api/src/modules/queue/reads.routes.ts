@@ -11,6 +11,7 @@ import {
   requireCapability,
 } from "../../lib/capabilities.js";
 import { isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
+import { getRequestContext } from "../../lib/request-context.js";
 import { positiveInt } from "../../lib/schemas.js";
 import { sharedCache } from "../../lib/shared-cache.js";
 import { subscribe } from "../../lib/sse.js";
@@ -38,6 +39,7 @@ import {
 } from "./reads.js";
 import { challengeIdParam, repoIdParam, roomIdParam, tvConfigBody, tvModeBody } from "./schemas.js";
 import { clearTvMode, resolveTvState, setTvLanguage, setTvMode, tvVenueConfig } from "./tv.js";
+import { tvConnections } from "./tv-connections.js";
 
 const tvControlPolicy = {
   kind: "capability" as const,
@@ -236,6 +238,24 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       },
     },
     () => sharedCache("tv", "rooms", 2, publicRoomViews),
+  );
+  typed.get(
+    "/api/tv/connections",
+    {
+      config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-tv" } },
+      // The wall shows the current edition only: an `X-Edition` override must not
+      // publish a past edition's named graph to anonymous callers (nor split the cache).
+      preHandler: async () => {
+        const ctx = getRequestContext();
+        if (ctx) ctx.edition = undefined;
+      },
+      schema: {
+        summary: "Public attendee connections graph (#934, #935)",
+        description:
+          "Opt-out networking graph of the active edition: connected people and companies only, keyed-hash node ids that rotate hourly, names only for shared profiles, bounded payload with truncated flag. No notes, favourites, timestamps or user ids. Shared cache, 15 s.",
+      },
+    },
+    () => sharedCache("tv", "connections", 15, tvConnections),
   );
 
   // Raw queue events contain operational room and team data. Public walls use

@@ -22,7 +22,7 @@ edits the same photo from the Account avatar and the networking profile editor
 
 The "Public profile" section (`components/profile/public-profile-card.tsx`)
 shows only the opt-in switch ("Share my profile"), with one line saying that
-only people who scan the person's badge will see it, until the person opts in; then it reveals the surname, photo and project switches, the
+only people who scan the person's badge will see their profile and that, while the profile is shared, their name and connections also show on public event screens, which can be photographed or copied, until the person opts in; then it reveals the surname, photo and project switches, the
 headline and location note (placeholder "Room 2.1", so people know which classroom to enter), the bio (with a character count), up to six links
 (type + address rows; empty rows are not saved), the linked GitHub account as a matching link row with its own profile-visibility switch, and the CV. Hiding that link does not unlink the account.
 There is no preview card. While the opt-in is off the fields stay in view,
@@ -30,6 +30,20 @@ disabled, so people see what sharing would show; they neither
 enable Save nor get published: switching it off saves the stored text and
 toggles unchanged. Fields are locked while a save is in flight, and each
 change set saves with one `Idempotency-Key`.
+
+**Disclosure and the TV exception.** The profile stays visible only to people
+who scan the badge, but the public TV connections graph is a documented
+exception to "private" (#934, #935): while `directory_visible` is true, the owner
+appears by name (surname per `show_surname`) with their connections (people and
+company, including sponsor scans) on public event screens. People who do not share
+do not appear at all: no anonymous dot and no line to or from them. There is no
+separate switch; sharing is the only control. That display and its data are public
+and can be photographed or copied; turning sharing off removes the person and all
+their connections on the next refresh, but cannot retract copies. The privacy
+policy section 3.4, the sharing copy on web and mobile and the onboarding step say
+the same. People who already share newly appear publicly, so an announcement to
+existing users is needed before launch; it is not built here. Organizer privacy
+review is required before launch.
 
 The CV file saves on its own (upload, replace, remove), like the photo; the
 "Share CV" switch appears once a CV exists and is part of the form. Removing
@@ -142,8 +156,8 @@ including the account photo, stays in `users` and is projected, never copied.
 | `consented_at` | `NULL` | Stamped on every hidden→visible transition; required while visible. |
 
 Text is trimmed, empty text becomes `NULL`, and control characters are
-rejected. `PUT` may omit `bio`, `socials` and `shareCv` to keep their stored
-values.
+rejected. `PUT` may omit `bio`, `socials` and `shareCv` to
+keep their stored values.
 
 ### Account photo and CV storage
 
@@ -338,6 +352,12 @@ removals write `user.photo_updated` / `user.photo_removed` on the `user`
 entity with only `hasPhoto` before/after. Moderation writes
 `public_profile.moderated` with the staff reason and answers 409 for an account
 being removed.
+
+Moderation (`PUT /api/users/:id/public-profile`, `users:write`) may stop sharing
+but never start it: turning `directoryVisible` on answers 409
+`profile_consent_required`. Staff stopping sharing also removes the person from the
+public TV graph. Removal-pending accounts are refused (owner
+404 at the caller gate, 409 in the service; staff 409).
 
 A card's challenges exclude cancelled and disqualified queue entries.
 

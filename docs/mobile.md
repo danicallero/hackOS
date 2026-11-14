@@ -759,8 +759,11 @@ they are not device screenshots or proof of native toolbar behavior.
   rendered by the same `components/profile-card.tsx` the diary's person screen
   uses), under an always-visible "Share my profile" switch. In the preview that
   switch saves on its own (optimistic, rolled back with a localized error if the
-  PUT fails); a card that is not shared yet is drawn at half opacity and the
-  sheet starts in edit mode. The header follows the other form sheets
+  PUT fails). Its footer discloses (#934, #935) that while the profile is shared
+  the person's name and connections (people and companies) appear on public
+  event screens, which can be photographed or copied, and that turning off
+  sharing removes them; there is no separate switch. A card that is not shared
+  yet is drawn at half opacity and the sheet starts in edit mode. The header follows the other form sheets
   (native header/toolbars on iOS Liquid Glass, safe-area-inset floating controls
   elsewhere): X closes, pencil enters edit mode; while editing, X
   discards the changes (back to the preview) and the checkmark saves. On foldable
@@ -1166,6 +1169,8 @@ reached the server is queued on the device (`lib/diary-pending.ts`, one entry
 per code, cleared with the account's other caches), "Waiting for connection: n"
 shows above the scan button, and the queue is sent on reconnect, on focus and
 on launch; a code the server answers (accepted or refused) leaves the queue.
+Removing a person asks for confirmation with a body saying the other person
+keeps the contact and the connection can stay on public event screens while they do.
 
 The diary uses the system header, laid out like Activities. On iOS 26
 (`isRealLiquidGlassAvailable`) it is the transparent native bar: the list
