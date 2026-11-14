@@ -77,7 +77,9 @@ async function lockDoorParticipant(
     removal_requires_exit: boolean;
     removal_started_at: Date | null;
   }>(
-    `SELECT id, badge_id, badge_assigned_at, account_state, removal_action,
+    `SELECT id,
+            CASE WHEN badge_event_key = current_edition() THEN badge_id END AS badge_id,
+            badge_assigned_at, account_state, removal_action,
             removal_requires_exit, removal_started_at
        FROM users
       WHERE id = $1 AND anonymized_at IS NULL
@@ -162,6 +164,7 @@ async function openSessionAsOf(
   const { rows } = await client.query(
     `SELECT kind, scanned_at FROM time_logs
       WHERE user_id = $1 AND kind IN ('in', 'out') AND scanned_at <= $2
+        AND event_key = current_edition()
       ORDER BY scanned_at DESC, id DESC LIMIT 1`,
     [userId, asOf],
   );
@@ -258,6 +261,7 @@ export async function presenceScan(
       await client.query(
         `DELETE FROM time_logs
           WHERE user_id = $1 AND scanned_at > $2
+            AND event_key = current_edition()
             AND notes = 'Automatic entry from accreditation'`,
         [userId, scannedAt],
       );
@@ -351,14 +355,15 @@ export async function openSessions(opts: { actorId: number | null; at?: number }
        FROM (
          SELECT DISTINCT ON (user_id) id, user_id, kind, scanned_at
            FROM time_logs
-      WHERE scanned_at <= now() AND kind IN ('in', 'out')
+      WHERE scanned_at <= now() AND kind IN ('in', 'out') AND event_key = current_edition()
           ORDER BY user_id, scanned_at DESC, id DESC
        ) tl
        JOIN users u ON u.id = tl.user_id
        LEFT JOIN LATERAL (
          SELECT max(signal_at) AS last_activity FROM (
-           SELECT logged_at AS signal_at FROM activity_logs
-            WHERE user_id = tl.user_id AND logged_at >= tl.scanned_at
+           SELECT al.logged_at AS signal_at FROM activity_logs al
+             JOIN activities a ON a.id = al.activity_id AND a.event_key = current_edition()
+            WHERE al.user_id = tl.user_id AND al.logged_at >= tl.scanned_at
            UNION ALL
            SELECT hc.resolved_at FROM (${HELP_CHECKPOINTS_SQL}) hc
             WHERE hc.user_id = tl.user_id AND hc.resolved_at >= tl.scanned_at
@@ -457,11 +462,13 @@ async function loadEvents(
     `SELECT tl.user_id, extract(epoch from tl.scanned_at) * 1000 AS t, tl.kind,
             NULL::text AS activity_name
        FROM time_logs tl ${timeFilter} AND tl.kind IN ('in', 'out')
+        AND tl.event_key = current_edition()
      UNION ALL
      SELECT al.user_id, extract(epoch from al.logged_at) * 1000 AS t, 'activity' AS kind,
             a.name AS activity_name
        FROM activity_logs al
-       JOIN activities a ON a.id = al.activity_id ${activityFilter}
+       JOIN activities a ON a.id = al.activity_id AND a.event_key = current_edition()
+       ${activityFilter}
      UNION ALL
      SELECT hc.user_id, extract(epoch from hc.resolved_at) * 1000 AS t, 'help' AS kind,
             NULL::text AS activity_name
@@ -660,6 +667,7 @@ export async function listTimeLogs(userId: number, actorId: number | null) {
        LEFT JOIN users u ON u.id = tl.scanned_by
         AND u.account_state = 'active' AND u.anonymized_at IS NULL
       WHERE tl.user_id = $1
+        AND tl.event_key = current_edition()
         AND EXISTS (SELECT 1 FROM users subject
                      WHERE subject.id = tl.user_id
                        AND subject.account_state = 'active'
@@ -723,6 +731,7 @@ export async function updateTimeLog(
       const { rows: latestDoorRows } = await client.query<{ id: number }>(
         `SELECT id FROM time_logs
           WHERE user_id = $1 AND kind IN ('in', 'out') AND scanned_at <= $2
+            AND event_key = current_edition()
           ORDER BY scanned_at DESC, id DESC
           LIMIT 1`,
         [before.user_id, scannedAt],
@@ -821,9 +830,10 @@ export async function createPresenceSignal(
       }
     }
     if (input.kind === "activity") {
-      const activity = await client.query(`SELECT id FROM activities WHERE id = $1`, [
-        input.activityId,
-      ]);
+      const activity = await client.query(
+        `SELECT id FROM activities WHERE id = $1 AND event_key = current_edition()`,
+        [input.activityId],
+      );
       if (!activity.rows[0]) throw new NotFoundError("Activity not found");
       const { rows } = await client.query(
         `INSERT INTO activity_logs (user_id, activity_id, notes, logged_at, logged_by)
@@ -902,7 +912,10 @@ export async function updatePresenceActivity(
     await assertFixtureSubjectScope(client, actorId, before.user_id as number);
     await lockActiveParticipant(client, before.user_id as number);
     const activityId = input.activityId ?? before.activity_id;
-    const exists = await client.query(`SELECT 1 FROM activities WHERE id = $1`, [activityId]);
+    const exists = await client.query(
+      `SELECT 1 FROM activities WHERE id = $1 AND event_key = current_edition()`,
+      [activityId],
+    );
     if (!exists.rows[0]) throw new NotFoundError("Activity not found");
     const { rows: updated } = await client.query(
       `UPDATE activity_logs
@@ -992,6 +1005,7 @@ export async function presenceTimeline(
        LEFT JOIN users u ON u.id = tl.scanned_by
         AND u.account_state = 'active' AND u.anonymized_at IS NULL
       WHERE tl.user_id = $1
+        AND tl.event_key = current_edition()
         AND EXISTS (SELECT 1 FROM users subject
                      WHERE subject.id = tl.user_id
                        AND subject.account_state = 'active'
@@ -1000,7 +1014,7 @@ export async function presenceTimeline(
      SELECT al.id, 'activity', 'activity', al.logged_at, a.id, a.name, a.category,
             al.notes, al.logged_by, u.name, u.surname
        FROM activity_logs al
-       JOIN activities a ON a.id = al.activity_id
+       JOIN activities a ON a.id = al.activity_id AND a.event_key = current_edition()
        LEFT JOIN users u ON u.id = al.logged_by
         AND u.account_state = 'active' AND u.anonymized_at IS NULL
       WHERE al.user_id = $1
@@ -1029,9 +1043,10 @@ export async function presenceTimeline(
       `SELECT a.id, a.name, a.category
          FROM activities a
          LEFT JOIN schedule s ON s.id = a.schedule_id
-        WHERE ${scannableActivitySql("a", 2)}
+        WHERE a.event_key = current_edition()
+          AND (${scannableActivitySql("a", 2)}
            OR EXISTS (SELECT 1 FROM activity_logs al
-                       WHERE al.activity_id = a.id AND al.user_id = $1)
+                       WHERE al.activity_id = a.id AND al.user_id = $1))
         ORDER BY s.starts_at ASC NULLS LAST, a.name ASC, a.id ASC`,
       [userId, scannableCategoriesParam()],
     ),

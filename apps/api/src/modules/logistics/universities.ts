@@ -128,10 +128,15 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
     kind: "public",
     anonymousCategory: "public-content",
   } as const satisfies RouteAccessPolicy;
-  const authenticated = { kind: "authenticated" } as const satisfies RouteAccessPolicy;
+  // Catalogues are global: their edits never touch an edition's rows.
+  const authenticated = {
+    kind: "authenticated",
+    edition: "global",
+  } as const satisfies RouteAccessPolicy;
   const manageAccess = {
     kind: "capability",
     capability: CAPABILITIES.INTOLERANCES_MANAGE,
+    edition: "global",
   } as const satisfies RouteAccessPolicy;
 
   // Public: autocomplete list for the university picker. `q` filters by name;

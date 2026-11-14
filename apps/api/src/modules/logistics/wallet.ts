@@ -120,11 +120,13 @@ async function passPayload(pass: PassRow) {
   const { rows } = await pool.query(
     `SELECT u.name, u.surname, u.email, u.badge_id, u.language, un.name AS university, t.token
        FROM users u
+       -- A pass belongs to the edition it was issued in; its ticket does too.
        LEFT JOIN tickets t ON t.user_id = u.id
+         AND t.event_key = (SELECT wp.event_key FROM wallet_passes wp WHERE wp.id = $2)
        LEFT JOIN universities un ON un.id = ${userUniversityIdSql("u.id")}
       WHERE u.id = $1 AND u.anonymized_at IS NULL
         AND u.account_state IN ('active', 'removal_pending')`,
-    [pass.user_id],
+    [pass.user_id, pass.id],
   );
   const u = rows[0];
   if (!u) throw new NotFoundError("User not found");

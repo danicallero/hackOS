@@ -62,12 +62,16 @@ async function assertEntitled(userId: number, purpose: Purpose): Promise<void> {
     // invariant 10), so re-issuing/refreshing a wallet pass must instead gate
     // on whether the person currently holds real event access.
     if (!(await hasEventAccess(pool, userId))) throw new NotFoundError("Ticket not issued");
-    const { rows } = await pool.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [userId]);
+    const { rows } = await pool.query(
+      `SELECT 1 FROM tickets WHERE user_id = $1 AND event_key = current_edition()`,
+      [userId],
+    );
     if (!rows[0]) throw new NotFoundError("Ticket not issued");
   } else {
     if (!(await hasEventAccess(pool, userId))) throw new NotFoundError("Badge not issued");
     const b = await pool.query(
-      `SELECT badge_id FROM users
+      `SELECT CASE WHEN badge_event_key = current_edition() THEN badge_id END AS badge_id
+         FROM users
         WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
       [userId],
     );
@@ -93,11 +97,18 @@ async function lockEntitledUser(
   if (!activeUser.rows[0]) throw new NotFoundError("User not found");
   if (purpose === "ticket") {
     if (!(await hasEventAccess(client, userId))) throw new NotFoundError("Ticket not issued");
-    const ticket = await client.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [userId]);
+    const ticket = await client.query(
+      `SELECT 1 FROM tickets WHERE user_id = $1 AND event_key = current_edition()`,
+      [userId],
+    );
     if (!ticket.rows[0]) throw new NotFoundError("Ticket not issued");
   } else {
     if (!(await hasEventAccess(client, userId))) throw new NotFoundError("Badge not issued");
-    const badge = await client.query(`SELECT badge_id FROM users WHERE id = $1`, [userId]);
+    const badge = await client.query(
+      `SELECT CASE WHEN badge_event_key = current_edition() THEN badge_id END AS badge_id
+         FROM users WHERE id = $1`,
+      [userId],
+    );
     if (!badge.rows[0]?.badge_id) throw new BadRequestError("Badge not assigned");
   }
 }
@@ -172,6 +183,7 @@ export async function ensurePassRecord(
               google_object_id, google_object_type, status, update_tag
          FROM wallet_passes
         WHERE user_id = $1 AND purpose = $2 AND platform = $3 AND status <> 'voided'
+          AND event_key = current_edition()
         FOR UPDATE`,
       [userId, purpose, platform],
     );
@@ -215,6 +227,7 @@ export async function ensureGooglePassRecord(
               google_object_id, google_object_type, status, update_tag
          FROM wallet_passes
         WHERE user_id = $1 AND purpose = $2 AND platform = 'google' AND status <> 'voided'
+          AND event_key = current_edition()
         FOR UPDATE`,
       [userId, purpose],
     );
@@ -286,7 +299,7 @@ export async function bumpAllAppleWalletUpdateTags(db: Queryable = pool): Promis
         (SELECT COALESCE(MAX(update_tag::numeric)::bigint, 0) + 1
            FROM wallet_passes WHERE platform = 'apple')
       )::text
-      WHERE platform = 'apple'
+      WHERE platform = 'apple' AND event_key = current_edition()
       RETURNING id`,
   );
   return rows.map((r: { id: number }) => r.id);
@@ -295,7 +308,8 @@ export async function bumpAllAppleWalletUpdateTags(db: Queryable = pool): Promis
 /** Active passes whose provider should receive an event-wide Wallet refresh. */
 export async function listActiveWalletPassIds(): Promise<number[]> {
   const { rows } = await pool.query(
-    `SELECT id FROM wallet_passes WHERE status <> 'voided' ORDER BY id`,
+    `SELECT id FROM wallet_passes
+      WHERE status <> 'voided' AND event_key = current_edition() ORDER BY id`,
   );
   return rows.map((row: { id: number }) => row.id);
 }
@@ -315,6 +329,7 @@ export async function voidTicketPasses(client: pg.PoolClient, userId: number): P
             last_updated_at = now(),
             update_tag = ((extract(epoch FROM now()) * 1000)::bigint)::text
       WHERE user_id = $1 AND purpose = 'ticket' AND status <> 'voided'
+        AND event_key = current_edition()
       RETURNING id`,
     [userId],
   );

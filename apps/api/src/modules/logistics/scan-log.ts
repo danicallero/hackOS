@@ -44,21 +44,21 @@ function scanLogUnion(subjectFilter: string): string {
          NULL::text AS activity_category, NULL::text AS door_kind,
          NULL::text AS door_location, cil.notes
     FROM check_in_logs cil JOIN users u ON u.id = cil.user_id
-   WHERE cil.staff_id = $1
+   WHERE cil.staff_id = $1 AND cil.event_key = current_edition()
      AND u.account_state = 'active' AND u.anonymized_at IS NULL${subjectFilter}
   UNION ALL
   SELECT tl.id, 'door', tl.scanned_at, tl.kind, u.id, u.name, u.surname
          ,NULL::text, NULL::text, NULL::integer, NULL::text, NULL::text,
          tl.kind, NULL::text, tl.notes
     FROM time_logs tl JOIN users u ON u.id = tl.user_id
-   WHERE tl.scanned_by = $1
+   WHERE tl.scanned_by = $1 AND tl.event_key = current_edition()
      AND u.account_state = 'active' AND u.anonymized_at IS NULL${subjectFilter}
   UNION ALL
   SELECT al.id, 'activity', al.logged_at, a.name, u.id, u.name, u.surname
          ,NULL::text, NULL::text, a.id, a.name, a.category,
          NULL::text, NULL::text, al.notes
     FROM activity_logs al
-    JOIN activities a ON a.id = al.activity_id
+    JOIN activities a ON a.id = al.activity_id AND a.event_key = current_edition()
     JOIN users u ON u.id = al.user_id
    WHERE al.logged_by = $1
      AND u.account_state = 'active' AND u.anonymized_at IS NULL${subjectFilter}
@@ -158,23 +158,28 @@ export interface StaffScanRankingRow extends StaffScanCounts {
 export async function staffScanRanking(): Promise<StaffScanRankingRow[]> {
   const { rows } = await pool.query(
     `WITH staff_ids AS (
-       SELECT DISTINCT staff_id AS id FROM check_in_logs
+       SELECT DISTINCT staff_id AS id FROM check_in_logs WHERE event_key = current_edition()
        UNION
-       SELECT DISTINCT scanned_by FROM time_logs WHERE scanned_by IS NOT NULL
+       SELECT DISTINCT scanned_by FROM time_logs
+        WHERE scanned_by IS NOT NULL AND event_key = current_edition()
        UNION
-       SELECT DISTINCT logged_by FROM activity_logs
+       SELECT DISTINCT al.logged_by FROM activity_logs al
+         JOIN activities a ON a.id = al.activity_id AND a.event_key = current_edition()
      ), counted AS (
        SELECT u.id AS staff_id, u.name, u.surname,
               (SELECT count(*)::int
                  FROM check_in_logs cil JOIN users subject ON subject.id = cil.user_id
-                WHERE cil.staff_id = u.id AND subject.account_state = 'active' AND subject.anonymized_at IS NULL
+                WHERE cil.staff_id = u.id AND cil.event_key = current_edition()
+                  AND subject.account_state = 'active' AND subject.anonymized_at IS NULL
                   AND subject.is_test_account = false) AS accreditation_count,
               (SELECT count(*)::int
                  FROM time_logs tl JOIN users subject ON subject.id = tl.user_id
-                WHERE tl.scanned_by = u.id AND subject.account_state = 'active' AND subject.anonymized_at IS NULL
+                WHERE tl.scanned_by = u.id AND tl.event_key = current_edition()
+                  AND subject.account_state = 'active' AND subject.anonymized_at IS NULL
                   AND subject.is_test_account = false) AS presence_count,
               (SELECT count(*)::int
                  FROM activity_logs al JOIN users subject ON subject.id = al.user_id
+                 JOIN activities a ON a.id = al.activity_id AND a.event_key = current_edition()
                 WHERE al.logged_by = u.id AND subject.account_state = 'active' AND subject.anonymized_at IS NULL
                   AND subject.is_test_account = false) AS activity_count
          FROM staff_ids si

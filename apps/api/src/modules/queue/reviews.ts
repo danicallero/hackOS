@@ -190,7 +190,11 @@ export async function listReviews(
   const challengeIds = resolveChallengeFilter(scope, filters.challengeId);
   if (challengeIds !== null && challengeIds.length === 0) return [];
 
-  const conditions: string[] = ["c.is_test_account = $1", "r.is_test_account = $1"];
+  const conditions: string[] = [
+    "c.is_test_account = $1",
+    "r.is_test_account = $1",
+    "qe.event_key = current_edition()",
+  ];
   const params: unknown[] = [scope.fixtureMarker];
   if (challengeIds !== null) {
     params.push(challengeIds);

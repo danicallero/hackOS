@@ -500,7 +500,9 @@ describe("H22/H23 unified person search", () => {
     const alice = await createUser({ name: "Alice" });
     const bob = await createUser({ name: "Bob" });
     const { pool } = await import("../../src/db/pool.js");
-    await pool.query(`UPDATE users SET badge_id_history = '{B-SHARED}' WHERE id = $1`, [alice]);
+    await pool.query(`INSERT INTO badge_id_history (user_id, badge_id) VALUES ($1, 'B-SHARED')`, [
+      alice,
+    ]);
     await assignBadge(bob, "B-SHARED");
 
     const { results } = (await search("b-shared")).json();
@@ -555,12 +557,14 @@ describe("H23 badge rotation", () => {
     expect(res.json().voidedPasses).toBe(1);
 
     const { pool } = await import("../../src/db/pool.js");
-    const u = await pool.query(
-      `SELECT badge_id, badge_id_history, badge_assigned_at FROM users WHERE id = $1`,
-      [uid],
-    );
+    const u = await pool.query(`SELECT badge_id, badge_assigned_at FROM users WHERE id = $1`, [
+      uid,
+    ]);
+    const history = await pool.query(`SELECT badge_id FROM badge_id_history WHERE user_id = $1`, [
+      uid,
+    ]);
     expect(u.rows[0].badge_id).toBe("NEW-1");
-    expect(u.rows[0].badge_id_history).toContain("OLD-1");
+    expect(history.rows.map((r) => r.badge_id)).toContain("OLD-1");
     expect(u.rows[0].badge_assigned_at).toBeInstanceOf(Date);
     const pass = await pool.query(`SELECT status FROM wallet_passes WHERE id = $1`, [passId]);
     expect(pass.rows[0].status).toBe("voided");

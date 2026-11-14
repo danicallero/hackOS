@@ -236,6 +236,7 @@ export async function revealDueScheduleItems(client: Queryable = pool): Promise<
     `UPDATE schedule
         SET visibility = 'shown'
       WHERE visibility = 'hidden'
+        AND event_key = current_edition()
         AND publish_at IS NOT NULL
         AND publish_at <= now()
       RETURNING id`,
@@ -276,6 +277,7 @@ export async function listSchedule() {
   const { rows } = await pool.query(
     `SELECT ${SCHEDULE_COLUMNS}
        FROM schedule
+      WHERE event_key = current_edition()
       ORDER BY starts_at ASC, id ASC`,
   );
   const ownersByScheduleId = await loadOwnersByScheduleId(rows.map((r) => Number(r.id)));
@@ -1069,12 +1071,13 @@ export async function listScheduleForAudiences(
     `SELECT id, title, description, location, type, starts_at, ends_at, publish_at,
             audiences, contact_note, notes, visibility, primary_language, title_i18n, description_i18n
        FROM schedule
-      WHERE $2
+      WHERE event_key = current_edition()
+        AND ($2
          OR (
            visibility = 'shown'
            AND (publish_at IS NULL OR publish_at <= now())
            AND audiences && $1::text[]
-         )
+         ))
       ORDER BY starts_at ASC, id ASC`,
     [Array.from(caller.audiences), caller.isStaff],
   );

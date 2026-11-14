@@ -389,6 +389,7 @@ export async function searchChallengeQueue(challengeId: number, q: string, fixtu
            JOIN queue_entries bqe ON bqe.repo_id = s2.repo_id
                                   AND bqe.status IN ('called', 'in_room', 'presenting')
                                   AND bqe.id <> qe.id
+                                  AND bqe.event_key = qe.event_key
            JOIN challenges bchallenge
              ON bchallenge.id = bqe.challenge_id AND bchallenge.is_test_account = $4
            JOIN rooms br ON br.id = bqe.assigned_room_id
