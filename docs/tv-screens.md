@@ -74,9 +74,10 @@ are all there is. Display rules:
 
 - Plain SVG drawn by `connections-graph.tsx` (no chart library), styled after
   org-roam-ui: flat dark canvas (always dark, whatever the theme), thin translucent
-  straight links (lower opacity on hubs), every person the same single flat colour (no glow), radius growing
-  with the square root of degree (leaf ~4.6 px to hub 22 px at 1000 px height,
-  capped; no controls). Communities steer only the camera and dimming, never colour.
+  straight links (lower opacity on hubs), every person the same single flat colour (no glow), radius from
+  `personRadius(degree)` (power law `2.9*d^0.568` through a tanh soft cap at 34 px at 1000 px
+  height: leaf ~5.8 px diameter, 4 → 12.6, 10 → 20.8, 50 → 44.6, 120 → 58.4; fixed scale, never
+  normalised to the snapshot; no controls). Communities steer only the camera and dimming, never colour.
 - Companies are drawn *as* their logo (SVG `<image>`, no frame), always bigger
   than any person, with no name label (their logo is the node). The negative logo is used on dark
   canvases, the plain one on light; each URL is probed off-DOM, a failed variant

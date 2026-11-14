@@ -11,6 +11,7 @@ import {
   layoutGraph,
   linkAlpha,
   nodeRadius,
+  personRadius,
   selectLabels,
   snapshotSignature,
   spawnPoint,
@@ -295,6 +296,21 @@ describe("label placement next to the dot", () => {
     expect(leaf).toBeLessThan(6);
     expect(nodeRadius(10_000, "person", 1)).toBeLessThan(nodeRadius(0, "company", 1));
     expect(nodeRadius(1, "person", 2)).toBeCloseTo(leaf * 2);
+  });
+
+  it("personRadius separates the 4-10 band and keeps outliers distinct but capped", () => {
+    const degrees = [1, 2, 3, 4, 6, 8, 10, 15, 20, 30, 50, 80, 120, 1000];
+    for (let i = 1; i < degrees.length; i++) {
+      expect(personRadius(degrees[i])).toBeGreaterThan(personRadius(degrees[i - 1]));
+    }
+    expect(personRadius(10) / personRadius(4)).toBeGreaterThanOrEqual(1.35);
+    const outlier = personRadius(50) / personRadius(4);
+    expect(outlier).toBeGreaterThan(3);
+    expect(outlier).toBeLessThan(5.5);
+    expect(personRadius(80)).toBeGreaterThan(personRadius(50) * 1.1);
+    expect(personRadius(120)).toBeGreaterThan(personRadius(50));
+    expect(personRadius(1)).toBeGreaterThanOrEqual(2.5);
+    expect(personRadius(1e6)).toBeLessThan(36);
   });
 
   it("grows company logos slower than the camera zoom", () => {

@@ -566,16 +566,31 @@ export function selectLabels(
 
 /** Largest person radius (units); every company is bigger than this. */
 const PERSON_MAX = 36;
+/** Person radius curve: `PERSON_BASE * degree^PERSON_EXPONENT`, softly capped. */
+const PERSON_BASE = 2.9;
+const PERSON_EXPONENT = 0.568;
+/** Asymptote of the soft cap (tanh), below PERSON_MAX so companies stay bigger. */
+const PERSON_SOFT_CAP = 34;
 
 /**
- * Node radius in px at overview zoom. People grow with the square root of their
- * degree, from a tiny leaf (2.4) to a capped hub (36), so hubs read as landmarks;
+ * Person radius in units (px at 1000 px height, overview zoom). A fixed power law
+ * (so 4 vs 10 connections differ clearly) run through a tanh soft cap (so 50, 80
+ * and 120 stay distinct yet never exceed PERSON_SOFT_CAP). Absolute degree scale:
+ * sizes do not change when the snapshot's max degree does.
+ */
+export function personRadius(degree: number): number {
+  const raw = PERSON_BASE * Math.max(1, degree) ** PERSON_EXPONENT;
+  return PERSON_SOFT_CAP * Math.tanh(raw / PERSON_SOFT_CAP);
+}
+
+/**
+ * Node radius in px at overview zoom. People follow `personRadius` (power law, soft cap);
  * companies render their logo and always start above the biggest person.
  */
 export function nodeRadius(degree: number, kind: "person" | "company", unit: number): number {
   const d = Math.sqrt(Math.max(1, degree));
   if (kind === "company") return unit * Math.min(60, PERSON_MAX + 4 + d * 1.5);
-  return unit * Math.min(PERSON_MAX, 2.4 + (d - 1) * 3.6);
+  return unit * personRadius(degree);
 }
 
 /** On-screen radius at a camera zoom: people scale with it, company squares only
