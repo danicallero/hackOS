@@ -115,10 +115,20 @@ are all there is. Display rules:
   land mid-transition are coalesced (`createCoalescer`) into one. The tour cursor
   survives: a vanished section's slot resolves to whatever is there and the camera eases
   there from where it is. Reduced motion applies updates at once;
-  `cameraFor` frames the section's people and home companies. In a section its
-  people, their companies and their edges are lit, the rest fades to ~10 %
-  (opacity transitions). Names are placed only once the camera settles, by
-  `selectLabels` (only the section's top 4 people by degree, `TOP_LABELS`, in small plain text with no
+  `cameraFor` frames the section's own people (trimming the outer ~6 % of big
+  groups); a company joins the frame only if it already sits within 20 % of that
+  box, a far logo never drives the framing. In a section, people and logos that are
+  members and fully inside the frame are lit; everything else is drawn small (constant
+  screen size, logos at 40 %) at ~7 % opacity, and a node or logo the frame edge would
+  clip fades to nothing. A link is full strength (`linkAlpha` "focus") only when both
+  ends are lit; any other link is "dim" (2.5 %), so no long line crosses the screen.
+  All of it eases on the same rAF loop (opacity, scale, width).
+  A new node starts on the centroid of its on-screen neighbours, else on its own laid-out
+  spot (`spawnPoint`), and nothing is seeded before the box is measured (a zero-size world
+  is all origin: that made logos appear in the top-left corner on load). An update that
+  replaces nearly every id (the hourly id rotation) is a crossfade in place: new nodes
+  fade in at their final spot at full size, old ones fade out where they are. Names are placed only once the camera settles, by
+  `selectLabels` (only the section's top 9 people by degree, `TOP_LABELS`; ones that do not fit are dropped, never overlapped, in small plain text with no
   stroke, halo or box; the overview names nobody; every node is an obstacle;
   collision-free, inside the frame), and fade in. Nothing else is drawn on the canvas: no caption.
 - Motion: the loop pauses while the page is hidden; with

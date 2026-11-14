@@ -13,6 +13,7 @@ import {
   nodeRadius,
   selectLabels,
   snapshotSignature,
+  spawnPoint,
 } from "./connections-layout";
 
 function sampleGraph(people: number, companies = 6) {
@@ -192,6 +193,31 @@ describe("cameraFor", () => {
     expect(cam.zoom).toBeLessThanOrEqual(5);
     expect(cam.cx).toBeCloseTo(150, 0);
     expect(cameraFor({ people: ["x"], companies: [] }, world, 1000, 800).zoom).toBe(1);
+  });
+
+  it("frames by the people and ignores a distant company", () => {
+    const world = new Map([
+      ["a", { x: 400, y: 400 }],
+      ["b", { x: 500, y: 450 }],
+      ["far", { x: 1900, y: 1500 }],
+      ["near", { x: 520, y: 430 }],
+    ]);
+    const solo = cameraFor({ people: ["a", "b"], companies: [] }, world, 1000, 800);
+    expect(cameraFor({ people: ["a", "b"], companies: ["far"] }, world, 1000, 800)).toEqual(solo);
+    const withNear = cameraFor({ people: ["a", "b"], companies: ["near"] }, world, 1000, 800);
+    expect(withNear.cx).toBeGreaterThan(solo.cx);
+  });
+
+  it("keeps a near logo inside the frame", () => {
+    const world = new Map([
+      ["a", { x: 400, y: 400 }],
+      ["b", { x: 500, y: 450 }],
+      ["near", { x: 530, y: 440 }],
+    ]);
+    const cam = cameraFor({ people: ["a", "b"], companies: ["near"] }, world, 1000, 800);
+    const sx = (530 - cam.cx) * cam.zoom + 500;
+    expect(sx).toBeGreaterThan(0);
+    expect(sx).toBeLessThan(1000);
   });
 });
 
@@ -429,5 +455,22 @@ describe("community layout", () => {
     expect(linkAlpha(1, "overview")).toBeLessThanOrEqual(0.2);
     expect(linkAlpha(5, "focus")).toBeGreaterThan(linkAlpha(5, "overview") * 3);
     expect(linkAlpha(5, "dim")).toBeLessThan(linkAlpha(5, "overview"));
+    expect(linkAlpha(5, "dim")).toBeLessThan(linkAlpha(5, "focus") / 10);
+  });
+});
+
+describe("spawnPoint", () => {
+  it("starts on the neighbours' centroid, else on its own laid-out spot, never the origin", () => {
+    expect(spawnPoint({ x: 300, y: 200 }, [])).toEqual({ x: 300, y: 200 });
+    expect(
+      spawnPoint({ x: 300, y: 200 }, [
+        { x: 100, y: 100 },
+        { x: 300, y: 300 },
+      ]),
+    ).toEqual({
+      x: 200,
+      y: 200,
+    });
+    expect(spawnPoint({ x: 300, y: 200 }, [{ x: Number.NaN, y: 1 }])).toEqual({ x: 300, y: 200 });
   });
 });

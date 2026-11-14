@@ -444,26 +444,41 @@ export function cameraFor(
 ): Camera {
   const overview = { zoom: 1, cx: width / 2, cy: height / 2 };
   if (!section) return overview;
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-  for (const id of [...section.people, ...section.companies]) {
+  // Frame the section's own people (trimming the stragglers of big groups), then take in a
+  // logo only if it already sits near that frame; a far logo is left out and hidden.
+  const pts = section.people.map((id) => world.get(id)).filter((p): p is Point => Boolean(p));
+  if (pts.length === 0) return overview;
+  const trim = pts.length >= 12 ? Math.floor(pts.length * 0.06) : 0;
+  const range = (values: number[]): [number, number] => {
+    const sorted = [...values].sort((p, q) => p - q);
+    return [sorted[trim], sorted[sorted.length - 1 - trim]];
+  };
+  let [minX, maxX] = range(pts.map((p) => p.x));
+  let [minY, maxY] = range(pts.map((p) => p.y));
+  const padX = (maxX - minX) * 0.2;
+  const padY = (maxY - minY) * 0.2;
+  for (const id of section.companies) {
     const point = world.get(id);
     if (!point) continue;
-    minX = Math.min(minX, point.x);
-    maxX = Math.max(maxX, point.x);
-    minY = Math.min(minY, point.y);
-    maxY = Math.max(maxY, point.y);
+    if (
+      point.x >= minX - padX &&
+      point.x <= maxX + padX &&
+      point.y >= minY - padY &&
+      point.y <= maxY + padY
+    ) {
+      minX = Math.min(minX, point.x);
+      maxX = Math.max(maxX, point.x);
+      minY = Math.min(minY, point.y);
+      maxY = Math.max(maxY, point.y);
+    }
   }
-  if (!Number.isFinite(minX)) return overview;
   const span = Math.min(width, height) * 0.2;
   const zoom = Math.min(
     5,
     Math.max(
       1.3,
       Math.min(
-        (width * 0.78) / Math.max(maxX - minX, span),
+        (width * 0.8) / Math.max(maxX - minX, span),
         (height * 0.7) / Math.max(maxY - minY, span),
       ),
     ),
@@ -648,4 +663,15 @@ export function createCoalescer<T>() {
       return next;
     },
   };
+}
+
+/**
+ * Where a new node starts: the centroid of its neighbours already on screen, or, with
+ * none (or a non-finite centroid), its own laid-out position. Never an origin default.
+ */
+export function spawnPoint(own: Point, neighbours: Point[]): Point {
+  if (neighbours.length === 0) return own;
+  const x = neighbours.reduce((a, n) => a + n.x, 0) / neighbours.length;
+  const y = neighbours.reduce((a, n) => a + n.y, 0) / neighbours.length;
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : own;
 }

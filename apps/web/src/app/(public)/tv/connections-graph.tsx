@@ -22,6 +22,7 @@ import {
   type Snapshot,
   selectLabels,
   snapshotSignature,
+  spawnPoint,
 } from "./connections-layout";
 
 /** Camera timing: a calm overview, then one section at a time. */
@@ -29,7 +30,7 @@ export const OVERVIEW_DWELL_MS = 6_000;
 export const SECTION_DWELL_MS = 10_000;
 export const MOVE_MS = 1_600;
 /** Only this many of a section's most-connected people are named; the overview names nobody. */
-export const TOP_LABELS = 4;
+export const TOP_LABELS = 9;
 /** Labels fade out this long before the camera starts to move. */
 export const LABEL_LEAD_MS = 300;
 /** A data update with the camera at rest: new nodes grow in, removed ones fade, kept ones glide. */
@@ -118,7 +119,15 @@ interface NodeState {
   y: number;
   o: number;
   s: number;
+  /** 0 = in focus, 1 = out of focus: drawn small (constant on-screen size) and faint. */
+  d: number;
 }
+/** Scale of a node's group: logos grow with sqrt(zoom), dimmed nodes keep their screen size. */
+export function nodeScale(st: NodeState, company: boolean, zoom: number): number {
+  const base = company ? zoom ** -0.5 : zoom ** -0.3;
+  return st.s * (base + ((company ? 0.4 : 1) / zoom - base) * st.d);
+}
+const DIM_ALPHA = 0.07;
 interface EdgeState {
   o: number;
   w: number;
@@ -269,30 +278,36 @@ export function ConnectionsGraph({
   // idempotent (StrictMode, re-renders).
   useMemo(() => {
     const sc = scene.current;
+    // Before the box is measured every world position is the origin: seeding then would
+    // park every node (logos first, as they mount late) in the top-left corner.
+    if (width === 0 || height === 0) return;
     const first = sc.nodes.size === 0 && !camera.current;
+    // An update that replaces (almost) every id, e.g. the hourly id rotation, is a
+    // crossfade in place: new nodes appear at their final spot, never growing or flying.
+    const known = nodes.filter((n) => sc.nodes.has(n.id)).length;
+    const replaced = !first && known < nodes.length * 0.3;
     for (const node of nodes) {
       if (sc.nodes.has(node.id)) continue;
       const p = world.get(node.id);
       if (!p) continue;
       if (first) {
-        sc.nodes.set(node.id, { x: p.x, y: p.y, o: 0.92, s: 1 });
+        sc.nodes.set(node.id, { x: p.x, y: p.y, o: 0.92, s: 1, d: 0 });
         continue;
       }
-      const near = (adjacency.get(node.id) ?? [])
-        .map((id) => sc.nodes.get(id))
-        .filter((n): n is NodeState => Boolean(n));
-      const at = near.length
-        ? {
-            x: near.reduce((a, n) => a + n.x, 0) / near.length,
-            y: near.reduce((a, n) => a + n.y, 0) / near.length,
-          }
-        : p;
-      sc.nodes.set(node.id, { x: at.x, y: at.y, o: 0, s: 0.3 });
+      const at = replaced
+        ? p
+        : spawnPoint(
+            p,
+            (adjacency.get(node.id) ?? [])
+              .map((id) => sc.nodes.get(id))
+              .filter((n): n is NodeState => Boolean(n)),
+          );
+      sc.nodes.set(node.id, { x: at.x, y: at.y, o: 0, s: replaced ? 1 : 0.3, d: 0 });
     }
     if (!first)
       for (const edge of edges)
         if (!sc.edges.has(edgeKey(edge))) sc.edges.set(edgeKey(edge), { o: 0, w: 0.7 * unit });
-  }, [nodes, edges, world, adjacency, unit]);
+  }, [nodes, edges, world, adjacency, unit, width, height]);
 
   // Removed nodes and edges stay mounted (as "ghosts") while they fade out, then drop.
   const history = useRef<{ cur: Snapshot; prev: Snapshot | null }>({
@@ -340,6 +355,13 @@ export function ConnectionsGraph({
       moves: boolean;
       fades: boolean;
     }
+    // Is a world point inside the frame the target camera will show (plus a margin)?
+    const inFrame = (p: { x: number; y: number }, margin: number) => {
+      const sx = (p.x - target.cx) * target.zoom + width / 2;
+      const sy = (p.y - target.cy) * target.zoom + height / 2;
+      return sx >= margin && sx <= width - margin && sy >= margin && sy <= height - margin;
+    };
+    const focused = new Map<string, boolean>();
     const nodeEntries: NodeEntry[] = [];
     const entryById = new Map<string, NodeEntry>();
     for (const el of group.querySelectorAll<SVGElement>("[data-nid]")) {
@@ -348,10 +370,22 @@ export function ConnectionsGraph({
       if (!st) continue;
       const ghost = el.dataset.ghost !== undefined;
       const w = world.get(id);
-      const to: NodeState =
-        ghost || !w
-          ? { x: st.x, y: st.y, o: 0, s: 0.3 }
-          : { x: w.x, y: w.y, o: lit ? (lit.has(id) ? 1 : 0.1) : 0.92, s: 1 };
+      let to: NodeState;
+      if (ghost || !w) to = { x: st.x, y: st.y, o: 0, s: 0.3, d: st.d };
+      else if (!lit) to = { x: w.x, y: w.y, o: 0.92, s: 1, d: 0 };
+      else {
+        const company = el.dataset.company !== undefined;
+        const r = nodeRadius(degrees.get(id) ?? 0, company ? "company" : "person", unit);
+        const seen = inFrame(w, (company ? r * target.zoom ** 0.5 : r * target.zoom) + 3);
+        if (company) {
+          // A logo is shown only whole, inside the frame, and only if the section reaches it.
+          if (lit.has(id) && seen) to = { x: w.x, y: w.y, o: 1, s: 1, d: 0 };
+          else to = { x: w.x, y: w.y, o: seen ? DIM_ALPHA : 0, s: 1, d: 1 };
+        } else if (lit.has(id) && seen) to = { x: w.x, y: w.y, o: 1, s: 1, d: 0 };
+        // Out of focus, or cut by the frame edge: small and faint, or gone if it would be clipped.
+        else to = { x: w.x, y: w.y, o: seen ? DIM_ALPHA : 0, s: 1, d: 1 };
+      }
+      focused.set(id, to.d === 0 && to.o > 0);
       const from = { ...st };
       const entry: NodeEntry = {
         el,
@@ -360,7 +394,7 @@ export function ConnectionsGraph({
         from,
         to,
         company: el.dataset.company !== undefined,
-        moves: from.x !== to.x || from.y !== to.y || from.s !== to.s,
+        moves: from.x !== to.x || from.y !== to.y || from.s !== to.s || from.d !== to.d,
         fades: from.o !== to.o,
       };
       nodeEntries.push(entry);
@@ -384,8 +418,10 @@ export function ConnectionsGraph({
       if (!a || !b) continue;
       const key = `${aId}|${bId}`;
       const pd = personDegree(aId, bId);
+      // Full strength only between nodes that are both in focus, in frame and shown.
       const on = lit
-        ? lit.has(aId) && lit.has(bId) && Boolean(members?.has(aId) || members?.has(bId))
+        ? Boolean(focused.get(aId) && focused.get(bId)) &&
+          Boolean(members?.has(aId) || members?.has(bId))
         : false;
       let es = sc.edges.get(key);
       if (!es) {
@@ -415,22 +451,22 @@ export function ConnectionsGraph({
         "transform",
         `translate(${width / 2} ${height / 2}) scale(${c.zoom}) translate(${-c.cx} ${-c.cy})`,
       );
-      // Company logos are counter-scaled so they grow with the square root of the zoom.
-      const k = c.zoom ** -0.5;
+      const zoomed = c.zoom !== 1;
       for (const n of nodeEntries) {
         if (n.moves) {
           n.st.x = n.from.x + (n.to.x - n.from.x) * e;
           n.st.y = n.from.y + (n.to.y - n.from.y) * e;
           n.st.s = n.from.s + (n.to.s - n.from.s) * e;
+          n.st.d = n.from.d + (n.to.d - n.from.d) * e;
         }
         if (n.fades) {
           n.st.o = n.from.o + (n.to.o - n.from.o) * e;
           n.el.style.opacity = String(n.st.o);
         }
-        if (n.moves || n.company)
+        if (n.moves || n.company || zoomed || n.st.d > 0)
           n.el.setAttribute(
             "transform",
-            `translate(${n.st.x} ${n.st.y}) scale(${n.st.s * (n.company ? k : 1)})`,
+            `translate(${n.st.x} ${n.st.y}) scale(${nodeScale(n.st, n.company, c.zoom)})`,
           );
       }
       for (const n of edgeEntries) {
@@ -471,7 +507,8 @@ export function ConnectionsGraph({
           Math.abs(n.from.x - n.to.x) < 0.5 &&
           Math.abs(n.from.y - n.to.y) < 0.5 &&
           Math.abs(n.from.o - n.to.o) < 0.02 &&
-          Math.abs(n.from.s - n.to.s) < 0.01,
+          Math.abs(n.from.s - n.to.s) < 0.01 &&
+          Math.abs(n.from.d - n.to.d) < 0.02,
       ) &&
       edgeEntries.every(
         (n) => Math.abs(n.from.o - n.to.o) < 0.01 && Math.abs(n.from.w - n.to.w) < 0.01,
@@ -557,7 +594,7 @@ export function ConnectionsGraph({
 
   const nodeEls = useMemo(() => {
     const sc = scene.current;
-    const k = (camera.current?.zoom ?? 1) ** -0.5;
+    const zoom = camera.current?.zoom ?? 1;
     const draw = (node: TvConnectionNode, ghost: boolean) => {
       const st = sc.nodes.get(node.id);
       if (!st || (!ghost && !world.get(node.id))) return null;
@@ -577,7 +614,7 @@ export function ConnectionsGraph({
             key={node.id}
             {...common}
             data-company=""
-            transform={`translate(${st.x} ${st.y}) scale(${st.s * k})`}
+            transform={`translate(${st.x} ${st.y}) scale(${nodeScale(st, true, zoom)})`}
           >
             {logo ? (
               <image
@@ -612,7 +649,11 @@ export function ConnectionsGraph({
         );
       }
       return (
-        <g key={node.id} {...common} transform={`translate(${st.x} ${st.y}) scale(${st.s})`}>
+        <g
+          key={node.id}
+          {...common}
+          transform={`translate(${st.x} ${st.y}) scale(${nodeScale(st, false, zoom)})`}
+        >
           <circle r={r} fill={palette.person} />
         </g>
       );
@@ -642,7 +683,9 @@ export function ConnectionsGraph({
     // Every node of the view is an obstacle; only the section's top people by degree
     // (`people` is sorted most-connected first) are named, so no wall of text.
     const named = new Set(
-      (shownSection?.people ?? []).filter((id) => byId.get(id)?.label?.trim()).slice(0, TOP_LABELS),
+      (shownSection?.people ?? [])
+        .filter((id) => byId.get(id)?.label?.trim())
+        .slice(0, TOP_LABELS * 2),
     );
     for (const node of nodes) {
       const at = project(node.id);

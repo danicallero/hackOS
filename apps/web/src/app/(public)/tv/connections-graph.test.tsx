@@ -14,6 +14,7 @@ import {
   LABEL_LEAD_MS,
   logoCandidates,
   MOVE_MS,
+  nodeScale,
   OVERVIEW_DWELL_MS,
   TOP_LABELS,
 } from "./connections-graph";
@@ -248,5 +249,63 @@ describe("ConnectionsGraph", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("id rotation", () => {
+  it("crossfades a total id replacement in place: no node at the origin, none shrunk", async () => {
+    const make = (p: string) => {
+      const nodes: TvConnectionNode[] = [
+        {
+          id: `${p}c`,
+          kind: "company",
+          label: "acme",
+          degree: 3,
+          logoUrl: null,
+          logoNegativeUrl: null,
+        },
+        ...["a", "b", "d", "e"].map((k) => ({
+          id: p + k,
+          kind: "person" as const,
+          label: k,
+          degree: 1,
+        })),
+      ];
+      const edges = ["a", "b", "d", "e"].map((k) => ({ source: p + k, target: `${p}c` }));
+      return { nodes, edges };
+    };
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const one = make("x");
+    await act(async () =>
+      root.render(<ConnectionsGraph nodes={one.nodes} edges={one.edges} label="graph" />),
+    );
+    const two = make("y");
+    await act(async () =>
+      root.render(<ConnectionsGraph nodes={two.nodes} edges={two.edges} label="graph" />),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    for (const el of container.querySelectorAll("[data-nid]:not([data-ghost])")) {
+      const m = /translate\(([-\d.e]+) ([-\d.e]+)\) scale\(([-\d.e]+)\)/.exec(
+        el.getAttribute("transform") ?? "",
+      );
+      expect(m).not.toBeNull();
+      expect(Math.abs(Number(m?.[1])) + Math.abs(Number(m?.[2]))).toBeGreaterThan(1);
+      if (String((el as HTMLElement).dataset.nid).startsWith("y"))
+        expect(Number(m?.[3])).toBeGreaterThan(0.5);
+    }
+    act(() => root.unmount());
+    container.remove();
+  });
+});
+
+describe("nodeScale", () => {
+  it("shrinks dimmed nodes to a small constant screen size", () => {
+    const st = { x: 0, y: 0, o: 1, s: 1, d: 1 };
+    expect(nodeScale(st, false, 4) * 4).toBeCloseTo(1);
+    expect(nodeScale({ ...st, d: 0 }, false, 4)).toBeCloseTo(4 ** -0.3);
+    expect(nodeScale(st, true, 4) * 4).toBeLessThan(0.5);
+    expect(nodeScale({ ...st, d: 0 }, true, 4)).toBeCloseTo(0.5);
   });
 });
