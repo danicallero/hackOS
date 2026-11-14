@@ -1874,6 +1874,7 @@
   "passFillOrganizer": "Configured outside the app",
   "notSetYet": "not set",
   "passBackFieldsLabel": "Extra back fields",
+  "passFrontCustomFieldsLabel": "Extra front fields",
   "backFieldLabelPlaceholder": "Label",
   "backFieldValuePlaceholder": "Value",
   "removeBackFieldAria": "Remove field {index}",

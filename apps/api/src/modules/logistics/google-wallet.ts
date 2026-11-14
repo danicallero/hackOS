@@ -112,6 +112,7 @@ function genericClass(purpose: Purpose) {
 
 interface GoogleEventConfig {
   name: string | null;
+  pass_front_fields: { label: string; value: string }[];
   pass_back_fields: { label: string; value: string }[];
   pass_field_labels: PassFieldLabels;
   pass_field_visibility: PassFieldVisibility;
@@ -127,13 +128,14 @@ interface GoogleEventConfig {
 
 async function readEventConfig(): Promise<GoogleEventConfig> {
   const { rows } = await pool.query(
-    `SELECT name, pass_back_fields, pass_field_labels, pass_field_visibility, venue_name, venue_latitude, venue_longitude,
+    `SELECT name, pass_front_fields, pass_back_fields, pass_field_labels, pass_field_visibility, venue_name, venue_latitude, venue_longitude,
             event_starts_at, event_ends_at, hacking_starts_at, hacking_ends_at
        FROM event_config WHERE id = 1`,
   );
   return {
     ...(rows[0] ?? {
       name: null,
+      pass_front_fields: [],
       pass_back_fields: [],
       pass_field_labels: {},
       pass_field_visibility: {},
@@ -201,9 +203,12 @@ function eventTicketClass(event: GoogleEventConfig) {
     Number.isFinite(event.venue_longitude);
 
   const visible = resolvePassFieldVisibility(event.pass_field_visibility);
-  const paths = Object.entries(visible)
-    .filter(([, shown]) => shown)
-    .map(([key]) => `object.textModulesData['${key}']`);
+  const paths = [
+    ...Object.entries(visible)
+      .filter(([, shown]) => shown)
+      .map(([key]) => `object.textModulesData['${key}']`),
+    ...frontModules(event).map((module) => `object.textModulesData['${module.id}']`),
+  ];
   const cardRowTemplateInfos = [];
   for (let i = 0; i < paths.length; i += 2)
     cardRowTemplateInfos.push(
@@ -336,6 +341,15 @@ function googleAppLink(settings: WalletSettings) {
     displayText: localized("Open hackOS"),
   };
 }
+// H28: admin-defined front rows live on each object (≤5 holder + ≤4 custom
+// stays inside Google's ten text modules) so badges carry them too.
+function frontModules(event: GoogleEventConfig) {
+  return event.pass_front_fields.map((field, i) => ({
+    id: `front_${i}`,
+    header: field.label,
+    body: field.value,
+  }));
+}
 function personalModules(content: GooglePassContent, purpose: Purpose) {
   const labels = resolvePassFieldLabels(content.event.pass_field_labels);
   const visible = resolvePassFieldVisibility(content.event.pass_field_visibility);
@@ -346,11 +360,14 @@ function personalModules(content: GooglePassContent, purpose: Purpose) {
     university: content.university,
     email: content.email,
   };
-  return Object.entries(values).flatMap(([key, value]) =>
-    visible[key as keyof typeof visible] && value
-      ? [{ id: key, header: labels[key as keyof typeof labels], body: value }]
-      : [],
-  );
+  return [
+    ...Object.entries(values).flatMap(([key, value]) =>
+      visible[key as keyof typeof visible] && value
+        ? [{ id: key, header: labels[key as keyof typeof labels], body: value }]
+        : [],
+    ),
+    ...frontModules(content.event),
+  ];
 }
 function eventTicketObject(
   objectId: string,

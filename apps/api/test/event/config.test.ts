@@ -176,6 +176,56 @@ describe("event config (H45/H47)", () => {
     expect(pub.json().venueName).toBe("Facultade de Informática, UDC");
   });
 
+  it("saves up to four custom Wallet pass front fields (H28)", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.WALLET_MANAGE]);
+    const fields = [
+      { label: "Table", value: "B12" },
+      { label: "Track", value: "AI" },
+    ];
+    const put = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: { passFrontFields: fields },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json().passFrontFields).toEqual(fields);
+    const pub = await a.inject({ method: "GET", url: "/api/public/event" });
+    expect(pub.json().passFrontFields).toEqual(fields);
+
+    // Omitted fields stay untouched by an unrelated wallet save.
+    const other = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: { passBackFields: [] },
+    });
+    expect(other.json().passFrontFields).toEqual(fields);
+
+    const tooMany = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: {
+        passFrontFields: Array.from({ length: 5 }, (_, i) => ({ label: `L${i}`, value: "v" })),
+      },
+    });
+    expect(tooMany.statusCode).toBe(400);
+  });
+
+  it("requires wallet:manage to change pass front fields (H8, H28)", async () => {
+    const a = await getApp();
+    const venue = await createUserWithCapabilities([CAPABILITIES.VENUE_MANAGE]);
+    const res = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(venue),
+      payload: { passFrontFields: [{ label: "Table", value: "B12" }] },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
   it("round-trips the venue Wi-Fi without leaking it to the public feed (H42)", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.VENUE_MANAGE]);

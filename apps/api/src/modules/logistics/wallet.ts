@@ -143,7 +143,7 @@ async function passPayload(pass: PassRow) {
   const { rows: eventRows } = await pool.query(
     `SELECT name, tagline, timezone, event_starts_at, event_ends_at, hacking_starts_at,
             venue_name, venue_latitude, venue_longitude,
-            pass_back_fields, pass_field_labels, pass_field_visibility
+            pass_front_fields, pass_back_fields, pass_field_labels, pass_field_visibility
        FROM event_config WHERE id = 1`,
   );
   const event = eventRows[0];
@@ -181,6 +181,7 @@ async function passPayload(pass: PassRow) {
   const venueName: string | null = event?.venue_name ?? null;
   const venueLatitude: number | null = event?.venue_latitude ?? null;
   const venueLongitude: number | null = event?.venue_longitude ?? null;
+  const passFrontFields: { label: string; value: string }[] = event?.pass_front_fields ?? [];
   const passBackFields: { label: string; value: string }[] = event?.pass_back_fields ?? [];
   const labels = resolvePassFieldLabels(event?.pass_field_labels);
   const visible = resolvePassFieldVisibility(event?.pass_field_visibility);
@@ -227,6 +228,14 @@ async function passPayload(pass: PassRow) {
     ...(!revoked && visible.email && u.email
       ? [{ key: "email", label: labels.email, value: u.email }]
       : []),
+    // H28: admin-defined front rows follow the auto-filled holder fields.
+    ...(revoked
+      ? []
+      : passFrontFields.map((field, i) => ({
+          key: `front-${i}`,
+          label: field.label,
+          value: field.value,
+        }))),
   ];
   const backFields = [
     { key: "event", label: labels.event, value: eventName },

@@ -667,6 +667,7 @@ Table event_config {
   pass_back_fields jsonb [not null, default: `'[]'::jsonb`]
   pass_field_labels jsonb [not null, default: `'{}'::jsonb`]
   pass_field_visibility jsonb [not null, default: `'{}'::jsonb`]
+  pass_front_fields jsonb [not null, default: `'[]'::jsonb`]
   presence_auto_entry_at "timestamp with time zone"
   presence_certainty_window_minutes integer [not null, default: `720`]
   project_draft_visibility text [not null, default: `'team_only'::text`]
