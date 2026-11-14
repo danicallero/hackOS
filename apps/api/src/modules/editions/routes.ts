@@ -91,7 +91,7 @@ export function registerEditionRoutes(app: FastifyInstance): void {
   r.patch(
     "/api/editions/:eventKey",
     {
-      ...access(manage),
+      ...access(manageLifecycle),
       preHandler: [requireCapability(CAPABILITIES.EVENT_MANAGE), idempotencyGuard],
       schema: {
         params: eventKeyParams,

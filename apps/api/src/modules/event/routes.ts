@@ -443,60 +443,74 @@ export function registerEventRoutes(app: FastifyInstance): void {
         // H45/H52: serialize singleton edits, including first-save scheduling.
         await client.query("SELECT pg_advisory_xact_lock(603, 1)");
         const current = await readConfig(client);
+        // A key change opens or activates the target edition FIRST: activation
+        // replaces the live row with that edition's saved values, so this
+        // request's edits must be computed from and written onto the target,
+        // never onto the edition being left. `current` stays the pre-change
+        // state for the audit `before` and the wallet diff.
+        if (b.eventKey !== undefined && b.eventKey !== current.event_key) {
+          if (current.event_key !== "default" && b.eventKey === "default") {
+            throw new BadRequestError("The legacy default event key cannot be reused");
+          }
+          // The first rename adopts the legacy default edition (its key
+          // cascades to every edition row). A later key opens or activates
+          // that edition through the edition lifecycle and leaves the
+          // previous one intact (docs/multi-edition-plan.md).
+          await changeCurrentEditionKey(client, req.userId, current.event_key, b.eventKey);
+        }
+        const base =
+          b.eventKey !== undefined && b.eventKey !== current.event_key
+            ? await readConfig(client)
+            : current;
         const next = {
-          event_key: b.eventKey ?? current.event_key,
-          name: b.name === undefined ? current.name : b.name,
-          tagline: b.tagline === undefined ? current.tagline : b.tagline,
-          timezone: b.timezone ?? current.timezone,
-          event_starts_at:
-            b.eventStartsAt === undefined ? current.event_starts_at : b.eventStartsAt,
-          event_ends_at: b.eventEndsAt === undefined ? current.event_ends_at : b.eventEndsAt,
+          event_key: b.eventKey ?? base.event_key,
+          name: b.name === undefined ? base.name : b.name,
+          tagline: b.tagline === undefined ? base.tagline : b.tagline,
+          timezone: b.timezone ?? base.timezone,
+          event_starts_at: b.eventStartsAt === undefined ? base.event_starts_at : b.eventStartsAt,
+          event_ends_at: b.eventEndsAt === undefined ? base.event_ends_at : b.eventEndsAt,
           hacking_starts_at:
-            b.hackingStartsAt === undefined ? current.hacking_starts_at : b.hackingStartsAt,
-          hacking_ends_at:
-            b.hackingEndsAt === undefined ? current.hacking_ends_at : b.hackingEndsAt,
+            b.hackingStartsAt === undefined ? base.hacking_starts_at : b.hackingStartsAt,
+          hacking_ends_at: b.hackingEndsAt === undefined ? base.hacking_ends_at : b.hackingEndsAt,
           show_start_countdown:
-            b.showStartCountdown === undefined
-              ? current.show_start_countdown
-              : b.showStartCountdown,
+            b.showStartCountdown === undefined ? base.show_start_countdown : b.showStartCountdown,
           presence_auto_entry_at:
             b.presenceAutoEntryAt === undefined
-              ? current.presence_auto_entry_at
+              ? base.presence_auto_entry_at
               : b.presenceAutoEntryAt,
           presence_certainty_window_minutes:
-            b.presenceCertaintyWindowMinutes ?? current.presence_certainty_window_minutes,
-          venue_name: b.venueName === undefined ? current.venue_name : b.venueName,
-          venue_latitude: b.venueLatitude === undefined ? current.venue_latitude : b.venueLatitude,
-          venue_longitude:
-            b.venueLongitude === undefined ? current.venue_longitude : b.venueLongitude,
-          wifi_ssid: b.wifiSsid === undefined ? current.wifi_ssid : b.wifiSsid,
-          wifi_password: b.wifiPassword === undefined ? current.wifi_password : b.wifiPassword,
+            b.presenceCertaintyWindowMinutes ?? base.presence_certainty_window_minutes,
+          venue_name: b.venueName === undefined ? base.venue_name : b.venueName,
+          venue_latitude: b.venueLatitude === undefined ? base.venue_latitude : b.venueLatitude,
+          venue_longitude: b.venueLongitude === undefined ? base.venue_longitude : b.venueLongitude,
+          wifi_ssid: b.wifiSsid === undefined ? base.wifi_ssid : b.wifiSsid,
+          wifi_password: b.wifiPassword === undefined ? base.wifi_password : b.wifiPassword,
           pass_back_fields:
-            b.passBackFields === undefined ? current.pass_back_fields : b.passBackFields,
+            b.passBackFields === undefined ? base.pass_back_fields : b.passBackFields,
           pass_field_labels:
-            b.passFieldLabels === undefined ? current.pass_field_labels : b.passFieldLabels,
+            b.passFieldLabels === undefined ? base.pass_field_labels : b.passFieldLabels,
           pass_field_visibility:
             b.passFieldVisibility === undefined
-              ? current.pass_field_visibility
+              ? base.pass_field_visibility
               : b.passFieldVisibility,
           require_sponsor_shirt_size:
             b.requireSponsorShirtSize === undefined
-              ? current.require_sponsor_shirt_size
+              ? base.require_sponsor_shirt_size
               : b.requireSponsorShirtSize,
           require_sponsor_dietary:
             b.requireSponsorDietary === undefined
-              ? current.require_sponsor_dietary
+              ? base.require_sponsor_dietary
               : b.requireSponsorDietary,
           require_staff_shirt_size:
             b.requireStaffShirtSize === undefined
-              ? current.require_staff_shirt_size
+              ? base.require_staff_shirt_size
               : b.requireStaffShirtSize,
           require_staff_dietary:
             b.requireStaffDietary === undefined
-              ? current.require_staff_dietary
+              ? base.require_staff_dietary
               : b.requireStaffDietary,
-          shirt_sizes: b.shirtSizes === undefined ? current.shirt_sizes : b.shirtSizes,
-          meal_plan_cutoff_hours: b.mealPlanCutoffHours ?? current.meal_plan_cutoff_hours,
+          shirt_sizes: b.shirtSizes === undefined ? base.shirt_sizes : b.shirtSizes,
+          meal_plan_cutoff_hours: b.mealPlanCutoffHours ?? base.meal_plan_cutoff_hours,
         };
 
         if (
@@ -509,7 +523,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
         // H12: shirt sizes are stored as plain text on users, so dropping (or
         // renaming) one still in use would orphan those people's value.
         // Reordering is always safe — order is just array position.
-        const removedSizes = current.shirt_sizes.filter((s) => !next.shirt_sizes.includes(s));
+        const removedSizes = base.shirt_sizes.filter((s) => !next.shirt_sizes.includes(s));
         if (removedSizes.length > 0) {
           const { rows: inUse } = await client.query<{ shirt_size: string; n: number }>(
             `SELECT shirt_size, count(*)::int AS n FROM users
@@ -545,8 +559,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
              pass_back_fields, pass_field_labels, pass_field_visibility,
              require_sponsor_shirt_size, require_sponsor_dietary,
              require_staff_shirt_size, require_staff_dietary, shirt_sizes,
-             meal_plan_cutoff_hours)
-         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17::jsonb, $18::jsonb, $19, $20, $21, $22, $23, $24)
+             meal_plan_cutoff_hours, event_key)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17::jsonb, $18::jsonb, $19, $20, $21, $22, $23, $24, $25)
          ON CONFLICT (id) DO UPDATE
             SET name = EXCLUDED.name, tagline = EXCLUDED.tagline, timezone = EXCLUDED.timezone,
                 event_starts_at = EXCLUDED.event_starts_at,
@@ -605,6 +619,9 @@ export function registerEventRoutes(app: FastifyInstance): void {
             next.require_staff_dietary,
             next.shirt_sizes,
             next.meal_plan_cutoff_hours,
+            // Explicit: the column default is the request-scoped edition, which
+            // is the one a key change just left behind.
+            next.event_key,
           ],
         );
         if (b.projectDraftsOpenAt !== undefined)
@@ -639,16 +656,6 @@ export function registerEventRoutes(app: FastifyInstance): void {
           await client.query("UPDATE event_config SET project_github_required=$1 WHERE id=1", [
             b.projectGithubRequired,
           ]);
-        if (b.eventKey !== undefined) {
-          if (current.event_key !== "default" && b.eventKey === "default") {
-            throw new BadRequestError("The legacy default event key cannot be reused");
-          }
-          // The first rename adopts the legacy default edition (its key
-          // cascades to every edition row). A later key opens or activates
-          // that edition through the edition lifecycle and leaves the
-          // previous one intact (docs/multi-edition-plan.md).
-          await changeCurrentEditionKey(client, req.userId, current.event_key, b.eventKey);
-        }
         const phaseCheck = await client.query(
           `SELECT COALESCE(project_submissions_close_at,hacking_ends_at) < COALESCE(project_drafts_open_at,hacking_starts_at) AS invalid FROM event_config WHERE id=1`,
         );

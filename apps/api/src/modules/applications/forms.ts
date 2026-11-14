@@ -85,7 +85,10 @@ export async function ensureApplicationFormVersion(
 // ── loaders ──────────────────────────────────────────────────────────────────
 
 async function getApplication(db: Queryable, id: number): Promise<ApplicationRow | undefined> {
-  const { rows } = await db.query(`SELECT * FROM applications WHERE id = $1`, [id]);
+  const { rows } = await db.query(
+    `SELECT * FROM applications WHERE id = $1 AND event_key = current_edition()`,
+    [id],
+  );
   return rows[0];
 }
 
@@ -211,17 +214,34 @@ export function privacyNotice(language: string | null | undefined): string {
 // ── invited-participant check (E) ───────────────────────────────────────────
 
 /**
- * Check whether a user was created via a participant invitation
+ * Check whether a user was invited as a participant to ONE edition
  * (kind=participant account_claim). Invited participants bypass the
  * application window (both to write — H10 — and to read/discover a closed
- * form, H10 gap) and auto-confirm on submit.
+ * form, H10 gap) and auto-confirm on submit. The invite is not global: it
+ * counts only for `eventKey` (default: the viewed edition), so a past
+ * edition's invitee goes through review and capacity in the next one. The
+ * claim token carries no edition, so it is attributed by the invite-sourced
+ * role the redemption assigned in that edition, or — for a roleless invite —
+ * by being redeemed while that edition existed and was not yet closed.
  */
-export async function isInvitedParticipant(client: Queryable, userId: number): Promise<boolean> {
+export async function isInvitedParticipant(
+  client: Queryable,
+  userId: number,
+  eventKey?: string,
+): Promise<boolean> {
   const { rows } = await client.query(
-    `SELECT 1 FROM email_verification_tokens
-     WHERE user_id = $1 AND type = 'account_claim' AND kind = 'participant' AND used_at IS NOT NULL
-     LIMIT 1`,
-    [userId],
+    `WITH ed AS (SELECT event_key, created_at, closed_at FROM editions
+                  WHERE event_key = COALESCE($2::text, current_edition()))
+     SELECT 1 FROM email_verification_tokens t, ed
+      WHERE t.user_id = $1 AND t.type = 'account_claim' AND t.kind = 'participant'
+        AND t.used_at IS NOT NULL
+        AND (
+          EXISTS (SELECT 1 FROM user_roles ur
+                   WHERE ur.user_id = $1 AND ur.source = 'invite' AND ur.event_key = ed.event_key)
+          OR (t.used_at >= ed.created_at AND (ed.closed_at IS NULL OR t.used_at <= ed.closed_at))
+        )
+      LIMIT 1`,
+    [userId, eventKey ?? null],
   );
   return rows.length > 0;
 }

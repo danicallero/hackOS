@@ -504,6 +504,7 @@ Table check_in_logs {
 Table content_reports {
   created_at "timestamp with time zone" [not null, default: `now()`]
   details text [note: 'H18: optional free text from the reporter, at most 500 characters; visible to moderating staff only.']
+  event_key text [not null, default: `current_edition()`, note: 'H18/H8: edition the report was filed in; project reports inherit their repo\'s edition.']
   id integer [pk, increment, not null]
   reason text [not null]
   repo_id integer
@@ -1858,6 +1859,7 @@ Ref: challenges.event_key > editions.event_key
 Ref: check_in_logs.event_key > editions.event_key
 Ref: check_in_logs.staff_id > users.id
 Ref: check_in_logs.user_id > users.id
+Ref: content_reports.event_key > editions.event_key
 Ref: content_reports.repo_id > repos.id
 Ref: content_reports.reporter_id > users.id
 Ref: content_reports.resolved_by > users.id

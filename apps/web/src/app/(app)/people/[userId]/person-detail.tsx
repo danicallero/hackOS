@@ -3,7 +3,7 @@
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
@@ -115,7 +115,7 @@ export function PersonProfile({
   const { nameOf } = useChallengeNames();
   const { language } = useLocale();
   const photoColor = useLogoColor(entry.photoUrl);
-  const companies = personCompanies(entry);
+  const companies = useMemo(() => personCompanies(entry), [entry]);
   useEffect(() => {
     for (const c of companies) precomputeLogoColor(c.logoUrl);
   }, [companies]);

@@ -86,7 +86,7 @@ export function registerReportRoutes(app: FastifyInstance): void {
         querystring: listQuery,
         summary: "List reported content",
         description:
-          "The organiser report inbox of the viewed edition (X-Edition): project reports follow their project, profile reports follow the reporter's diary entry of that edition. Open reports first and then newest, at most 200. Reports about projects need `projects:edit`, reports about profiles need `users:write`; a moderator sees only the kinds they hold. Reports by synthetic review accounts are visible only to synthetic moderators. The reported content itself is read live from its own page, never copied here (H18).",
+          "The organiser report inbox of the viewed edition (X-Edition): a report belongs to the edition it was filed in (its own `event_key`), so it stays listed even if the reporter later removes their diary entry. Open reports first and then newest, at most 200. Reports about projects need `projects:edit`, reports about profiles need `users:write`; a moderator sees only the kinds they hold. Reports by synthetic review accounts are visible only to synthetic moderators. The reported content itself is read live from its own page, never copied here (H18).",
         response: { 200: z.object({ items: z.array(reportSchema) }) },
       },
     },
@@ -106,7 +106,7 @@ export function registerReportRoutes(app: FastifyInstance): void {
         body: resolveBody,
         summary: "Close a report",
         description:
-          "Marks an open report `actioned` (the content was edited or hidden through its own moderation tool) or `dismissed`, with an optional note. Audited as `content_report.actioned` or `content_report.dismissed`. 404 for a report outside the caller's kinds or synthetic scope, 409 when it is already closed (H18, H53).",
+          "Marks an open report `actioned` (the content was edited or hidden through its own moderation tool) or `dismissed`, with an optional note. Audited as `content_report.actioned` or `content_report.dismissed`. 404 for a report outside the caller's kinds, synthetic scope or the viewed edition, 409 when it is already closed (H18, H53).",
         response: { 200: z.object({ id: z.number(), status: z.enum(["actioned", "dismissed"]) }) },
       },
     },

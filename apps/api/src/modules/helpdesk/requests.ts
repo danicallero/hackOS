@@ -246,10 +246,10 @@ async function isActiveHelper(db: Queryable, userId: number): Promise<boolean> {
 }
 
 async function viewOne(db: Queryable, viewerId: number, id: number): Promise<HelpRequestView> {
-  const { rows } = await db.query<RequestRow>(requestSelect("hr.id = $2", "hr.id", 1), [
-    viewerId,
-    id,
-  ]);
+  const { rows } = await db.query<RequestRow>(
+    requestSelect("hr.id = $2 AND hr.event_key = current_edition()", "hr.id", 1),
+    [viewerId, id],
+  );
   if (!rows[0]) throw new NotFoundError("Help request not found");
   const [view] = await toViews(
     db,
@@ -302,7 +302,7 @@ export async function getRequest(
 
 async function isRequester(db: Queryable, userId: number, id: number): Promise<boolean> {
   const { rows } = await db.query(
-    "SELECT 1 FROM help_requests WHERE id = $2 AND requester_id = $1",
+    "SELECT 1 FROM help_requests WHERE id = $2 AND requester_id = $1 AND event_key = current_edition()",
     [userId, id],
   );
   return rows.length > 0;
@@ -738,7 +738,7 @@ async function lockRequest(client: PoolClient, id: number): Promise<LockedReques
   const { rows } = await client.query<LockedRequest>(
     `SELECT id, status, requester_id, claimed_by, meeting_mode, meeting_location, location,
             challenge_id
-       FROM help_requests WHERE id = $1 FOR UPDATE`,
+       FROM help_requests WHERE id = $1 AND event_key = current_edition() FOR UPDATE`,
     [id],
   );
   if (!rows[0]) throw new NotFoundError("Help request not found");

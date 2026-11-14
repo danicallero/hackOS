@@ -162,7 +162,8 @@ describe("roles per edition", () => {
     expect((await me(member, "Bad Key!")).statusCode).toBe(400);
     expect((await me(member, "nope")).statusCode).toBe(404);
     expect((await me(member, "e3")).statusCode).toBe(403);
-    expect((await me(member, "e4")).statusCode).toBe(403);
+    // A published edition is readable without having taken part in it.
+    expect((await me(member, "e4")).statusCode).toBe(200);
     expect((await me(member, "e2")).statusCode).toBe(200);
     // The current edition is always allowed, with or without participation.
     expect((await me(outsider, "default")).statusCode).toBe(200);

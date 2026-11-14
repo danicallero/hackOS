@@ -96,7 +96,7 @@ export async function getResponseDetail(
      JOIN users u ON u.id = r.user_id
      JOIN applications a ON a.id = r.application_id
      WHERE r.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
-       AND u.is_test_account = false`,
+       AND u.is_test_account = false AND a.event_key = current_edition()`,
     [responseId],
   );
   if (!rows[0]) throw new NotFoundError("Response not found");

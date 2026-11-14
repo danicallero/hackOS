@@ -60,7 +60,10 @@ async function loadDecisionPoolRows(
 }
 
 export async function getDecisionPool(applicationId: number): Promise<DecisionPool> {
-  const { rows } = await pool.query(`SELECT id FROM applications WHERE id = $1`, [applicationId]);
+  const { rows } = await pool.query(
+    `SELECT id FROM applications WHERE id = $1 AND event_key = current_edition()`,
+    [applicationId],
+  );
   if (!rows[0]) throw new NotFoundError("Application not found");
 
   const [acceptedUns, acceptedSent, rejectedUns, rejectedSent, declinedManual, declinedExpired] =
@@ -221,7 +224,9 @@ export async function getConfirmLink(
     `SELECT t.token, t.expires_at
      FROM application_responses r
      JOIN email_verification_tokens t ON t.id = r.confirmation_token_id
+     JOIN applications a ON a.id = r.application_id
      WHERE r.id = $1 AND r.status = 'accepted' AND t.type = 'spot_confirmation'
+       AND a.event_key = current_edition()
        AND t.used_at IS NULL AND t.expires_at > now() AND t.user_id = r.user_id
        AND EXISTS (
          SELECT 1 FROM users u

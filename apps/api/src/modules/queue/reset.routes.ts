@@ -17,7 +17,13 @@ export function registerQueueResetRoutes(app: FastifyInstance): void {
     "/api/queue/admin/reset",
     {
       preHandler: [requireCapability(CAPABILITIES.ADMIN_ALL), idempotencyGuard],
-      config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.ADMIN_ALL } },
+      config: {
+        routeAccessPolicy: {
+          kind: "capability",
+          capability: CAPABILITIES.ADMIN_ALL,
+          edition: "current",
+        },
+      },
       schema: {
         summary: "Reset all project, queue, and judging data",
         description:

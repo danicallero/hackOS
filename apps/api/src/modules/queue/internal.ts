@@ -37,15 +37,16 @@ export async function lockEntry(client: pg.PoolClient, entryId: number): Promise
   const { rows } = await client.query(
     `SELECT qe.*
        FROM queue_entries qe
-      WHERE qe.id = $1
-         OR (qe.status IN ('waiting', 'called')
-             AND qe.challenge_id IN (
-               SELECT sibling.challenge_id
-                 FROM queue_group_challenges self
-                 JOIN queue_group_challenges sibling
-                   ON sibling.queue_group_id = self.queue_group_id
-                WHERE self.challenge_id = (SELECT challenge_id FROM queue_entries WHERE id = $1)
-             ))
+      WHERE qe.event_key = current_edition()
+        AND (qe.id = $1
+             OR (qe.status IN ('waiting', 'called')
+                 AND qe.challenge_id IN (
+                   SELECT sibling.challenge_id
+                     FROM queue_group_challenges self
+                     JOIN queue_group_challenges sibling
+                       ON sibling.queue_group_id = self.queue_group_id
+                    WHERE self.challenge_id = (SELECT challenge_id FROM queue_entries WHERE id = $1)
+                 )))
       ORDER BY qe.id
       FOR UPDATE`,
     [entryId],

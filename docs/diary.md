@@ -354,4 +354,4 @@ about the subject are those attendees' private data and are not exported.
 
 ## Editions
 
-Diary entries are per edition (unique owner/target/edition, enterprise entries inherit the enterprise's edition). Lists, the sponsor collection and scanned ticket tokens use the viewed edition; a stand code of a closed edition answers 409 `edition_closed`. Directory cards show projects, challenges and helper topics of the viewed edition only.
+Diary entries are per edition (unique owner/target/edition, enterprise entries inherit the enterprise's edition). Updating or removing an entry by id acts on the viewed edition only (404 otherwise). Lists, the sponsor collection and scanned ticket tokens use the viewed edition; a stand code of a closed edition answers 409 `edition_closed`. Directory cards show projects, challenges and helper topics of the viewed edition only.

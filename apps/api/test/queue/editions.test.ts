@@ -13,8 +13,8 @@ import {
 
 /**
  * Multi-edition queue (H29, H38, H40, H41): lists, boards, exports and the
- * participant status are scoped to the viewed edition; by-id endpoints work
- * across editions; a closed edition rejects queue mutations.
+ * participant status are scoped to the viewed edition; by-id endpoints answer
+ * 404 for another edition's rows; a closed edition rejects queue mutations.
  */
 
 const getApp = useTestApp();
@@ -247,20 +247,23 @@ describe("queue lists are scoped to the viewed edition", () => {
 });
 
 describe("queue by-id endpoints, mutations and ticks", () => {
-  it("reads an entry's history regardless of the viewed edition", async () => {
+  it("reads an entry's history only from the entry's own edition", async () => {
     await createEdition("e2");
     const staff = await staffIn([CAPABILITIES.QUEUE_OPERATE, CAPABILITIES.QUEUE_ADMIN], ["e2"]);
     const c2 = await challengeIn("e2");
     const entryId = await enqueueRepo(c2, await repoIn("e2"), 1);
     const app = await getApp();
 
-    for (const key of [undefined, "e2"]) {
+    for (const [key, status] of [
+      [undefined, 404],
+      ["e2", 200],
+    ] as const) {
       const res = await app.inject({
         method: "GET",
         url: `/api/queue/entries/${entryId}/history`,
         headers: { ...asUser(staff), ...edition(key) },
       });
-      expect(res.statusCode).toBe(200);
+      expect(res.statusCode).toBe(status);
     }
   });
 

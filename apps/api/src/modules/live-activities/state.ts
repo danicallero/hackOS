@@ -211,6 +211,7 @@ export async function loadScannedCounts(
   const { rows } = await db.query<{ activity_id: number; is_test_account: boolean; n: number }>(
     `SELECT al.activity_id, u.is_test_account, count(DISTINCT u.id)::int AS n
        FROM activity_logs al
+       JOIN activities a ON a.id = al.activity_id AND a.event_key = current_edition()
        JOIN users u ON u.id = al.user_id
       WHERE al.activity_id = ANY($1::int[])
         AND u.account_state = 'active' AND u.anonymized_at IS NULL

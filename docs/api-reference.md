@@ -474,7 +474,12 @@ translation, en → es → gl, into `description`), `representatives` (the compa
 revealed `challenges` (`summary` = start of the description) and `activities` —
 the caller's own audience-filtered schedule feed narrowed to items linked to the
 company or spoken at by one of its members, once each, by start time. A hidden
-company answers 404 unless the caller is staff. A person's public profile card
+company answers 404 unless the caller holds `sponsors:manage` (hidden challenges also need
+`challenges:manage`, draft schedule items `schedule:read`/`schedule:manage`; an unrelated
+capability reveals nothing extra). The page is addressed by the company's own id, whichever
+edition it belongs to; the by-id management routes (`/api/enterprises/:id` and its
+members, judges, stand tags and stand-scannable sub-routes, bulk visibility and reorder)
+act on the viewed edition only and answer 404 (batch visibility skips) for another one. A person's public profile card
 (`/api/directory/:userId`, `/api/users/:id/public-profile` preview) lists the
 participant-visible items they speak at and their visible company ([directory](./directory.md)).
 
@@ -687,7 +692,11 @@ event data carries `event_key` (directly, or through its parent row).
   route policy declares `edition: "global"` (account, profile, preferences,
   devices, catalogues, the edition lifecycle) or the caller is the global
   superadmin. Routes writing the current edition's singleton settings declare
-  `edition: "current"` and are rejected while another edition is viewed. A
+  `edition: "current"` and are rejected while another edition is viewed; so are
+  mutations of the global role catalogue (role create/update/position/
+  capabilities/delete/restore/reset and grant rules), whose authority must come
+  from the current edition. Application, response and decision routes resolve
+  rows only in the viewed edition (another edition's id is a 404). A
   participant's own after-event record (self-issued attendance certificates)
   declares `edition: "self-service"` and still writes a closed edition. A
   trigger on every edition table (SQLSTATE `HKE01`) is the in-transaction

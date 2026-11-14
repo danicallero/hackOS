@@ -2,10 +2,17 @@ import type { EditionStatus, EditionSummary, MyEditionsResponse } from "@hackos/
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type pg from "pg";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
+import { afterCommit } from "../../lib/after-commit.js";
 import { audit } from "../../lib/audit.js";
 import { GLOBAL_ADMIN_SQL } from "../../lib/edition.js";
 import { ConflictError, EditionClosedError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
+import {
+  broadcastQueueEventWithMarker,
+  queueEntryFixtureMarkers,
+  queueRoomFixtureMarkers,
+} from "../queue/broadcast.js";
+import type { QueueEntryRow } from "../queue/types.js";
 
 /**
  * Edition lifecycle (docs/multi-edition-plan.md §3-§4, H53 audit).
@@ -195,6 +202,10 @@ export async function activateEditionInTransaction(
   actorId: number | null,
   eventKey: string,
 ): Promise<{ edition: EditionSummary; changed: boolean }> {
+  // Same singleton lock as PUT /api/event (H45/H52): a concurrent settings
+  // edit must not land on the edition being switched. Re-entrant per
+  // transaction, so PUT /api/event, which already holds it, is unaffected.
+  await client.query("SELECT pg_advisory_xact_lock(603, 1)");
   const target = await lockEdition(client, eventKey);
   if (target.status === "closed") {
     throw new ConflictError("Reopen this edition before making it the current one", {
@@ -282,11 +293,12 @@ export async function closeEdition(
 ): Promise<{ edition: EditionSummary; effects: ClosingEffects | null }> {
   const result = await withTransaction(async (client) => {
     const target = await lockEdition(client, eventKey);
-    if (target.status === "closed") return { edition: toSummary(target), effects: null };
+    if (target.status === "closed")
+      return { edition: toSummary(target), effects: null, touched: null };
     if (target.status === "draft") {
       throw new ConflictError("A draft edition has nothing to close", { edition: eventKey });
     }
-    const effects = await applyClosingEffects(client, actorId, eventKey);
+    const { effects, touched } = await applyClosingEffects(client, actorId, eventKey);
     await client.query(
       "UPDATE editions SET status = 'closed', closed_at = now() WHERE event_key = $1",
       [eventKey],
@@ -300,17 +312,73 @@ export async function closeEdition(
       before: { status: target.status },
       after: { ...edition, effects },
     });
-    return { edition, effects };
+    return { edition, effects, touched };
   });
+  if (result.touched) await announceClosingEffects(result.touched);
   if (result.effects) await announce(result.edition);
-  return result;
+  return { edition: result.edition, effects: result.effects };
+}
+
+interface ClosingTouched {
+  entryIds: number[];
+  roomIds: number[];
+  requests: { id: number; userIds: number[] }[];
+}
+
+/**
+ * Realtime echo of the closing effects (H29-H40, H64-H66): the same events the
+ * queue and help desk modules emit for a single cancel or pause, once per
+ * affected entry, room and request. Best-effort and after commit; the history
+ * rows are already written, and no participant notification is sent.
+ */
+async function announceClosingEffects(touched: ClosingTouched): Promise<void> {
+  await afterCommit("edition close broadcasts", async () => {
+    if (touched.entryIds.length > 0) {
+      const [markers, { rows: entries }] = await Promise.all([
+        queueEntryFixtureMarkers(pool, touched.entryIds),
+        pool.query<QueueEntryRow>("SELECT * FROM queue_entries WHERE id = ANY($1::int[])", [
+          touched.entryIds,
+        ]),
+      ]);
+      await Promise.all(
+        entries.map((entry) =>
+          broadcastQueueEventWithMarker(
+            markers.get(Number(entry.id)) ?? null,
+            EVENTS.QUEUE_ENTRY_CHANGED,
+            entry,
+          ),
+        ),
+      );
+    }
+    if (touched.roomIds.length > 0) {
+      const markers = await queueRoomFixtureMarkers(pool, touched.roomIds);
+      await Promise.all(
+        touched.roomIds.map((roomId) =>
+          broadcastQueueEventWithMarker(markers.get(roomId) ?? null, EVENTS.QUEUE_ROOM_CHANGED, {
+            roomId,
+            isPaused: true,
+          }),
+        ),
+      );
+    }
+    await Promise.all(
+      touched.requests.flatMap((request) =>
+        request.userIds.map((userId) =>
+          broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.HELPDESK_REQUEST_CHANGED, {
+            requestId: request.id,
+            status: "cancelled",
+          }),
+        ),
+      ),
+    );
+  });
 }
 
 async function applyClosingEffects(
   client: pg.PoolClient,
   actorId: number,
   eventKey: string,
-): Promise<ClosingEffects> {
+): Promise<{ effects: ClosingEffects; touched: ClosingTouched }> {
   // H20: drafts that were never submitted stay as not submitted.
   const projects = await client.query(
     `UPDATE repos SET submission_status = 'not_submitted'
@@ -355,16 +423,29 @@ async function applyClosingEffects(
   );
   const rooms = await client.query(
     `UPDATE room_queue_state rqs SET is_paused = true
-       FROM rooms r WHERE r.id = rqs.room_id AND r.event_key = $1 AND NOT rqs.is_paused`,
+       FROM rooms r WHERE r.id = rqs.room_id AND r.event_key = $1 AND NOT rqs.is_paused
+     RETURNING rqs.room_id`,
     [eventKey],
   );
   await client.query("UPDATE rooms SET status = 'paused' WHERE event_key = $1", [eventKey]);
   // H64-H66: the event is over; open and claimed requests will not be served.
-  const requests = await client.query(
+  const requests = await client.query<{
+    id: number;
+    requester_id: number | null;
+    claimed_by: number | null;
+  }>(
     `UPDATE help_requests SET status = 'cancelled', cancelled_at = now()
-      WHERE event_key = $1 AND status IN ('open', 'claimed')`,
+      WHERE event_key = $1 AND status IN ('open', 'claimed')
+      RETURNING id, requester_id, claimed_by`,
     [eventKey],
   );
+  const requestIds = requests.rows.map((row) => Number(row.id));
+  const { rows: recipients } = requestIds.length
+    ? await client.query<{ request_id: number; user_id: number }>(
+        "SELECT request_id, user_id FROM help_request_recipients WHERE request_id = ANY($1::int[])",
+        [requestIds],
+      )
+    : { rows: [] };
   // H62/H67: help windows and helper availability end now; future ones go.
   const windowsEnded = await client.query(
     `UPDATE helpdesk_open_windows SET ends_at = now()
@@ -384,7 +465,27 @@ async function applyClosingEffects(
     "DELETE FROM helper_availability WHERE event_key = $1 AND starts_at >= now()",
     [eventKey],
   );
-  return {
+  const touched: ClosingTouched = {
+    entryIds: queue.rows.map((row) => Number(row.id)),
+    roomIds: rooms.rows.map((row) => Number(row.room_id)),
+    requests: requests.rows.map((row) => ({
+      id: Number(row.id),
+      userIds: [
+        ...new Set(
+          [
+            row.requester_id,
+            row.claimed_by,
+            ...recipients
+              .filter((r) => Number(r.request_id) === Number(row.id))
+              .map((r) => r.user_id),
+          ]
+            .filter((id): id is number => id != null)
+            .map(Number),
+        ),
+      ],
+    })),
+  };
+  const effects: ClosingEffects = {
     projectsNotSubmitted: projects.rowCount ?? 0,
     queueEntriesCancelled: queue.rows.length,
     judgingSessionsEnded: sessions.rowCount ?? 0,
@@ -394,6 +495,7 @@ async function applyClosingEffects(
     helperAvailabilityClosed:
       (availabilityEnded.rowCount ?? 0) + (availabilityDropped.rowCount ?? 0),
   };
+  return { effects, touched };
 }
 
 /**

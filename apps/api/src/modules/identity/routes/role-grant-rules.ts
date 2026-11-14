@@ -262,7 +262,12 @@ export function registerRoleGrantRuleRoutes(app: FastifyInstance): void {
     "/api/role-grant-rules",
     {
       preHandler: [manage, idempotencyGuard],
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      // Global catalogue data: authority is resolved in the current edition (H8).
+      config: routeAccess({
+        kind: "capability",
+        capability: CAPABILITIES.PERMISSIONS_MANAGE,
+        edition: "current",
+      }),
       schema: {
         summary: "Create an automatic role grant/revoke rule",
         description:
@@ -315,7 +320,12 @@ export function registerRoleGrantRuleRoutes(app: FastifyInstance): void {
     "/api/role-grant-rules/:ruleId",
     {
       preHandler: [manage, idempotencyGuard],
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      // Global catalogue data: authority is resolved in the current edition (H8).
+      config: routeAccess({
+        kind: "capability",
+        capability: CAPABILITIES.PERMISSIONS_MANAGE,
+        edition: "current",
+      }),
       schema: {
         summary: "Update an automatic role grant/revoke rule",
         description:
@@ -391,7 +401,12 @@ export function registerRoleGrantRuleRoutes(app: FastifyInstance): void {
     "/api/role-grant-rules/:ruleId",
     {
       preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      // Global catalogue data: authority is resolved in the current edition (H8).
+      config: routeAccess({
+        kind: "capability",
+        capability: CAPABILITIES.PERMISSIONS_MANAGE,
+        edition: "current",
+      }),
       schema: {
         summary: "Delete an automatic role grant/revoke rule",
         description:

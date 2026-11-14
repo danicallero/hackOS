@@ -1,4 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import { describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
 import {
@@ -115,12 +116,135 @@ async function seedLiveEdition(key: string) {
     waitingEntry: waiting.rows[0].id as number,
     presentingEntry: presenting.rows[0].id as number,
     roomId: room.rows[0].id as number,
+    requesters: [requester, requester2, helper],
     openRequest: open.rows[0].id as number,
     claimedRequest: claimed.rows[0].id as number,
   };
 }
 
+/** Every SSE envelope published (any topic) while `run` executes. */
+async function publishedEvents(
+  run: () => Promise<unknown>,
+): Promise<{ topic: string; type: string; data: Record<string, unknown> }[]> {
+  const { valkey } = await import("../../src/lib/valkey.js");
+  const { config } = await import("../../src/config.js");
+  const prefix = `sse:${config.SSE_NAMESPACE}:`;
+  const sub = valkey.duplicate({ enableOfflineQueue: true });
+  const events: { topic: string; type: string; data: Record<string, unknown> }[] = [];
+  sub.on("pmessage", (_pattern: string, channel: string, message: string) => {
+    const line = message.split("\n").find((l) => l.startsWith("data: "));
+    if (!line) return;
+    const event = JSON.parse(line.slice("data: ".length));
+    events.push({ topic: channel.slice(prefix.length), type: event.type, data: event.data });
+  });
+  await sub.psubscribe(`${prefix}*`);
+  try {
+    await run();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  } finally {
+    await sub.quit();
+  }
+  return events;
+}
+
 describe("edition lifecycle (H8, H53)", () => {
+  it("broadcasts the queue, room and help request changes its closing effects cause (H29-H40, H64-H66)", async () => {
+    const app = await getApp();
+    await seedCurrentEdition();
+    const seeded = await seedLiveEdition("e2026");
+    const admin = await superadmin();
+
+    const events = await publishedEvents(() =>
+      app.inject({ method: "POST", url: "/api/editions/e2026/close", headers: idem(admin) }),
+    );
+
+    const entryIds = events
+      .filter((e) => e.topic === "queue" && e.type === EVENTS.QUEUE_ENTRY_CHANGED)
+      .map((e) => (e.data as { id: number; status: string }).id);
+    expect(entryIds.sort()).toEqual([seeded.waitingEntry, seeded.presentingEntry].sort());
+    expect(
+      events
+        .filter((e) => e.type === EVENTS.QUEUE_ENTRY_CHANGED)
+        .every((e) => e.data.status === "cancelled"),
+    ).toBe(true);
+    expect(events.filter((e) => e.type === EVENTS.QUEUE_ROOM_CHANGED).map((e) => e.data)).toEqual([
+      { roomId: seeded.roomId, isPaused: true },
+    ]);
+    const helpEvents = events.filter((e) => e.type === EVENTS.HELPDESK_REQUEST_CHANGED);
+    expect(helpEvents.map((e) => e.topic).sort()).toEqual(
+      seeded.requesters.map((id) => `user:${id}`).sort(),
+    );
+    expect(helpEvents.every((e) => e.data.status === "cancelled")).toBe(true);
+  });
+
+  it("lets a current-edition organizer edit a draft while the current edition is closed", async () => {
+    const app = await getApp();
+    await seedCurrentEdition();
+    await createEdition("e2027", "draft");
+    const organizer = await createUser();
+    const roleId = await createRole([CAPABILITIES.EVENT_MANAGE]);
+    await assignRole(organizer, roleId);
+    await pool.query(
+      "UPDATE editions SET status = 'closed', closed_at = now() WHERE event_key = 'e2026'",
+    );
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/api/editions/e2027",
+      headers: idem(organizer),
+      payload: { name: "Renamed draft" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ eventKey: "e2027", name: "Renamed draft" });
+  });
+
+  it("answers 401 to an anonymous write while the edition is closed, not edition_closed", async () => {
+    const app = await getApp();
+    await seedCurrentEdition();
+    await pool.query(
+      "UPDATE editions SET status = 'closed', closed_at = now() WHERE event_key = 'e2026'",
+    );
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/editions",
+      payload: { eventKey: "e2030", name: "Nope" },
+    });
+    expect(res.statusCode).toBe(401);
+    const roles = await app.inject({
+      method: "POST",
+      url: "/api/roles",
+      payload: { name: "x", position: 1 },
+    });
+    expect(roles.statusCode).toBe(401);
+  });
+
+  it("lets a signed-in non-participant read a past edition but not write to it", async () => {
+    const app = await getApp();
+    await seedCurrentEdition();
+    await createEdition("old", "closed");
+    const outsider = await createUser();
+    const read = await app.inject({
+      method: "GET",
+      url: "/api/public/event",
+      headers: { ...asUser(outsider), "x-edition": "old" },
+    });
+    expect(read.statusCode).toBe(200);
+    const write = await app.inject({
+      method: "POST",
+      url: "/api/editions",
+      headers: { ...idem(outsider), "x-edition": "old" },
+      payload: { eventKey: "e2031", name: "Nope" },
+    });
+    expect(write.statusCode).toBe(403);
+    // No capability leaks through the viewed edition.
+    const me = await app.inject({
+      method: "GET",
+      url: "/api/editions",
+      headers: { ...asUser(outsider), "x-edition": "old" },
+    });
+    expect(me.statusCode).toBe(403);
+  });
+
   it("creates a draft edition, rejects a duplicate key and requires event:manage", async () => {
     const app = await getApp();
     await seedCurrentEdition();
@@ -509,7 +633,8 @@ describe("GET /api/me/editions and X-Edition (H8)", () => {
       url,
       headers: { ...asUser(userId), "x-edition": "e2026" },
     });
-    expect(foreign.statusCode).toBe(403);
+    // Published editions are readable by any signed-in user; only drafts are not.
+    expect(foreign.statusCode).toBe(200);
     const draft = await app.inject({
       method: "GET",
       url,

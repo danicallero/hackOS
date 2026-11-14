@@ -44,7 +44,11 @@ existing tools (`users:write` profile moderation, `projects:edit`).
 ## Data
 
 `content_reports` (migration `0310`) stores the reporter, exactly one target,
-reason, detail, status and the resolver. The reported content is never copied:
+reason, detail, status and the resolver. Migration `1002` adds `event_key`
+(default `current_edition()`; project reports inherit their repo's edition): the
+inbox, the open-report lookup, the per-reporter open-report cap and closing a
+report all use the viewed edition, and the one-open-report-per-person rule is
+per edition. The edition is no longer derived from the reporter's diary entry. The reported content is never copied:
 staff read it live, so content that was already edited or hidden does not
 linger. Rows are deleted with either account or with the project (see
 [account deletion](./account-deletion.md)). Reporters' text is visible to

@@ -143,16 +143,19 @@ export async function computeMembershipFlags(
        (
          EXISTS (
            SELECT 1 FROM enterprise_judges ej
-            WHERE ej.user_id = u.id
+             JOIN enterprises e ON e.id = ej.enterprise_id
+            WHERE ej.user_id = u.id AND e.event_key = current_edition()
          )
          OR EXISTS (
            SELECT 1 FROM sponsors s
-            WHERE s.user_id = u.id
+             JOIN enterprises e ON e.id = s.enterprise_id
+            WHERE s.user_id = u.id AND e.event_key = current_edition()
          )
        ) AS is_enterprise_judge,
        EXISTS (
          SELECT 1 FROM sponsors s
-          WHERE s.user_id = u.id
+           JOIN enterprises e ON e.id = s.enterprise_id
+          WHERE s.user_id = u.id AND e.event_key = current_edition()
        ) AS is_sponsor_rep
        FROM users u
       WHERE u.id = $1

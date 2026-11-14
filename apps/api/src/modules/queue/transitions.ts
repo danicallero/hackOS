@@ -61,7 +61,10 @@ export async function callNextForRoom(
     );
     if (stateRes.rowCount === 0) throw new NotFoundError("Room not found", { roomId });
     const state = stateRes.rows[0];
-    const roomRes = await client.query(`SELECT * FROM rooms WHERE id = $1`, [roomId]);
+    const roomRes = await client.query(
+      `SELECT * FROM rooms WHERE id = $1 AND event_key = current_edition()`,
+      [roomId],
+    );
     const room = roomRes.rows[0];
     if (!room) throw new NotFoundError("Room not found", { roomId });
     let fixtureMarker: boolean;

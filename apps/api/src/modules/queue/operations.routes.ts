@@ -27,7 +27,7 @@ export function registerOperationsRoutes(app: FastifyInstance): void {
 
       const { rows: challenges } = await pool.query(
         `SELECT id FROM challenges
-          WHERE is_test_account = false
+          WHERE is_test_account = false AND event_key = current_edition()
           ORDER BY id`,
       );
       const eligible = challenges;

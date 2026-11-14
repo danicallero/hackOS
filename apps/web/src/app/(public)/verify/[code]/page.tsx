@@ -37,6 +37,7 @@ export default function VerifyCertificatePage() {
 
   useEffect(() => {
     let cancelled = false;
+    setEditionName(null);
     api
       .get<{
         status: "valid" | "revoked";

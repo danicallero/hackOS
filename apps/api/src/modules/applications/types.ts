@@ -10,6 +10,7 @@ import type { FormSection, TemplateField } from "./schemas.js";
 
 export interface ApplicationRow {
   id: number;
+  event_key: string;
   name: string;
   template: TemplateField[];
   sections: FormSection[];
