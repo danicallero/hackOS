@@ -663,6 +663,11 @@ debe ser compatible con la anterior en:
   corte; `deploy` es el camino sin corte.
 - Durante el relevo corren dos réplicas del servicio: el host necesita memoria
   libre para una réplica extra de `api`/`worker` (2 GiB) o `web` (1 GiB).
+- Durante el solapamiento la réplica antigua y la nueva comparten el mismo
+  volumen `*-memory` (p. ej. `web-memory`), así que los gauges de memoria de
+  contenedor alternan entre ambas hasta que la antigua termina.
+- El proxy reparte en round-robin `/metrics` (`:9464`) entre las réplicas de
+  `worker`, así que los contadores scrapeados pueden saltar mientras conviven.
 
 ### Primer despliegue con `proxy`
 

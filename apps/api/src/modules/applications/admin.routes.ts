@@ -353,7 +353,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       const b = req.body;
       return withTransaction(async (client) => {
         const { rows: currentRows } = await client.query(
-          `SELECT ${COLUMNS} FROM applications WHERE id = $1 FOR UPDATE`,
+          `SELECT ${COLUMNS} FROM applications WHERE id = $1 AND event_key = current_edition() FOR UPDATE`,
           [req.params.id],
         );
         const current = currentRows[0];
@@ -574,7 +574,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       await withTransaction(async (client) => {
         const { rows: appRows } = await client.query(
-          `SELECT id FROM applications WHERE id = $1 FOR UPDATE`,
+          `SELECT id FROM applications WHERE id = $1 AND event_key = current_edition() FOR UPDATE`,
           [req.params.id],
         );
         if (!appRows[0]) throw new NotFoundError("Application not found");

@@ -71,17 +71,19 @@ function toTag(row: {
 }
 
 async function assertEnterpriseExists(db: Queryable, actorId: number, enterpriseId: number) {
-  const { rows } = await db.query(`SELECT 1 FROM enterprises WHERE id = $1 FOR UPDATE`, [
-    enterpriseId,
-  ]);
+  const { rows } = await db.query(
+    `SELECT 1 FROM enterprises WHERE id = $1 AND event_key = current_edition() FOR UPDATE`,
+    [enterpriseId],
+  );
   if (!rows[0]) throw new NotFoundError("Enterprise not found");
   await assertFixtureEnterpriseScope(db, actorId, enterpriseId);
 }
 
 export async function listStandTags(actorId: number, enterpriseId: number): Promise<StandTag[]> {
-  const { rows: exists } = await pool.query(`SELECT 1 FROM enterprises WHERE id = $1`, [
-    enterpriseId,
-  ]);
+  const { rows: exists } = await pool.query(
+    `SELECT 1 FROM enterprises WHERE id = $1 AND event_key = current_edition()`,
+    [enterpriseId],
+  );
   if (!exists[0]) throw new NotFoundError("Enterprise not found");
   await assertFixtureEnterpriseScope(pool, actorId, enterpriseId);
   const { rows } = await pool.query(
@@ -417,7 +419,8 @@ export async function setStandScannable(
 ): Promise<{ enterpriseId: number; scannable: boolean; changed: boolean }> {
   return withTransaction(async (db) => {
     const { rows } = await db.query<{ stand_scannable: boolean }>(
-      `SELECT stand_scannable FROM enterprises WHERE id = $1 FOR UPDATE`,
+      `SELECT stand_scannable FROM enterprises
+        WHERE id = $1 AND event_key = current_edition() FOR UPDATE`,
       [enterpriseId],
     );
     if (!rows[0]) throw new NotFoundError("Enterprise not found");

@@ -971,13 +971,13 @@ export async function revokeCertificate(
     const { rows } = await client.query(
       `UPDATE attendance_certificates
           SET revoked_at = now(), revoked_by = $2, revoked_reason = $3
-        WHERE id = $1 AND revoked_at IS NULL
+        WHERE id = $1 AND revoked_at IS NULL AND event_key = current_edition()
       RETURNING ${COLUMNS}`,
       [id, actorId, reason],
     );
     if (!rows[0]) {
       const { rowCount } = await client.query(
-        `SELECT 1 FROM attendance_certificates WHERE id = $1`,
+        `SELECT 1 FROM attendance_certificates WHERE id = $1 AND event_key = current_edition()`,
         [id],
       );
       if (!rowCount) throw new NotFoundError("Certificate not found");
@@ -992,6 +992,15 @@ export async function revokeCertificate(
     });
     return toRow(rows[0]);
   });
+}
+
+/** H8: staff reach a certificate through the viewed edition only; others answer 404. */
+export async function assertCertificateInViewedEdition(id: number): Promise<void> {
+  const { rowCount } = await pool.query(
+    `SELECT 1 FROM attendance_certificates WHERE id = $1 AND event_key = current_edition()`,
+    [id],
+  );
+  if (!rowCount) throw new NotFoundError("Certificate not found");
 }
 
 export async function listForUser(userId: number): Promise<CertificateRow[]> {

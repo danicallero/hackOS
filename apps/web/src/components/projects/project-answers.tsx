@@ -17,14 +17,12 @@ import { ProjectVideo } from "./project-video";
 export function ProjectAnswers({
   project,
   language,
-  fallbackTitle,
   descriptionLabel,
   omitFieldKeys = [],
   assetUrl,
 }: {
   project: NativeProject;
   language: Language;
-  fallbackTitle?: string;
   /** Name of the project description, shown when the form has no description question. */
   descriptionLabel?: string;
   /** Answers the surrounding view already shows, so they are not repeated. */

@@ -181,7 +181,11 @@ async function challengeProjectIds(
   fixtureMarker = false,
 ): Promise<number[]> {
   const { rows } = await client.query(
-    `SELECT pc.repo_id FROM project_challenges pc JOIN repos r ON r.id=pc.repo_id WHERE pc.challenge_id=$1 AND r.is_test_account=$2 AND r.submission_status='submitted'`,
+    `SELECT pc.repo_id
+       FROM project_challenges pc
+       JOIN repos r ON r.id=pc.repo_id AND r.event_key = current_edition()
+       JOIN challenges c ON c.id=pc.challenge_id AND c.event_key = current_edition()
+      WHERE pc.challenge_id=$1 AND r.is_test_account=$2 AND r.submission_status='submitted'`,
     [challengeId, fixtureMarker],
   );
   return rows.map((row) => Number(row.repo_id));

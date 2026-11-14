@@ -61,6 +61,7 @@ export async function loadLiveAttendeeItems(
     `SELECT id, title, title_i18n, type, location, audiences, starts_at, ends_at
        FROM schedule
       WHERE live_activity_audience
+        AND event_key = current_edition()
         AND visibility = 'shown'
         AND (publish_at IS NULL OR publish_at <= now())
         AND cardinality(audiences) > 0

@@ -283,7 +283,7 @@ export async function announcementAuditSnapshot(db: Queryable, announcement: Ann
   // H53: read content and targeting under the same row lock; a stale caller
   // snapshot must never inherit another version's broader audience.
   const { rows } = await db.query<Announcement>(
-    "SELECT * FROM announcements WHERE id = $1 FOR UPDATE",
+    "SELECT * FROM announcements WHERE id = $1 AND event_key = current_edition() FOR UPDATE",
     [announcement.id],
   );
   const current = rows[0];
@@ -478,7 +478,7 @@ export async function updateAnnouncement(
      SET title = $2, body = $3, translations = $4::jsonb, notify_users = $5,
          screen_placement = $6, publish_at = $7, expires_at = $8,
          role_ids = $9, intolerance_ids = $10, channels = $11
-     WHERE id = $1
+     WHERE id = $1 AND event_key = current_edition()
      RETURNING *`,
     [
       id,
@@ -508,7 +508,10 @@ export async function deleteAnnouncement(
   actorId?: number,
 ): Promise<Announcement> {
   if (actorId != null) await getAnnouncement(db, id, actorId);
-  const { rows } = await db.query(`DELETE FROM announcements WHERE id = $1 RETURNING *`, [id]);
+  const { rows } = await db.query(
+    `DELETE FROM announcements WHERE id = $1 AND event_key = current_edition() RETURNING *`,
+    [id],
+  );
   if (!rows[0]) throw new NotFoundError("Announcement not found");
   return rows[0];
 }
@@ -525,7 +528,7 @@ export async function getAnnouncement(
   const { rows } = await db.query(
     `SELECT a.* FROM announcements a
        LEFT JOIN users author ON author.id = a.author_id
-      WHERE a.id = $1${markerClause}`,
+      WHERE a.id = $1 AND a.event_key = current_edition()${markerClause}`,
     params,
   );
   if (!rows[0]) throw new NotFoundError("Announcement not found");
@@ -724,6 +727,15 @@ function isCurrentlyVisible(a: Pick<Announcement, "publish_at" | "expires_at">):
 export async function fanOutIfVisibleNow(db: Queryable, announcement: Announcement): Promise<void> {
   if (!announcement.notify_users) return;
   if (announcement.fanned_out_at) return;
+  // H8: an announcement authored while viewing another open edition is not
+  // pushed to people now; only the active edition's announcements fan out
+  // (the publisher poll covers it if that edition becomes active later).
+  const { rows } = await db.query<{ is_active: boolean }>(
+    `SELECT event_key = COALESCE((SELECT event_key FROM event_config WHERE id = 1), 'default') AS is_active
+       FROM announcements WHERE id = $1`,
+    [announcement.id],
+  );
+  if (rows[0]?.is_active !== true) return;
   if (isCurrentlyVisible(announcement)) {
     await fanOutAnnouncement(db, announcement);
   }

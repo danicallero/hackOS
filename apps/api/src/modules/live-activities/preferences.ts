@@ -76,7 +76,8 @@ async function availableKinds(userId: number, db: Queryable): Promise<LiveActivi
         AND EXISTS (SELECT 1 FROM user_roles ur
                       JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
                       JOIN live_activity_kind_roles kr ON kr.role_id = r.id
-                     WHERE ur.user_id = $1 AND kr.kind = ks.kind)
+                     WHERE ur.user_id = $1 AND kr.kind = ks.kind
+                       AND (ur.event_key IS NULL OR ur.event_key = current_edition()))
       ORDER BY ks.priority, ks.kind`,
     [userId],
   );

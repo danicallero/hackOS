@@ -8,6 +8,24 @@ import {
 } from "../../lib/fixture-queue-scope.js";
 import { isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
 
+/**
+ * Multi-edition guard for by-id queue resources (H8): a row of another
+ * edition than the viewed one answers 404 exactly like a missing row. A row
+ * that does not exist at all is left to the caller's own verdict.
+ */
+async function assertInViewedEdition(
+  client: Queryable,
+  table: "rooms" | "queue_groups" | "repos",
+  resource: string,
+  id: number,
+): Promise<void> {
+  const { rows } = await client.query<{ in_edition: boolean }>(
+    `SELECT event_key = current_edition() AS in_edition FROM ${table} WHERE id = $1`,
+    [id],
+  );
+  if (rows[0] && !rows[0].in_edition) throw new NotFoundError(`${resource} not found`, { id });
+}
+
 type QueueFixtureMarkers = {
   has_synthetic: boolean;
   has_real: boolean;
@@ -137,15 +155,16 @@ async function resolveQueueChallengeScope(
   const { rows } = await client.query<{
     is_test_account: boolean;
     queue_group_id: number | null;
+    in_edition: boolean;
   }>(
-    `SELECT c.is_test_account, qgc.queue_group_id
+    `SELECT c.is_test_account, qgc.queue_group_id, c.event_key = current_edition() AS in_edition
        FROM challenges c
        LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = c.id
       WHERE c.id = $1`,
     [challengeId],
   );
   const challenge = rows[0];
-  if (!challenge) throw new NotFoundError("Challenge not found", { challengeId });
+  if (!challenge?.in_edition) throw new NotFoundError("Challenge not found", { challengeId });
   if (challenge.queue_group_id == null) {
     throw new ConflictError("Challenge has no complete queue-group scope", {
       code: "review_fixture_scope",
@@ -250,10 +269,12 @@ export async function assertQueueEntryScope(
     challenge_is_test_account: boolean;
     repo_is_test_account: boolean;
     queue_group_id: number | null;
+    in_edition: boolean;
   }>(
     `SELECT c.is_test_account AS challenge_is_test_account,
             r.is_test_account AS repo_is_test_account,
-            qgc.queue_group_id
+            qgc.queue_group_id,
+            qe.event_key = current_edition() AS in_edition
        FROM queue_entries qe
        JOIN challenges c ON c.id = qe.challenge_id
        JOIN repos r ON r.id = qe.repo_id
@@ -262,6 +283,7 @@ export async function assertQueueEntryScope(
     [entryId],
   );
   const row = rows[0];
+  if (row && !row.in_edition) throw new NotFoundError("Queue entry not found", { entryId });
   if (row && row.challenge_is_test_account !== row.repo_is_test_account) {
     throw new ConflictError("Queue fixture markers must match", {
       code: "review_fixture_scope",
@@ -295,6 +317,7 @@ export async function assertQueueRoomScope(
   roomId: number,
   actorIsSyntheticHint?: ActorMarkerHint,
 ): Promise<boolean> {
+  await assertInViewedEdition(client, "rooms", "Room", roomId);
   const actorIsSynthetic = await assertFixtureQueueScope(
     client,
     actorId,
@@ -335,6 +358,7 @@ export async function assertQueueGroupScope(
   actorId: number,
   queueGroupId: number,
 ): Promise<boolean> {
+  await assertInViewedEdition(client, "queue_groups", "Queue group", queueGroupId);
   const actorIsSynthetic = await assertFixtureQueueScope(
     client,
     actorId,
@@ -383,6 +407,7 @@ export async function assertQueueRepoScope(
   repoId: number,
   actorIsSyntheticHint?: ActorMarkerHint,
 ): Promise<boolean> {
+  await assertInViewedEdition(client, "repos", "Repo", repoId);
   const actorIsSynthetic = await assertFixtureQueueScope(
     client,
     actorId,

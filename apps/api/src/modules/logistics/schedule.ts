@@ -317,6 +317,7 @@ export async function loadScheduleLinks(
                      FROM sponsors sp
                      JOIN enterprises e ON e.id = sp.enterprise_id
                     WHERE sp.user_id = u.id
+                      AND e.event_key = (SELECT s.event_key FROM schedule s WHERE s.id = ss.schedule_id)
                       AND ($2::boolean OR (e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))
                     GROUP BY e.id, e.name) m
          ) ent ON true
@@ -413,8 +414,10 @@ async function replaceScheduleLinks(
     const ids = [...new Set(links.enterpriseIds)];
     if (ids.length > 0) {
       const { rows } = await client.query<{ id: number }>(
-        `SELECT id FROM enterprises WHERE id = ANY($1::int[])`,
-        [ids],
+        `SELECT id FROM enterprises
+          WHERE id = ANY($1::int[])
+            AND event_key = (SELECT event_key FROM schedule WHERE id = $2)`,
+        [ids, scheduleId],
       );
       const known = new Set(rows.map((r) => Number(r.id)));
       const unknown = ids.filter((id) => !known.has(id));

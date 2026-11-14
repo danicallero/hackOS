@@ -165,6 +165,7 @@ export async function queueGroupQueue(queueGroupId: number, fixtureMarker = fals
          FROM queue_groups qg
          JOIN enterprises e ON e.id = qg.enterprise_id
         WHERE qg.id = $1
+          AND qg.event_key = current_edition()
           AND NOT EXISTS (
             SELECT 1
               FROM queue_group_challenges hidden_qgc
@@ -315,9 +316,10 @@ export async function roomView(roomId: number, opts: { includeCrossRoomSkips?: b
 export async function roomViews(roomIds: number[], opts: { includeCrossRoomSkips?: boolean } = {}) {
   const ids = [...new Set(roomIds)];
   if (ids.length === 0) return [];
-  const { rows: roomRows } = await pool.query(`SELECT * FROM rooms WHERE id = ANY($1::int[])`, [
-    ids,
-  ]);
+  const { rows: roomRows } = await pool.query(
+    `SELECT * FROM rooms WHERE id = ANY($1::int[]) AND event_key = current_edition()`,
+    [ids],
+  );
   const roomById = new Map<number, Record<string, unknown>>(
     roomRows.map((row) => [Number(row.id), row]),
   );
@@ -571,7 +573,11 @@ async function crossRoomSkipReasons(
 
 /** H46 read surface: current room -> enterprise pool, serving queue_group, and the judges that follow. */
 export async function roomAssignments(roomId: number) {
-  const room = (await pool.query(`SELECT * FROM rooms WHERE id = $1`, [roomId])).rows[0];
+  const room = (
+    await pool.query(`SELECT * FROM rooms WHERE id = $1 AND event_key = current_edition()`, [
+      roomId,
+    ])
+  ).rows[0];
   if (!room) throw new NotFoundError("Room not found", { roomId });
 
   const enterprise =
@@ -1406,6 +1412,12 @@ export async function repoChallenges(repoId: number) {
 export async function entryHistory(entryId: number, actorId?: number) {
   const fixtureMarker =
     actorId == null ? false : await assertQueueEntryScope(pool, actorId, entryId);
+  // An entry of another edition answers 404, like one that does not exist.
+  const inEdition = await pool.query(
+    `SELECT 1 FROM queue_entries WHERE id = $1 AND event_key = current_edition()`,
+    [entryId],
+  );
+  if (inEdition.rowCount === 0) throw new NotFoundError("Queue entry not found", { entryId });
   const { rows } = await pool.query(
     `SELECT h.*, u.name AS actor_name, u.surname AS actor_surname
        FROM queue_history h

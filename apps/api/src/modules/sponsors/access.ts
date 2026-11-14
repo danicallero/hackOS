@@ -31,7 +31,8 @@ function enterpriseIdFrom(request: FastifyRequest, locator: ContextualResourceLo
 /** True when `userId` holds a sponsor row on `enterpriseId`. */
 async function ownsEnterprise(userId: number, enterpriseId: number): Promise<boolean> {
   const { rowCount } = await pool.query(
-    `SELECT 1 FROM sponsors WHERE user_id = $1 AND enterprise_id = $2`,
+    `SELECT 1 FROM sponsors s JOIN enterprises e ON e.id = s.enterprise_id
+      WHERE s.user_id = $1 AND s.enterprise_id = $2 AND e.event_key = current_edition()`,
     [userId, enterpriseId],
   );
   return (rowCount ?? 0) > 0;
@@ -55,7 +56,10 @@ async function assertCanEditEnterprise(
     [userId],
   );
   if (!activeCount) throw new UnauthorizedError("This account is closed or being removed");
-  const { rowCount } = await pool.query(`SELECT 1 FROM enterprises WHERE id = $1`, [enterpriseId]);
+  const { rowCount } = await pool.query(
+    `SELECT 1 FROM enterprises WHERE id = $1 AND event_key = current_edition()`,
+    [enterpriseId],
+  );
   if (rowCount === 0) throw new NotFoundError("Enterprise not found", { enterpriseId });
   await assertFixtureEnterpriseScope(pool, userId, enterpriseId);
 
@@ -75,9 +79,10 @@ export function requireEnterpriseJudgeManager(
 ): preHandlerHookHandler {
   return async (request) => {
     const enterpriseId = enterpriseIdFrom(request, locator);
-    const { rowCount } = await pool.query(`SELECT 1 FROM enterprises WHERE id = $1`, [
-      enterpriseId,
-    ]);
+    const { rowCount } = await pool.query(
+      `SELECT 1 FROM enterprises WHERE id = $1 AND event_key = current_edition()`,
+      [enterpriseId],
+    );
     if (rowCount === 0) throw new NotFoundError("Enterprise not found", { enterpriseId });
     await assertCanManageEnterpriseJudging(request, enterpriseId);
   };
@@ -112,7 +117,10 @@ export const enterpriseAccessPolicy: ContextualPolicyResolver<EnterpriseResource
   name: "enterprise-access",
   async resolve(request, locator) {
     const id = enterpriseIdFrom(request, locator);
-    const { rows } = await pool.query(`SELECT id FROM enterprises WHERE id = $1`, [id]);
+    const { rows } = await pool.query(
+      `SELECT id FROM enterprises WHERE id = $1 AND event_key = current_edition()`,
+      [id],
+    );
     if (!rows[0]) throw new NotFoundError("Enterprise not found", { enterpriseId: id });
     return { id: Number(rows[0].id) };
   },

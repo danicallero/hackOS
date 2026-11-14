@@ -304,15 +304,18 @@ async function sessionTokenFromRequest(req: FastifyRequest): Promise<string | nu
   return getBetterAuthSessionToken(headers);
 }
 
-// H7: once any application has been accepted, a participant can no longer
+// H7: once any application of the CURRENT edition (not the viewed one: the
+// profile is global) has been accepted, a participant can no longer
 // self-edit identity/logistics fields (name, shirt size, dietary info) —
 // they're on the badge/certificate and drive shirt orders/catering headcounts
 // already committed to. Staff can still fix these via PATCH /api/users/:id.
 async function hasAcceptedApplication(db: Queryable, userId: number): Promise<boolean> {
   const { rows } = await db.query(
-    `SELECT 1 FROM application_responses
-       WHERE user_id = $1
-         AND status IN ('accepted_internal', 'accepted', 'confirmed')
+    `SELECT 1 FROM application_responses r
+       JOIN applications a ON a.id = r.application_id
+       WHERE r.user_id = $1
+         AND r.status IN ('accepted_internal', 'accepted', 'confirmed')
+         AND a.event_key = COALESCE((SELECT event_key FROM event_config WHERE id = 1), 'default')
        LIMIT 1`,
     [userId],
   );

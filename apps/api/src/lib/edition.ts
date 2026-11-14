@@ -101,8 +101,8 @@ export const GLOBAL_ADMIN_SQL = `EXISTS (
  * Resolve the `X-Edition` header after authentication (auth-context hook).
  * Anyone may scope to the current edition (someone without a role there is
  * an applicant). Another edition needs participation in it or the global
- * superadmin role; anonymous callers may read published (non-draft)
- * editions' public content.
+ * superadmin role; anyone, signed in or not, may read (GET/HEAD) published
+ * (non-draft) editions' public content.
  */
 export async function applyRequestedEdition(req: FastifyRequest, db: Queryable): Promise<void> {
   const raw = req.headers[EDITION_HEADER];
@@ -131,7 +131,11 @@ export async function applyRequestedEdition(req: FastifyRequest, db: Queryable):
     if (edition.status === "draft") {
       throw new ForbiddenError("This edition is not available", { edition: requested });
     }
-    if (req.userId != null && !edition.participated) {
+    // Published editions are readable by anyone, like for anonymous callers
+    // (their capabilities there are empty without a role in it); only a
+    // mutation still requires having taken part in the edition.
+    const safeMethod = req.method === "GET" || req.method === "HEAD";
+    if (req.userId != null && !edition.participated && !safeMethod) {
       throw new ForbiddenError("You did not take part in this edition", { edition: requested });
     }
   }

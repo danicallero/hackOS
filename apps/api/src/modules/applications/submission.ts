@@ -52,7 +52,7 @@ export async function saveDraft(
     if (!userRows[0]) throw new NotFoundError("User not found");
     const app = await requireApplication(client, applicationId);
     const currentForm = await ensureApplicationFormVersion(client, app);
-    const invited = await isInvitedParticipant(client, userId);
+    const invited = await isInvitedParticipant(client, userId, app.event_key);
 
     const { rows } = await client.query(
       `SELECT * FROM application_responses WHERE user_id = $1 AND application_id = $2 FOR UPDATE`,
@@ -195,7 +195,7 @@ export async function submitResponse(
     );
     const existing = rows[0] as ResponseRow | undefined;
     if (!existing) throw new NotFoundError("Draft not found — save a draft first");
-    const invited = await isInvitedParticipant(client, userId);
+    const invited = await isInvitedParticipant(client, userId, app.event_key);
     if (existing.status !== "draft") {
       throw new ConflictError("This application has already been submitted", {
         status: existing.status,

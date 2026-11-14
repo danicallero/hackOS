@@ -1,7 +1,9 @@
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { TRIGGER_EVENTS } from "@hackos/shared/role-grant-triggers";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit, auditMany } from "../../lib/audit.js";
+import { type AuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { isUniqueViolation } from "../../lib/db-errors.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import {
@@ -139,7 +141,10 @@ function withDescriptionMirror<
 }
 
 export async function getEnterprise(id: number) {
-  const { rows } = await pool.query(`SELECT ${COLUMNS} FROM enterprises WHERE id = $1`, [id]);
+  const { rows } = await pool.query(
+    `SELECT ${COLUMNS} FROM enterprises WHERE id = $1 AND event_key = current_edition()`,
+    [id],
+  );
   if (!rows[0]) throw new NotFoundError("Enterprise not found", { id });
   return rows[0];
 }
@@ -148,17 +153,37 @@ const SUMMARY_MAX = 240;
 
 /**
  * A company's page (H44, H45): what signed-in attendees see when they open it.
- * Staff see any enterprise; everyone else only a visible one, 404 otherwise so a
- * hidden company cannot be probed. Challenges count once revealed (H45), the
+ * Sponsor administrators (SPONSORS_MANAGE) see any enterprise; everyone else only a visible one, 404 otherwise so a hidden company
+ * cannot be probed. Holding some unrelated capability (a scanner volunteer) does
+ * not reveal hidden companies, hidden challenges (those need SPONSORS_MANAGE or
+ * CHALLENGES_MANAGE) or draft schedule items (those need SCHEDULE_READ or
+ * SCHEDULE_MANAGE). Challenges count once revealed (H45), the
  * activities are the caller's own schedule feed (audiences, H59) narrowed to the
  * ones linked to the company or spoken at by one of its members. A person's
  * photo is linked only while they share it on their public profile (#934).
+ * The company is addressed by its own id, whichever edition it belongs to
+ * (shared links keep working, docs/multi-edition-plan.md §4).
  */
 export async function getEnterpriseProfile(
   enterpriseId: number,
   viewerId: number,
   caller: CallerScheduleAudience,
+  context: AuthorizationContext,
 ) {
+  const [canManage, canManageChallenges, canReadSchedule] = await Promise.all([
+    userHasCapability(context, CAPABILITIES.SPONSORS_MANAGE),
+    userHasCapability(context, CAPABILITIES.CHALLENGES_MANAGE),
+    userHasCapability(context, CAPABILITIES.SCHEDULE_READ),
+  ]);
+  const seesHiddenChallenges = canManage || canManageChallenges;
+  // `caller.isStaff` means "holds any capability" (H59 feed); here it only
+  // widens the schedule when the capability is a schedule one.
+  const scheduleCaller: CallerScheduleAudience =
+    caller.isStaff &&
+    !canReadSchedule &&
+    !(await userHasCapability(context, CAPABILITIES.SCHEDULE_MANAGE))
+      ? { isStaff: false, audiences: new Set(["participant"]) }
+      : caller;
   const { rows } = await pool.query(
     `SELECT e.id, e.name, e.website, e.logo_url,
             COALESCE(e.logo_negative_url, e.logo_url) AS logo_negative_url, e.description,
@@ -166,11 +191,11 @@ export async function getEnterpriseProfile(
        FROM enterprises e
       WHERE e.id = $1
         AND ($2::boolean OR (e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))`,
-    [enterpriseId, caller.isStaff],
+    [enterpriseId, canManage],
   );
   const enterprise = rows[0];
   if (!enterprise) throw new NotFoundError("Enterprise not found", { id: enterpriseId });
-  if (caller.isStaff) await assertEnterpriseScope(pool, viewerId, enterpriseId);
+  if (canManage) await assertEnterpriseScope(pool, viewerId, enterpriseId);
 
   const [{ rows: people }, { rows: challengeRows }, activities] = await Promise.all([
     pool.query(
@@ -195,9 +220,9 @@ export async function getEnterpriseProfile(
         WHERE sp.enterprise_id = $1
           AND ($2::boolean OR (c.visibility = 'visible' AND c.is_test_account = false))
         ORDER BY c.title, c.id`,
-      [enterpriseId, caller.isStaff],
+      [enterpriseId, seesHiddenChallenges],
     ),
-    listScheduleForAudiences(caller, { enterpriseId }),
+    listScheduleForAudiences(scheduleCaller, { enterpriseId }),
   ]);
   return {
     id: Number(enterprise.id),
@@ -322,7 +347,8 @@ export async function updateEnterprise(
   try {
     return await withTransaction(async (client) => {
       const { rows } = await client.query(
-        `UPDATE enterprises SET ${sets.join(", ")} WHERE id = $${i} RETURNING ${COLUMNS}`,
+        `UPDATE enterprises SET ${sets.join(", ")}
+          WHERE id = $${i} AND event_key = current_edition() RETURNING ${COLUMNS}`,
         values,
       );
       if (!rows[0]) throw new NotFoundError("Enterprise not found", { id });
@@ -356,7 +382,7 @@ export async function setEnterprisesVisibility(
   if (ids.length === 0) return { updated: [] as number[] };
   return withTransaction(async (client) => {
     const existing = await client.query<{ id: number }>(
-      `SELECT id FROM enterprises WHERE id = ANY($1::int[])`,
+      `SELECT id FROM enterprises WHERE id = ANY($1::int[]) AND event_key = current_edition()`,
       [ids],
     );
     await assertEnterpriseScopes(
@@ -368,7 +394,7 @@ export async function setEnterprisesVisibility(
     const { rows } = await client.query(
       `UPDATE enterprises
           SET visibility = $2
-        WHERE id = ANY($1::int[])
+        WHERE id = ANY($1::int[]) AND event_key = current_edition()
         RETURNING id`,
       [ids, visibility],
     );
@@ -399,7 +425,8 @@ export async function reorderEnterprises(
 ) {
   return withTransaction(async (client) => {
     const { rows } = await client.query<{ id: number; priority: number | null }>(
-      `SELECT id, priority FROM enterprises WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE`,
+      `SELECT id, priority FROM enterprises
+        WHERE id = ANY($1::int[]) AND event_key = current_edition() ORDER BY id FOR UPDATE`,
       [ids],
     );
     if (rows.length !== new Set(ids).size) throw new NotFoundError("Enterprise not found", { ids });
@@ -439,7 +466,8 @@ export async function setEnterpriseLogo(
   return withTransaction(async (client) => {
     await assertEnterpriseScope(client, actorId, id);
     const { rows } = await client.query(
-      `UPDATE enterprises SET ${sets} WHERE id = $2 RETURNING ${COLUMNS}`,
+      `UPDATE enterprises SET ${sets}
+        WHERE id = $2 AND event_key = current_edition() RETURNING ${COLUMNS}`,
       [logoUrl, id],
     );
     if (!rows[0]) throw new NotFoundError("Enterprise not found", { id });
@@ -586,6 +614,7 @@ export async function removeEnterpriseMember(
   actorId: number | null,
 ): Promise<void> {
   await assertEnterpriseScope(pool, actorId, enterpriseId);
+  await getEnterprise(enterpriseId); // 404 for another edition's enterprise
   if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const ticketAccess = await withTransaction(async (client) => {
     await lockRoleGraph(client);
@@ -759,6 +788,7 @@ export async function removeEnterpriseJudge(
   actorId: number | null,
 ): Promise<void> {
   await assertEnterpriseScope(pool, actorId, enterpriseId);
+  await getEnterprise(enterpriseId); // 404 for another edition's enterprise
   if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const ticketAccess = await withTransaction(async (client) => {
     await lockRoleGraph(client);

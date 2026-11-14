@@ -2,6 +2,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("../hooks/use-event-source", () => ({ useEventSource: vi.fn() }));
+
 vi.mock("./api", () => ({
   ApiError: class ApiError extends Error {
     status: number;
@@ -14,10 +16,13 @@ vi.mock("./api", () => ({
   api: { get: vi.fn() },
 }));
 
-import { api } from "./api";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { useEventSource } from "../hooks/use-event-source";
+import { ApiError, api } from "./api";
 import { SessionProvider, useSessionContext } from "./session";
 import { notifySignOut } from "./sign-out-events";
 import type { Me } from "./types";
+import { getViewedEdition, resetViewedEdition, setViewedEdition } from "./viewed-edition";
 
 const profile = {
   id: 7,
@@ -141,5 +146,82 @@ describe("web session refresh", () => {
     });
     expect(container.querySelector('[data-testid="status"]')?.textContent).toBe("unauthenticated");
     expect(container.querySelector('[data-testid="owner"]')?.textContent).toBe("none");
+  });
+
+  it.each([
+    403, 404,
+  ])("drops a remembered edition that answers %i and retries /api/me once", async (status) => {
+    setViewedEdition("old-edition");
+    vi.mocked(api.get)
+      .mockReset()
+      .mockRejectedValueOnce(
+        new (ApiError as unknown as new (status: number, message: string) => Error)(status, "gone"),
+      )
+      .mockResolvedValueOnce(profile);
+
+    await act(async () => {
+      root.render(
+        <SessionProvider>
+          <Probe />
+        </SessionProvider>,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(api.get).toHaveBeenCalledTimes(2);
+    expect(getViewedEdition()).toBeNull();
+    expect(container.querySelector('[data-testid="status"]')?.textContent).toBe("authenticated");
+  });
+
+  it("does not retry a 403 when no edition is remembered", async () => {
+    resetViewedEdition();
+    vi.mocked(api.get)
+      .mockReset()
+      .mockRejectedValue(
+        new (ApiError as unknown as new (status: number, message: string) => Error)(
+          403,
+          "forbidden",
+        ),
+      );
+
+    await act(async () => {
+      root.render(
+        <SessionProvider>
+          <Probe />
+        </SessionProvider>,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(api.get).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('[data-testid="status"]')?.textContent).toBe("unauthenticated");
+  });
+
+  it("refreshes /api/me when an edition changes", async () => {
+    await act(async () => {
+      root.render(
+        <SessionProvider>
+          <Probe />
+        </SessionProvider>,
+      );
+      await Promise.resolve();
+    });
+    const call = vi
+      .mocked(useEventSource)
+      .mock.calls.filter(([scope]) => scope === domainScope(SSE_TOPICS.IDENTITY))
+      .at(-1);
+    expect(call?.[1]?.events).toEqual([EVENTS.EDITION_CHANGED]);
+    expect(call?.[1]?.enabled).toBe(true);
+
+    vi.useFakeTimers();
+    vi.mocked(api.get).mockClear();
+    act(() => call?.[1]?.onEvent?.({} as never));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    vi.useRealTimers();
+    expect(api.get).toHaveBeenCalledWith("/api/me");
   });
 });

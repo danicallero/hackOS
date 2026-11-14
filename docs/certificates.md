@@ -247,7 +247,10 @@ eligibility, hours, bulk issue, review roster, exports and the staff issued list
 act on the viewed edition (`current_edition()`), and issuing in a closed edition
 is rejected by the edition write guard. Verification by code or hash and the PDF
 work for any edition, closed ones included, and return `edition: { eventKey, name }`;
-closing never invalidates a certificate. `GET /api/me/certificates` and
+closing never invalidates a certificate. Staff revoke and the staff PDF
+(`POST /api/certificates/:id/revoke`, `GET /api/certificates/:id/pdf`) reach a
+certificate through the viewed edition only and answer 404 for another one; the
+owner download and public verification stay cross-edition. `GET /api/me/certificates` and
 `GET /api/users/:id/certificates` list certificates of all editions, each with
 its `edition` (eligibility and `types` describe the viewed edition). Policy and
 type settings are global to the current edition (`edition: "current"`).

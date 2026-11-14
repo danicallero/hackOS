@@ -51,7 +51,7 @@ async function manager(): Promise<number> {
 const titles = (body: { items: { title: string }[] }) => body.items.map((i) => i.title);
 
 describe("announcement editions", () => {
-  it("lists admin and public announcements per edition; by-id works across editions", async () => {
+  it("lists admin and public announcements per edition; by-id follows the viewed edition", async () => {
     await createEdition("e2");
     const admin = await manager();
     await pool.query(
@@ -71,12 +71,71 @@ describe("announcement editions", () => {
     expect(titles((await list("e2", "/api/announcements/public")).json())).toEqual(["Next"]);
 
     const { rows } = await pool.query("SELECT id FROM announcements WHERE title = 'Next'");
-    const byId = await app.inject({
-      method: "GET",
-      url: `/api/announcements/${rows[0].id}`,
-      headers: asUser(admin),
-    });
-    expect(byId.statusCode).toBe(200);
+    const byId = (edition?: string) =>
+      app.inject({
+        method: "GET",
+        url: `/api/announcements/${rows[0].id}`,
+        headers: { ...asUser(admin), ...(edition ? { "x-edition": edition } : {}) },
+      });
+    expect((await byId()).statusCode).toBe(404);
+    expect((await byId("e2")).statusCode).toBe(200);
+  });
+
+  it("answers 404 to an update or delete of another edition's announcement", async () => {
+    await createEdition("e2");
+    const admin = await manager();
+    const { rows } = await pool.query(
+      `INSERT INTO announcements (title, body, author_id, event_key)
+       VALUES ('Next', 'b', $1, 'e2') RETURNING id`,
+      [admin],
+    );
+    const id = rows[0].id;
+    const call = (method: "PUT" | "DELETE", edition?: string) =>
+      app.inject({
+        method,
+        url: `/api/announcements/${id}`,
+        headers: {
+          ...asUser(admin),
+          "idempotency-key": crypto.randomUUID(),
+          ...(edition ? { "x-edition": edition } : {}),
+        },
+        payload: method === "PUT" ? { title: "Changed" } : undefined,
+      });
+    expect((await call("PUT")).statusCode).toBe(404);
+    expect((await call("DELETE")).statusCode).toBe(404);
+    expect((await pool.query("SELECT title FROM announcements WHERE id = $1", [id])).rows).toEqual([
+      { title: "Next" },
+    ]);
+    expect((await call("PUT", "e2")).statusCode).toBe(200);
+    expect((await call("DELETE", "e2")).statusCode).toBeLessThan(300);
+  });
+
+  it("fans out only announcements of the active edition", async () => {
+    await createEdition("e2");
+    const admin = await manager();
+    const recipient = await createUser();
+    const create = (edition?: string) =>
+      app.inject({
+        method: "POST",
+        url: "/api/announcements",
+        headers: {
+          ...asUser(admin),
+          "idempotency-key": crypto.randomUUID(),
+          ...(edition ? { "x-edition": edition } : {}),
+        },
+        payload: { title: "T", body: "B", notifyUsers: true, channels: ["in_app"] },
+      });
+    const other = await create("e2");
+    expect(other.statusCode).toBe(201);
+    expect(other.json().fanned_out_at).toBeNull();
+    const outbox = () =>
+      pool.query("SELECT user_id FROM notification_outbox WHERE user_id = $1", [recipient]);
+    expect((await outbox()).rowCount).toBe(0);
+
+    const active = await create();
+    expect(active.statusCode).toBe(201);
+    expect(active.json().fanned_out_at).not.toBeNull();
+    expect((await outbox()).rowCount).toBeGreaterThan(0);
   });
 
   it("stores new announcements in the viewed edition and rejects a closed one", async () => {

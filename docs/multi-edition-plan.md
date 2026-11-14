@@ -167,9 +167,11 @@ visible no cambia hasta la Fase 8.
 - **La edición vista viaja como cabecera por petición** (`X-Edition: <event_key>`),
   no como campo de la sesión. Sin cabecera, la API usa la edición activa. Los
   clientes guardan la elección en su estado local y la reinician a la última
-  edición activa al iniciar sesión o abrir la app. La API comprueba que el
-  usuario tiene un rol o una participación en esa edición y calcula los
-  permisos con los roles de esa edición.
+  edición activa al iniciar sesión o abrir la app. Para leer (GET/HEAD) una
+  edición publicada (no borrador) basta con la cabecera, con o sin sesión: es
+  información pública y sin rol allí no hay permisos. Para escribir, la API
+  comprueba que el usuario tiene un rol o una participación en esa edición.
+  Los permisos se calculan con los roles de esa edición.
 - Los recursos por id (`/gallery/:id`, `/companies/:id`, un proyecto, un reto)
   derivan la edición de su propia fila, no de la cabecera, así que un enlace
   compartido funciona igual para cualquiera con acceso y no depende de la

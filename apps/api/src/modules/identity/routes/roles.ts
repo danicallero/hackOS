@@ -75,6 +75,15 @@ const manageAccess = routeAccess({
   kind: "capability",
   capability: CAPABILITIES.PERMISSIONS_MANAGE,
 });
+// The role catalogue (roles, role_capabilities, grant rules) is global, so its
+// mutations resolve authority in the current edition only: a role held in a
+// past edition must not grant itself rights over roles the current one uses
+// (H8, docs/multi-edition-plan.md). User assignment stays edition-scoped.
+const manageCatalogueAccess = routeAccess({
+  kind: "capability",
+  capability: CAPABILITIES.PERMISSIONS_MANAGE,
+  edition: "current",
+});
 const roleUserParams = z.object({
   roleId: z.coerce.number().int(),
   userId: z.coerce.number().int(),
@@ -310,7 +319,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles",
     {
       preHandler: manageWithIdempotency,
-      config: manageAccess,
+      config: manageCatalogueAccess,
       schema: {
         summary: "Create a role",
         description:
@@ -387,7 +396,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId",
     {
       preHandler: manageWithIdempotency,
-      config: manageAccess,
+      config: manageCatalogueAccess,
       schema: {
         summary: "Rename or toggle visibility of a role",
         description:
@@ -445,7 +454,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/position",
     {
       preHandler: manageWithIdempotency,
-      config: manageAccess,
+      config: manageCatalogueAccess,
       schema: {
         summary: "Reorder a role",
         description:
@@ -497,7 +506,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/capabilities",
     {
       preHandler: manageWithIdempotency,
-      config: manageAccess,
+      config: manageCatalogueAccess,
       schema: {
         summary: "Replace a role's tri-state capability grants",
         description:
@@ -561,7 +570,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId",
     {
       preHandler: manage,
-      config: manageAccess,
+      config: manageCatalogueAccess,
       schema: {
         summary: "Soft-delete a role",
         description:
@@ -603,7 +612,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/restore",
     {
       preHandler: manage,
-      config: manageAccess,
+      config: manageCatalogueAccess,
       schema: {
         summary: "Restore a soft-deleted role",
         description:
@@ -706,7 +715,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/reset-to-default",
     {
       preHandler: manageWithIdempotency,
-      config: manageAccess,
+      config: manageCatalogueAccess,
       schema: {
         summary: "Reset a seeded role's capabilities to its seed-time snapshot",
         description:

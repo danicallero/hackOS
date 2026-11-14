@@ -25,11 +25,15 @@ export async function lockResponse(
   responseId: number,
   actorId?: number,
 ): Promise<ResponseRow> {
+  // A response of another edition than the viewed one is "not found" (H28,
+  // docs/multi-edition-plan.md); token flows do not come through here.
   // Resolve the owner without locking the response first. Account removal
   // locks users before their application rows; every staff transition must do
   // the same or it can race the lifecycle gate (and deadlock with the scrub).
   const { rows: targetRows } = await client.query(
-    `SELECT user_id FROM application_responses WHERE id = $1`,
+    `SELECT r.user_id FROM application_responses r
+       JOIN applications a ON a.id = r.application_id
+      WHERE r.id = $1 AND a.event_key = current_edition()`,
     [responseId],
   );
   if (!targetRows[0]) throw new NotFoundError("Response not found");

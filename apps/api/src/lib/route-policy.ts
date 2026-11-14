@@ -251,7 +251,14 @@ export function registerRoutePolicyInfrastructure(app: FastifyInstance): void {
     const policy = request.routeOptions.config?.routeAccessPolicy;
     if (!policy) return;
     // The single closed-edition write guard: one place for every mutation.
-    if (MUTATION_METHODS.has(request.method.toUpperCase()) && policy.edition !== "global") {
+    // This hook runs before the route's own requireAuth/requireCapability, so an
+    // anonymous caller is left to those (401, not a misleading 409); the
+    // database guard (HKE01) still backs any anonymous write that gets through.
+    if (
+      request.userId != null &&
+      MUTATION_METHODS.has(request.method.toUpperCase()) &&
+      policy.edition !== "global"
+    ) {
       if (policy.edition === "current" && requestEditionOverride() !== null) {
         throw new ConflictError("Settings can only be changed in the current edition");
       }

@@ -14,6 +14,7 @@ import { routeAccessOption as routeAccess } from "../../lib/route-policy.js";
 import { presenceTimeline } from "../logistics/presence.js";
 import {
   approveCertificateHours,
+  assertCertificateInViewedEdition,
   availableCertificateTypes,
   certificateIdByCode,
   certificateOwner,
@@ -422,7 +423,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
         body: z.object({ reason: z.string().trim().min(1).max(500) }),
         summary: "Revoke a certificate",
         description:
-          "Revokes a live certificate with a reason. The public verification page then reports it as revoked and the PDF can no longer be downloaded. Audited as `certificate.revoke` (#1083, H53).",
+          "Revokes a live certificate with a reason. The public verification page then reports it as revoked and the PDF can no longer be downloaded. A certificate of another edition than the viewed one answers 404. Audited as `certificate.revoke` (#1083, H53).",
         response: { 200: certificateSchema },
       },
     },
@@ -438,10 +439,13 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
         params: idParams,
         summary: "Download anyone's certificate",
         description:
-          "Staff download of a certificate's single PDF copy, the same file the recipient and the public viewer get. Generated on first use. A revoked certificate answers 409 (#1083).",
+          "Staff download of a certificate's single PDF copy, the same file the recipient and the public viewer get. Generated on first use. A revoked certificate answers 409; a certificate of another edition than the viewed one answers 404 (#1083).",
       },
     },
-    async (req, reply) => sendPdf(reply, req.params.id),
+    async (req, reply) => {
+      await assertCertificateInViewedEdition(req.params.id);
+      return sendPdf(reply, req.params.id);
+    },
   );
 
   r.get(

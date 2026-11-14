@@ -110,14 +110,18 @@ const PERIOD_MS: Record<Exclude<Period, "" | "custom">, number> = {
   "30d": 30 * 24 * 60 * 60 * 1000,
 };
 
+/** Preset start measured from now, rounded to the minute so the query key stays stable. */
+function presetStart(period: Exclude<Period, "" | "custom">) {
+  const minute = Math.floor(Date.now() / 60_000) * 60_000;
+  return new Date(minute - PERIOD_MS[period]).toISOString();
+}
+
 interface FilterState {
   actorQuery: string;
   action: string;
   entityType: string;
   entityId: string;
   period: Period;
-  /** Fixed when a preset is picked, so the query key stays stable between renders. */
-  periodStart: string;
   /** datetime-local wall-clock values for the custom period. */
   dateFrom: string;
   dateTo: string;
@@ -129,7 +133,6 @@ const EMPTY_FILTERS: FilterState = {
   entityType: "",
   entityId: "",
   period: "",
-  periodStart: "",
   dateFrom: "",
   dateTo: "",
 };
@@ -197,7 +200,7 @@ export default function AuditPage() {
     debounced.period === "custom"
       ? fromDatetimeLocal(debounced.dateFrom)
       : debounced.period
-        ? debounced.periodStart
+        ? presetStart(debounced.period)
         : null;
   const dateTo = debounced.period === "custom" ? fromDatetimeLocal(debounced.dateTo) : null;
 
@@ -297,10 +300,6 @@ export default function AuditPage() {
         setFilters((f) => ({
           ...f,
           period,
-          periodStart:
-            period && period !== "custom"
-              ? new Date(Date.now() - PERIOD_MS[period]).toISOString()
-              : "",
           dateFrom: period === "custom" ? f.dateFrom : "",
           dateTo: period === "custom" ? f.dateTo : "",
         }));

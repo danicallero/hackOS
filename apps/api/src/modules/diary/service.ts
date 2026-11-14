@@ -395,7 +395,7 @@ export async function updateEntry(owner: number, entryId: number, input: UpdateE
       `UPDATE diary_entries
           SET starred = COALESCE($3, starred),
               note = CASE WHEN $4 THEN $5 ELSE note END
-        WHERE id = $1 AND owner_id = $2
+        WHERE id = $1 AND owner_id = $2 AND event_key = current_edition()
         RETURNING ${ENTRY_COLUMNS}`,
       [entryId, owner, input.starred ?? null, input.note !== undefined, input.note ?? null],
     );
@@ -409,7 +409,8 @@ export async function removeEntry(owner: number, entryId: number): Promise<void>
   await withTransaction(async (db) => {
     await lockOwner(db, owner);
     const { rowCount } = await db.query(
-      `DELETE FROM diary_entries WHERE id = $1 AND owner_id = $2`,
+      `DELETE FROM diary_entries
+        WHERE id = $1 AND owner_id = $2 AND event_key = current_edition()`,
       [entryId, owner],
     );
     if (!rowCount) throw new NotFoundError("Diary entry not found");

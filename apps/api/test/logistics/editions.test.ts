@@ -348,3 +348,52 @@ describe("schedule per edition (H48)", () => {
     }
   });
 });
+
+describe("schedule companies and speakers' companies per edition (H48, H44)", () => {
+  it("links only the item's own edition's companies", async () => {
+    await createEdition("e2");
+    const pool = await db();
+    const staff = await staffIn([CAPABILITIES.SCHEDULE_MANAGE], ["e2"]);
+    const enterprise = async (name: string, eventKey: string) =>
+      (
+        await pool.query(`INSERT INTO enterprises (name, event_key) VALUES ($1, $2) RETURNING id`, [
+          name,
+          eventKey,
+        ])
+      ).rows[0].id as number;
+    const current = await enterprise("Acme now", "default");
+    const previous = await enterprise("Acme before", "e2");
+    const speaker = await createUser({ name: "Ada" });
+    for (const id of [current, previous]) {
+      await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+        id,
+        speaker,
+      ]);
+    }
+    const app = await getApp();
+    const window = { startsAt: "2030-05-01T10:00:00.000Z", endsAt: "2030-05-01T11:00:00.000Z" };
+    const write = (edition: string | undefined, enterpriseIds: number[]) =>
+      app.inject({
+        method: "POST",
+        url: "/api/schedule",
+        headers: { ...asUser(staff), ...ed(edition), "idempotency-key": crypto.randomUUID() },
+        payload: { title: "Talk", ...window, speakerUserIds: [speaker], enterpriseIds },
+      });
+
+    // A company of another edition is an unknown company, and nothing is written.
+    const foreign = await write(undefined, [previous]);
+    expect(foreign.statusCode).toBe(400);
+    expect((await pool.query(`SELECT 1 FROM schedule`)).rowCount).toBe(0);
+
+    const own = await write(undefined, [current]);
+    expect(own.statusCode).toBe(201);
+    // The speaker's companies are those of the item's edition only.
+    expect(own.json().speakers[0].enterprises).toEqual([{ id: current, name: "Acme now" }]);
+
+    const previousItem = await write("e2", [previous]);
+    expect(previousItem.statusCode).toBe(201);
+    expect(previousItem.json().speakers[0].enterprises).toEqual([
+      { id: previous, name: "Acme before" },
+    ]);
+  });
+});

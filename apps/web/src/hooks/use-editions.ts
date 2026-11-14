@@ -1,19 +1,22 @@
 "use client";
 
 import type { EditionSummary, MyEditionsResponse } from "@hackos/shared/editions";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { useSyncExternalStore } from "react";
 import { api } from "@/lib/api";
 import { useMe } from "@/lib/session";
 import { getViewedEdition, subscribeViewedEdition } from "@/lib/viewed-edition";
-import { useServerResource } from "./use-server-resource";
+import { useLiveQuery } from "./use-live-query";
 
 /** Editions the signed-in user can view, newest first, and the current one's key. */
 export function useEditions(): { editions: EditionSummary[]; current: string | null } {
   const me = useMe();
-  const { data } = useServerResource<MyEditionsResponse>(
-    ["me", "editions"],
+  // An edition closed, reopened or activated changes what the list offers.
+  const { data } = useLiveQuery<MyEditionsResponse>(
     (signal) => api.get<MyEditionsResponse>("/api/me/editions", { signal }),
-    { enabled: !!me },
+    domainScope(SSE_TOPICS.IDENTITY),
+    [EVENTS.EDITION_CHANGED],
+    { enabled: !!me, resourceKey: ["me", "editions"] },
   );
   return { editions: data?.editions ?? [], current: data?.current ?? null };
 }

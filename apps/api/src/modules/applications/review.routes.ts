@@ -12,6 +12,7 @@ import {
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { likeContains } from "../../lib/like.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
+import { requireApplication } from "./forms.js";
 import {
   batchDecideSchema,
   batchIdsSchema,
@@ -92,6 +93,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
         getRequestAuthorizationContext(req),
         CAPABILITIES.APPLICATIONS_MANAGE,
       );
+      await requireApplication(pool, req.params.id);
       const params: unknown[] = [req.params.id];
       let reviewFilter = "ar.author_id IS NOT NULL";
       if (!canViewAllReviews) {

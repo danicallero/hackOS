@@ -1,4 +1,5 @@
 import type { EditionSummary, MyEditionsResponse } from "@hackos/shared/editions";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import {
   createContext,
   type ReactNode,
@@ -21,7 +22,11 @@ import {
 } from "./edition";
 import { setEventTimeZone } from "./event-time";
 import { clearCachedValues } from "./offline-cache";
-import { setServerEventIdentity } from "./server-events";
+import {
+  setServerEventIdentity,
+  startDomainEventStream,
+  subscribeToServerEvent,
+} from "./server-events";
 import { registerSignOutListener } from "./sign-out-events";
 import type { Me } from "./types";
 import { useMe } from "./use-me";
@@ -62,37 +67,65 @@ export function MeProvider({ children }: { children: ReactNode }) {
   const [editions, setEditions] = useState<EditionSummary[]>([]);
   const meId = base.me?.id ?? null;
   const online = base.me !== null && !base.offline;
+  const { refetch } = base;
+  const loadEditions = useCallback(
+    () =>
+      apiFetch<MyEditionsResponse>("/api/me/editions")
+        .then((response) => response.editions)
+        .catch(() => null),
+    [],
+  );
   // biome-ignore lint/correctness/useExhaustiveDependencies: epoch re-reads the list after a switch.
   useEffect(() => {
     if (!online) return;
     let active = true;
-    apiFetch<MyEditionsResponse>("/api/me/editions")
-      .then((response) => {
-        if (active) setEditions(response.editions);
-      })
-      .catch(() => {
-        // The selector simply stays hidden; every screen still works.
-      });
+    // On failure the selector simply stays hidden; every screen still works.
+    void loadEditions().then((list) => {
+      if (active && list) setEditions(list);
+    });
     return () => {
       active = false;
     };
-  }, [online, meId, epoch]);
-  const { refetch } = base;
+  }, [online, meId, epoch, loadEditions]);
+  // An edition opened, closed or reopened changes the session (capabilities,
+  // read-only state) and the list: refresh both without a reload.
+  useEffect(() => {
+    if (!online) return;
+    let active = true;
+    const reload = () => {
+      void refetch();
+      void loadEditions().then((list) => {
+        if (active && list) setEditions(list);
+      });
+    };
+    const stopStream = startDomainEventStream(SSE_TOPICS.IDENTITY, { onResync: reload });
+    const stopEvent = subscribeToServerEvent(
+      EVENTS.EDITION_CHANGED,
+      reload,
+      domainScope(SSE_TOPICS.IDENTITY),
+    );
+    return () => {
+      active = false;
+      stopEvent();
+      stopStream();
+    };
+  }, [online, refetch, loadEditions]);
   const switchEdition = useCallback(
     async (eventKey: string | null) => {
       const previous = getViewedEdition();
       if (previous === eventKey) return;
       selectViewedEdition(eventKey);
       try {
-        // Verify the target edition is reachable before dropping anything.
-        await apiFetch<MyEditionsResponse>("/api/me/editions");
+        // /api/me carries the edition header, so an unknown or inaccessible key
+        // fails here; /api/me/editions is edition-global and would not.
+        await apiFetch<Me>("/api/me");
+        // Cached reads belong to the previous edition.
+        if (meId !== null) await clearCachedValues(`user:${meId}:`);
+        await refetch();
       } catch (error) {
         selectViewedEdition(previous);
         throw error;
       }
-      // Cached reads belong to the previous edition.
-      if (meId !== null) await clearCachedValues(`user:${meId}:`);
-      await refetch();
       commitEditionChange();
     },
     [meId, refetch],

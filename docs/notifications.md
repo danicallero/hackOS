@@ -581,11 +581,14 @@ the localized category. Subject/title/body are not repeated as technical detail 
 
 ## Editions
 
-Announcements carry `event_key`: the admin list, the public feed, the
+Announcements carry `event_key`: the admin list, by-id read, update and delete
+(404 for another edition's announcement), the public feed, the
 scheduled-visibility publisher and role-based audiences use the viewed edition
 (role holders are those of the announcement's edition plus global roles). The
 inbox (`notification_outbox`), notification preferences, push tokens and local
 reminders are global and stay writable while an edition is closed. Automation
 settings are current-edition settings. The announcement publisher, schedule
 reminders, draft-application reminders and the pre-event email reminder do
-nothing while the current edition is closed.
+nothing while the current edition is closed. An announcement created while
+viewing another open edition is stored there but not fanned out: only the active
+edition's announcements notify (`fanOutIfVisibleNow` and the publisher).

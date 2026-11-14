@@ -1,6 +1,7 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { describe, expect, it } from "vitest";
+import { pool } from "../../src/db/pool.js";
 import { asUser, createUser, createUserWithCapabilities, useTestApp } from "../helpers.js";
 
 /**
@@ -491,5 +492,53 @@ describe("event config (H45/H47)", () => {
     const pub = await a.inject({ method: "GET", url: "/api/public/event" });
     expect(new Date(pub.json().judgingStartsAt).toISOString()).toBe(start);
     expect(new Date(pub.json().judgingEndsAt).toISOString()).toBe(end);
+  });
+
+  it("H53: a key change applies the same request's edits to the target edition, not the one it leaves", async () => {
+    const a = await getApp();
+    await pool.query(
+      "INSERT INTO editions (event_key, name, status) VALUES ('e2026', 'Old name', 'active')",
+    );
+    await pool.query(
+      "INSERT INTO editions (event_key, name, status) VALUES ('e2027', 'e2027', 'draft')",
+    );
+    await pool.query(
+      `INSERT INTO event_config (id, event_key, name, hacking_starts_at, hacking_ends_at)
+       VALUES (1, 'e2026', 'Old name', '2026-03-01T10:00:00Z', '2026-03-02T10:00:00Z')`,
+    );
+    const manager = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
+
+    const res = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: { ...asUser(manager), "idempotency-key": crypto.randomUUID() },
+      payload: {
+        eventKey: "e2027",
+        name: "New name",
+        hackingStartsAt: "2027-03-01T10:00:00Z",
+        hackingEndsAt: "2027-03-02T10:00:00Z",
+        projectDraftsOpenAt: "2027-02-01T10:00:00Z",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const live = await pool.query(
+      "SELECT event_key, name, hacking_starts_at, project_drafts_open_at FROM event_config WHERE id = 1",
+    );
+    expect(live.rows[0]).toMatchObject({ event_key: "e2027", name: "New name" });
+    expect(live.rows[0].hacking_starts_at.toISOString()).toBe("2027-03-01T10:00:00.000Z");
+    expect(live.rows[0].project_drafts_open_at.toISOString()).toBe("2027-02-01T10:00:00.000Z");
+    const editions = await pool.query(
+      "SELECT event_key, name, settings_snapshot FROM editions WHERE event_key <> 'default' ORDER BY event_key",
+    );
+    expect(editions.rows.map((r) => [r.event_key, r.name])).toEqual([
+      ["e2026", "Old name"],
+      ["e2027", "New name"],
+    ]);
+    // The old edition keeps its own windows and name in its snapshot.
+    expect(editions.rows[0].settings_snapshot).toMatchObject({
+      name: "Old name",
+      hacking_starts_at: "2026-03-01T10:00:00+00:00",
+    });
   });
 });

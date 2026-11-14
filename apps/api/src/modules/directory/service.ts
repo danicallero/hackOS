@@ -317,11 +317,13 @@ async function sharedOnPublicSurface(
         AND (EXISTS (
          SELECT 1 FROM schedule_speakers ss JOIN schedule s ON s.id = ss.schedule_id
           WHERE ss.user_id = u.id AND s.visibility = 'shown'
+            AND s.event_key = current_edition()
             AND (s.publish_at IS NULL OR s.publish_at <= now())
             AND 'participant' = ANY (s.audiences))
        OR EXISTS (
          SELECT 1 FROM sponsors sp JOIN enterprises e ON e.id = sp.enterprise_id
-          WHERE sp.user_id = u.id AND e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))`,
+          WHERE sp.user_id = u.id AND e.visibility = 'visible' AND e.event_key = current_edition()
+            AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))`,
     [userId],
   );
   return (rowCount ?? 0) > 0;

@@ -128,4 +128,42 @@ describe("help desk editions", () => {
     const read = await call("GET", "/api/helpdesk/schedule", manager, { edition: "e2" });
     expect(read.statusCode).toBe(200);
   });
+
+  it("answers 404 for a request of another edition and serves it from its own (H64, H66)", async () => {
+    await createEdition("e2");
+    const requester = await userIn([CAPABILITIES.HELPDESK_REQUEST]);
+    const helper = await userIn([CAPABILITIES.HELPDESK_OFFER]);
+    const { rows } = await pool.query(
+      `INSERT INTO help_requests (requester_id, description, location, other, routing, status, event_key)
+       VALUES ($1, 'there', 'B2', true, 'none', 'open', 'e2') RETURNING id`,
+      [requester],
+    );
+    const id = rows[0].id;
+    await pool.query(
+      "INSERT INTO helper_profiles (user_id, published, published_at, event_key) VALUES ($1, true, now(), 'default')",
+      [helper],
+    );
+
+    // Viewing the current edition, another edition's request does not exist.
+    expect((await call("GET", `/api/helpdesk/requests/${id}`, requester)).statusCode).toBe(404);
+    for (const action of ["cancel", "claim", "release", "resolve"]) {
+      const who = action === "cancel" ? requester : helper;
+      const res = await call("POST", `/api/helpdesk/requests/${id}/${action}`, who, {
+        payload: action === "claim" ? { mode: "on_my_way" } : {},
+      });
+      expect(res.statusCode, action).toBe(404);
+    }
+    expect(
+      (await pool.query("SELECT status FROM help_requests WHERE id = $1", [id])).rows[0].status,
+    ).toBe("open");
+
+    // The request's own edition still serves and cancels it.
+    const own = await call("GET", `/api/helpdesk/requests/${id}`, requester, { edition: "e2" });
+    expect(own.statusCode).toBe(200);
+    const cancel = await call("POST", `/api/helpdesk/requests/${id}/cancel`, requester, {
+      edition: "e2",
+      payload: {},
+    });
+    expect(cancel.statusCode).toBe(200);
+  });
 });
