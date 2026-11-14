@@ -27,7 +27,7 @@ The header's gear menu holds Coverage (`HELPDESK_COVERAGE`) and My support profi
 `HelpDeskSectionHeader` (title plus sibling links) as Home and Projects do; there
 is no layout. The helper record renders the people reader's `PersonProfile`
 (`people/[userId]/person-detail.tsx`) from the API's `profile`, followed by the
-planned availability and any challenge restrictions. Its role capsule sits in the profile header;
+planned availability and any challenge restrictions. Its role capsule sits at the right edge of the back-navigation row;
 company name and logo have their own row immediately before knowledge. Presence
 is only a green dot at the avatar edge when inside (with a screen-reader label),
 never an outside placeholder. Knowledge falls back to the card's topics. Publishing

@@ -67,7 +67,11 @@ export default function HelperPage() {
       present={helper.present}
       company={
         helper.affiliation
-          ? { name: helper.affiliation, logoUrl: helper.affiliationLogoUrl }
+          ? {
+              name: helper.affiliation,
+              logoUrl: helper.affiliationLogoUrl,
+              logoNegativeUrl: helper.affiliationLogoNegativeUrl,
+            }
           : undefined
       }
     >

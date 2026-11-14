@@ -372,6 +372,25 @@ describe("H63 browse helpers", () => {
 });
 
 describe("H63 helper profile detail", () => {
+  it("returns both company logo variants", async () => {
+    const viewer = await createUserWithCapabilities(participantCaps);
+    const h = await helper([], { scheduled: false, present: false });
+    const { rows } = await pool.query(
+      `INSERT INTO enterprises (name, logo_url, logo_negative_url) VALUES ('GPUL', $1, $2) RETURNING id`,
+      ["https://example.com/logo.png", "https://example.com/logo-dark.png"],
+    );
+    await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+      rows[0].id,
+      h,
+    ]);
+    const res = await call("GET", `/api/helpdesk/helpers/${h}`, viewer);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      affiliationLogoUrl: "https://example.com/logo.png",
+      affiliationLogoNegativeUrl: "https://example.com/logo-dark.png",
+    });
+  });
+
   it("returns the public-profile entry honouring switches, without scan consent or diary rows", async () => {
     const p = await createUserWithCapabilities(participantCaps);
     const t = await topic("Swift", p);

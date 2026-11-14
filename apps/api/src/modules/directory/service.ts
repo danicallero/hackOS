@@ -46,7 +46,12 @@ export interface DirectoryEntry {
   /** H48: shown schedule items the person speaks at, by start time. */
   activities: DirectoryActivity[];
   /** Every visible company the person represents, oldest membership first. */
-  enterprises: { id: number; name: string; logoUrl: string | null }[];
+  enterprises: {
+    id: number;
+    name: string;
+    logoUrl: string | null;
+    logoNegativeUrl: string | null;
+  }[];
 }
 
 export interface DirectoryActivity {
@@ -224,12 +229,12 @@ function entrySql(profiles: string, accountLinks = true): string {
               AND 'participant' = ANY (s.audiences)
          ), '[]'::jsonb) AS activities,
          COALESCE((
-           SELECT jsonb_agg(jsonb_build_object('id', m.id, 'name', m.name, 'logoUrl', m.logo_url) ORDER BY m.sp_id)
-             FROM (SELECT e.id, e.name, e.logo_url, min(sp.id) AS sp_id
+           SELECT jsonb_agg(jsonb_build_object('id', m.id, 'name', m.name, 'logoUrl', m.logo_url, 'logoNegativeUrl', m.logo_negative_url) ORDER BY m.sp_id)
+             FROM (SELECT e.id, e.name, e.logo_url, e.logo_negative_url, min(sp.id) AS sp_id
                      FROM sponsors sp
                      JOIN enterprises e ON e.id = sp.enterprise_id
                     WHERE sp.user_id = u.id AND e.event_key = current_edition() AND e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}
-                    GROUP BY e.id, e.name, e.logo_url) m
+                    GROUP BY e.id, e.name, e.logo_url, e.logo_negative_url) m
          ), '[]'::jsonb) AS enterprises
     FROM ${profiles}
     JOIN users u ON u.id = p.user_id
@@ -272,6 +277,7 @@ function toEntry(row: EntryRow, cvPath = `/api/directory/${row.user_id}/cv`): Di
       id: Number(e.id),
       name: e.name,
       logoUrl: e.logoUrl ?? null,
+      logoNegativeUrl: e.logoNegativeUrl ?? null,
     })),
   };
 }

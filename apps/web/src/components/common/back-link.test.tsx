@@ -79,12 +79,34 @@ describe("BackLink (record back navigation)", () => {
     expect(back).not.toHaveBeenCalled();
   });
 
-  it("goes to the canonical parent when the previous page was another one", () => {
+  it("uses the canonical parent when the previous page has no known heading", () => {
     window.history.pushState(null, "", "/audit");
     window.history.pushState(null, "", "/users/7");
     const event = click(render());
     expect(event.defaultPrevented).toBe(false);
     expect(back).not.toHaveBeenCalled();
+  });
+
+  it("returns through nested profile and company visits with the origin heading", () => {
+    const main = document.createElement("main");
+    main.innerHTML = "<h1>Contacts</h1>";
+    document.body.append(main);
+    window.history.replaceState(null, "", "/people?search=ana");
+    window.history.pushState(null, "", "/people/42");
+    main.querySelector("h1")!.textContent = "Ana Pérez";
+    window.history.pushState(null, "", "/companies/7");
+    const companyBack = render("/event");
+    expect(companyBack.getAttribute("href")).toBe("/people/42");
+    expect(companyBack.textContent).toBe("Ana Pérez");
+    expect(click(companyBack).defaultPrevented).toBe(true);
+    main.querySelector("h1")!.textContent = "GPUL";
+    act(() => window.history.pushState(null, "", "/people/43"));
+    const personBack = render("/people");
+    expect(personBack.getAttribute("href")).toBe("/companies/7");
+    expect(personBack.textContent).toBe("GPUL");
+    expect(click(personBack).defaultPrevented).toBe(true);
+    expect(back).toHaveBeenCalledTimes(2);
+    main.remove();
   });
 
   it("does not trust an entry that a replace navigation overwrote", () => {
