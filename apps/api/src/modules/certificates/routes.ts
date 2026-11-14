@@ -270,13 +270,16 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
   r.post(
     "/api/me/certificates",
     {
-      config: own,
+      // A participant may obtain their certificate after the edition closed.
+      config: {
+        routeAccessPolicy: { kind: "authenticated" as const, edition: "self-service" as const },
+      },
       preHandler: [requireAuth, idempotencyGuard],
       schema: {
         body: z.object({ variant, locale }),
         summary: "Issue my certificate",
         description:
-          "Issues the caller's certificate in the chosen variant (participation, hours or activities) and language, or returns the one already issued in that language. 409 with a reason when certificates are off, the venue-hours threshold is not met, the policy requires a presented project or an activities certificate has no attended activities to list (#1083, H53).",
+          "Issues the caller's certificate in the chosen variant (participation, hours or activities) and language, or returns the one already issued in that language. 409 with a reason when certificates are off, the venue-hours threshold is not met, the policy requires a presented project or an activities certificate has no attended activities to list. Works in the viewed edition even after it closed (#1083, H53).",
         response: { 200: certificateSchema },
       },
     },

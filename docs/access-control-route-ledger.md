@@ -234,9 +234,9 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | POST | `/api/me/anonymize/cancel` | authenticated + email-verification:none + edition:global |
 | GET | `/api/me/applications` | authenticated |
 | GET | `/api/me/certificates` | authenticated |
-| POST | `/api/me/certificates` | authenticated + email-verification:caller |
+| POST | `/api/me/certificates` | authenticated + email-verification:caller + edition:self-service |
 | GET | `/api/me/certificates/:id/pdf` | authenticated |
-| POST | `/api/me/certificates/issue` | authenticated + email-verification:caller |
+| POST | `/api/me/certificates/issue` | authenticated + email-verification:caller + edition:self-service |
 | GET | `/api/me/diary` | authenticated |
 | DELETE | `/api/me/diary/:entryId` | authenticated + email-verification:caller |
 | PATCH | `/api/me/diary/:entryId` | authenticated + email-verification:caller |

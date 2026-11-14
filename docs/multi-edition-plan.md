@@ -443,9 +443,12 @@ No hay decisiones de producto abiertas. Quedan estas comprobaciones:
   la disponibilidad de helpers en curso terminan ahora y las futuras se
   eliminan.
 
-### Abierto para revisión
+### Certificados tras el cierre
 
-- Con una edición cerrada no se pueden emitir certificados (son escrituras de
-  la edición). Si se necesita emitirlos tras el evento, hay que esperar a
-  cerrar o reabrir temporalmente.
+- Cerrar congela lo que administra la organización, no lo que un participante
+  puede obtener después: cada persona puede **autoemitirse su certificado**
+  de una edición cerrada (`POST /api/me/certificates` y
+  `POST /api/me/certificates/issue`, declaradas `edition: "self-service"`),
+  con las mismas reglas de elegibilidad. La emisión, revocación y
+  configuración por parte del staff siguen bloqueadas hasta reabrir.
 

@@ -268,3 +268,13 @@ type settings are global to the current edition (`edition: "current"`).
 - Issue, revoke and settings changes are audited (H53):
   `certificate.issue`, `certificate.approve`, `certificate.revoke`, `certificate.supersede`,
   `certificate_settings.update`, `certificate_type.create`, `certificate_type.update` and university `export` actions.
+
+## Closed editions
+
+Closing an edition freezes what organizers administer: staff issue, bulk
+issue, revocation and settings answer `edition_closed` until it is reopened.
+A participant can still obtain their own certificate of that edition
+(`POST /api/me/certificates`, `POST /api/me/certificates/issue`) with the same
+eligibility rules, and every certificate stays verifiable
+([multi-edition plan](./multi-edition-plan.md)).
+

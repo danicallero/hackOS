@@ -145,7 +145,11 @@ export async function applyRequestedEdition(req: FastifyRequest, db: Queryable):
  * declares `edition: "global"` in its access policy and skips it. A global
  * superadmin passes and gets the database override for this request.
  */
-export async function assertEditionWritable(req: FastifyRequest, db: Queryable): Promise<void> {
+export async function assertEditionWritable(
+  req: FastifyRequest,
+  db: Queryable,
+  options: { selfServiceAfterClose?: boolean } = {},
+): Promise<void> {
   const { rows } = await db.query<{
     event_key: string;
     status: EditionStatus;
@@ -157,7 +161,9 @@ export async function assertEditionWritable(req: FastifyRequest, db: Queryable):
   );
   const edition = rows[0];
   if (edition?.status !== "closed") return;
-  if (edition.global_admin) {
+  // Closing freezes what organizers administer; a participant's own
+  // after-event record (a self-issued attendance certificate) stays possible.
+  if (edition.global_admin || options.selfServiceAfterClose) {
     allowClosedEditionWrites();
     return;
   }

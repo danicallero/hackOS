@@ -686,6 +686,8 @@ event data carries `event_key` (directly, or through its parent row).
   devices, catalogues, the edition lifecycle) or the caller is the global
   superadmin. Routes writing the current edition's singleton settings declare
   `edition: "current"` and are rejected while another edition is viewed. A
+  participant's own after-event record (self-issued attendance certificates)
+  declares `edition: "self-service"` and still writes a closed edition. A
   trigger on every edition table (SQLSTATE `HKE01`) is the in-transaction
   backstop; erasure and the closing transaction itself use
   `withClosedEditionWrites`.

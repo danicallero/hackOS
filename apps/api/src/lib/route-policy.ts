@@ -21,9 +21,12 @@ export type EmailVerificationRequirement = "caller" | "target" | "none";
  * profile, preferences, devices, catalogues, the edition lifecycle itself)
  * declare `global`. Routes that write the current edition's singleton
  * settings (event_config and the other id=1 settings rows) declare `current`:
- * they are also rejected while viewing any other edition.
+ * they are also rejected while viewing any other edition. A participant's own
+ * after-event record that stays valid once the edition closes (self-issued
+ * attendance certificates) declares `self-service`: it writes the viewed
+ * edition even while it is closed.
  */
-export type EditionWriteScope = "scoped" | "current" | "global";
+export type EditionWriteScope = "scoped" | "current" | "global" | "self-service";
 
 interface RouteAccessOptions {
   emailVerification?: EmailVerificationRequirement;
@@ -133,7 +136,10 @@ function validatePolicy(policy: RouteAccessPolicy, route: RouteOptions): void {
       `Route ${String(route.method)} ${route.url} cannot require caller email verification for ${policy.kind} access`,
     );
   }
-  if (policy.edition !== undefined && !["scoped", "current", "global"].includes(policy.edition)) {
+  if (
+    policy.edition !== undefined &&
+    !["scoped", "current", "global", "self-service"].includes(policy.edition)
+  ) {
     throw new Error(`Route ${String(route.method)} ${route.url} has an invalid edition scope`);
   }
   if (policy.emailVerification === "target" && policy.kind !== "token") {
@@ -249,7 +255,9 @@ export function registerRoutePolicyInfrastructure(app: FastifyInstance): void {
       if (policy.edition === "current" && requestEditionOverride() !== null) {
         throw new ConflictError("Settings can only be changed in the current edition");
       }
-      await assertEditionWritable(request, pool);
+      await assertEditionWritable(request, pool, {
+        selfServiceAfterClose: policy.edition === "self-service",
+      });
     }
     if (emailVerificationForRoute(request.method, policy) === "caller") {
       await requireVerifiedEmail(request);
