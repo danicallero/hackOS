@@ -320,6 +320,11 @@ open it; the API answers the same 404 to anyone else. A person opened without
 a diary entry shows no CV row, favourite star, note or remove action: those
 need the reader's diary entry.
 
+The profile hero samples the authenticated photo at its absolute API URL with
+credentials, using the same photo as the avatar. Company representative links
+carry `?company=<id>` so the profile returns to that company (also in error
+states); direct and diary visits return to Contacts.
+
 Every CV link on the web (the person page, the owner's file name and the
 "View CV" link of the My profile preview) opens the shared viewer
 (`components/profile/cv-viewer.tsx`) instead of a new tab. It fetches the CV

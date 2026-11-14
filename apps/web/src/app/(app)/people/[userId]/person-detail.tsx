@@ -37,11 +37,11 @@ const PROJECT_KIND: Record<"project" | "workGroup", [MessageKey, MessageKey]> = 
  * someone the reader saved in their diary by scanning; the API answers the
  * same 404 for anyone else.
  */
-export function PersonDetail({ userId }: { userId: number }) {
-  return <PersonReader userId={userId} />;
+export function PersonDetail({ userId, companyId }: { userId: number; companyId?: number }) {
+  return <PersonReader userId={userId} companyId={companyId} />;
 }
 
-function PersonReader({ userId }: { userId: number }) {
+function PersonReader({ userId, companyId }: { userId: number; companyId?: number }) {
   const { t } = useLocale();
   const validId = Number.isSafeInteger(userId) && userId > 0;
   const {
@@ -57,7 +57,13 @@ function PersonReader({ userId }: { userId: number }) {
   // Hidden and missing profiles share the 404, so both read as "not found".
   const missing = !validId || isNotFoundError(error);
 
-  const back = <BackLink href="/people" label={t("diary")} />;
+  const company = entry && personCompanies(entry).find((item) => item.id === companyId);
+  const fromCompany = Number.isSafeInteger(companyId) && (companyId ?? 0) > 0;
+  const back = fromCompany ? (
+    <BackLink href={`/companies/${companyId}`} label={company?.name ?? t("helpDeskCompany")} />
+  ) : (
+    <BackLink href="/people" label={t("diary")} />
+  );
 
   if (!entry || missing) {
     return (
@@ -114,7 +120,9 @@ export function PersonProfile({
   const { t } = useLocale();
   const { nameOf } = useChallengeNames();
   const { language } = useLocale();
-  const photoColor = useLogoColor(entry.photoUrl);
+  const photoColor = useLogoColor(entry.photoUrl ? apiAssetUrl(entry.photoUrl) : null, {
+    credentials: true,
+  });
   const companies = useMemo(() => personCompanies(entry), [entry]);
   useEffect(() => {
     for (const c of companies) precomputeLogoColor(c.logoUrl);
@@ -247,7 +255,10 @@ export function PersonProfile({
   return (
     <>
       <HeroBleed color={entry.photoColor ?? photoColor}>
-        {context}
+        <div className="flex items-center justify-between gap-3">
+          {context}
+          {visibleRole && <Badge variant="secondary">{visibleRole}</Badge>}
+        </div>
         <header className="flex flex-col items-center gap-3 pt-6 text-center sm:flex-row sm:items-center sm:gap-6 sm:text-left">
           <UserAvatar
             name={entry.displayName}
@@ -266,21 +277,18 @@ export function PersonProfile({
               <p className="text-muted-foreground wrap-anywhere text-sm">{entry.headline}</p>
             )}
           </div>
-          {(visibleRole || entry.cvUrl) && (
+          {entry.cvUrl && (
             <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-              {visibleRole && <Badge variant="secondary">{visibleRole}</Badge>}
-              {entry.cvUrl && (
-                <CvViewer
-                  path={entry.cvUrl}
-                  name={entry.displayName}
-                  trigger={
-                    <Button type="button" variant="outline" size="sm">
-                      <FilePdfIcon aria-hidden="true" />
-                      {t("viewCv")}
-                    </Button>
-                  }
-                />
-              )}
+              <CvViewer
+                path={entry.cvUrl}
+                name={entry.displayName}
+                trigger={
+                  <Button type="button" variant="outline" size="sm">
+                    <FilePdfIcon aria-hidden="true" />
+                    {t("viewCv")}
+                  </Button>
+                }
+              />
             </div>
           )}
         </header>
