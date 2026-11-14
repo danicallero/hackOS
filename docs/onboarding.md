@@ -44,6 +44,13 @@ answers were copied to the current edition, and settings were created for all
 currently offered sponsor meals plus meals with historical answers. A
 participant is never offered a meal RSVP, whatever the settings say.
 
+The networking step also discloses the public TV connections graph (#934,
+#935) and shows its "Show me on the TV connections graph" switch (default on),
+independent of the profile opt-in: declining to create a profile does not
+remove the person from the graph, only the switch does. Existing users get the
+same default; announcing it to them is tracked separately (see the TV
+connections graph spec). Organizer privacy review is required before launch.
+
 Networking completion does not create consent. Only the public-profile editor
 can opt a person in. Declining networking clears `directory_visible` and
 `consented_at` in the same transaction as the onboarding decision; deferring

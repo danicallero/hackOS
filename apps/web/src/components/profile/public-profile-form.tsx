@@ -1,5 +1,6 @@
 "use client";
 
+import { TV_GRAPH_VISIBLE_DEFAULT } from "@hackos/shared/public-profile";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
@@ -54,6 +55,8 @@ export interface Settings {
   showPhoto: boolean;
   showProject: boolean;
   showGithub: boolean;
+  /** Independent of `directoryVisible`: editable while the profile is not shared. */
+  tvGraphVisible: boolean;
   headline: string;
   locationNote: string;
   bio: string;
@@ -68,6 +71,8 @@ export interface PublicProfile {
   showProject: boolean;
   /** Missing only in responses from older servers; links stayed visible by default. */
   showGithub?: boolean;
+  /** Missing only in responses from older servers; on by default. */
+  tvGraphVisible?: boolean;
   headline: string | null;
   bio: string | null;
   locationNote: string | null;
@@ -91,6 +96,7 @@ export function settingsFrom(profile: PublicProfile): Settings {
     showPhoto: profile.showPhoto,
     showProject: profile.showProject,
     showGithub: profile.showGithub ?? true,
+    tvGraphVisible: profile.tvGraphVisible ?? TV_GRAPH_VISIBLE_DEFAULT,
     headline: profile.headline ?? "",
     locationNote: profile.locationNote ?? "",
     bio: profile.bio ?? "",

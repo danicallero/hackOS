@@ -406,7 +406,7 @@ export function DiaryScreen() {
   }
 
   function confirmRemove(onConfirm: () => void) {
-    alert(t("diaryRemoveTitle"), undefined, [
+    alert(t("diaryRemoveTitle"), t("diaryRemoveBody"), [
       { text: t("cancel"), style: "cancel" },
       { text: t("remove"), style: "destructive", onPress: onConfirm },
     ]);

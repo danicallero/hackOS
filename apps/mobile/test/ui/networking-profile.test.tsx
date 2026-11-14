@@ -160,6 +160,7 @@ const profile = {
   showSurname: false,
   showPhoto: false,
   showProject: true,
+  tvGraphVisible: true,
   headline: null,
   locationNote: null,
   bio: null,
@@ -251,6 +252,34 @@ describe("NetworkingProfileScreen", () => {
     await renderMobile(<NetworkingProfileScreen />);
     expect(await screen.findByLabelText("photo-menu:Ada Lovelace")).toBeTruthy();
     expect(screen.getByLabelText("networkingHeadline")).toBeTruthy();
+  });
+
+  it("edits the TV graph switch while the profile is not shared and sends it on save", async () => {
+    mockApiFetch
+      .mockResolvedValueOnce(profile)
+      .mockResolvedValueOnce({ ...profile, tvGraphVisible: false });
+    await renderMobile(<NetworkingProfileScreen />);
+    const tv = await screen.findByLabelText("networkingTvGraph");
+    expect(tv.props.value).toBe(true);
+    expect(tv.props.disabled).toBeFalsy();
+    await fireEvent(tv, "valueChange", false);
+    await fireEvent.press(screen.getByRole("button", { name: "save" }));
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
+    const [, init] = mockApiFetch.mock.calls[1];
+    expect(JSON.parse(init.body)).toMatchObject({ directoryVisible: false, tvGraphVisible: false });
+  });
+
+  it("saves the TV graph switch at once from the preview", async () => {
+    mockApiFetch
+      .mockResolvedValueOnce(shared)
+      .mockResolvedValueOnce({ ...shared, tvGraphVisible: false });
+    await renderMobile(<NetworkingProfileScreen />);
+    await fireEvent(await screen.findByLabelText("networkingTvGraph"), "valueChange", false);
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(mockApiFetch.mock.calls[1][1].body)).toMatchObject({
+      directoryVisible: true,
+      tvGraphVisible: false,
+    });
   });
 
   it("saves the share switch at once from the preview and rolls back on failure", async () => {
