@@ -1115,5 +1115,9 @@
   "rsvpUnanswered": "Sen resposta",
   "couldNotSaveRsvps": "Non se puideron gardar as túas respostas",
   "rsvpClosed": "Pechado",
-  "rsvpNoItems": "Non hai actividades que che pidan RSVP."
+  "rsvpNoItems": "Non hai actividades que che pidan RSVP.",
+  "accountEdition": "Edición",
+  "editionClosedNotice": "{name} · Pechada, só lectura",
+  "editionClosedError": "Esta edición está pechada e é de só lectura.",
+  "projectEdition": "Edición"
 }

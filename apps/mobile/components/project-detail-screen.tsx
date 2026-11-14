@@ -39,6 +39,7 @@ import { ApiError, apiFetch } from "@/lib/api";
 import { formatEventTime } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
+import { useEditionList } from "@/lib/me-context";
 import { safeBack } from "@/lib/navigation";
 import {
   type NativeProject,
@@ -202,6 +203,7 @@ export function ProjectReadView({
   titleHeader?: boolean;
 }) {
   const { t } = useLocale();
+  const showEdition = useEditionList().length > 1;
   const readable = useParticipantLayout("list");
   const router = useRouter();
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
@@ -254,6 +256,11 @@ export function ProjectReadView({
           <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
             {project.name}
           </Text>
+        ) : null}
+        {showEdition && project.edition ? (
+          <Section>
+            <InfoRow icon="calendar" label={t("projectEdition")} value={project.edition.name} />
+          </Section>
         ) : null}
         {project.winners?.length ? (
           <Section>

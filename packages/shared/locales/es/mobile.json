@@ -1115,5 +1115,9 @@
   "rsvpUnanswered": "Sin respuesta",
   "couldNotSaveRsvps": "No se pudieron guardar tus respuestas",
   "rsvpClosed": "Cerrado",
-  "rsvpNoItems": "No hay actividades que te pidan RSVP."
+  "rsvpNoItems": "No hay actividades que te pidan RSVP.",
+  "accountEdition": "Edición",
+  "editionClosedNotice": "{name} · Cerrada, solo lectura",
+  "editionClosedError": "Esta edición está cerrada y es de solo lectura.",
+  "projectEdition": "Edición"
 }

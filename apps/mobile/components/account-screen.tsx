@@ -1,3 +1,4 @@
+import { shouldShowEditionSelector } from "@hackos/shared/editions";
 import {
   Stack,
   useFocusEffect,
@@ -6,7 +7,14 @@ import {
   useRouter,
   useScrollToTop,
 } from "expo-router";
-import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   type LayoutChangeEvent,
   Platform,
@@ -32,6 +40,7 @@ import {
 } from "@/components/account-wallet";
 import { type MenuAction, type MenuComponentRef, MenuView } from "@/components/app-menu";
 import { AppRefreshControl } from "@/components/app-refresh-control";
+import { EditionClosedNotice } from "@/components/edition-closed-notice";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import {
   ActionButton,
@@ -55,6 +64,7 @@ import { apiFetch } from "@/lib/api";
 import { useApiMode } from "@/lib/api-mode";
 import { appVersionLabel } from "@/lib/app-version";
 import { forceLocalSignOut, signOut } from "@/lib/auth-client";
+import { viewedEditionSummary } from "@/lib/edition";
 import { haptic } from "@/lib/haptics";
 import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -363,6 +373,8 @@ export default function AccountScreen() {
           <RequestFeedback error={error} onRetry={() => void refetch()} />
         ) : null}
 
+        <EditionClosedNotice />
+
         <Section title={t("accountProfile")}>
           <InfoRow label={t("accountName")} value={fullName} icon="person" />
           <Separator inset={48} />
@@ -371,6 +383,7 @@ export default function AccountScreen() {
             saving={savingLanguage}
             onChange={(next) => void changeLanguage(next)}
           />
+          <EditionRow />
         </Section>
 
         <Section title={t("accountContact")}>
@@ -715,29 +728,93 @@ function LanguageRow({
   onChange: (language: Lang) => void;
 }) {
   const { t } = useLocale();
+  return (
+    <MenuRow
+      label={t("accountLanguage")}
+      value={languageName(language)}
+      icon="globe"
+      saving={saving}
+      options={LANGUAGES.map((lang) => ({
+        id: lang,
+        title: languageName(lang),
+        selected: lang === language,
+      }))}
+      onSelect={(id) => onChange(id as Lang)}
+    />
+  );
+}
+
+/** Edition selector (multi-edition): shown only when there is more than one edition to view. */
+function EditionRow() {
+  const { t } = useLocale();
+  const { editions = [], me, viewedEdition = null, switchEdition } = useMeContext();
+  const [switching, setSwitching] = useState(false);
+  const [failed, setFailed] = useState<Error | null>(null);
+  if (!shouldShowEditionSelector(editions)) return null;
+  const selected = viewedEditionSummary(editions, viewedEdition);
+  const name = selected?.name ?? me?.edition?.name ?? "";
+  return (
+    <>
+      <Separator inset={48} />
+      <MenuRow
+        label={t("accountEdition")}
+        value={name}
+        icon="calendar"
+        saving={switching}
+        options={editions.map((edition) => ({
+          id: edition.eventKey,
+          title: edition.name,
+          selected: edition.eventKey === selected?.eventKey,
+        }))}
+        onSelect={(id) => {
+          const target = editions.find((edition) => edition.eventKey === id);
+          if (!target || target.eventKey === selected?.eventKey) return;
+          setSwitching(true);
+          setFailed(null);
+          // The current edition is the absence of a selection (no header).
+          switchEdition(target.isCurrent ? null : target.eventKey)
+            .catch((error: unknown) =>
+              setFailed(error instanceof Error ? error : new Error(String(error))),
+            )
+            .finally(() => setSwitching(false));
+        }}
+      />
+      {failed ? <RequestFeedback error={failed} /> : null}
+    </>
+  );
+}
+
+function MenuRow({
+  label,
+  value,
+  icon,
+  saving,
+  options,
+  onSelect,
+}: {
+  label: string;
+  value: string;
+  icon: ComponentProps<typeof InfoRow>["icon"];
+  saving: boolean;
+  options: { id: string; title: string; selected: boolean }[];
+  onSelect: (id: string) => void;
+}) {
   const menuRef = useRef<MenuComponentRef>(null);
   // The iOS MenuView hosts its trigger at intrinsic size, so the row needs an
   // explicit width to span the section and keep its value right-aligned.
   const [rowWidth, setRowWidth] = useState<number>();
-  const actions = LANGUAGES.map(
-    (lang): MenuAction => ({
-      id: lang,
-      title: languageName(lang),
-      state: lang === language ? "on" : "off",
+  const actions = options.map(
+    (option): MenuAction => ({
+      id: option.id,
+      title: option.title,
+      state: option.selected ? "on" : "off",
       attributes: saving ? { disabled: true } : undefined,
     }),
   );
-  const row = (
-    <InfoRow
-      label={t("accountLanguage")}
-      value={languageName(language)}
-      icon="globe"
-      accessoryIcon="chevron.down"
-    />
-  );
+  const row = <InfoRow label={label} value={value} icon={icon} accessoryIcon="chevron.down" />;
   const accessibility = {
     accessible: true,
-    accessibilityLabel: t("accountLanguage"),
+    accessibilityLabel: label,
     accessibilityRole: "button",
     accessibilityState: { disabled: saving, busy: saving },
   } as const;
@@ -753,7 +830,7 @@ function LanguageRow({
           // frame, centring the row off to the left and swallowing taps.
           <MenuView
             actions={actions}
-            onPressAction={({ nativeEvent }) => onChange(nativeEvent.event as Lang)}
+            onPressAction={({ nativeEvent }) => onSelect(nativeEvent.event)}
             style={{ width: rowWidth }}
           >
             <View {...accessibility} style={{ width: rowWidth }}>
@@ -776,7 +853,7 @@ function LanguageRow({
       <MenuView
         ref={menuRef}
         actions={actions}
-        onPressAction={({ nativeEvent }) => onChange(nativeEvent.event as Lang)}
+        onPressAction={({ nativeEvent }) => onSelect(nativeEvent.event)}
         style={{ position: "absolute", top: 0, bottom: 0, right: 16, width: 1 }}
       >
         <View style={{ width: 1, height: 1 }} />

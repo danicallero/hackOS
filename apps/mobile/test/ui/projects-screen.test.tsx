@@ -39,7 +39,11 @@ jest.mock("expo-router", () => ({
   useLocalSearchParams: () => mockParams,
   useNavigation: () => ({ addListener: jest.fn(() => () => {}), setOptions: mockSetOptions }),
 }));
-jest.mock("@/lib/me-context", () => ({ useMeContext: () => ({ me: { id: 11 } }) }));
+let mockEditions: unknown[] = [];
+jest.mock("@/lib/me-context", () => ({
+  useMeContext: () => ({ me: { id: 11 } }),
+  useEditionList: () => mockEditions,
+}));
 jest.mock("@/lib/api", () => ({
   apiFetch: jest.fn(),
   getCurrentSessionCookie: () => "session=1",
@@ -332,6 +336,16 @@ it("reports a gallery project from a native sheet, never the team's own (H18)", 
   sheet.mockRestore();
   alert.mockRestore();
 });
+it("names the project's edition only when several editions exist", async () => {
+  const past = { ...project, edition: { eventKey: "2025", name: "HackUDC 2025" } };
+  await renderMobile(<ProjectReadView project={past} />);
+  expect(screen.queryByText("HackUDC 2025")).toBeNull();
+  mockEditions = [{}, {}];
+  await renderMobile(<ProjectReadView project={past} />);
+  expect(screen.getByText("HackUDC 2025")).toBeTruthy();
+  mockEditions = [];
+});
+
 it("offers no report on the team's own project (H18)", async () => {
   await renderMobile(<ProjectReadView project={{ ...project, isMember: true }} />);
   expect(screen.queryByRole("button", { name: "reportContent" })).toBeNull();
