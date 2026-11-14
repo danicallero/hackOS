@@ -40,6 +40,7 @@ sending `null` clears a nullable field.
 | `wifi_ssid`, `wifi_password` | Venue Wi-Fi shown on the TV screens (H42). Served by `GET /api/tv/config`, **never** by `/api/public/event`; an audit entry records that the password changed, not its value. See [TV screens](./tv-screens.md). |
 | `tv_language` | Nullable; the fixed language every venue TV renders in, overriding the default. Set from `/tv/control`'s Display language section (`PATCH /api/tv/config`, `TV_CONTROL`), served by `GET /api/tv/config`. Never a signed-in caller's own language preference. See [TV screens](./tv-screens.md). |
 | `pass_back_fields` | jsonb array of admin-defined `{label, value}` pairs appended to the pass back (schedule links, rules…). |
+| `pass_front_fields` | jsonb array of up to four admin-defined `{label, value}` pairs (label ≤ 40, value ≤ 80 chars) shown on the pass front after the auto-filled holder fields (`0508`). |
 | `pass_field_labels` | jsonb map of caption overrides for the pass's fixed fields. Catalogue and defaults: `packages/shared/src/wallet-pass-labels.ts` (`PASS_FIELD_LABEL_KEYS`). Missing/blank keys fall back to the default. |
 | `pass_field_visibility` | jsonb map of show/hide toggles for the pass's auto-filled front fields (`PASS_FIELD_VISIBILITY_KEYS`: participant, role, passType, university, email). Missing keys default to **visible**. |
 | `presence_auto_entry_at`, `presence_certainty_window_minutes` | H24 automatic-presence policy: an optional common entry instant for people accredited earlier, and the estimator's certainty window. `PRESENCE_MANAGE`. |
@@ -100,6 +101,9 @@ the event is baked into issued passes. Composition:
   (`getHighestVisibleRoleName`, H8 — see `docs/audits/access-control-audit-plan.md`'s
   "badge_category retired entirely" section), or "Unassigned" with no visible
   role at all.
+- **Custom front fields**: the `pass_front_fields` rows follow the holder
+  fields in `auxiliaryFields` (keys `front-0`…). Wallet shows only as many
+  front rows as fit the strip layout, so keep the total small.
 - **Back fields**, in order: event name → venue name (if set) → the custom
   `pass_back_fields` list → "Organized by" (`APPLE_PASS_ORGANIZATION`).
 - **App link**: when `APPLE_PASS_APP_STORE_ID` (the mobile app's numeric App
@@ -345,8 +349,10 @@ the Wallet section then requests the authenticated recipient's pass. A separate
 ## Runtime editor, artwork, actions, and manual operations (H28/H53)
 
 Settings → Event → Wallet passes now controls both providers. Existing
-`passFieldLabels`, `passFieldVisibility`, and `passBackFields` drive Apple
-fields and Google card/detail templates. Google renders its own native card;
+`passFieldLabels`, `passFieldVisibility`, `passFrontFields`, and `passBackFields` drive Apple
+fields and Google card/detail templates. Google carries custom front fields as
+object text modules (`front_N`) after the holder fields; the card shows the
+first three rows and the rest stay in the details template. Google renders its own native card;
 it shows at most ten text modules per class/object, so overflow back fields
 are grouped in the last details block rather than dropped. URL-valued back
 fields become clickable links. Dates use doors-open time on both platforms.

@@ -1874,6 +1874,7 @@
   "passFillOrganizer": "Configurado fóra da aplicación",
   "notSetYet": "sen definir",
   "passBackFieldsLabel": "Campos adicionais do reverso",
+  "passFrontCustomFieldsLabel": "Campos adicionais do anverso",
   "backFieldLabelPlaceholder": "Etiqueta",
   "backFieldValuePlaceholder": "Valor",
   "removeBackFieldAria": "Eliminar campo {index}",

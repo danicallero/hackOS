@@ -72,6 +72,7 @@ const EVENT_SETTINGS_CAPABILITIES: Record<string, Capability> = {
   venueLongitude: CAPABILITIES.VENUE_MANAGE,
   wifiSsid: CAPABILITIES.VENUE_MANAGE,
   wifiPassword: CAPABILITIES.VENUE_MANAGE,
+  passFrontFields: CAPABILITIES.WALLET_MANAGE,
   passBackFields: CAPABILITIES.WALLET_MANAGE,
   passFieldLabels: CAPABILITIES.WALLET_MANAGE,
   passFieldVisibility: CAPABILITIES.WALLET_MANAGE,
@@ -120,6 +121,13 @@ const backFieldSchema = z.object({
   value: z.string().min(1).max(500),
 });
 
+// H28: front rows share the pass face with the auto-filled holder fields, so
+// they stay few and short; Wallet truncates anything longer.
+const frontFieldSchema = z.object({
+  label: z.string().min(1).max(40),
+  value: z.string().min(1).max(80),
+});
+
 const passFieldLabelsSchema = z
   .object(
     Object.fromEntries(PASS_FIELD_LABEL_KEYS.map((key) => [key, z.string().max(60).optional()])),
@@ -164,6 +172,7 @@ const eventConfigBody = z
     // public website feed.
     wifiSsid: z.string().max(64).nullable().optional(),
     wifiPassword: z.string().max(128).nullable().optional(),
+    passFrontFields: z.array(frontFieldSchema).max(4).optional(),
     passBackFields: z.array(backFieldSchema).max(20).optional(),
     passFieldLabels: passFieldLabelsSchema.optional(),
     passFieldVisibility: passFieldVisibilitySchema.optional(),
@@ -205,6 +214,7 @@ const DEFAULTS = {
   venue_longitude: null,
   wifi_ssid: null,
   wifi_password: null,
+  pass_front_fields: [],
   pass_back_fields: [],
   pass_field_labels: {},
   pass_field_visibility: {},
@@ -248,6 +258,7 @@ interface EventConfigRow {
   venue_longitude: number | null;
   wifi_ssid: string | null;
   wifi_password: string | null;
+  pass_front_fields: { label: string; value: string }[];
   pass_back_fields: { label: string; value: string }[];
   pass_field_labels: PassFieldLabels;
   pass_field_visibility: PassFieldVisibility;
@@ -267,7 +278,7 @@ async function readConfig(db: Queryable = pool): Promise<EventConfigRow> {
             presence_auto_entry_at, presence_certainty_window_minutes,
             venue_name, venue_latitude, venue_longitude,
             wifi_ssid, wifi_password,
-            pass_back_fields, pass_field_labels, pass_field_visibility,
+            pass_front_fields, pass_back_fields, pass_field_labels, pass_field_visibility,
             require_sponsor_shirt_size, require_sponsor_dietary,
             require_staff_shirt_size, require_staff_dietary, shirt_sizes,
             meal_plan_cutoff_hours, project_drafts_open_at,project_submissions_close_at,project_draft_visibility,project_gallery_opens_at,project_gallery_audience,project_max_team_size,project_github_required
@@ -325,6 +336,7 @@ function toPublic(
     venueName: row.venue_name,
     venueLatitude: row.venue_latitude,
     venueLongitude: row.venue_longitude,
+    passFrontFields: row.pass_front_fields,
     passBackFields: row.pass_back_fields,
     passFieldLabels: row.pass_field_labels,
     passFieldVisibility: row.pass_field_visibility,
@@ -420,7 +432,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update event config",
         description:
-          "Atomically saves the edition eventKey (first rename adopts legacy evidence; later changes preserve history) and an optional eventReminderScheduledAt (null cancels a pending pre-event email) alongside the event settings. The reminder requires event:manage and a future send before doors open. Updates name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, whether participants may create their own project (H19), presence-detection policy, whether invited sponsors/staff must supply a shirt size and/or see dietary-restriction fields when claiming their account (H10), the shirt-size options offered by every picker in the app (H12), and `mealPlanCutoffHours` (0–168, #933): how many hours before each meal sponsor meal plans lock. Fields omitted from the body are left unchanged. Each field is additionally gated by its own owning capability (EVENT_MANAGE for identity/timing, VENUE_MANAGE, WALLET_MANAGE, PRESENCE_MANAGE, INVITES_MANAGE for the sponsor/staff requirements, INTOLERANCES_MANAGE for shirtSizes and mealPlanCutoffHours) — a 403 names exactly which field(s) the caller lacks rights to. When the saved config actually changes, Apple Wallet devices are pushed and the shared Google Wallet event-ticket class is refreshed for saved tickets. A change to the event start, the hacking window or the timezone also runs the Live Activity worker early, so running deadline and accreditation Live Activities follow it within seconds.",
+          "Atomically saves the edition eventKey (first rename adopts legacy evidence; later changes preserve history) and an optional eventReminderScheduledAt (null cancels a pending pre-event email) alongside the event settings. The reminder requires event:manage and a future send before doors open. Updates name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass custom front fields (`passFrontFields`, up to 4 short label/value rows shown after the holder fields) and back-field list, field-label overrides, per-field show/hide toggles, whether participants may create their own project (H19), presence-detection policy, whether invited sponsors/staff must supply a shirt size and/or see dietary-restriction fields when claiming their account (H10), the shirt-size options offered by every picker in the app (H12), and `mealPlanCutoffHours` (0–168, #933): how many hours before each meal sponsor meal plans lock. Fields omitted from the body are left unchanged. Each field is additionally gated by its own owning capability (EVENT_MANAGE for identity/timing, VENUE_MANAGE, WALLET_MANAGE, PRESENCE_MANAGE, INVITES_MANAGE for the sponsor/staff requirements, INTOLERANCES_MANAGE for shirtSizes and mealPlanCutoffHours) — a 403 names exactly which field(s) the caller lacks rights to. When the saved config actually changes, Apple Wallet devices are pushed and the shared Google Wallet event-ticket class is refreshed for saved tickets. A change to the event start, the hacking window or the timezone also runs the Live Activity worker early, so running deadline and accreditation Live Activities follow it within seconds.",
         body: eventConfigBody,
       },
     },
@@ -618,6 +630,10 @@ export function registerEventRoutes(app: FastifyInstance): void {
         if (b.projectMaxTeamSize !== undefined)
           await client.query("UPDATE event_config SET project_max_team_size=$1 WHERE id=1", [
             b.projectMaxTeamSize,
+          ]);
+        if (b.passFrontFields !== undefined)
+          await client.query("UPDATE event_config SET pass_front_fields=$1::jsonb WHERE id=1", [
+            JSON.stringify(b.passFrontFields),
           ]);
         if (b.projectGithubRequired !== undefined)
           await client.query("UPDATE event_config SET project_github_required=$1 WHERE id=1", [

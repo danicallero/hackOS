@@ -1,7 +1,8 @@
 "use client";
 
 // Wallet category (H28): what the Apple/Google Wallet pass shows. Front
-// fields (the common edit) stay in the default view; the built-in and custom
+// fields (auto-filled toggles plus up to four custom rows, the common edit)
+// stay in the default view; the built-in and custom
 // back fields are less frequently touched and sit under progressive
 // disclosure. A live preview mirrors exactly what will be saved, using real
 // event/venue/organizer data where the pass would auto-fill it.
@@ -54,7 +55,7 @@ function normalizeFieldLabels(labels: PassFieldLabels): PassFieldLabels {
   return overrides;
 }
 
-function normalizeBackFields(fields: PassBackField[]): PassBackField[] {
+function normalizeCustomFields(fields: PassBackField[]): PassBackField[] {
   return fields
     .map((field) => ({ label: field.label.trim(), value: field.value.trim() }))
     .filter((field) => field.label.length > 0 && field.value.length > 0);
@@ -187,12 +188,18 @@ function BuiltinBackFieldRow({
   );
 }
 
-function BackFieldBuilder({
+// Mirrors the API's per-list limits (event/routes.ts).
+const FRONT_FIELD_LIMITS = { count: 4, label: 40, value: 80 };
+const BACK_FIELD_LIMITS = { count: 20, label: 80, value: 500 };
+
+function CustomFieldBuilder({
   value,
   onChange,
+  limits,
 }: {
   value: PassBackField[];
   onChange: (value: PassBackField[]) => void;
+  limits: { count: number; label: number; value: number };
 }) {
   const { t } = useLocale();
   const id = useId();
@@ -214,6 +221,7 @@ function BackFieldBuilder({
             <Input
               id={`${id}-label-${index}`}
               value={field.label}
+              maxLength={limits.label}
               onChange={(event) => update(index, { label: event.target.value })}
             />
           </div>
@@ -222,6 +230,7 @@ function BackFieldBuilder({
             <Input
               id={`${id}-value-${index}`}
               value={field.value}
+              maxLength={limits.value}
               onChange={(event) => update(index, { value: event.target.value })}
             />
           </div>
@@ -237,11 +246,31 @@ function BackFieldBuilder({
           </Button>
         </div>
       ))}
-      <Button type="button" variant="outline" size="sm" onClick={add}>
-        {t("addField")}
-      </Button>
+      {value.length < limits.count && (
+        <Button type="button" variant="outline" size="sm" onClick={add}>
+          {t("addField")}
+        </Button>
+      )}
     </div>
   );
+}
+
+function CustomPreviewRows({ fields }: { fields: PassBackField[] }) {
+  const { t } = useLocale();
+  return fields.map((f, index) => (
+    <div
+      // biome-ignore lint/suspicious/noArrayIndexKey: rows are positional and may repeat while typing.
+      key={index}
+      className="grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-start gap-2 text-sm"
+    >
+      <dt className="text-muted-foreground min-w-0 wrap-break-word text-pretty">
+        {f.label || t("notSetYet")}
+      </dt>
+      <dd className="min-w-0 wrap-break-word text-pretty font-medium">
+        {f.value || t("notSetYet")}
+      </dd>
+    </div>
+  ));
 }
 
 function PassPreview({
@@ -250,6 +279,7 @@ function PassPreview({
   eventName,
   venueName,
   organizerName,
+  frontFields,
   backFields,
 }: {
   visibility: PassFieldVisibility;
@@ -257,6 +287,7 @@ function PassPreview({
   eventName: string;
   venueName: string;
   organizerName: string;
+  frontFields: PassBackField[];
   backFields: PassBackField[];
 }) {
   const { t } = useLocale();
@@ -296,6 +327,7 @@ function PassPreview({
                 <dd className="min-w-0 wrap-break-word text-pretty font-medium">{sample[key]}</dd>
               </div>
             ))}
+            <CustomPreviewRows fields={frontFields} />
           </dl>
         </div>
         <div className="rounded-md border p-3">
@@ -314,19 +346,7 @@ function PassPreview({
                 <dd className="min-w-0 wrap-break-word text-pretty font-medium">{f.value}</dd>
               </div>
             ))}
-            {backFields.map((f) => (
-              <div
-                key={`${f.label}-${f.value}`}
-                className="grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-start gap-2 text-sm"
-              >
-                <dt className="text-muted-foreground min-w-0 wrap-break-word text-pretty">
-                  {f.label || t("notSetYet")}
-                </dt>
-                <dd className="min-w-0 wrap-break-word text-pretty font-medium">
-                  {f.value || t("notSetYet")}
-                </dd>
-              </div>
-            ))}
+            <CustomPreviewRows fields={backFields} />
           </dl>
         </div>
       </div>
@@ -359,6 +379,7 @@ export function WalletTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
     router.replace(`/settings/event?${params}`, { scroll: false });
   }
   const { config, status, applyConfig } = useEventConfig();
+  const [passFrontFields, setPassFrontFields] = useState<PassBackField[]>([]);
   const [passBackFields, setPassBackFields] = useState<PassBackField[]>([]);
   const [passFieldLabels, setPassFieldLabels] = useState<PassFieldLabels>({
     ...DEFAULT_PASS_FIELD_LABELS,
@@ -375,6 +396,7 @@ export function WalletTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
   const [saveState, setSaveState] = useCategorySaveState(dirty || runtimeDirty, onDirtyChange);
 
   const applyFromConfig = useCallback((cfg: EventConfig) => {
+    setPassFrontFields(cfg.passFrontFields);
     setPassBackFields(cfg.passBackFields);
     setPassFieldLabels(resolvePassFieldLabels(cfg.passFieldLabels));
     setPassFieldVisibility(resolvePassFieldVisibility(cfg.passFieldVisibility));
@@ -402,7 +424,8 @@ export function WalletTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
       if (!runtimeSave.current) throw new Error(t("couldNotLoadEventSettings"));
       await runtimeSave.current();
       const next = await api.put<EventConfig>("/api/event", {
-        passBackFields: normalizeBackFields(passBackFields),
+        passFrontFields: normalizeCustomFields(passFrontFields),
+        passBackFields: normalizeCustomFields(passBackFields),
         passFieldLabels: normalizeFieldLabels(passFieldLabels),
         passFieldVisibility,
       });
@@ -456,6 +479,14 @@ export function WalletTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
                   onVisibilityChange={markDirty(setPassFieldVisibility)}
                 />
               </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">{t("passFrontCustomFieldsLabel")}</p>
+                <CustomFieldBuilder
+                  value={passFrontFields}
+                  onChange={markDirty(setPassFrontFields)}
+                  limits={FRONT_FIELD_LIMITS}
+                />
+              </div>
 
               <PassPreview
                 visibility={passFieldVisibility}
@@ -463,6 +494,7 @@ export function WalletTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
                 eventName={liveEventName}
                 venueName={liveVenueName}
                 organizerName={config.organizerName}
+                frontFields={passFrontFields}
                 backFields={passBackFields}
               />
 
@@ -510,9 +542,10 @@ export function WalletTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
                   </div>
                   <div className="space-y-2">
                     <p className="text-sm font-medium">{t("passBackFieldsLabel")}</p>
-                    <BackFieldBuilder
+                    <CustomFieldBuilder
                       value={passBackFields}
                       onChange={markDirty(setPassBackFields)}
+                      limits={BACK_FIELD_LIMITS}
                     />
                   </div>
                 </CollapsibleContent>

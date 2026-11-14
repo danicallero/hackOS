@@ -222,6 +222,7 @@ export interface EventConfig {
    */
   wifiSsid: string | null;
   wifiPassword: string | null;
+  passFrontFields: PassBackField[];
   passBackFields: PassBackField[];
   passFieldLabels: PassFieldLabels;
   passFieldVisibility: PassFieldVisibility;
