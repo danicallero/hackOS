@@ -5,6 +5,8 @@ import { invalidateServerState } from "./server-state";
 /** H16–H21: one native project and the applications form contract. */
 export interface NativeProject {
   id: number;
+  /** The edition the project belongs to (links to past editions stay valid). */
+  edition?: { eventKey: string; name: string };
   canEdit: boolean;
   isMember?: boolean;
   canInspect?: boolean;

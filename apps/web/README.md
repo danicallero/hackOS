@@ -87,6 +87,10 @@ old-cookie profile response; `useLiveQuery` retains its bounded one-trailing-
 refetch behavior for SSE bursts. The cache is only a browser deduplication
 layer: API reads remain the authoritative Postgres projection.
 
+### Viewed edition
+
+`lib/viewed-edition.ts` holds the edition this tab views (`null` = the current edition), in memory only, so every load and sign-in starts in the latest active edition. `lib/api.ts` sends `X-Edition` on JSON, upload and download requests only for a non-current edition and never shares an in-flight GET across a switch. `setViewedEdition` drops every cached read (`invalidateAllServerState`) and `SessionProvider` refetches `/api/me`, so capabilities and navigation follow the edition. `hooks/use-editions.ts` reads `/api/me/editions`; the account-menu selector and the closed-edition shell notice (`EditionNotice`) build on it. Realtime streams cannot carry the header and stay user-scoped.
+
 ### One read pattern (#1003)
 
 Every authenticated read goes through `lib/server-state.ts`: use

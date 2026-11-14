@@ -2,6 +2,7 @@ import { CommandPalette } from "@/components/common/command-palette";
 import { QuickArrival } from "@/components/common/quick-arrival";
 import { AppSidebar, NotificationSidebarTrigger } from "@/components/layout/app-sidebar";
 import { AuthGuard } from "@/components/layout/auth-guard";
+import { EditionNotice } from "@/components/layout/edition-notice";
 import { MAIN_CONTENT_ID, SkipLink } from "@/components/layout/skip-link";
 import { VerificationBanner } from "@/components/layout/verification-banner";
 import { OnboardingBanner } from "@/components/onboarding/onboarding-banner";
@@ -23,6 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="pointer-events-none absolute top-3 left-3 z-40 md:hidden">
             <NotificationSidebarTrigger className="pointer-events-auto bg-background/90 shadow-sm backdrop-blur" />
           </div>
+          <EditionNotice />
           <VerificationBanner />
           <OnboardingBanner />
           <CommandPalette />
