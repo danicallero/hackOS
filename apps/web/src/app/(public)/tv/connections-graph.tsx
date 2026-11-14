@@ -273,6 +273,17 @@ export function ConnectionsGraph({
     [kinds, degrees],
   );
 
+  // Degree of the company at either end of a link, undefined for person-person links.
+  const companyDegree = useCallback(
+    (a: string, b: string) =>
+      kinds.get(a) === "company"
+        ? (degrees.get(a) ?? 1)
+        : kinds.get(b) === "company"
+          ? (degrees.get(b) ?? 1)
+          : undefined,
+    [kinds, degrees],
+  );
+
   // New nodes start (invisible, small) on their neighbours; the very first snapshot
   // starts in place. Only ids the scene does not know yet are touched, so this is
   // idempotent (StrictMode, re-renders).
@@ -408,6 +419,8 @@ export function ConnectionsGraph({
       from: EdgeState;
       to: EdgeState;
       moves: boolean;
+      /** Opacity or width changes in this transition; unchanged edges are not rewritten per frame. */
+      dirty: boolean;
     }
     const edgeEntries: EdgeEntry[] = [];
     for (const el of group.querySelectorAll<SVGElement>("[data-eid]")) {
@@ -425,14 +438,14 @@ export function ConnectionsGraph({
         : false;
       let es = sc.edges.get(key);
       if (!es) {
-        es = { o: Number(el.style.opacity) || 0, w: (on ? 1.4 : 0.7) * unit };
+        es = { o: Number(el.getAttribute("stroke-opacity")) || 0, w: (on ? 1.4 : 0.7) * unit };
         sc.edges.set(key, es);
       }
       const ghost = el.dataset.ghost !== undefined;
       const to: EdgeState = ghost
         ? { o: 0, w: es.w }
         : {
-            o: linkAlpha(pd, lit ? (on ? "focus" : "dim") : "overview"),
+            o: linkAlpha(pd, lit ? (on ? "focus" : "dim") : "overview", companyDegree(aId, bId)),
             w: (on ? 1.4 : 0.7) * unit,
           };
       edgeEntries.push({
@@ -443,6 +456,7 @@ export function ConnectionsGraph({
         from: { ...es },
         to,
         moves: Boolean(entryById.get(aId)?.moves || entryById.get(bId)?.moves),
+        dirty: es.o !== to.o || es.w !== to.w,
       });
     }
     const paint = (c: Camera, e: number) => {
@@ -470,10 +484,13 @@ export function ConnectionsGraph({
           );
       }
       for (const n of edgeEntries) {
-        n.es.o = n.from.o + (n.to.o - n.from.o) * e;
-        n.es.w = n.from.w + (n.to.w - n.from.w) * e;
-        n.el.style.opacity = String(n.es.o);
-        n.el.setAttribute("stroke-width", String(n.es.w));
+        if (n.dirty) {
+          n.es.o = n.from.o + (n.to.o - n.from.o) * e;
+          n.es.w = n.from.w + (n.to.w - n.from.w) * e;
+          // stroke-opacity, not opacity: a group opacity per line forces an offscreen layer each.
+          n.el.setAttribute("stroke-opacity", String(n.es.o));
+          n.el.setAttribute("stroke-width", String(n.es.w));
+        }
         if (n.moves) {
           n.el.setAttribute("x1", String(n.a.x));
           n.el.setAttribute("y1", String(n.a.y));
@@ -518,7 +535,10 @@ export function ConnectionsGraph({
         n.moves = true;
         n.fades = true;
       }
-      for (const n of edgeEntries) n.moves = true;
+      for (const n of edgeEntries) {
+        n.moves = true;
+        n.dirty = true;
+      }
       paint(target, 1);
       settle();
       return;
@@ -552,6 +572,7 @@ export function ConnectionsGraph({
     lit,
     members,
     personDegree,
+    companyDegree,
     unit,
     logos,
     world,
@@ -583,14 +604,19 @@ export function ConnectionsGraph({
           stroke={palette.edge}
           strokeWidth={now?.w ?? 0.7 * unit}
           vectorEffect="non-scaling-stroke"
-          style={{
-            opacity: now?.o ?? linkAlpha(personDegree(edge.source, edge.target), "overview"),
-          }}
+          strokeOpacity={
+            now?.o ??
+            linkAlpha(
+              personDegree(edge.source, edge.target),
+              "overview",
+              companyDegree(edge.source, edge.target),
+            )
+          }
         />
       );
     };
     return [...edges.map((e) => draw(e, false)), ...ghosts.edges.map((e) => draw(e, true))];
-  }, [edges, ghosts, unit, personDegree]);
+  }, [edges, ghosts, unit, personDegree, companyDegree]);
 
   const nodeEls = useMemo(() => {
     const sc = scene.current;

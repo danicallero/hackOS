@@ -57,9 +57,56 @@ export function communityAnchors(count: number): Point[] {
   });
 }
 
+/** Companies sit on a ring outside the community ring, never at the centre of gravity. */
+const COMPANY_RING = { rx: 0.56, ry: 0.43 };
+const companyCount = (flags: boolean[]) => flags.filter(Boolean).length;
+
+/** Spread preferred ring angles so logos keep a minimum angular gap (deterministic). */
+export function placeCompanyAngles(order: number[], preferred: number[]): number[] {
+  const m = preferred.length;
+  const TAU = Math.PI * 2;
+  if (m < 2) return preferred;
+  const minGap = (TAU / m) * 0.6;
+  const idx = preferred
+    .map((_, k) => k)
+    .sort((p, q) => preferred[p] - preferred[q] || order[p] - order[q]);
+  const ang = idx.map((k) => ((preferred[k] % TAU) + TAU) % TAU);
+  ang.sort((p, q) => p - q);
+  for (let pass = 0; pass < 30; pass++) {
+    let moved = false;
+    for (let k = 0; k < m; k++) {
+      const next = (k + 1) % m;
+      const gap = (ang[next] - ang[k] + TAU) % TAU;
+      if (gap < minGap) {
+        const push = (minGap - gap) / 2;
+        ang[k] -= push;
+        ang[next] += push;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  const out = new Array<number>(m);
+  idx.forEach((k, r) => {
+    out[k] = ang[r];
+  });
+  return out;
+}
+
 /** Link opacity from the most connected person at either end: hub bundles stay faint. */
-export function linkAlpha(personDegree: number, mode: "overview" | "focus" | "dim"): number {
+export function linkAlpha(
+  personDegree: number,
+  mode: "overview" | "focus" | "dim",
+  companyDegree?: number,
+): number {
   const hub = Math.sqrt(Math.max(1, personDegree));
+  if (companyDegree !== undefined) {
+    // A sponsor is scanned by hundreds: its spokes are a whisper in the overview (shared
+    // out over its degree) and only full strength where the section is lit.
+    if (mode === "dim") return 0.006;
+    if (mode === "focus") return 0.4 / (1 + 0.05 * hub);
+    return Math.min(0.03, 3 / Math.max(1, companyDegree));
+  }
   if (mode === "dim") return 0.025;
   if (mode === "focus") return 0.85 / (1 + 0.05 * hub);
   return 0.2 / (1 + 0.2 * hub);
@@ -127,37 +174,42 @@ export function layoutGraph(
       if (v > count) [best, count] = [c, v];
     community[i] = best;
   }
-  const home: Point[] = ids.map(() => centre);
-  for (let i = 0; i < n; i++) {
-    if (!isCompany[i]) {
-      if (community[i] >= 0) home[i] = anchors[community[i]];
-      continue;
-    }
+  // Companies never take part in communities: their angle on the outer ring comes from
+  // where their people are (one dominant group: next to it; spread over many: an even slot).
+  let slot = 0;
+  const diffuse = companyCount(isCompany) || 1;
+  const companyAngle = (i: number, id: string): number => {
     const tally = new Map<number, number>();
     for (const j of neighbours[i])
       if (!isCompany[j] && community[j] >= 0)
         tally.set(community[j], (tally.get(community[j]) ?? 0) + 1);
     let total = 0;
     let top = 0;
-    let cx = 0;
-    let cy = 0;
-    for (const [c, v] of tally) {
+    let topCommunity = -1;
+    for (const [c, v] of [...tally].sort((p, q) => p[0] - q[0])) {
       total += v;
-      top = Math.max(top, v);
-      cx += anchors[c].x * v;
-      cy += anchors[c].y * v;
+      if (v > top) [top, topCommunity] = [v, c];
     }
-    if (total === 0) {
-      const angle = hashUnit(ids[i], 5) * Math.PI * 2;
-      home[i] = { x: 0.5 + 0.55 * Math.cos(angle), y: 0.5 + 0.42 * Math.sin(angle) };
-      continue;
-    }
-    cx /= total;
-    cy /= total;
-    // One home group: sit on its outer edge. Several: between them.
-    const out = top / total >= 0.6 ? 1.3 : 1.05;
-    home[i] = { x: 0.5 + (cx - 0.5) * out, y: 0.5 + (cy - 0.5) * out };
-  }
+    if (total === 0) return hashUnit(id, 5) * Math.PI * 2;
+    if (top / total >= 0.6)
+      return Math.atan2(
+        (anchors[topCommunity].y - 0.5) / RING.ry,
+        (anchors[topCommunity].x - 0.5) / RING.rx,
+      );
+    const k = slot++;
+    return -Math.PI / 2 + Math.PI / Math.max(1, sections.length) + (2 * Math.PI * k) / diffuse;
+  };
+  const home: Point[] = ids.map(() => centre);
+  for (let i = 0; i < n; i++)
+    if (!isCompany[i] && community[i] >= 0) home[i] = anchors[community[i]];
+  const companyIdx = ids.map((_, i) => i).filter((i) => isCompany[i]);
+  const preferred = companyIdx.map((i) => companyAngle(i, ids[i]));
+  placeCompanyAngles(companyIdx, preferred).forEach((angle, k) => {
+    home[companyIdx[k]] = {
+      x: 0.5 + COMPANY_RING.rx * Math.cos(angle),
+      y: 0.5 + COMPANY_RING.ry * Math.sin(angle),
+    };
+  });
 
   const x = new Float64Array(n);
   const y = new Float64Array(n);
@@ -182,12 +234,12 @@ export function layoutGraph(
       let sy = 0;
       let count = 0;
       for (const j of neighbours[i]) {
-        if (!placed[j] || isCompany[j]) continue;
+        if (isCompany[i] || !placed[j] || isCompany[j]) continue;
         sx += x[j];
         sy += y[j];
         count++;
       }
-      if (count === 0 && pass < 2) continue;
+      if (count === 0 && pass < 2 && !isCompany[i]) continue; // logos seed on their ring slot
       const point = seedPoint(ids[i], count ? { x: sx / count, y: sy / count } : null, home[i]);
       x[i] = point.x;
       y[i] = point.y;
@@ -209,7 +261,8 @@ export function layoutGraph(
     const node = byId.get(ids[i]);
     const r = node ? nodeRadius(node.degree, node.kind, 1) : 3;
     radius[i] = r / 1000;
-    weight[i] = (r / 4) ** 1.25;
+    // Logos keep their clearance (final pass) but must not shove the whole graph away.
+    weight[i] = node?.kind === "company" ? 8 : (r / 4) ** 1.25;
     gap[i] = (r / 1000) * 1.5;
   }
   const rest = 0.6 / Math.sqrt(n);
@@ -223,8 +276,9 @@ export function layoutGraph(
   const linkStiff = new Float64Array(links.length);
   links.forEach(([a, b], k) => {
     if (isCompany[a] || isCompany[b]) {
-      linkRest[k] = rest * 2;
-      linkStiff[k] = 0.1;
+      // Sponsor spokes are weak: they must not collapse people onto the logo.
+      linkRest[k] = rest * 3;
+      linkStiff[k] = 0.004;
     } else if (community[a] >= 0 && community[a] === community[b]) {
       linkRest[k] = rest * 0.7;
       linkStiff[k] = 0.6;
@@ -273,7 +327,7 @@ export function layoutGraph(
       fy[b] -= dy * f * fb;
     });
     for (let i = 0; i < n; i++) {
-      const pull = isCompany[i] ? 0.3 : community[i] >= 0 ? 1.1 : 0.12;
+      const pull = isCompany[i] ? 2.5 : community[i] >= 0 ? 1.1 : 0.12;
       fx[i] += (home[i].x - x[i]) * pull;
       fy[i] += (home[i].y - y[i]) * pull;
       const mag = Math.hypot(fx[i], fy[i]);
@@ -346,13 +400,23 @@ export function detectSections(nodes: TvConnectionNode[], edges: TvConnectionEdg
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const people = nodes.filter((node) => node.kind === "person");
   if (people.length < MIN_SECTION_PEOPLE * 2) return [];
+  // Communities come from person-person links only: sponsors are linked to most people and
+  // would merge every group (and drag everyone to one centre).
   const adjacency = new Map<string, string[]>(nodes.map((node) => [node.id, []]));
+  const companyLinks = new Map<string, string[]>(nodes.map((node) => [node.id, []]));
   for (const edge of edges) {
-    if (edge.source === edge.target || !byId.has(edge.source) || !byId.has(edge.target)) continue;
+    const a = byId.get(edge.source);
+    const b = byId.get(edge.target);
+    if (edge.source === edge.target || !a || !b) continue;
+    if (a.kind === "company" || b.kind === "company") {
+      const [company, person] = a.kind === "company" ? [a, b] : [b, a];
+      if (person.kind === "person") companyLinks.get(company.id)?.push(person.id);
+      continue;
+    }
     adjacency.get(edge.source)?.push(edge.target);
     adjacency.get(edge.target)?.push(edge.source);
   }
-  const label = new Map(nodes.map((node) => [node.id, node.id]));
+  const label = new Map(people.map((node) => [node.id, node.id]));
   const order = people.map((node) => node.id).sort((a, b) => hashUnit(a, 7) - hashUnit(b, 7));
   for (let round = 0; round < 15; round++) {
     let changed = false;
@@ -360,9 +424,7 @@ export function detectSections(nodes: TvConnectionNode[], edges: TvConnectionEdg
       const votes = new Map<string, number>();
       for (const other of adjacency.get(id) ?? []) {
         // Hubs link across every group; their vote is diluted so they do not merge the groups.
-        const weight =
-          (byId.get(other)?.kind === "company" ? 0.5 : 1) /
-          Math.max(1, (adjacency.get(other)?.length ?? 1) / 10) ** 1;
+        const weight = 1 / Math.max(1, (adjacency.get(other)?.length ?? 1) / 10);
         const vote = label.get(other) as string;
         votes.set(vote, (votes.get(vote) ?? 0) + weight);
       }
@@ -395,7 +457,7 @@ export function detectSections(nodes: TvConnectionNode[], edges: TvConnectionEdg
   const home = new Map<string, number>();
   for (const company of nodes.filter((node) => node.kind === "company")) {
     const tally = new Map<number, number>();
-    for (const other of adjacency.get(company.id) ?? []) {
+    for (const other of companyLinks.get(company.id) ?? []) {
       const index = kept.findIndex(([, members]) => members.some((m) => m.id === other));
       if (index >= 0) tally.set(index, (tally.get(index) ?? 0) + 1);
     }

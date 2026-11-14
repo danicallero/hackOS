@@ -35,6 +35,86 @@ function sampleGraph(people: number, companies = 6) {
   return { nodes, edges };
 }
 
+/** Sponsor-heavy event: groups of 25 people linked inside the group, everyone scans 4-6 sponsors. */
+function sponsorHeavyGraph(people = 200, companies = 6) {
+  const nodes: TvConnectionNode[] = [];
+  const edges: TvConnectionEdge[] = [];
+  for (let c = 0; c < companies; c++)
+    nodes.push({ id: `c${c}`, kind: "company", label: `Company ${c}`, degree: 0 });
+  for (let p = 0; p < people; p++)
+    nodes.push({ id: `p${p}`, kind: "person", label: `Person ${p}`, degree: 0 });
+  const add = (source: string, target: string) => {
+    edges.push({ source, target });
+    for (const node of nodes) if (node.id === source || node.id === target) node.degree++;
+  };
+  const size = 25;
+  for (let p = 0; p < people; p++) {
+    const group = Math.floor(p / size);
+    for (const step of [1, 3, 7])
+      add(`p${p}`, `p${group * size + ((p - group * size + step) % size)}`);
+    const visits = 4 + (p % 3);
+    for (let k = 0; k < visits; k++) add(`p${p}`, `c${(p + k) % companies}`);
+  }
+  return { nodes, edges };
+}
+
+describe("sponsor-heavy graphs", () => {
+  it("detects communities from person links only", () => {
+    const { nodes, edges } = sponsorHeavyGraph();
+    const personOnly = edges.filter((e) => e.source.startsWith("p") && e.target.startsWith("p"));
+    expect(edges.length - personOnly.length).toBeGreaterThan(personOnly.length);
+    const sections = detectSections(nodes, edges);
+    expect(sections.length).toBeGreaterThanOrEqual(6);
+    expect(sections[0].people.length).toBeLessThanOrEqual(60);
+    // Same sections whether or not the company links are present.
+    expect(sections.map((s) => s.people)).toEqual(
+      detectSections(nodes, personOnly).map((s) => s.people),
+    );
+  });
+
+  it("places companies outside the person clusters, not at the centre", () => {
+    const { nodes, edges } = sponsorHeavyGraph();
+    const pos = layoutGraph(nodes, edges);
+    const people = nodes.filter((n) => n.kind === "person").map((n) => pos.get(n.id));
+    const cx = people.reduce((a, p) => a + (p?.x ?? 0), 0) / people.length;
+    const cy = people.reduce((a, p) => a + (p?.y ?? 0), 0) / people.length;
+    const radial = (id: string) =>
+      Math.hypot((pos.get(id)?.x ?? 0) - cx, (pos.get(id)?.y ?? 0) - cy);
+    const personRadii = nodes
+      .filter((n) => n.kind === "person")
+      .map((n) => radial(n.id))
+      .sort((a, b) => a - b);
+    const median = personRadii[Math.floor(personRadii.length / 2)];
+    for (const n of nodes.filter((x) => x.kind === "company"))
+      expect(radial(n.id)).toBeGreaterThan(median * 1.2);
+  });
+
+  it("settles in well under 1.5 s at 500 people and stays deterministic", () => {
+    const { nodes, edges } = sponsorHeavyGraph(500);
+    const started = performance.now();
+    const first = layoutGraph(nodes, edges);
+    expect(performance.now() - started).toBeLessThan(1500);
+    expect([...layoutGraph(nodes, edges)]).toEqual([...first]);
+    // A poll with the same content starting from the previous positions barely moves anything.
+    const again = layoutGraph(nodes, edges, first);
+    let moved = 0;
+    for (const [id, p] of first) {
+      const q = again.get(id);
+      moved = Math.max(moved, Math.hypot((q?.x ?? 0) - p.x, (q?.y ?? 0) - p.y));
+    }
+    expect(moved).toBeLessThan(0.15);
+  });
+
+  it("draws sponsor spokes far fainter than person links in the overview, normal in focus", () => {
+    expect(linkAlpha(5, "overview", 200)).toBeLessThan(linkAlpha(5, "overview") / 5);
+    expect(linkAlpha(5, "overview", 400)).toBeLessThan(linkAlpha(5, "overview", 100));
+    // 2000 spokes at the overview alpha stay under a hairball's worth of ink.
+    expect(2000 * linkAlpha(5, "overview", 300)).toBeLessThan(25);
+    expect(linkAlpha(5, "focus", 200)).toBeGreaterThan(linkAlpha(5, "overview", 200) * 10);
+    expect(linkAlpha(5, "dim", 200)).toBeLessThan(linkAlpha(5, "dim"));
+  });
+});
+
 describe("layoutGraph spacing", () => {
   it("keeps companies apart from each other and from people, deterministically", () => {
     const { nodes, edges } = sampleGraph(60, 6);

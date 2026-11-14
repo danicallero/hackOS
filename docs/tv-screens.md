@@ -87,21 +87,34 @@ are all there is. Display rules:
   `logoNegativeUrl` on company nodes); the web app sets no CSP and `<image>` needs
   no CORS since nothing reads pixels.
 - Sections: `detectSections` runs a deterministic label propagation over the
-  people (companies are fixed anchors that vote at half weight; visit order comes
-  from a hash of the id, never `Math.random`). Communities of 3+ people become
+  people over **person-person links only**: company links are ignored, because at a
+  sponsor-scan event every person links to most sponsors and they would merge all groups
+  into one (visit order comes from a hash of the id, never `Math.random`). A company's
+  home section, used for the camera, is only a tally of where its people sit. Communities of 3+ people become
   sections, biggest first, at most 12. Graphs under 6 people, or with no 3-person
   community, only show the overview.
 - Layout (`layoutGraph`, community-aware): `detectSections` communities (hub votes
   diluted by degree so hubs do not merge groups) get anchors on an ellipse around the
-  centre, biggest first (`communityAnchors`); people gravitate to their anchor, logos to
-  the outer edge of their home group (or between groups if they span several). Links
-  inside a group are short and stiff, across groups long and weak. Repulsion and
-  collision scale with node radius, and a final pass guarantees every logo clears every
-  other node. Known nodes keep their previous positions and only relax. The view fits
+  centre, biggest first (`communityAnchors`); people gravitate to their anchor. Logos are
+  never the centre of gravity: each sits on a ring outside the community ring
+  (`COMPANY_RING`), at the angle of its dominant group (>= 60 % of its people) or, when its
+  people are spread over many groups, in an even slot between groups (`placeCompanyAngles`
+  keeps a minimum angular gap). Logos are seeded on their ring slot, pulled strongly to it,
+  repel lightly, and company links are very weak springs (stiffness 0.004 vs 0.6 inside a
+  group), so spokes never collapse people onto a logo; a final pass still guarantees every
+  logo clears every other node. Links inside a group are short and stiff, across groups
+  long and weak. Known nodes keep their previous positions and only relax. The view fits
   the bounds with a ~6% margin (never less than a logo radius); logos draw on top of
-  people. Link opacity comes from the most connected person at either end
-  (`linkAlpha`): hub bundles are faint, the overview is quiet, the focused section is
-  at full strength.
+  people. Link opacity (`linkAlpha`) comes from the most connected person at either end:
+  hub bundles are faint, the overview is quiet, the focused section is at full strength.
+  Company links take a third argument, the company's degree: in the overview their alpha is
+  `min(0.03, 3 / companyDegree)` (~0.014 at 220 scans, so ~2000 spokes stay a faint haze), in
+  focus 0.4 (only where both ends are lit, i.e. the logos of the focused section), otherwise
+  0.006. Edges are `<line>`s that carry `stroke-opacity`, not CSS `opacity` (a group opacity
+  per line forces an offscreen layer each: ~1300 translucent lines took the overview from
+  ~20 ms to ~145 ms per frame in software GL), and the animation loop only rewrites edges whose
+  opacity or width actually change. At 500 people (332 visible, 885 person-person and 1314
+  person-company edges) the layout settles in ~0.1 s.
 - Camera loop (`buildSequence`): overview (6 s, calm, no names) →
   section 1 … section 3 → overview → section 4 … The camera is one SVG transform
   tweened per frame (1.6 s ease-in-out, zoom interpolated in log space) by one
