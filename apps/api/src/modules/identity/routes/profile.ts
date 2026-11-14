@@ -14,6 +14,7 @@ import {
   requireCapability,
   userHasCapability,
 } from "../../../lib/capabilities.js";
+import { readScopedEdition } from "../../../lib/edition.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
 import { assertFixtureSubjectScope } from "../../../lib/fixture-subject-scope.js";
 import { idempotencyGuard, replayCompletedIdempotency } from "../../../lib/idempotency.js";
@@ -459,7 +460,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           "accounts (H55), whether they currently hold role-derived event access, whether they have a project/queue entry of their own " +
           "(drives hiding the My project/My queue nav items, issue #424), mobile " +
           "entry eligibility, and the caller's complete assigned-role set (H8) alongside " +
-          "the single highest-visible `visibleRoleName` shown elsewhere. `attendanceKind` is derived from current-edition evidence, with participant confirmation taking precedence over mentor, sponsor and staff. `pendingProfileTasks` " +
+          "the single highest-visible `visibleRoleName` shown elsewhere. Everything edition-dependent (roles, capabilities, event access, project/queue facts, `attendanceKind`) is resolved for the viewed edition (`X-Edition`, else the current one): a person with no role there looks like someone who has not applied, while profile and preferences stay global. `edition` is that edition (`eventKey`, `name`, `status`, `isCurrent`). `attendanceKind` is derived from the viewed edition's evidence, with participant confirmation taking precedence over mentor, sponsor and staff. `pendingProfileTasks` " +
           "(#933) lists what to ask for on next entry: `dietary` when the caller has event access " +
           "but never gave an explicit dietary answer and the profile is not locked (H7), `meal_plan` when a sponsor representative " +
           "has an open offered meal without an answer. `pendingRsvps` is true for any unanswered, unlocked offered activity or meal and drives the general RSVP prompt on current clients. `eventTimezone` (H45/H47) is the event's IANA timezone: web and mobile show and accept every date and time in that zone, not the device's. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
@@ -519,38 +520,49 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // any signed-in account (no capability), unlike GET /api/event.
             eventTimezone: z.string(),
             attendanceKind: z.enum(["participant", "mentor", "sponsor", "staff"]).nullable(),
+            // Multi-edition: the edition the response is scoped to (X-Edition
+            // or the current one).
+            edition: z
+              .object({
+                eventKey: z.string(),
+                name: z.string(),
+                status: z.enum(["draft", "active", "closed"]),
+                isCurrent: z.boolean(),
+              })
+              .nullable(),
           }),
         },
       },
     },
     async (req) => {
       const userId = req.userId as number;
-      const profile = await withTransaction(async (client) => {
-        await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY");
-        const row = await fetchUser(client, userId, true);
-        const [
-          capabilities,
-          membership,
-          hasProject,
-          hasQueueItems,
-          canCreateProject,
-          profileLocked,
-          hasStatisticsPanels,
-          removalStatus,
-          roles,
-          eventAccess,
-          eventTimezone,
-          currentAttendanceKind,
-        ] = await Promise.all([
-          getEffectiveCapabilities(createAuthorizationContext(userId, client)),
-          computeMembershipFlags(client, userId),
-          hasMyProject(userId, client),
-          hasMyQueueItems(userId, client),
-          canCreateMyProject(userId, client),
-          hasAcceptedApplication(client, userId),
-          client
-            .query(
-              `SELECT EXISTS (
+      const profile = await withTransaction(
+        async (client) => {
+          const row = await fetchUser(client, userId, true);
+          const [
+            capabilities,
+            membership,
+            hasProject,
+            hasQueueItems,
+            canCreateProject,
+            profileLocked,
+            hasStatisticsPanels,
+            removalStatus,
+            roles,
+            eventAccess,
+            eventTimezone,
+            currentAttendanceKind,
+            scopedEdition,
+          ] = await Promise.all([
+            getEffectiveCapabilities(createAuthorizationContext(userId, client)),
+            computeMembershipFlags(client, userId),
+            hasMyProject(userId, client),
+            hasMyQueueItems(userId, client),
+            canCreateMyProject(userId, client),
+            hasAcceptedApplication(client, userId),
+            client
+              .query(
+                `SELECT EXISTS (
              SELECT 1
              FROM (
                SELECT DISTINCT ON (scope_key, panel_key) state
@@ -558,6 +570,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                  SELECT sa.scope_key, sa.panel_key, sa.state, r.position
                    FROM statistics_scope_panel_role_access sa
                    JOIN user_roles ur ON ur.role_id = sa.role_id AND ur.user_id = $1
+                     AND (ur.event_key IS NULL OR ur.event_key = current_edition())
                    JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
                   WHERE sa.state <> 'inherit'
                ) decisions
@@ -566,54 +579,65 @@ export function registerProfileRoutes(app: FastifyInstance): void {
              ) AS effective
              WHERE effective.state = 'allow'
            ) AS "exists"`,
-              [userId],
-            )
-            .then((result) => Boolean(result.rows[0]?.exists)),
-          row.account_state === "active"
-            ? Promise.resolve<PendingAccountRemovalStatus>({ status: "active" })
-            : getPendingAccountRemovalStatus(client, userId),
-          getAssignedRoles(client, userId),
-          hasEventAccess(client, userId),
-          getEventTimezone(client),
-          attendanceKind(client, userId),
-        ]);
-        const pendingProfileTasks: (typeof PENDING_PROFILE_TASKS)[number][] = [];
-        // H7: after acceptance dietary data may be written once; any recorded answer
-        // locks it, so a locked profile is never asked and only staff change it.
-        const dietaryLocked =
-          profileLocked &&
-          (row.dietary_confirmed_at !== null || row.dietary_data_state === "present");
-        const onboarding = await readOnboarding(client, userId);
-        if (
-          eventAccess &&
-          !dietaryLocked &&
-          onboarding.steps.some((step) => step.step === "dietary" && step.status === "pending")
-        ) {
-          pendingProfileTasks.push("dietary");
-        }
-        if (eventAccess && membership.isSponsorRep && onboarding.pendingMealRsvps) {
-          pendingProfileTasks.push("meal_plan");
-        }
-        return {
-          ...serializeUser(row, removalStatus),
-          visibleRoleName: roles.find((r) => r.isVisible)?.name ?? null,
-          capabilities: [...capabilities],
-          roles,
-          ...membership,
-          hasEventAccess: eventAccess,
-          hasProject,
-          hasQueueItems,
-          canCreateProject,
-          profileLocked,
-          dietaryLocked,
-          hasStatisticsPanels,
-          pendingProfileTasks,
-          pendingRsvps: eventAccess && onboarding.facts.openRsvps,
-          notificationOnboardingRequired: eventAccess && row.notification_onboarded_at === null,
-          eventTimezone,
-          attendanceKind: currentAttendanceKind,
-        };
-      });
+                [userId],
+              )
+              .then((result) => Boolean(result.rows[0]?.exists)),
+            row.account_state === "active"
+              ? Promise.resolve<PendingAccountRemovalStatus>({ status: "active" })
+              : getPendingAccountRemovalStatus(client, userId),
+            getAssignedRoles(client, userId),
+            hasEventAccess(client, userId),
+            getEventTimezone(client),
+            attendanceKind(client, userId),
+            readScopedEdition(client),
+          ]);
+          const pendingProfileTasks: (typeof PENDING_PROFILE_TASKS)[number][] = [];
+          // H7: after acceptance dietary data may be written once; any recorded answer
+          // locks it, so a locked profile is never asked and only staff change it.
+          const dietaryLocked =
+            profileLocked &&
+            (row.dietary_confirmed_at !== null || row.dietary_data_state === "present");
+          const onboarding = await readOnboarding(client, userId);
+          if (
+            eventAccess &&
+            !dietaryLocked &&
+            onboarding.steps.some((step) => step.step === "dietary" && step.status === "pending")
+          ) {
+            pendingProfileTasks.push("dietary");
+          }
+          if (eventAccess && membership.isSponsorRep && onboarding.pendingMealRsvps) {
+            pendingProfileTasks.push("meal_plan");
+          }
+          return {
+            ...serializeUser(row, removalStatus),
+            visibleRoleName: roles.find((r) => r.isVisible)?.name ?? null,
+            capabilities: [...capabilities],
+            roles,
+            ...membership,
+            hasEventAccess: eventAccess,
+            hasProject,
+            hasQueueItems,
+            canCreateProject,
+            profileLocked,
+            dietaryLocked,
+            hasStatisticsPanels,
+            pendingProfileTasks,
+            pendingRsvps: eventAccess && onboarding.facts.openRsvps,
+            notificationOnboardingRequired: eventAccess && row.notification_onboarded_at === null,
+            eventTimezone,
+            attendanceKind: currentAttendanceKind,
+            edition: scopedEdition
+              ? {
+                  eventKey: scopedEdition.key,
+                  name: scopedEdition.name,
+                  status: scopedEdition.status,
+                  isCurrent: scopedEdition.isCurrent,
+                }
+              : null,
+          };
+        },
+        { snapshotRead: true },
+      );
       return profile;
     },
   );
@@ -624,7 +648,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       preHandler: requireAuth,
       // H1: account/profile setup is allowed before primary-email
       // verification; event transactions are guarded by the shared default.
-      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      config: routeAccess({ kind: "authenticated", emailVerification: "none", edition: "global" }),
       schema: {
         summary: "Update my profile",
         description:
@@ -728,7 +752,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/me/anonymize/cancel",
     {
       preHandler: selfRemovalCancellationPreHandler,
-      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      config: routeAccess({ kind: "authenticated", emailVerification: "none", edition: "global" }),
       schema: {
         summary: "Cancel my pending account anonymization",
         description:
@@ -746,7 +770,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/me/removal-pin",
     {
       preHandler: assertActiveAuthenticatedUser,
-      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      config: routeAccess({ kind: "authenticated", emailVerification: "none", edition: "global" }),
       schema: {
         summary: "Send my account-removal security PIN",
         description:
@@ -767,7 +791,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       // Account removal is a security/privacy lifecycle action, not an event
       // transaction, so an unverified account may still use it (H1, H54) after
       // proving possession of its current credential.
-      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      config: routeAccess({ kind: "authenticated", emailVerification: "none", edition: "global" }),
       schema: {
         description:
           "H54 self-service full deletion. The server chooses this only before canonical accreditation; an inconsistent open door record may wait for a valid exit. Unverified real accounts must re-enter their current password.",
@@ -815,7 +839,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/me/anonymize",
     {
       preHandler: selfRemovalPreHandler("POST /api/me/anonymize removal-complete"),
-      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      config: routeAccess({ kind: "authenticated", emailVerification: "none", edition: "global" }),
       schema: {
         summary: "Anonymize my data and close my account",
         description:
@@ -1081,7 +1105,11 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/users/:id",
     {
       preHandler: requireCapability(CAPABILITIES.USERS_WRITE),
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_WRITE }),
+      config: routeAccess({
+        kind: "capability",
+        capability: CAPABILITIES.USERS_WRITE,
+        edition: "global",
+      }),
       schema: {
         summary: "Update a user's profile",
         description:
@@ -1177,7 +1205,11 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/users/:id",
     {
       preHandler: [requireCapability(CAPABILITIES.ADMIN_ALL), adminRemovalIdempotency],
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.ADMIN_ALL }),
+      config: routeAccess({
+        kind: "capability",
+        capability: CAPABILITIES.ADMIN_ALL,
+        edition: "global",
+      }),
       schema: {
         summary: "Delete a user account",
         description:
@@ -1219,7 +1251,11 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/users/:id/email",
     {
       preHandler: requireCapability(CAPABILITIES.USERS_WRITE),
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_WRITE }),
+      config: routeAccess({
+        kind: "capability",
+        capability: CAPABILITIES.USERS_WRITE,
+        edition: "global",
+      }),
       schema: {
         summary: "Change a user's email",
         description:
@@ -1278,7 +1314,11 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/users/:id/anonymize",
     {
       preHandler: [requireCapability(CAPABILITIES.ADMIN_ALL), adminRemovalIdempotency],
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.ADMIN_ALL }),
+      config: routeAccess({
+        kind: "capability",
+        capability: CAPABILITIES.ADMIN_ALL,
+        edition: "global",
+      }),
       schema: {
         summary: "Anonymize a user account",
         description:

@@ -80,7 +80,8 @@ export async function highestRolePosition(
     `SELECT MAX(r.position) AS position
        FROM user_roles ur
        JOIN roles r ON r.id = ur.role_id
-      WHERE ur.user_id = $1 AND r.deleted_at IS NULL`,
+      WHERE ur.user_id = $1 AND r.deleted_at IS NULL
+        AND (ur.event_key IS NULL OR ur.event_key = current_edition())`,
     [userId],
   );
   const position = rows[0]?.position;
@@ -112,6 +113,7 @@ async function resolveUserCapability(
       WHERE ur.user_id = $1
         AND ($3::boolean = false OR (u.account_state = 'active' AND u.anonymized_at IS NULL))
         AND r.deleted_at IS NULL
+        AND (ur.event_key IS NULL OR ur.event_key = current_edition())
       ORDER BY r.position DESC`,
     [userId, capability, requireActive],
   );
@@ -231,6 +233,7 @@ export async function assertActiveWildcardHolder(
          LEFT JOIN role_capabilities rc ON rc.role_id = r.id AND rc.capability = $1
         WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
           AND r.deleted_at IS NULL
+          AND (ur.event_key IS NULL OR ur.event_key = current_edition())
           AND ($2::integer IS NULL OR ur.user_id <> $2)
      ), resolved AS (
        SELECT DISTINCT ON (user_id) user_id, state

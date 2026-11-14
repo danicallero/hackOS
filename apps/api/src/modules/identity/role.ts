@@ -20,7 +20,7 @@ export interface EffectiveRole {
 /** H8: shared SQL projection for lists and individual public-role reads. */
 export function highestVisibleRoleNameSql(userRef: string): string {
   return `(SELECT r.name FROM user_roles ur JOIN roles r ON r.id = ur.role_id
-    WHERE ur.user_id = ${userRef} AND r.is_visible AND r.deleted_at IS NULL
+    WHERE ur.user_id = ${userRef} AND (ur.event_key IS NULL OR ur.event_key = current_edition()) AND r.is_visible AND r.deleted_at IS NULL
     ORDER BY r.position DESC LIMIT 1)`;
 }
 
@@ -103,6 +103,7 @@ export async function getAssignedRoles(
        FROM user_roles ur
        JOIN roles r ON r.id = ur.role_id
       WHERE ur.user_id = $1 AND r.deleted_at IS NULL
+        AND (ur.event_key IS NULL OR ur.event_key = current_edition())
       ORDER BY r.position DESC`,
     [userId],
   );
@@ -227,13 +228,14 @@ export async function assignAttendeeRole(
     `DELETE FROM user_roles ur
       USING roles r
      WHERE ur.role_id = r.id AND ur.user_id = $1
+       AND (ur.event_key IS NULL OR ur.event_key = current_edition())
        AND r.name = ANY($3::text[]) AND r.id <> $2`,
     [userId, targetRoleId, [ATTENDEE_ROLE_NAMES.mentor, ATTENDEE_ROLE_NAMES.participant]],
   );
   await client.query(
     `INSERT INTO user_roles (user_id, role_id, assigned_by, source)
      VALUES ($1, $2, $3, 'attendee_role_assigned')
-     ON CONFLICT (user_id, role_id) DO NOTHING`,
+     ON CONFLICT (user_id, role_id, event_key) DO NOTHING`,
     [userId, targetRoleId, actorId],
   );
 }

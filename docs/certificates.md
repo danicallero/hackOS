@@ -239,6 +239,19 @@ Event settings → Certificates is split into Issued certificates (default), Cer
 types and Policy.
 Mobile screens are not built yet.
 
+## Editions
+
+Certificates and approvals belong to the edition they were issued in
+(`event_key`; approvals are keyed `(user_id, event_key)`). Issuance,
+eligibility, hours, bulk issue, review roster, exports and the staff issued list
+act on the viewed edition (`current_edition()`), and issuing in a closed edition
+is rejected by the edition write guard. Verification by code or hash and the PDF
+work for any edition, closed ones included, and return `edition: { eventKey, name }`;
+closing never invalidates a certificate. `GET /api/me/certificates` and
+`GET /api/users/:id/certificates` list certificates of all editions, each with
+its `edition` (eligibility and `types` describe the viewed edition). Policy and
+type settings are global to the current edition (`edition: "current"`).
+
 ## Lifecycle
 
 - One live certificate per account, configured type, activity and language: asking again returns it
@@ -251,8 +264,7 @@ Mobile screens are not built yet.
   batch in set-based queries, then issues each person in their own transaction. Each transaction
   still locks the settings, type and person and re-reads the person's award, so a concurrent review
   or type edit is honoured (an edited type drops the preload for that person).
-- Account removal (H54) revokes the person's certificates and clears their
-  snapshot, explicit recipient identity fields and the manual award (`identity/removal.ts`).
+- Account removal or anonymization (H54) deletes the person's certificates and manual awards of every edition; their codes and hashes then answer 404 like unknown ones (`identity/removal.ts`).
 - Issue, revoke and settings changes are audited (H53):
   `certificate.issue`, `certificate.approve`, `certificate.revoke`, `certificate.supersede`,
   `certificate_settings.update`, `certificate_type.create`, `certificate_type.update` and university `export` actions.

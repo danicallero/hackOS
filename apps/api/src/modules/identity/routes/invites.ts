@@ -932,7 +932,9 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           );
         }
 
-        // H8/H10: pre-assigned roles (`role_ids` holds roles.id). The
+        // H8/H10: pre-assigned roles (`role_ids` holds roles.id), assigned in
+        // the active edition at redemption time (user_roles.event_key defaults
+        // to current_edition(); protected roles stay global). The
         // invitation creator validated every assignment under the same
         // role-graph lock. A deleted role is intentionally skipped: deletion
         // revokes deferred grants.
@@ -941,7 +943,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
             `INSERT INTO user_roles (user_id, role_id, assigned_by, source)
              SELECT $1, $2, NULL, 'invite'
              WHERE EXISTS (SELECT 1 FROM roles WHERE id = $2)
-             ON CONFLICT DO NOTHING`,
+             ON CONFLICT (user_id, role_id, event_key) DO NOTHING`,
             [userId, roleId],
           );
           // A deferred invite assignment is still a role assignment. Apply

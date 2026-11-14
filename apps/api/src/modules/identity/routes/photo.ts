@@ -192,7 +192,11 @@ async function staffChange(req: FastifyRequest, subjectId: number): Promise<Phot
   };
 }
 
-const usersWriter = routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_WRITE });
+const usersWriter = routeAccess({
+  kind: "capability",
+  capability: CAPABILITIES.USERS_WRITE,
+  edition: "global",
+});
 
 export function registerPhotoRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -200,7 +204,7 @@ export function registerPhotoRoutes(app: FastifyInstance): void {
   r.post(
     "/api/me/photo",
     {
-      config: routeAccess({ kind: "authenticated" }),
+      config: routeAccess({ kind: "authenticated", edition: "global" }),
       preHandler: [requireAuth, idempotencyGuard],
       schema: {
         summary: "Upload my photo",
@@ -215,7 +219,7 @@ export function registerPhotoRoutes(app: FastifyInstance): void {
   r.delete(
     "/api/me/photo",
     {
-      config: routeAccess({ kind: "authenticated" }),
+      config: routeAccess({ kind: "authenticated", edition: "global" }),
       preHandler: [requireAuth, idempotencyGuard],
       schema: {
         summary: "Remove my photo",

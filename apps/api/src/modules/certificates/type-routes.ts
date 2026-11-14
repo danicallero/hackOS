@@ -23,6 +23,7 @@ export function registerCertificateTypeRoutes(app: FastifyInstance) {
   const access = routeAccessOption({
     kind: "capability",
     capability: CAPABILITIES.PRESENCE_MANAGE,
+    edition: "current",
   });
   r.get(
     "/api/certificates/types",
@@ -40,7 +41,7 @@ export function registerCertificateTypeRoutes(app: FastifyInstance) {
         `SELECT id,name FROM roles WHERE deleted_at IS NULL ORDER BY position DESC,id`,
       );
       const challenges = await pool.query(
-        `SELECT id,title,mandatory FROM challenges ORDER BY mandatory DESC,title,id`,
+        `SELECT id,title,mandatory FROM challenges WHERE event_key=current_edition() ORDER BY mandatory DESC,title,id`,
       );
       return {
         items: await listCertificateTypes(),
