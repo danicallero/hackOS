@@ -24,9 +24,9 @@ and favourites stay private. But the *existence* of a connection (not who saved
 whom, when, or any note) feeds the public TV connections graph: a person pair
 is an edge while either side keeps the entry, so removing a contact leaves the
 line while the other person keeps theirs. Sponsor/company scans show up as
-company connections. Everything is subject to the owner's `tvGraphVisible`
-opt-out (default on, [`directory.md`](./directory.md)); names show only while
-the profile is shared. The diary UI says so when removing a contact (web
+company connections. Only people whose networking profile is shared appear, with
+their name, and a line to a person who is not sharing is never drawn
+([`directory.md`](./directory.md)); there is no separate switch. The diary UI says so when removing a contact (web
 `diaryRemoveBody`, mobile remove alert). The public display can be
 photographed or copied. Organizer privacy review is required before launch.
 

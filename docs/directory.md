@@ -22,7 +22,7 @@ edits the same photo from the Account avatar and the networking profile editor
 
 The "Public profile" section (`components/profile/public-profile-card.tsx`)
 shows only the opt-in switch ("Share my profile"), with one line saying that
-only people who scan the person's badge will see their profile and that, while the TV graph is on, their name shows on public event screens only if the profile is shared, until the person opts in; then it reveals the surname, photo and project switches, the
+only people who scan the person's badge will see their profile and that, while the profile is shared, their name and connections also show on public event screens, which can be photographed or copied, until the person opts in; then it reveals the surname, photo and project switches, the
 headline and location note (placeholder "Room 2.1", so people know which classroom to enter), the bio (with a character count), up to six links
 (type + address rows; empty rows are not saved), the linked GitHub account as a matching link row with its own profile-visibility switch, and the CV. Hiding that link does not unlink the account.
 There is no preview card. While the opt-in is off the fields stay in view,
@@ -33,14 +33,17 @@ change set saves with one `Idempotency-Key`.
 
 **Disclosure and the TV exception.** The profile stays visible only to people
 who scan the badge, but the public TV connections graph is a documented
-exception to "private" (#934, #935): while `tv_graph_visible` is on, the owner
-and their connections (including company connections) appear on public event
-screens as anonymous dots, and the name (surname per `show_surname`) only while
-`directory_visible`. That display and its data are public and can be photographed
-or copied; opting out removes the person and all their connections, but cannot
-retract copies. The switch sits outside the fields that lock while sharing is
-off, and the privacy policy section 3.4 and the onboarding step say the same.
-Organizer privacy review is required before launch.
+exception to "private" (#934, #935): while `directory_visible` is true, the owner
+appears by name (surname per `show_surname`) with their connections (people and
+company, including sponsor scans) on public event screens. People who do not share
+do not appear at all: no anonymous dot and no line to or from them. There is no
+separate switch; sharing is the only control. That display and its data are public
+and can be photographed or copied; turning sharing off removes the person and all
+their connections on the next refresh, but cannot retract copies. The privacy
+policy section 3.4, the sharing copy on web and mobile and the onboarding step say
+the same. People who already share newly appear publicly, so an announcement to
+existing users is needed before launch; it is not built here. Organizer privacy
+review is required before launch.
 
 The CV file saves on its own (upload, replace, remove), like the photo; the
 "Share CV" switch appears once a CV exists and is part of the form. Removing
@@ -149,15 +152,12 @@ including the account photo, stays in `users` and is projected, never copied.
 | `socials` | `[]` | Up to 6 distinct `{kind, url}`; `kind` is `linkedin`, `x`, `instagram`, `website` or `other`; a submitted `github` entry is dropped, because the GitHub link is the member's linked GitHub account (`POST /api/me/github/authorize`). Readers see `https://github.com/<login>` appended to the stored links only while the account is linked and `show_github` is true. `url` must be https (a bare host gets `https://`; credentials and hosts without a dot are rejected) and is stored in the parsed URL's canonical form. |
 | `share_cv` | `false` | Readers may download the CV. Requires an uploaded or application CV (400 otherwise); removing the CV clears it. |
 | `cv_key`, `cv_filename`, `cv_uploaded_at` | `NULL` | The private CV object, its sanitized original name and upload time; all set or all null. |
-| `tv_graph_visible` | `true` | Show the person (and their connections) on the public TV networking graph (migration `1002`; #934, #935). Independent of `directory_visible`: settable while the profile is not shared. No row means on. Edited by the "Show me on the TV connections graph" switch on web (always shown, also in onboarding) and mobile; the PUT always sends it. |
 | `onboarding_completed_at` | `NULL` | Explicit completion or opt-out of the web profile step (migration `0104`); separate from sharing consent. |
 | `consented_at` | `NULL` | Stamped on every hidden→visible transition; required while visible. |
 
 Text is trimmed, empty text becomes `NULL`, and control characters are
-rejected. `PUT` may omit `bio`, `socials`, `shareCv` and `tvGraphVisible` to
-keep their stored values; `GET` and `PUT` responses always carry
-`tvGraphVisible` (boolean, default `true`). Older clients that never send it are
-unaffected. Shared name and default: `packages/shared/src/public-profile.ts`.
+rejected. `PUT` may omit `bio`, `socials` and `shareCv` to
+keep their stored values.
 
 ### Account photo and CV storage
 
@@ -343,8 +343,7 @@ A `PUT` that repeats the stored settings (or the hidden defaults, without a row)
 and does not newly complete onboarding, writes nothing, is not
 audited and broadcasts nothing. Every other `PUT` writes one `audit_log` row
 (`public_profile.updated`) in the same transaction, recording the changed field
-names and visibility before/after but never the free text or links (a graph
-switch change is just `tvGraphVisible` in `changedFields`). CV uploads
+names and visibility before/after but never the free text or links. CV uploads
 and removals write the same action with `changedFields: ["cv"]` (plus
 `shareCv` when removal stops sharing), never the file name. Photo uploads and
 removals write `user.photo_updated` / `user.photo_removed` on the `user`
@@ -352,10 +351,10 @@ entity with only `hasPhoto` before/after. Moderation writes
 `public_profile.moderated` with the staff reason and answers 409 for an account
 being removed.
 
-Moderation (`PUT /api/users/:id/public-profile`, `users:write`) may set
-`tvGraphVisible: false` but never `true`: turning it on answers 409
-`profile_consent_required`, like starting to share, because appearing on the public
-screen is the person's own consent. Removal-pending accounts are refused (owner
+Moderation (`PUT /api/users/:id/public-profile`, `users:write`) may stop sharing
+but never start it: turning `directoryVisible` on answers 409
+`profile_consent_required`. Staff stopping sharing also removes the person from the
+public TV graph. Removal-pending accounts are refused (owner
 404 at the caller gate, 409 in the service; staff 409).
 
 A card's challenges exclude cancelled and disqualified queue entries.

@@ -11,7 +11,7 @@ import { ENTERPRISE_HAS_SYNTHETIC } from "../sponsors/service.js";
 /**
  * Public TV connections graph (#934, #935). Read-only projection of the
  * event diary: nothing from notes, stars, timestamps or user ids leaves here.
- * Cached 15 s (shared cache), which is also the staleness bound for opt-outs,
+ * Cached 15 s (shared cache), which is also the staleness bound for sharing changes,
  * removals and edition switches. docs/tv-screens.md § "Connections graph API".
  */
 
@@ -46,24 +46,24 @@ interface GraphRow {
 
 /**
  * One aggregate query. Eligible people: event access (active, not removed or
- * anonymized, current edition), not a test account, graph switch on (default
- * on without a profile row). A person pair is one edge while either side keeps
- * the entry; a company edge needs a visible, non-synthetic current-edition company.
- * A name is only returned while the profile is shared, with the surname rule.
+ * anonymized, current edition), not a test account, networking profile shared
+ * (directory_visible); no profile row or sharing off means absent, with no
+ * node and no edge. A person pair is one edge while either side keeps the
+ * entry; a company edge needs a visible person and a visible, non-synthetic
+ * current-edition company. The label is the display name with the surname rule.
  */
 const GRAPH_SQL = `
 WITH people AS (
   SELECT u.id,
-         CASE WHEN p.directory_visible THEN NULLIF(btrim(
+         btrim(
            u.name || CASE
              WHEN NULLIF(btrim(u.surname), '') IS NULL THEN ''
              WHEN p.show_surname THEN ' ' || btrim(u.surname)
              ELSE ' ' || left(btrim(u.surname), 1) || '.'
-           END), '') END AS label
+           END) AS label
     FROM users u
-    LEFT JOIN user_public_profiles p ON p.user_id = u.id
+    JOIN user_public_profiles p ON p.user_id = u.id AND p.directory_visible
    WHERE u.is_test_account = false
-     AND COALESCE(p.tv_graph_visible, true)
      AND u.id IN (SELECT user_id FROM user_event_access)
 ), companies AS (
   SELECT e.id, e.name AS label
@@ -109,17 +109,14 @@ export function buildGraph(
 ): TvConnectionsResponse {
   const idOf = nodeIdFactory(now);
   const key = (kind: "p" | "c", id: number) => `${kind}${id}`;
-  const nodes = new Map<
-    string,
-    { kind: Kind; internal: number; label: string | null; degree: number }
-  >();
+  const nodes = new Map<string, { kind: Kind; internal: number; label: string; degree: number }>();
   const edges: RawEdge[] = [];
   for (const row of rows) {
     if (row.row_type === "n") {
       nodes.set(key(row.a_kind, Number(row.a_id)), {
         kind: row.a_kind === "p" ? "person" : "company",
         internal: Number(row.a_id),
-        label: row.label,
+        label: row.label ?? "",
         degree: Number(row.degree),
       });
     } else {

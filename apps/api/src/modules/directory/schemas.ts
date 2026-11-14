@@ -84,8 +84,6 @@ export const publicProfileBody = z.object({
   bio: bioText.optional(),
   socials: socials.optional(),
   shareCv: z.boolean().optional(),
-  // Omitted by older clients: keep the stored setting. Independent of directoryVisible.
-  tvGraphVisible: z.boolean().optional(),
 });
 export const ownPublicProfileBody = publicProfileBody.extend({
   completeOnboarding: z.boolean().optional(),

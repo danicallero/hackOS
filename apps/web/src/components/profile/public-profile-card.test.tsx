@@ -237,7 +237,6 @@ describe("PublicProfileCard", () => {
         showPhoto: false,
         showProject: true,
         showGithub: true,
-        tvGraphVisible: true,
         headline: "Rust",
         locationNote: null,
         bio: null,
@@ -247,28 +246,6 @@ describe("PublicProfileCard", () => {
       { headers: { "Idempotency-Key": expect.any(String) } },
     );
     expect(container.textContent).toContain("saved");
-  });
-
-  it("edits the TV graph switch while the profile is not shared, keeping stored text unpublished", async () => {
-    vi.mocked(api.get).mockResolvedValue(profile({ headline: "Stored" }));
-    await render(<PublicProfileCard />);
-    expect(container.textContent).toContain("publicProfileTvGraphHint");
-    const tv = byLabel("publicProfileTvGraph") as HTMLButtonElement;
-    expect(tv.getAttribute("aria-checked")).toBe("true");
-    expect(tv.closest("fieldset[disabled]")?.querySelector("input[type=file]")).toBeFalsy();
-
-    await act(async () => userEvent.setup().click(tv));
-    vi.mocked(api.put).mockResolvedValue(profile({ headline: "Stored", tvGraphVisible: false }));
-    await save();
-    expect(api.put).toHaveBeenCalledWith(
-      "/api/me/public-profile",
-      expect.objectContaining({
-        directoryVisible: false,
-        tvGraphVisible: false,
-        headline: "Stored",
-      }),
-      expect.anything(),
-    );
   });
 
   it("stays hidden without event access", async () => {

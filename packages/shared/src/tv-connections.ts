@@ -9,8 +9,8 @@ export interface TvConnectionNode {
   /** Opaque, keyed hash that rotates on the server; never a user or enterprise id. */
   id: string;
   kind: TvConnectionNodeKind;
-  /** Person: display name only while their profile is shared, else null (anonymous dot). Company: name. */
-  label: string | null;
+  /** Person: display name (surname rule applied); only people sharing their networking profile appear. Company: name. */
+  label: string;
   /** Number of edges, so the view can size and focus without recounting. */
   degree: number;
 }

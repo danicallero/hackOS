@@ -44,15 +44,15 @@ Algunos formularios o registros de proyectos pueden pedirte que proporciones enl
 
 ### 3.4. Pantalla pública de conexiones (TV)
 
-**Finalidad.** Durante el evento, las pantallas públicas de HackUDC pueden mostrar un grafo de las conexiones entre asistentes y con empresas, para animar el networking. Es distinto de tu perfil de networking, que solo ven quienes escanean tu acreditación.
+**Finalidad.** Durante el evento, las pantallas públicas de HackUDC pueden mostrar un grafo de las conexiones entre asistentes y con empresas, para animar el networking. Es distinto de tu perfil de networking, que solo ven quienes escanean tu acreditación, pero se activa con la misma decisión.
 
-**Qué se muestra.** Cada persona con al menos una conexión aparece como un punto anónimo. Su nombre (con la inicial del apellido, o el apellido completo si lo has elegido) solo aparece mientras compartes tu perfil de networking. Nunca se muestran fotografías, notas, favoritos, horas de los escaneos ni identificadores de usuario. Las conexiones con empresas (por escanear su stand) aparecen como conexiones con esa empresa. Existe una conexión entre dos personas mientras cualquiera de las dos conserve el contacto en su agenda.
+**Qué se muestra.** Mientras compartes tu perfil de networking, apareces con tu nombre (con la inicial del apellido, o el apellido completo si lo has elegido) y con tus conexiones, tanto con personas como con empresas, siempre que tengas al menos una. Quien no comparte su perfil no aparece, ni como punto anónimo ni como conexión de otra persona. Nunca se muestran fotografías, notas, favoritos, horas de los escaneos ni identificadores de usuario. Escanear el stand de una empresa o patrocinador aparece como conexión con esa empresa. Existe una conexión entre dos personas mientras cualquiera de las dos conserve el contacto en su agenda.
 
-**Activado por defecto y cómo desactivarlo.** Está activado por defecto, también para cuentas existentes. Puedes desactivarlo en cualquier momento en Mi perfil o en la app, incluso con el perfil sin compartir. Al desactivarlo desaparecen tu punto y todas tus conexiones de la pantalla.
+**Cómo dejar de aparecer.** Desactiva «Compartir mi perfil» en Mi perfil o en la app: desaparecen tu nombre y todas tus conexiones de la pantalla.
 
-**Conservación.** Solo se muestra información de la edición activa, con los datos de conexión que ya existen en las agendas del evento. Los cambios (desactivar, perder el acceso al evento, cerrar la cuenta o quitar un contacto del que la otra persona tampoco conserva el suyo) se reflejan en la pantalla en la siguiente actualización.
+**Conservación.** Solo se muestra información de la edición activa, con los datos de conexión que ya existen en las agendas del evento. Los cambios (dejar de compartir, perder el acceso al evento, cerrar la cuenta o quitar un contacto del que la otra persona tampoco conserva el suyo) se reflejan en la pantalla en la siguiente actualización.
 
-**Límites.** La pantalla y sus datos son públicos: cualquiera puede fotografiarlos, grabarlos o copiarlos, y una copia no se puede retirar. Un grafo anónimo puede permitir identificar a una persona por sus conexiones, por ejemplo si las conocen quienes la rodean. Si quitas un contacto, la otra persona lo conserva y la conexión sigue mostrándose mientras lo conserve.
+**Límites.** La pantalla y sus datos son públicos: cualquiera puede fotografiarlos, grabarlos o copiarlos, y una copia no se puede retirar. Si quitas un contacto, la otra persona lo conserva y la conexión sigue mostrándose mientras lo conserve.
 
 ## 4. Información común: finalidades, destinatarios y derechos
 
@@ -152,15 +152,15 @@ Algúns formularios ou rexistros de proxectos poden pedirche que proporciones li
 
 ### 3.4. Pantalla pública de conexións (TV)
 
-**Finalidade.** Durante o evento, as pantallas públicas de HackUDC poden amosar un grafo das conexións entre asistentes e con empresas, para animar o networking. É distinto do teu perfil de networking, que só ven quen escanea a túa acreditación.
+**Finalidade.** Durante o evento, as pantallas públicas de HackUDC poden amosar un grafo das conexións entre asistentes e con empresas, para animar o networking. É distinto do teu perfil de networking, que só ven quen escanea a túa acreditación, pero actívase coa mesma decisión.
 
-**Que se amosa.** Cada persoa con alomenos unha conexión aparece como un punto anónimo. O seu nome (coa inicial do apelido, ou o apelido completo se o escolliches) só aparece mentres compartes o teu perfil de networking. Nunca se amosan fotografías, notas, favoritos, horas dos escaneos nin identificadores de usuario. As conexións con empresas (por escanear o seu stand) aparecen como conexións con esa empresa. Existe unha conexión entre dúas persoas mentres calquera delas conserve o contacto na súa axenda.
+**Que se amosa.** Mentres compartes o teu perfil de networking, apareces co teu nome (coa inicial do apelido, ou o apelido completo se o escolliches) e coas túas conexións, tanto con persoas como con empresas, sempre que teñas alomenos unha. Quen non comparte o seu perfil non aparece, nin como punto anónimo nin como conexión doutra persoa. Nunca se amosan fotografías, notas, favoritos, horas dos escaneos nin identificadores de usuario. Escanear o stand dunha empresa ou patrocinador aparece como conexión con esa empresa. Existe unha conexión entre dúas persoas mentres calquera delas conserve o contacto na súa axenda.
 
-**Activado por defecto e como desactivalo.** Está activado por defecto, tamén para contas existentes. Podes desactivalo en calquera momento en O meu perfil ou na app, mesmo co perfil sen compartir. Ao desactivalo desaparecen o teu punto e todas as túas conexións da pantalla.
+**Como deixar de aparecer.** Desactiva «Compartir o meu perfil» en O meu perfil ou na app: desaparecen o teu nome e todas as túas conexións da pantalla.
 
-**Conservación.** Só se amosa información da edición activa, cos datos de conexión que xa existen nas axendas do evento. Os cambios (desactivar, perder o acceso ao evento, pechar a conta ou quitar un contacto do que a outra persoa tampouco conserva o seu) reflíctense na pantalla na seguinte actualización.
+**Conservación.** Só se amosa información da edición activa, cos datos de conexión que xa existen nas axendas do evento. Os cambios (deixar de compartir, perder o acceso ao evento, pechar a conta ou quitar un contacto do que a outra persoa tampouco conserva o seu) reflíctense na pantalla na seguinte actualización.
 
-**Límites.** A pantalla e os seus datos son públicos: calquera pode fotografalos, gravalos ou copialos, e unha copia non se pode retirar. Un grafo anónimo pode permitir identificar unha persoa polas súas conexións, por exemplo se as coñecen quen a rodea. Se quitas un contacto, a outra persoa consérvao e a conexión segue amosándose mentres o conserve.
+**Límites.** A pantalla e os seus datos son públicos: calquera pode fotografalos, gravalos ou copialos, e unha copia non se pode retirar. Se quitas un contacto, a outra persoa consérvao e a conexión segue amosándose mentres o conserve.
 
 ## 4. Información común: finalidades, destinatarios e dereitos
 
@@ -260,15 +260,15 @@ Some forms or project records may ask you to provide links to external websites,
 
 ### 3.4. Public connections display (TV)
 
-**Purpose.** During the event, HackUDC's public screens may show a graph of the connections between attendees and with companies, to encourage networking. It is separate from your networking profile, which only people who scan your badge can see.
+**Purpose.** During the event, HackUDC's public screens may show a graph of the connections between attendees and with companies, to encourage networking. It is separate from your networking profile, which only people who scan your badge can see, but it follows the same choice.
 
-**What is shown.** Each person with at least one connection appears as an anonymous dot. Their name (with the surname initial, or the full surname if you chose that) appears only while you share your networking profile. Photos, notes, favourites, scan times and user identifiers are never shown. Connections with companies (from scanning their stand) appear as connections to that company. A connection between two people exists while either of them keeps the contact in their diary.
+**What is shown.** While you share your networking profile, you appear with your name (with the surname initial, or the full surname if you chose that) and with your connections, to both people and companies, as long as you have at least one. People who do not share their profile do not appear, neither as an anonymous dot nor as another person's connection. Photos, notes, favourites, scan times and user identifiers are never shown. Scanning a company or sponsor stand appears as a connection to that company. A connection between two people exists while either of them keeps the contact in their diary.
 
-**On by default and how to opt out.** It is on by default, including for existing accounts. You can turn it off at any time in My profile or in the app, even while your profile is not shared. Turning it off removes your dot and all your connections from the screen.
+**How to stop appearing.** Turn off "Share my profile" in My profile or in the app: your name and all your connections disappear from the screen.
 
-**Retention.** Only information from the active edition is shown, built from the connection data that already exists in event diaries. Changes (turning it off, losing event access, closing your account, or removing a contact the other person has also removed) reach the screen at its next refresh.
+**Retention.** Only information from the active edition is shown, built from the connection data that already exists in event diaries. Changes (stopping sharing, losing event access, closing your account, or removing a contact the other person has also removed) reach the screen at its next refresh.
 
-**Limits.** The screen and its data are public: anyone can photograph, record or copy them, and a copy cannot be withdrawn. An anonymous graph can allow someone to be identified from their connections, for example by people who know them. If you remove a contact, the other person keeps it and the connection stays on screen while they do.
+**Limits.** The screen and its data are public: anyone can photograph, record or copy them, and a copy cannot be withdrawn. If you remove a contact, the other person keeps it and the connection stays on screen while they do.
 
 ## 4. Common information: purposes, recipients and rights
 

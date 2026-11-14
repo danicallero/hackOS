@@ -47,15 +47,12 @@ interface Snapshot {
 const CV_MAX_BYTES = 5 * 1024 * 1024;
 
 /**
- * While the opt-in is off only the opt-in itself and the TV graph switch
- * count: hidden fields can neither enable Save nor be published by it (#934).
- * A published helper profile shows the fields on the help desk (H61), so they
- * stay editable.
+ * While the opt-in is off only the opt-in itself counts: hidden fields can
+ * neither enable Save nor be published by it (#934). A published helper
+ * profile shows the fields on the help desk (H61), so they stay editable.
  */
 function sameSettings(a: Settings, b: Settings, helperPublished = false): boolean {
-  if (!helperPublished && !a.directoryVisible && !b.directoryVisible) {
-    return a.tvGraphVisible === b.tvGraphVisible;
-  }
+  if (!helperPublished && !a.directoryVisible && !b.directoryVisible) return true;
   return (Object.keys(a) as (keyof Settings)[]).every((key) => {
     if (key === "socials") {
       return JSON.stringify(savedLinks(a.socials)) === JSON.stringify(savedLinks(b.socials));
@@ -190,7 +187,7 @@ export function PublicProfileCard({
     const body =
       directoryVisible || helperPublished
         ? { ...settings, directoryVisible: Boolean(directoryVisible) }
-        : { ...stored, directoryVisible: false, tvGraphVisible: settings.tvGraphVisible };
+        : { ...stored, directoryVisible: false };
     setSavingChoice(directoryVisible ? "create" : "hidden");
     setSaveError(null);
     if (
@@ -212,7 +209,6 @@ export function PublicProfileCard({
           showPhoto: body.showPhoto,
           showProject: body.showProject,
           showGithub: body.showGithub,
-          tvGraphVisible: body.tvGraphVisible,
           headline: body.headline.trim() || null,
           locationNote: body.locationNote.trim() || null,
           bio: body.bio.trim() || null,
@@ -249,7 +245,6 @@ export function PublicProfileCard({
           showSurname: settings.showSurname,
           showPhoto: settings.showPhoto,
           showProject: settings.showProject,
-          tvGraphVisible: settings.tvGraphVisible,
           headline: settings.headline.trim() || null,
           locationNote: settings.locationNote.trim() || null,
           bio: settings.bio.trim() || null,
@@ -329,13 +324,6 @@ export function PublicProfileCard({
               hint={t("publicProfileAudience")}
             />
           )}
-          {/* Its own choice, editable whether or not the profile is shared. */}
-          <ShareToggleCard
-            checked={settings.tvGraphVisible}
-            onChange={(tvGraphVisible) => update({ tvGraphVisible })}
-            label={t("publicProfileTvGraph")}
-            hint={t("publicProfileTvGraphHint")}
-          />
           {!settings.directoryVisible && helperPublished && (
             <p className="text-muted-foreground text-sm">{t("publicProfileHelpDeskOnly")}</p>
           )}

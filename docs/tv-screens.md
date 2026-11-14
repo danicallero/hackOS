@@ -65,30 +65,45 @@ mode. The countdown remains available as a block of the `live` composition.
 
 ### Connections graph view
 
-`connections-view.tsx` (+ `connections-graph.tsx`, `connections-layout.ts`,
-`connections-option.ts`) renders the typed `TvConnectionsResponse` from
-`@hackos/shared/tv-connections`. Display rules:
+`connections-view.tsx` (+ `connections-graph.tsx`, `connections-layout.ts`)
+renders the typed `TvConnectionsResponse` from `@hackos/shared/tv-connections`
+(#934, #935). Only people who share their networking profile are in the data, so
+every person node carries a name; the view still treats a missing label
+defensively. There is no stats row or legend: the header, the graph and a
+caption are all there is. Display rules:
 
-- The whole snapshot is always drawn (ECharts `graph`, SVG renderer, tree-shaken
-  imports). People are dots sized by degree; companies are larger rounded
-  squares in a second colour. Labels appear only for companies and the most
-  connected *named* people (capped, overlaps hidden), so 500+ nodes stay legible.
-  Anonymous people (`label: null`) are never labelled.
-- Rotating focus: every 9 s a hub and its neighbours are highlighted and the rest
-  is dimmed. Rotation stops while the page is hidden or `prefers-reduced-motion`
-  is set; nothing reacts to hover, focus or clicks (`silent` series).
-- Layout is computed by our own deterministic force pass (`layoutGraph`), not
-  ECharts' random animated one: positions are seeded from the node id, kept by id
-  across polls, new nodes start next to their neighbours, and the simulation runs a
-  bounded number of steps then stops. Node ids rotate server-side, so a rotation
-  re-seeds the layout once.
+- Plain SVG drawn by `connections-graph.tsx` (no chart library): thin curved
+  low-opacity edges, people as dots sized by degree and tinted by community,
+  companies as larger rounded squares with an outline.
+- Sections: `detectSections` runs a deterministic label propagation over the
+  people (companies are fixed anchors that vote at half weight; visit order comes
+  from a hash of the id, never `Math.random`). Communities of 3+ people become
+  sections, biggest first, at most 12. Graphs under 6 people, or with no 3-person
+  community, only show the overview.
+- Camera loop (`buildSequence`): overview (6 s, calm, only company names) →
+  section 1 … section 3 → overview → section 4 … The camera is one SVG transform
+  tweened per frame (1.6 s ease-in-out, zoom interpolated in log space);
+  `cameraFor` frames the section's people and home companies. In a section its
+  people, their companies and their edges are lit, the rest fades to ~10 %
+  (opacity transitions). Names are placed only once the camera settles, by
+  `selectLabels` (priority = companies, then degree; collision-free, inside the
+  frame, capped), and fade in; a caption at the bottom-left names the section
+  (its most-connected named node and `N people`, or "Whole network").
+- Motion: the loop pauses while the page is hidden; with
+  `prefers-reduced-motion` it still steps through sections but jumps without
+  animation. Nothing reacts to hover, focus or clicks, and there is no roam.
+- Layout is computed by our own deterministic force pass (`layoutGraph`):
+  positions are seeded from the node id, kept by id across polls, new nodes start
+  next to their neighbours, and the simulation runs a bounded number of steps
+  then stops. Node ids rotate server-side, so a rotation re-seeds the layout once.
+  A poll retargets the camera from where it currently is, so it never resets
+  mid-transition.
 - Refresh: polled every 15–30 s with random spacing, plus the public TV stream's
   `data.changed` (forwarded by `TvDisplay` as an `invalidation` counter, jittered
   3 s, never more often than every 5 s). A failed poll keeps the last snapshot and
   shows the reconnecting note; with no snapshot yet it shows an error state.
-- Totals (people / companies / connections) come from `totals`, so they stay
-  correct when `truncated` is true; a truncation note is shown then.
-- Empty snapshot: a friendly "no connections yet" state.
+- `truncated` shows a short note; an empty snapshot shows a friendly "no
+  connections yet" state.
 
 ### Winners
 
@@ -269,21 +284,23 @@ implemented in `apps/api/src/modules/queue/tv-connections.ts` and tested in
 
 - **One aggregate SQL**, not `visibleDirectoryEntries`, scoped by
   `current_edition()`. Cached in the shared cache for **15 s** per edition;
-  that TTL is the stale-data bound for opt-outs, account removal and edition
+  that TTL is the stale-data bound for sharing changes, account removal and edition
   switches (nothing else caches it). SSE stays payload-free and nothing is
   broadcast per scan: screens refetch on their own poll or on the existing TV
   invalidations.
 - **Who is a node.** People with event access (active, not removal-pending or
-  anonymized), not a test account, with `tv_graph_visible` on (default on, even
-  with no profile row); companies of the active edition that are `visible` and
+  anonymized), not a test account, with `directory_visible` true (networking
+  profile shared; no profile row or sharing off means absent, with no anonymous
+  dot); companies of the active edition that are `visible` and
   not synthetic. Only nodes with at least one edge are returned.
 - **Edges.** A person pair is one undirected edge while *either* side keeps
   the diary entry (one-way, reciprocal and one-sided deletion converge on one
-  edge). A person–company edge exists per person under the same opt-out. Both
-  endpoints must be eligible, so an opt-out removes every incident edge.
-- **Labels.** A person's `label` is their display name only while
-  `directory_visible` (surname only if `show_surname`, else initial), otherwise
-  `null` (anonymous dot). Company label is its name. No photos.
+  edge). A person–company edge exists only for a visible person. Both person
+  endpoints must be visible, so turning sharing off removes every incident edge,
+  and `degree` and `totals` count visible people only.
+- **Labels.** A person's `label` is always their display name (surname only if
+  `show_surname`, else initial); it is never null. Company label is its name.
+  No photos.
 - **Node ids** are `base64url(HMAC-SHA256(key, kind:id))[0..22]`, where `key`
   is derived from `BETTER_AUTH_SECRET` and the current UTC hour. Ids are stable
   within the hour (layout continuity) and uncorrelatable across hours; raw user

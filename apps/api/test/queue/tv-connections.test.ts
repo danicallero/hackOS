@@ -26,9 +26,9 @@ interface PersonOptions {
   surname?: string | null;
   visible?: boolean;
   showSurname?: boolean;
-  graph?: boolean | null;
   test?: boolean;
   access?: boolean;
+  noProfile?: boolean;
 }
 
 async function person(options: PersonOptions = {}): Promise<number> {
@@ -44,11 +44,11 @@ async function person(options: PersonOptions = {}): Promise<number> {
   );
   const id = rows[0].id as number;
   if (options.access ?? true) await grantAttendeeRole(id, "participant");
-  if (options.visible !== undefined || options.graph != null || options.showSurname) {
+  if (!options.noProfile && (options.visible !== false || options.showSurname)) {
     await pool.query(
-      `INSERT INTO user_public_profiles (user_id, directory_visible, show_surname, tv_graph_visible, consented_at)
-       VALUES ($1, $2, $3, $4, now())`,
-      [id, options.visible ?? false, options.showSurname ?? false, options.graph ?? true],
+      `INSERT INTO user_public_profiles (user_id, directory_visible, show_surname, consented_at)
+       VALUES ($1, $2, $3, now())`,
+      [id, options.visible ?? true, options.showSurname ?? false],
     );
   }
   return id;
@@ -91,10 +91,10 @@ describe("GET /api/tv/connections eligibility", () => {
   });
 
   it("dedupes one-way and reciprocal scans to one edge and omits isolated nodes", async () => {
-    const a = await person({ visible: true });
-    const b = await person({ visible: true, name: "Berta" });
-    const c = await person({ visible: true, name: "Carlos" });
-    await person({ visible: true, name: "Isolated" });
+    const a = await person();
+    const b = await person({ name: "Berta" });
+    const c = await person({ name: "Carlos" });
+    await person({ name: "Isolated" });
     await meet(a, { user: b });
     await meet(b, { user: a });
     await meet(a, { user: c });
@@ -114,41 +114,62 @@ describe("GET /api/tv/connections eligibility", () => {
     expect((await graphRaw()).body.edges).toHaveLength(1);
   });
 
-  it("shows a name only for shared profiles, honouring show_surname", async () => {
-    const shown = await person({ visible: true, showSurname: true, name: "Sol", surname: "Pérez" });
-    const initial = await person({ visible: true, name: "Rio", surname: "Vega" });
+  it("shows every visible person by name, honouring show_surname, and omits people not sharing", async () => {
+    const shown = await person({ showSurname: true, name: "Sol", surname: "Pérez" });
+    const initial = await person({ name: "Rio", surname: "Vega" });
     const hidden = await person({ visible: false, name: "Hidden" });
-    const noProfile = await person({ name: "NoProfile" });
+    const noProfile = await person({ name: "NoProfile", noProfile: true });
     await meet(shown, { user: initial });
     await meet(hidden, { user: noProfile });
     await meet(hidden, { user: shown });
+    await meet(noProfile, { user: initial });
     const { body, raw } = await graphRaw();
-    expect(labels(body).filter(Boolean)).toEqual(["Rio V.", "Sol Pérez"]);
-    expect(body.nodes.filter((n) => n.label === null)).toHaveLength(2);
+    expect(labels(body)).toEqual(["Rio V.", "Sol Pérez"]);
+    expect(body.nodes.every((n) => typeof n.label === "string" && n.label !== "")).toBe(true);
+    expect(body.edges).toHaveLength(1);
+    expect(body.nodes.map((n) => n.degree)).toEqual([1, 1]);
+    expect(body.totals).toEqual({ people: 2, companies: 0, connections: 1 });
     expect(raw).not.toContain("Hidden");
     expect(raw).not.toContain("NoProfile");
   });
 
-  it("removes a person and all incident edges when either side opts out, independent of profile sharing", async () => {
-    const a = await person({ visible: true });
-    const out = await person({ visible: true, graph: false, name: "Out" });
-    const hiddenButIn = await person({ visible: false, graph: true });
-    await meet(a, { user: out });
-    await meet(out, { user: hiddenButIn });
-    await meet(a, { user: hiddenButIn });
+  it("drops a person and all incident edges when sharing is off; degrees count visible people only", async () => {
+    const a = await person({ name: "Aa" });
+    const b = await person({ name: "Bb" });
+    const off = await person({ visible: false, name: "Off" });
+    await meet(a, { user: off });
+    await meet(off, { user: b });
+    await meet(a, { user: b });
     const { body, raw } = await graphRaw();
     expect(body.edges).toHaveLength(1);
     expect(body.totals.people).toBe(2);
-    expect(raw).not.toContain("Out");
+    expect(body.nodes.map((n) => n.degree)).toEqual([1, 1]);
+    expect(raw).not.toContain("Off");
+  });
+
+  it("hides a person on the next refresh after they stop sharing", async () => {
+    const a = await person();
+    const b = await person();
+    await meet(a, { user: b });
+    expect((await graphRaw()).body.nodes).toHaveLength(2);
+    await pool.query(
+      `UPDATE user_public_profiles SET directory_visible = false WHERE user_id = $1`,
+      [b],
+    );
+    const cached = await app.inject({ method: "GET", url: "/api/tv/connections" });
+    expect(cached.json().nodes).toHaveLength(2);
+    const { body } = await graphRaw();
+    expect(body.nodes).toEqual([]);
+    expect(body.edges).toEqual([]);
   });
 
   it("excludes test accounts, people without event access and removal pending or anonymized accounts", async () => {
-    const a = await person({ visible: true });
+    const a = await person();
     const test = await person({ test: true });
     const noAccess = await person({ access: false });
     const pending = await person();
     const anonymized = await person();
-    const ok = await person({ visible: true, name: "Ok" });
+    const ok = await person({ name: "Ok" });
     for (const other of [test, noAccess, pending, anonymized, ok]) await meet(a, { user: other });
     await pool.query(`UPDATE users SET account_state = 'removal_pending' WHERE id = $1`, [pending]);
     await pool.query(`UPDATE users SET anonymized_at = now() WHERE id = $1`, [anonymized]);
@@ -157,15 +178,15 @@ describe("GET /api/tv/connections eligibility", () => {
     expect(body.totals).toMatchObject({ people: 2, connections: 1 });
   });
 
-  it("includes visible current-edition companies with per-person edges and honours the opt-out", async () => {
-    const a = await person({ visible: true });
-    const b = await person({ visible: true });
-    const out = await person({ graph: false });
+  it("includes visible current-edition companies with edges only for visible people", async () => {
+    const a = await person();
+    const b = await person();
+    const off = await person({ visible: false });
     const acme = await company("Acme");
     const secret = await company("SecretCorp", "hidden");
     await meet(a, { enterprise: acme });
     await meet(b, { enterprise: acme });
-    await meet(out, { enterprise: acme });
+    await meet(off, { enterprise: acme });
     await meet(a, { enterprise: secret });
     const { body, raw } = await graphRaw();
     expect(body.totals).toEqual({ people: 2, companies: 1, connections: 2 });
@@ -191,8 +212,8 @@ describe("GET /api/tv/connections eligibility", () => {
   });
 
   it("leaks no ids, emails, notes, timestamps or stars", async () => {
-    const a = await person({ visible: true });
-    const b = await person({ visible: true });
+    const a = await person();
+    const b = await person();
     const co = await company("Acme");
     await meet(a, { user: b }, "PRIVATE-NOTE-xyz");
     await meet(a, { enterprise: co }, "PRIVATE-NOTE-co");
@@ -286,7 +307,7 @@ describe("bound and density", () => {
 
   it("serves a dense 600-person graph within the bounds quickly", async () => {
     const N = 600;
-    const first = await person({ visible: true });
+    const first = await person();
     const { rows: roleRows } = await pool.query(
       `SELECT role_id FROM user_roles WHERE user_id = $1`,
       [first],

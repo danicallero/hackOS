@@ -1,4 +1,3 @@
-import { TV_GRAPH_VISIBLE_DEFAULT } from "@hackos/shared/public-profile";
 import { apiFetch } from "./api";
 import type { DirectoryEntry } from "./directory";
 import { createIdempotencyKey } from "./idempotency-key";
@@ -18,8 +17,6 @@ export interface NetworkingProfile {
   locationNote: string | null;
   bio: string | null;
   shareCv: boolean;
-  /** On the public TV connections graph; independent of `directoryVisible`. Missing only from older servers (on). */
-  tvGraphVisible?: boolean;
   /** The CV on file, from the application or an upload; null when there is none. */
   cv: { filename: string; source: "application" | "upload" } | null;
   /** Stamped the first time the person shares; null means never created. */
@@ -36,7 +33,6 @@ export interface NetworkingDraft {
   showSurname: boolean;
   showPhoto: boolean;
   showProject: boolean;
-  tvGraphVisible: boolean;
   headline: string;
   locationNote: string;
   bio: string;
@@ -65,7 +61,6 @@ export function draftFromProfile(profile: NetworkingProfile): NetworkingDraft {
     showSurname: profile.showSurname,
     showPhoto: profile.showPhoto,
     showProject: profile.showProject,
-    tvGraphVisible: profile.tvGraphVisible ?? TV_GRAPH_VISIBLE_DEFAULT,
     headline: profile.headline ?? "",
     locationNote: profile.locationNote ?? "",
     bio: profile.bio ?? "",
@@ -79,7 +74,6 @@ export function sameDraft(a: NetworkingDraft, b: NetworkingDraft): boolean {
     a.showSurname === b.showSurname &&
     a.showPhoto === b.showPhoto &&
     a.showProject === b.showProject &&
-    a.tvGraphVisible === b.tvGraphVisible &&
     a.headline.trim() === b.headline.trim() &&
     a.locationNote.trim() === b.locationNote.trim() &&
     a.bio.trim() === b.bio.trim() &&
@@ -99,7 +93,6 @@ export function saveNetworkingProfile(
       showSurname: draft.showSurname,
       showPhoto: draft.showPhoto,
       showProject: draft.showProject,
-      tvGraphVisible: draft.tvGraphVisible,
       headline: draft.headline.trim() || null,
       locationNote: draft.locationNote.trim() || null,
       bio: draft.bio.trim() || null,

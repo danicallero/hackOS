@@ -164,17 +164,15 @@ export default function NetworkingProfileScreen() {
     }
   }
 
-  /** The preview's switches save at once; a failure puts them back. */
-  async function toggleShare(
-    patch: Pick<Partial<NetworkingDraft>, "directoryVisible" | "tvGraphVisible">,
-  ) {
+  /** The preview's switch saves at once; a failure puts it back. */
+  async function toggleShare(directoryVisible: boolean) {
     if (!stored || togglingShare) return;
     const before = stored;
     setTogglingShare(true);
     setFailure(null);
-    setStored({ ...stored, ...patch });
+    setStored({ ...stored, directoryVisible });
     try {
-      apply(await saveNetworkingProfile({ ...before, ...patch }, createIdempotencyKey()));
+      apply(await saveNetworkingProfile({ ...before, directoryVisible }, createIdempotencyKey()));
       void haptic("selection");
     } catch (cause) {
       setStored(before);
@@ -396,7 +394,6 @@ export default function NetworkingProfileScreen() {
   }
 
   const shared = editing ? draft?.directoryVisible : stored?.directoryVisible;
-  const tvGraph = editing ? draft?.tvGraphVisible : stored?.tvGraphVisible;
 
   return (
     <>
@@ -447,18 +444,7 @@ export default function NetworkingProfileScreen() {
                 value={Boolean(shared)}
                 disabled={saving || togglingShare}
                 onChange={(directoryVisible) =>
-                  editing ? update({ directoryVisible }) : void toggleShare({ directoryVisible })
-                }
-              />
-            </Section>
-            {/* Editable whether or not the profile is shared. */}
-            <Section footer={t("networkingTvGraphAudience")}>
-              <ToggleRow
-                label={t("networkingTvGraph")}
-                value={Boolean(tvGraph)}
-                disabled={saving || togglingShare}
-                onChange={(tvGraphVisible) =>
-                  editing ? update({ tvGraphVisible }) : void toggleShare({ tvGraphVisible })
+                  editing ? update({ directoryVisible }) : void toggleShare(directoryVisible)
                 }
               />
             </Section>
