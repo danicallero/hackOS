@@ -2003,8 +2003,6 @@
   "colActor": "Actor",
   "systemActor": "System",
   "entityTypeLabel": "Entity type",
-  "entityIdLabel": "Entity ID",
-  "actorUserIdLabel": "Actor",
   "fromLabel": "From",
   "toLabel": "To",
   "clearFilters": "Clear filters",
@@ -2015,8 +2013,6 @@
   "userAgentLabel": "User agent",
   "beforeLabel": "Before",
   "afterLabel": "After",
-  "allActionsPlaceholder": "All actions",
-  "allEntityTypesPlaceholder": "All entity types",
   "backToAuditLog": "Back to audit log",
   "auditEntryNotFound": "Audit entry not found",
   "auditContextTitle": "Context",
@@ -4352,5 +4348,13 @@
   "editionMadeCurrent": "Current edition changed",
   "editionClosedDone": "Edition closed",
   "editionReopenedDone": "Edition reopened",
-  "couldNotUpdateEdition": "Could not update the edition."
+  "couldNotUpdateEdition": "Could not update the edition.",
+  "auditPeriodLabel": "Date",
+  "auditPeriodLastHour": "Last hour",
+  "auditPeriodLast24Hours": "Last 24 hours",
+  "auditPeriodLast7Days": "Last 7 days",
+  "auditPeriodLast30Days": "Last 30 days",
+  "auditSearchActor": "Search by actor",
+  "auditEntityHistory": "History",
+  "auditViewEntityHistory": "View every action on this entity"
 }

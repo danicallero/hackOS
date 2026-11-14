@@ -1,24 +1,29 @@
 "use client";
 
 // H53 global audit log: searchable, paginated read view over audit_log,
-// filterable by actor/entity/action/date. The per-user audit tab
+// filterable by actor search plus one Filters menu (action, entity type,
+// entity, period) whose chips each remove a single filter. The per-user audit tab
 // (users/[id]/page.tsx AuditLogSection) stays as a scoped drill-down; this
 // page is the full, unscoped query surface referenced there.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { CalendarBlankIcon } from "@phosphor-icons/react/dist/csr/CalendarBlank";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
+import { CubeIcon } from "@phosphor-icons/react/dist/csr/Cube";
+import { FingerprintIcon } from "@phosphor-icons/react/dist/csr/Fingerprint";
+import { LightningIcon } from "@phosphor-icons/react/dist/csr/Lightning";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DateTimeInput } from "@/components/common/datetime-input";
-import { EntityCombobox } from "@/components/common/entity-combobox";
+import type { FilterDefinition } from "@/components/common/filter-menu";
+import { ListToolbar } from "@/components/common/list-toolbar";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useLiveQuery } from "@/hooks/use-live-query";
@@ -45,7 +50,7 @@ const FILTER_DEBOUNCE_MS = 300;
 
 function AuditMobileRow({ row }: { row: AuditRow }) {
   const { t, language } = useLocale();
-  const entityLabel = entityRef(row.entity_type, row.entity_id, t);
+  const entityLabel = entityRef(row, t);
   const actorLabel = getAuditActorLabel(row, t);
   return (
     <Link
@@ -96,29 +101,58 @@ function AuditMobileRow({ row }: { row: AuditRow }) {
   );
 }
 
+type Period = "" | "1h" | "24h" | "7d" | "30d" | "custom";
+
+const PERIOD_MS: Record<Exclude<Period, "" | "custom">, number> = {
+  "1h": 60 * 60 * 1000,
+  "24h": 24 * 60 * 60 * 1000,
+  "7d": 7 * 24 * 60 * 60 * 1000,
+  "30d": 30 * 24 * 60 * 60 * 1000,
+};
+
 interface FilterState {
-  entityType: string;
-  entityId: string;
   actorQuery: string;
   action: string;
+  entityType: string;
+  entityId: string;
+  period: Period;
+  /** Fixed when a preset is picked, so the query key stays stable between renders. */
+  periodStart: string;
+  /** datetime-local wall-clock values for the custom period. */
   dateFrom: string;
   dateTo: string;
 }
 
 const EMPTY_FILTERS: FilterState = {
-  entityType: "",
-  entityId: "",
   actorQuery: "",
   action: "",
+  entityType: "",
+  entityId: "",
+  period: "",
+  periodStart: "",
   dateFrom: "",
   dateTo: "",
 };
 
+function hasActiveFilters(filters: FilterState) {
+  return Boolean(
+    filters.actorQuery.trim() ||
+      filters.action ||
+      filters.entityType ||
+      filters.entityId ||
+      filters.period,
+  );
+}
+
 export default function AuditPage() {
   const { t, language } = useLocale();
-  const requestId = useSearchParams().get("request");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestId = searchParams.get("request");
   const canRead = useCan(CAPABILITIES.AUDIT_READ);
-  const [filters, setFilters] = usePersistedState("audit-list:filters", EMPTY_FILTERS);
+  // H53: every filter is one chip with its own remove action; the persisted
+  // copy only keeps them across visits to an entry and back.
+  const [filters, setFilters] = usePersistedState("audit-list:filters:v2", EMPTY_FILTERS);
   const debounced = useDebouncedValue(filters, FILTER_DEBOUNCE_MS);
   const [trackedRequest, setTrackedRequest] = useState<string | null>(null);
   const [offset, setOffset] = usePersistedState("audit-list:offset", 0);
@@ -128,6 +162,20 @@ export default function AuditPage() {
     setOffset(0);
   }
 
+  // An entity-history link (/audit?entityType=…&entityId=…) seeds the filters
+  // once and leaves a clean URL, so removing the chip never fights the link.
+  const linkedEntityType = searchParams.get("entityType");
+  const linkedEntityId = searchParams.get("entityId");
+  useEffect(() => {
+    if (!linkedEntityType && !linkedEntityId) return;
+    setFilters({
+      ...EMPTY_FILTERS,
+      entityType: linkedEntityType ?? "",
+      entityId: linkedEntityId ?? "",
+    });
+    router.replace("/audit", { scroll: false });
+  }, [linkedEntityType, linkedEntityId, router, setFilters]);
+
   // Back to page 1 when the debounced filters change, but not on mount, where
   // `filters` may be a restored value and `offset` was restored alongside it.
   const [offsetFilters, setOffsetFilters] = useState(debounced);
@@ -136,9 +184,8 @@ export default function AuditPage() {
     setOffset(0);
   }
 
-  // The {action, entityType} vocabulary actually present in audit_log backs the
-  // comboboxes; without it they still accept typed values, so a failed read
-  // only leaves the suggestion lists empty.
+  // The {action, entityType} vocabulary actually present in audit_log backs
+  // the filter menu; a failed read only leaves those two filters empty.
   const { data: vocabularyData } = useServerResource(
     ["audit", "vocabulary"],
     () => notificationsApi.getAuditActions(),
@@ -146,16 +193,24 @@ export default function AuditPage() {
   );
   const vocabulary: AuditVocabularyEntry[] = vocabularyData?.items ?? [];
 
+  const dateFrom =
+    debounced.period === "custom"
+      ? fromDatetimeLocal(debounced.dateFrom)
+      : debounced.period
+        ? debounced.periodStart
+        : null;
+  const dateTo = debounced.period === "custom" ? fromDatetimeLocal(debounced.dateTo) : null;
+
   // Audit entries come from every sensitive mutation (H53), so this stays on
   // the audit-scoped stream.
   const query = {
     requestId: requestId ?? undefined,
-    entityType: requestId ? undefined : debounced.entityType.trim() || undefined,
-    entityId: requestId ? undefined : debounced.entityId.trim() || undefined,
+    entityType: requestId ? undefined : debounced.entityType || undefined,
+    entityId: requestId ? undefined : debounced.entityId || undefined,
     actorQuery: requestId ? undefined : debounced.actorQuery.trim() || undefined,
-    action: requestId ? undefined : debounced.action.trim() || undefined,
-    dateFrom: requestId ? undefined : (fromDatetimeLocal(debounced.dateFrom) ?? undefined),
-    dateTo: requestId ? undefined : (fromDatetimeLocal(debounced.dateTo) ?? undefined),
+    action: requestId ? undefined : debounced.action || undefined,
+    dateFrom: requestId ? undefined : (dateFrom ?? undefined),
+    dateTo: requestId ? undefined : (dateTo ?? undefined),
     limit: LIMIT,
     offset,
   };
@@ -177,14 +232,88 @@ export default function AuditPage() {
     return <AccessDenied ask={t("auditLogAccessDeniedDesc")} />;
   }
 
-  const hasFilters = Object.values(filters).some((v) => v.trim() !== "");
+  const hasFilters = hasActiveFilters(filters);
+  const clearFilters = () => setFilters(EMPTY_FILTERS);
 
   const actionOptions = Array.from(new Set(vocabulary.map((v) => v.action)))
-    .map((action) => ({ action, label: getActionLabel(action, t) }))
+    .map((action) => ({ value: action, label: getActionLabel(action, t) }))
     .sort((a, b) => a.label.localeCompare(b.label, language));
   const entityTypeOptions = Array.from(new Set(vocabulary.map((v) => v.entity_type)))
-    .sort((a, b) => a.localeCompare(b, language))
-    .map((entityType) => ({ entityType, label: getAuditEntityLabel(entityType, t) }));
+    .map((entityType) => ({ value: entityType, label: getAuditEntityLabel(entityType, t) }))
+    .sort((a, b) => a.label.localeCompare(b.label, language));
+
+  const filterDefinitions: FilterDefinition[] = [
+    {
+      id: "action",
+      label: t("colAction"),
+      icon: LightningIcon,
+      type: "single",
+      value: filters.action,
+      resetValue: "",
+      onChange: (action) => setFilters((f) => ({ ...f, action })),
+      options: actionOptions,
+    },
+    {
+      id: "entityType",
+      label: t("entityTypeLabel"),
+      icon: CubeIcon,
+      type: "single",
+      value: filters.entityType,
+      resetValue: "",
+      // A specific entity only makes sense within its own type.
+      onChange: (entityType) => setFilters((f) => ({ ...f, entityType, entityId: "" })),
+      options: entityTypeOptions,
+    },
+    ...(filters.entityId
+      ? [
+          {
+            id: "entityId",
+            label: t("colEntity"),
+            icon: FingerprintIcon,
+            type: "single" as const,
+            value: filters.entityId,
+            resetValue: "",
+            onChange: (entityId: string) => setFilters((f) => ({ ...f, entityId })),
+            options: [
+              {
+                value: filters.entityId,
+                label:
+                  items.find((r) => r.entity_id === filters.entityId && r.entity_label)
+                    ?.entity_label ?? `#${filters.entityId}`,
+              },
+            ],
+          },
+        ]
+      : []),
+    {
+      id: "period",
+      label: t("auditPeriodLabel"),
+      icon: CalendarBlankIcon,
+      type: "single",
+      value: filters.period,
+      resetValue: "",
+      onChange: (value) => {
+        const period = value as Period;
+        setFilters((f) => ({
+          ...f,
+          period,
+          periodStart:
+            period && period !== "custom"
+              ? new Date(Date.now() - PERIOD_MS[period]).toISOString()
+              : "",
+          dateFrom: period === "custom" ? f.dateFrom : "",
+          dateTo: period === "custom" ? f.dateTo : "",
+        }));
+      },
+      options: [
+        { value: "1h", label: t("auditPeriodLastHour") },
+        { value: "24h", label: t("auditPeriodLast24Hours") },
+        { value: "7d", label: t("auditPeriodLast7Days") },
+        { value: "30d", label: t("auditPeriodLast30Days") },
+        { value: "custom", label: t("custom") },
+      ],
+    },
+  ];
 
   const columns: Column<AuditRow>[] = [
     {
@@ -229,10 +358,10 @@ export default function AuditPage() {
             className="text-sm hover:underline"
             onClick={(e) => e.stopPropagation()}
           >
-            {entityRef(r.entity_type, r.entity_id, t)}
+            {entityRef(r, t)}
           </Link>
         ) : (
-          <span className="text-sm">{entityRef(r.entity_type, r.entity_id, t)}</span>
+          <span className="text-sm">{entityRef(r, t)}</span>
         );
       },
     },
@@ -292,88 +421,44 @@ export default function AuditPage() {
           </Link>
         </div>
       ) : (
-        <div className="grid min-w-0 gap-3 sm:flex sm:flex-wrap sm:items-end">
-          <div className="min-w-0 space-y-1">
-            <Label htmlFor="audit-action" className="text-muted-foreground text-xs">
-              {t("colAction")}
-            </Label>
-            <EntityCombobox
-              id="audit-action"
-              options={actionOptions}
-              value={filters.action}
-              onChange={(v) => setFilters((f) => ({ ...f, action: v }))}
-              getId={(o) => o.action}
-              getLabel={(o) => o.label}
-              placeholder={t("allActionsPlaceholder")}
-              className="w-full sm:w-48"
-            />
-          </div>
-          <div className="min-w-0 space-y-1">
-            <Label htmlFor="audit-entity-type" className="text-muted-foreground text-xs">
-              {t("entityTypeLabel")}
-            </Label>
-            <EntityCombobox
-              id="audit-entity-type"
-              options={entityTypeOptions}
-              value={filters.entityType}
-              onChange={(v) => setFilters((f) => ({ ...f, entityType: v }))}
-              getId={(o) => o.entityType}
-              getLabel={(o) => o.label}
-              placeholder={t("allEntityTypesPlaceholder")}
-              className="w-full sm:w-48"
-            />
-          </div>
-          <div className="min-w-0 space-y-1">
-            <Label htmlFor="audit-entity-id" className="text-muted-foreground text-xs">
-              {t("entityIdLabel")}
-            </Label>
-            <Input
-              id="audit-entity-id"
-              value={filters.entityId}
-              onChange={(e) => setFilters((f) => ({ ...f, entityId: e.target.value }))}
-              className="w-full sm:w-28"
-            />
-          </div>
-          <div className="min-w-0 space-y-1">
-            <Label htmlFor="audit-actor" className="text-muted-foreground text-xs">
-              {t("actorUserIdLabel")}
-            </Label>
-            <Input
-              id="audit-actor"
-              value={filters.actorQuery}
-              onChange={(e) => setFilters((f) => ({ ...f, actorQuery: e.target.value }))}
-              placeholder={`${t("egPrefix")} Daniel, daniel@...`}
-              className="w-full sm:w-44"
-            />
-          </div>
-          <div className="min-w-0 space-y-1">
-            <Label htmlFor="audit-from" className="text-muted-foreground text-xs">
-              {t("fromLabel")}
-            </Label>
-            <DateTimeInput
-              id="audit-from"
-              value={filters.dateFrom}
-              onChange={(v) => setFilters((f) => ({ ...f, dateFrom: v }))}
-              className="w-full sm:w-auto"
-            />
-          </div>
-          <div className="min-w-0 space-y-1">
-            <Label htmlFor="audit-to" className="text-muted-foreground text-xs">
-              {t("toLabel")}
-            </Label>
-            <DateTimeInput
-              id="audit-to"
-              value={filters.dateTo}
-              onChange={(v) => setFilters((f) => ({ ...f, dateTo: v }))}
-              className="w-full sm:w-auto"
-            />
-          </div>
-          {hasFilters && (
-            <Button variant="ghost" size="sm" onClick={() => setFilters(EMPTY_FILTERS)}>
-              {t("clearFilters")}
-            </Button>
-          )}
-        </div>
+        <ListToolbar
+          search={{
+            id: "audit-actor",
+            label: t("auditSearchActor"),
+            placeholder: t("auditSearchActor"),
+            value: filters.actorQuery,
+            onValueChange: (actorQuery) => setFilters((f) => ({ ...f, actorQuery })),
+          }}
+          filters={filterDefinitions}
+          feedback={
+            filters.period === "custom" && (
+              <div className="grid min-w-0 gap-3 sm:flex sm:flex-wrap sm:items-end">
+                <div className="min-w-0 space-y-1">
+                  <Label htmlFor="audit-from" className="text-muted-foreground text-xs">
+                    {t("fromLabel")}
+                  </Label>
+                  <DateTimeInput
+                    id="audit-from"
+                    value={filters.dateFrom}
+                    onChange={(dateFrom) => setFilters((f) => ({ ...f, dateFrom }))}
+                    className="w-full sm:w-auto"
+                  />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <Label htmlFor="audit-to" className="text-muted-foreground text-xs">
+                    {t("toLabel")}
+                  </Label>
+                  <DateTimeInput
+                    id="audit-to"
+                    value={filters.dateTo}
+                    onChange={(dateTo) => setFilters((f) => ({ ...f, dateTo }))}
+                    className="w-full sm:w-auto"
+                  />
+                </div>
+              </div>
+            )
+          }
+        />
       )}
 
       <DataTable
@@ -388,15 +473,13 @@ export default function AuditPage() {
             : undefined
         }
         getRowHref={(r) => `/audit/${r.id}`}
-        getRowLabel={(r) =>
-          `${getActionLabel(r.action, t)} ${entityRef(r.entity_type, r.entity_id, t)}`
-        }
+        getRowLabel={(r) => `${getActionLabel(r.action, t)} ${entityRef(r, t)}`}
         renderMobileRow={(r) => <AuditMobileRow row={r} />}
         empty={{
           title: t("noAuditEntriesTitle"),
           description: hasFilters ? t("noEntriesMatchFilters") : t("sensitiveActionsAppearDesc"),
         }}
-        filteredEmpty={{ active: hasFilters, onClear: () => setFilters(EMPTY_FILTERS) }}
+        filteredEmpty={{ active: hasFilters, onClear: clearFilters }}
       />
 
       {total > 0 && (

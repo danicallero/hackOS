@@ -95,12 +95,24 @@ event per action and preserving the existing single history/broadcast invariant.
 `GET /api/audit` and `GET /api/audit/:id` require `AUDIT_READ`. Responses include
 minimized snapshots, changed fields, executor/initiator context and correlation.
 `requestId` filters related events; actor filters match executor or initiator.
+Rows also carry `entity_label`, the current name of catalogue subjects
+(university, degree, enterprise, challenge, role, room, application, activity,
+active user) resolved at read time, so the list reads "University · UDC" rather
+than "University #12"; deleted subjects fall back to their id.
+The list page uses the shared dense-list toolbar: a search by actor and one
+Filters menu (action, entity type, specific entity, date presets or a custom
+range). Each active filter is a chip that removes only itself. An entry's detail
+links to `/audit?entityType=…&entityId=…`, which seeds the entity filters and
+then leaves `/audit`, so removing the chip never fights the link.
 The desktop table constrains column widths and truncates long changed-field summaries with an ellipsis (the full list remains in the detail) so the subject, actor and source remain visible without horizontal scrolling.
 The UI localizes the current action/entity catalogue in English, Spanish and
 Galician, shows recursive object differences and changed fields separately from
 private values, and links supported subjects to their existing detail routes.
 Application-response links choose a workspace the viewer can access and keep
-the selected response through navigation/reload. Audit access alone never grants
+the selected response through navigation/reload. The review dialog is not
+modal on desktop (its file viewer and composer float beside it), so focus that
+lands behind it never dismisses it; only Escape, Close or a click outside do.
+Audit access alone never grants
 access to the affected domain record.
 
 ## Validation
