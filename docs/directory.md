@@ -245,7 +245,7 @@ unsaved, and no field is added by this rule.
 | `project` | deprecated: the first of `projects` (or `null`), kept for app builds that predate the list | `show_project` |
 | `challenges[]` `{id, name}` | published, non-test challenges of any of those projects (`queue_entries`) or groups (`planned_work_group_challenges`) | `show_project` |
 | `activities[]` `{id, title, startsAt, endsAt, location}` | shown schedule items the person speaks at (`schedule_speakers`, H48), by start time; only items visible to the participant audience with a due `publishAt` | always (`[]` when none) |
-| `enterprises[]` `{id, name, logoUrl}` | every visible, non-synthetic company the person is a sponsor member of (`sponsors`, H44; a person can have several rows), oldest membership first, once each | always (`[]` when none) |
+| `enterprises[]` `{id, name, logoUrl, logoNegativeUrl}` | every visible, non-synthetic company the person is a sponsor member of (`sponsors`, H44; a person can have several rows), oldest membership first, once each | always (`[]` when none) |
 | `helpTopics[]` `{id, name}` | the person's help desk knowledge (`helper_topics`, H61; [`help-desk.md`](./help-desk.md)) | their helper profile is published (`[]` otherwise) |
 
 Nothing else leaves the module: no email, DNI, badge, intolerances,
@@ -321,9 +321,12 @@ a diary entry shows no CV row, favourite star, note or remove action: those
 need the reader's diary entry.
 
 The profile hero samples the authenticated photo at its absolute API URL with
-credentials, using the same photo as the avatar. Company representative links
-carry `?company=<id>` so the profile returns to that company (also in error
-states); direct and diary visits return to Contacts.
+credentials, using the same photo as the avatar. Company rows use the dark
+logo variant on dark backgrounds, including the helper affiliation row. Back links
+follow the shared in-app history stack, so profiles and companies return to their
+actual origin. Company representative links also carry `?company=<id>` as the
+fallback for a new tab or refresh (including error states); otherwise direct
+profile visits return to Contacts.
 
 Every CV link on the web (the person page, the owner's file name and the
 "View CV" link of the My profile preview) opens the shared viewer

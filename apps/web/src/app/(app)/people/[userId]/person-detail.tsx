@@ -111,7 +111,7 @@ export function PersonProfile({
   present,
 }: {
   visibleRole?: string | null;
-  company?: { name: string; logoUrl: string | null };
+  company?: { name: string; logoUrl: string | null; logoNegativeUrl?: string | null };
   present?: boolean;
   entry: DirectoryEntry;
   context: React.ReactNode;
@@ -138,11 +138,12 @@ export function PersonProfile({
       value: (
         <div className="flex min-w-0 items-center gap-3">
           {company.logoUrl ? (
-            // biome-ignore lint/performance/noImgElement: authenticated enterprise logo URL.
-            <img
-              src={apiAssetUrl(company.logoUrl)}
+            <SponsorLogo
+              logoUrl={company.logoUrl}
+              logoNegativeUrl={company.logoNegativeUrl}
               alt=""
               className="size-10 shrink-0 object-contain"
+              inset={false}
             />
           ) : null}
           <span className="wrap-anywhere">{company.name}</span>
@@ -164,6 +165,7 @@ export function PersonProfile({
                 {c.logoUrl ? (
                   <SponsorLogo
                     logoUrl={c.logoUrl}
+                    logoNegativeUrl={c.logoNegativeUrl}
                     alt=""
                     className="max-h-8 max-w-14 shrink-0 object-contain"
                     inset={false}

@@ -1,17 +1,32 @@
 /**
  * Knows which in-app page sits just below the current history entry, so a back
  * link can use real browser history (list search, filters, page and scroll
- * come back intact) only when that entry is the parent it names.
+ * come back intact) when that entry has a known page title or is the canonical parent.
  *
  * Every `pushState`/`replaceState` made while the app runs (Next's router and
  * the unsaved-changes guard included) stamps its entry with a position and
  * remembers its URL. Entries the app did not create (the page that was open
  * before, another site, anything before a refresh) are unknown, so
- * `previousInAppLocation()` is null and callers fall back to a fixed route.
+ * `previousInAppEntry()` is null and callers fall back to a fixed route.
  */
 const POSITION_KEY = "__hackosHistoryPosition";
 
-const locations = new Map<number, string>();
+interface HistoryEntry {
+  url: string;
+  label: string | null;
+}
+const locations = new Map<number, HistoryEntry>();
+const listeners = new Set<() => void>();
+const notify = () => {
+  for (const listener of listeners) listener();
+};
+
+export function subscribeInAppHistory(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
 let restore: (() => void) | null = null;
 
 function positionOf(state: unknown): number | null {
@@ -36,23 +51,35 @@ export function installInAppHistory(): void {
   const current = positionOf(window.history.state);
   if (current === null) {
     replaceState.call(window.history, stamp(window.history.state, 0), "", window.location.href);
-    locations.set(0, locationOf(window.location.href));
+    locations.set(0, { url: locationOf(window.location.href), label: null });
   } else {
-    locations.set(current, locationOf(window.location.href));
+    locations.set(current, { url: locationOf(window.location.href), label: null });
   }
 
   window.history.pushState = function patchedPush(state, unused, url) {
     const position = (positionOf(window.history.state) ?? -1) + 1;
     for (const key of [...locations.keys()]) if (key >= position) locations.delete(key);
-    locations.set(position, locationOf(url));
-    return pushState.call(window.history, stamp(state, position), unused, url);
+    const previous = locations.get(position - 1);
+    if (previous) {
+      previous.label = document.querySelector("main h1")?.textContent?.trim() || previous.label;
+    }
+    locations.set(position, { url: locationOf(url), label: null });
+    const result = pushState.call(window.history, stamp(state, position), unused, url);
+    notify();
+    return result;
   };
   window.history.replaceState = function patchedReplace(state, unused, url) {
     const position = positionOf(window.history.state) ?? 0;
-    locations.set(position, locationOf(url));
-    return replaceState.call(window.history, stamp(state, position), unused, url);
+    const previous = locations.get(position);
+    locations.set(position, { url: locationOf(url), label: previous?.label ?? null });
+    const result = replaceState.call(window.history, stamp(state, position), unused, url);
+    notify();
+    return result;
   };
+  window.addEventListener("popstate", notify);
+  notify();
   restore = () => {
+    window.removeEventListener("popstate", notify);
     window.history.pushState = pushState;
     window.history.replaceState = replaceState;
     locations.clear();
@@ -65,8 +92,8 @@ export function uninstallInAppHistory(): void {
   restore?.();
 }
 
-/** Path and query of the entry before the current one, or null when unknown. */
-export function previousInAppLocation(): string | null {
+/** Previous in-app destination and the visible heading captured when leaving it. */
+export function previousInAppEntry(): HistoryEntry | null {
   if (typeof window === "undefined") return null;
   const position = positionOf(window.history.state);
   if (position === null || position < 1) return null;

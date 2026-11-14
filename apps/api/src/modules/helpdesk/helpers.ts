@@ -140,6 +140,9 @@ export const CARD_COLUMNS = `
   (SELECT e.logo_url FROM sponsors s JOIN enterprises e ON e.id = s.enterprise_id
     WHERE s.user_id = u.id AND e.event_key = current_edition()
     ORDER BY s.joined_at, s.id LIMIT 1) AS affiliation_logo_url,
+  (SELECT e.logo_negative_url FROM sponsors s JOIN enterprises e ON e.id = s.enterprise_id
+    WHERE s.user_id = u.id AND e.event_key = current_edition()
+    ORDER BY s.joined_at, s.id LIMIT 1) AS affiliation_logo_negative_url,
   COALESCE((SELECT jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name) ORDER BY lower(t.name), t.id)
               FROM helper_topics ht JOIN help_topics t ON t.id = ht.topic_id
              WHERE ht.user_id = u.id AND ht.event_key = current_edition()), '[]'::jsonb) AS topics,
@@ -160,6 +163,7 @@ export interface CardRow {
   visible_role_name: string | null;
   affiliation: string | null;
   affiliation_logo_url: string | null;
+  affiliation_logo_negative_url: string | null;
   topics: HelpTopic[];
   availability: { startsAt: string; endsAt: string }[];
   scheduled_now: boolean;
@@ -180,6 +184,7 @@ export function toCard(row: CardRow): HelperCard {
     visibleRoleName: row.visible_role_name,
     affiliation: row.affiliation,
     affiliationLogoUrl: row.affiliation_logo_url,
+    affiliationLogoNegativeUrl: row.affiliation_logo_negative_url,
     topics: row.topics.map((t) => ({ id: Number(t.id), name: t.name })),
     availability: row.availability.map((a) => ({
       startsAt: iso(a.startsAt),

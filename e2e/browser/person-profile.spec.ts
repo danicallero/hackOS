@@ -11,6 +11,11 @@ test("company representative photo tint and return navigation", async ({ page },
     if (path === "/api/me/public-profile") return route.fallback();
     if (path === "/api/public/challenges") return route.fulfill({ json: { items: [] } });
     if (path === "/api/me") return route.fulfill({ json: shellUser });
+    if (path === "/api/logo" || path === "/api/logo-dark")
+      return route.fulfill({
+        contentType: "image/svg+xml",
+        body: `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><text x="0" y="26" fill="${path.endsWith("-dark") ? "white" : "black"}" font-size="14">GPUL</text></svg>`,
+      });
     if (path === "/api/users/42/photo")
       return route.fulfill({
         contentType: "image/svg+xml",
@@ -44,7 +49,14 @@ test("company representative photo tint and return navigation", async ({ page },
           socials: [],
           projects: [],
           challenges: [],
-          enterprises: [{ id: 7, name: "GPUL", logoUrl: null }],
+          enterprises: [
+            {
+              id: 7,
+              name: "GPUL",
+              logoUrl: "http://localhost:3000/api/logo",
+              logoNegativeUrl: "http://localhost:3000/api/logo-dark",
+            },
+          ],
         },
       });
     return route.fulfill({ json: {} });
@@ -66,6 +78,19 @@ test("company representative photo tint and return navigation", async ({ page },
   await expect(page).toHaveURL(/companies\/7$/);
   await page.goto("/people/42");
   await expect(page.locator("[data-back-link]")).toHaveAttribute("href", "/people");
+  await page.getByRole("link", { name: "GPUL", exact: true }).click();
+  await expect(page).toHaveURL(/companies\/7$/);
+  await expect(back).toHaveText("Ana Pérez");
+  await expect(back).toHaveAttribute("href", "/people/42");
+  await page.getByRole("link", { name: "Ana Pérez", exact: true }).click();
+  await expect(back).toHaveText("GPUL");
+  await back.click();
+  await expect(page).toHaveURL(/companies\/7$/);
+  await expect(back).toHaveText("Ana Pérez");
+  await page.screenshot({ path: info.outputPath("company-from-person.png"), fullPage: true });
+  await back.click();
+  await expect(page).toHaveURL(/people\/42$/);
+  await expect(back).toHaveAttribute("href", "/people");
   await page.route("**/api/helpdesk/helpers/42", (route) =>
     route.fulfill({
       json: {
@@ -77,6 +102,9 @@ test("company representative photo tint and return navigation", async ({ page },
           projects: [],
           challenges: [],
         },
+        affiliation: "GPUL",
+        affiliationLogoUrl: "http://localhost:3000/api/logo",
+        affiliationLogoNegativeUrl: "http://localhost:3000/api/logo-dark",
         visibleRoleName: "Organizer",
         present: true,
         topics: [],
@@ -99,5 +127,7 @@ test("company representative photo tint and return navigation", async ({ page },
   await page.reload();
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(role).toBeVisible();
+  await expect(page.locator('img[src="http://localhost:3000/api/logo-dark"]')).toBeVisible();
+  await expect(page.locator('img[src="http://localhost:3000/api/logo"]')).toBeHidden();
   await page.screenshot({ path: info.outputPath("helper-role-narrow-dark.png"), fullPage: true });
 });

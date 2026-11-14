@@ -568,10 +568,10 @@ it reads as stray text there, so it leads the line below.
 
 - **Record pages carry one back link in `context`.** `BackLink`
   (`components/common/back-link.tsx`): a quiet arrow plus the parent's name
-  ("Users", "Applications"), the same on every record route. It steps back
-  through browser history when the entry just below is the parent list (search,
-  filters, page and scroll return intact) and otherwise goes to the canonical
-  parent. Don't hand-roll arrow links or put "Back to…" buttons in
+  ("Users", "Applications"), the same on every record route. It uses the known in-app origin and its visible page heading, including
+  cross-links such as profile → company → representative; search, filters, page
+  and scroll return intact. A direct visit or unknown origin uses the canonical
+  parent. The origin is kept only in window memory, never persisted. Don't hand-roll arrow links or put "Back to…" buttons in
   `secondaryActions` or empty states. Tab changes inside a record use
   `replace`, so Back leaves the record in one press. In-page drill-downs that
   change `?role=`/`tab` state, not the route, use `DrilldownBackButton`, which

@@ -257,3 +257,6 @@ company, using the existing challenge-sponsor relation; an unrelated sponsor
 matching a topic does not qualify for preference. If no preferred representative
 is inside, ordinary topic/Other fallback applies. Planned intervals never gate
 current availability or notifications.
+
+Helper cards include `affiliationLogoNegativeUrl` alongside `affiliationLogoUrl`
+for dark-background company artwork (H44, H63).

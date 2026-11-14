@@ -39,9 +39,19 @@ export interface DirectoryEntry {
     location: string | null;
   }[];
   /** Companies the person represents (a person may belong to several). */
-  enterprises?: { id: number; name: string; logoUrl: string | null }[];
+  enterprises?: {
+    id: number;
+    name: string;
+    logoUrl: string | null;
+    logoNegativeUrl?: string | null;
+  }[];
   /** Legacy single-company shape, tolerated until every API build sends `enterprises`. */
-  enterprise?: { id: number; name: string; logoUrl: string | null } | null;
+  enterprise?: {
+    id: number;
+    name: string;
+    logoUrl: string | null;
+    logoNegativeUrl?: string | null;
+  } | null;
   /** Representative colour of the photo, for the profile tint. */
   photoColor?: string | null;
 }
