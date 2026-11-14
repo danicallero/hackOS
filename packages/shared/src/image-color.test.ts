@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickDominantColor } from "./image-color";
+import { logoTouchesEdge, pickDominantColor } from "./image-color";
 
 const px = (r: number, g: number, b: number, a = 255) => [r, g, b, a];
 const repeat = (pixel: number[], n: number) => Array.from({ length: n }, () => pixel).flat();
@@ -49,5 +49,42 @@ describe("pickDominantColor", () => {
     expect(pickDominantColor(repeat(px(255, 255, 255), 50))).toBeNull();
     expect(pickDominantColor(repeat(px(0, 0, 0), 50))).toBeNull();
     expect(pickDominantColor(repeat(px(200, 30, 30, 0), 50))).toBeNull();
+  });
+});
+
+/** A `size`² image: `inner` inside a `pad`-pixel ring of `ring`. */
+function framed(size: number, pad: number, ring: number[], inner: number[]): number[] {
+  const out: number[] = [];
+  for (let y = 0; y < size; y += 1)
+    for (let x = 0; x < size; x += 1) {
+      const edge = x < pad || y < pad || x >= size - pad || y >= size - pad;
+      out.push(...(edge ? ring : inner));
+    }
+  return out;
+}
+
+describe("logoTouchesEdge", () => {
+  const brand = px(20, 90, 200);
+
+  it("treats a transparent ring as built-in margin", () => {
+    expect(logoTouchesEdge(framed(16, 2, px(0, 0, 0, 0), brand), 16, 16)).toBe(false);
+  });
+
+  it("treats a white or black matte as built-in margin", () => {
+    expect(logoTouchesEdge(framed(16, 2, px(255, 255, 255), brand), 16, 16)).toBe(false);
+    expect(logoTouchesEdge(framed(16, 2, px(5, 5, 5), brand), 16, 16)).toBe(false);
+  });
+
+  it("flags artwork that reaches the edge", () => {
+    expect(logoTouchesEdge(repeat(brand, 256), 16, 16)).toBe(true);
+    // Half the border is a coloured box, half white (a box logo beside its wordmark).
+    const halves = Array.from({ length: 256 }, (_, i) =>
+      i % 16 < 8 ? brand : px(255, 255, 255),
+    ).flat();
+    expect(logoTouchesEdge(halves, 16, 16)).toBe(true);
+  });
+
+  it("flags a mixed grey border", () => {
+    expect(logoTouchesEdge(framed(16, 1, px(128, 128, 128), brand), 16, 16)).toBe(true);
   });
 });

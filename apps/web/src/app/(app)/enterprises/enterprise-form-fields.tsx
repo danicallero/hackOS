@@ -5,6 +5,7 @@
 
 import type { UseFormReturn } from "react-hook-form";
 import { z } from "zod";
+import { MultilingualInput } from "@/components/common/questionnaire-builder";
 import {
   FormControl,
   FormDescription,
@@ -21,7 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useLocale } from "@/lib/i18n";
 
 const optionalUrl = z.string().url("Enter a valid URL").or(z.literal(""));
@@ -34,13 +34,26 @@ export const enterpriseFormSchema = z.object({
   website: optionalUrl,
   logoUrl: optionalUrl,
   logoNegativeUrl: optionalUrl,
-  description: z.string().max(2000),
+  description: z.object({
+    en: z.string().max(2000),
+    es: z.string().max(2000),
+    gl: z.string().max(2000),
+  }),
   priority: optionalPositiveInt,
   kind: z.enum(["sponsor", "collaborator"]),
   visibility: z.enum(["visible", "hidden"]),
   availableFrom: z.string(),
 });
 export type EnterpriseFormValues = z.infer<typeof enterpriseFormSchema>;
+
+/** Per-language description to send (H44): null clears it; empty translations default to English. */
+export function descriptionPayload(value: EnterpriseFormValues["description"]) {
+  const en = value.en.trim();
+  const es = value.es.trim();
+  const gl = value.gl.trim();
+  if (!en && !es && !gl) return { description: null, descriptionI18n: null };
+  return { descriptionI18n: { en, es: es || en, gl: gl || en } };
+}
 
 type EnterpriseForm = UseFormReturn<EnterpriseFormValues>;
 
@@ -86,10 +99,13 @@ export function EnterpriseProfileFields({
         name="description"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>{t("descriptionLabel")}</FormLabel>
-            <FormControl>
-              <Textarea rows={3} {...field} />
-            </FormControl>
+            <MultilingualInput
+              label={t("descriptionLabel")}
+              optional
+              textarea
+              value={field.value}
+              onChange={field.onChange}
+            />
             <FormMessage />
           </FormItem>
         )}

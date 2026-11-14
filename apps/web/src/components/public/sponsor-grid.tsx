@@ -1,9 +1,17 @@
+"use client";
+
+import Link from "next/link";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { Button } from "@/components/ui/button";
+import { useSessionContext } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import type { PublicSponsor } from "./public-types";
 
-/** H45: enterprise priority is ascending (1 is primary), shared by both event surfaces. */
+/**
+ * H45: enterprise priority is ascending (1 is primary), shared by both event
+ * surfaces. A logo opens the company page for signed-in viewers (H44; the page
+ * needs a session) and the company's website otherwise.
+ */
 export function SponsorGrid({
   sponsors,
   className,
@@ -11,6 +19,8 @@ export function SponsorGrid({
   sponsors: PublicSponsor[];
   className?: string;
 }) {
+  const { status } = useSessionContext();
+  const signedIn = status === "authenticated";
   const ordered = [...sponsors].sort(
     (a, b) => (a.priority ?? 9999) - (b.priority ?? 9999) || a.name.localeCompare(b.name),
   );
@@ -29,7 +39,13 @@ export function SponsorGrid({
         );
         return (
           <li key={sponsor.enterpriseId}>
-            {sponsor.website ? (
+            {signedIn ? (
+              <Button asChild variant="ghost" className="h-24 w-full rounded-surface p-4">
+                <Link href={`/companies/${sponsor.enterpriseId}`} aria-label={sponsor.name}>
+                  {mark}
+                </Link>
+              </Button>
+            ) : sponsor.website ? (
               <Button asChild variant="ghost" className="h-24 w-full rounded-surface p-4">
                 <a
                   href={sponsor.website}

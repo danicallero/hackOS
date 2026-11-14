@@ -25,7 +25,7 @@ import type {
 } from "./schemas.js";
 
 const COLUMNS = `id, name, website, logo_url,
-  COALESCE(logo_negative_url, logo_url) AS logo_negative_url, description, priority, kind, position,
+  COALESCE(logo_negative_url, logo_url) AS logo_negative_url, description, description_i18n, priority, kind, position,
   visibility, available_from, director_id, stand_scannable, created_at`;
 
 const COLUMN_FOR: Record<string, string> = {
@@ -34,6 +34,7 @@ const COLUMN_FOR: Record<string, string> = {
   logoUrl: "logo_url",
   logoNegativeUrl: "logo_negative_url",
   description: "description",
+  descriptionI18n: "description_i18n",
   priority: "priority",
   kind: "kind",
   visibility: "visibility",
@@ -99,6 +100,44 @@ async function publishTicketAccess(
   await enqueueWalletSync(access.voidedPassIds);
 }
 
+const DESCRIPTION_ORDER = ["en", "es", "gl"] as const;
+
+/** Non-empty translations of a stored `description_i18n` (H44). */
+export function descriptionTranslations(i18n: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (i18n && typeof i18n === "object" && !Array.isArray(i18n)) {
+    for (const [lang, value] of Object.entries(i18n as Record<string, unknown>)) {
+      if (typeof value === "string" && value.trim()) out[lang] = value;
+    }
+  }
+  return out;
+}
+
+/**
+ * H44: a per-language description is stored trimmed (null once every language
+ * is empty) and `description` mirrors its first non-empty translation, so
+ * clients that read only `description` keep showing something.
+ */
+function withDescriptionMirror<
+  T extends { description?: string | null; descriptionI18n?: unknown },
+>(input: T): Omit<T, "descriptionI18n"> & { descriptionI18n?: string | null } {
+  const { descriptionI18n, ...rest } = input;
+  if (descriptionI18n === undefined) return rest;
+  if (descriptionI18n === null) return { ...rest, descriptionI18n: null };
+  const trimmed = Object.fromEntries(
+    DESCRIPTION_ORDER.map((lang) => [
+      lang,
+      String((descriptionI18n as Record<string, unknown>)[lang] ?? "").trim(),
+    ]),
+  );
+  const first = DESCRIPTION_ORDER.map((lang) => trimmed[lang]).find(Boolean) ?? null;
+  return {
+    ...rest,
+    description: first,
+    descriptionI18n: first ? JSON.stringify(trimmed) : null,
+  };
+}
+
 export async function getEnterprise(id: number) {
   const { rows } = await pool.query(`SELECT ${COLUMNS} FROM enterprises WHERE id = $1`, [id]);
   if (!rows[0]) throw new NotFoundError("Enterprise not found", { id });
@@ -122,7 +161,8 @@ export async function getEnterpriseProfile(
 ) {
   const { rows } = await pool.query(
     `SELECT e.id, e.name, e.website, e.logo_url,
-            COALESCE(e.logo_negative_url, e.logo_url) AS logo_negative_url, e.description
+            COALESCE(e.logo_negative_url, e.logo_url) AS logo_negative_url, e.description,
+            e.description_i18n
        FROM enterprises e
       WHERE e.id = $1
         AND ($2::boolean OR (e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))`,
@@ -166,6 +206,7 @@ export async function getEnterpriseProfile(
     logoNegativeUrl: (enterprise.logo_negative_url as string | null) ?? null,
     website: (enterprise.website as string | null) ?? null,
     description: (enterprise.description as string | null) ?? null,
+    descriptionTranslations: descriptionTranslations(enterprise.description_i18n),
     representatives: people.map((row: Record<string, unknown>) => ({
       userId: Number(row.user_id),
       name: String(row.name),
@@ -215,7 +256,8 @@ export async function myEnterprise(userId: number) {
   return rows[0];
 }
 
-export async function createEnterprise(input: CreateEnterpriseBody, actorId: number | null) {
+export async function createEnterprise(body: CreateEnterpriseBody, actorId: number | null) {
+  const input = withDescriptionMirror(body);
   if (actorId != null && (await isSyntheticOperator(pool, actorId))) {
     throw new ForbiddenError("Synthetic operators cannot create real sponsor enterprises.", {
       code: "review_fixture_scope",
@@ -225,8 +267,9 @@ export async function createEnterprise(input: CreateEnterpriseBody, actorId: num
     return await withTransaction(async (client) => {
       const { rows } = await client.query(
         `INSERT INTO enterprises
-           (name, website, logo_url, logo_negative_url, description, priority, kind, visibility, available_from)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           (name, website, logo_url, logo_negative_url, description, description_i18n, priority,
+            kind, visibility, available_from)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING ${COLUMNS}`,
         [
           input.name,
@@ -234,6 +277,7 @@ export async function createEnterprise(input: CreateEnterpriseBody, actorId: num
           input.logoUrl ?? null,
           input.logoNegativeUrl ?? null,
           input.description ?? null,
+          input.descriptionI18n ?? null,
           input.priority ?? null,
           input.kind,
           input.visibility,
@@ -259,9 +303,10 @@ export async function createEnterprise(input: CreateEnterpriseBody, actorId: num
 
 export async function updateEnterprise(
   id: number,
-  patch: UpdateEnterpriseBody,
+  body: UpdateEnterpriseBody,
   actorId: number | null,
 ) {
+  const patch = withDescriptionMirror(body);
   const sets: string[] = [];
   const values: unknown[] = [];
   let i = 1;
@@ -286,7 +331,7 @@ export async function updateEnterprise(
         entityType: "enterprise",
         entityId: id,
         action: "updated",
-        after: { fields: Object.keys(patch) },
+        after: { fields: Object.keys(body) },
       });
       return rows[0];
     });

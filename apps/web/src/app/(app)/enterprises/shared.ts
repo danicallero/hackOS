@@ -12,6 +12,8 @@ export interface Enterprise {
   logo_url: string | null;
   logo_negative_url: string | null;
   description: string | null;
+  /** H44: per-language description; `description` mirrors its first non-empty translation. */
+  description_i18n: { en?: string; es?: string; gl?: string } | null;
   priority: number | null;
   kind: "sponsor" | "collaborator";
   position: number | null;

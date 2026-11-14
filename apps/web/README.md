@@ -826,8 +826,11 @@ sponsors; schedule, applications and gallery remain in their own destinations.
 Challenge records also retain the authenticated Home shell and navigation. `/gallery` and its records choose the same shell for signed-in viewers
 and public chrome for anonymous visitors.
 
-Home sponsors use the shared `SponsorGrid`: ascending enterprise priority, theme-aware
-logos and external website links in new tabs. The calendar toolbar combines search,
+Home and landing sponsors use the shared `SponsorGrid`: ascending enterprise priority,
+theme-aware logos; a logo opens the company page (`/companies/:id`) for signed-in
+viewers and the external website in a new tab for anonymous visitors. `SponsorLogo`
+draws artwork that runs into its own edges (no built-in margin, `useLogoBleed`) at
+82% so it never touches its tile; text-sized inline marks pass `inset={false}`. The calendar toolbar combines search,
 categorical FilterMenu, previous/next date arrows and day/week controls in one desktop
 row. Its internal viewport fills the remaining window height; all timed activities
 (including long sessions) retain their real duration and category metadata.
@@ -860,8 +863,11 @@ company filter, search over speaker and company names, and opens
 `/timetable?activity=ID` (read once on mount, never written back). The company
 page (`/companies/:id`, `components/sponsors/company-profile.tsx`) reads
 `GET /api/enterprises/:id/profile`; its hero tint is computed in the browser
-from the logo (`useLogoColor` in `lib/company.ts`, cached per URL, neutral when
-the canvas is tainted). `/people/:userId` lists the person's companies and talks;
+from the logo shown (`useCompanyLogoColor` in `lib/company.ts`: the negative logo in
+dark mode, falling back to the positive logo's colour when the negative is white or
+mono; cached per URL, neutral when the canvas is tainted). The description is the
+viewer's language from `descriptionTranslations`, else `description`
+(`companyDescription`); the enterprise editor edits it with `MultilingualInput`. `/people/:userId` lists the person's companies and talks;
 the CV stays scan-only. Tolerates both the legacy single-company and the
 `enterprises[]` API shapes (`speakerCompanies`, `personCompanies`).
 Short blocks use compact padding and line heights so title, category and time fit

@@ -1224,11 +1224,13 @@ never slides behind the clock.
 **Company screen (H44, H45, H59).** `app/companies/[id].tsx`
 (`components/company-profile-screen.tsx`) reads `GET /api/enterprises/:id/profile`
 and follows Apple Music's artist page: a tinted gradient hero (CSS
-`experimental_backgroundImage`; `heroTint` in `lib/hero-tint.ts` tints it with the logo's dominant colour, computed on the device by `lib/image-tint.ts` (Skia draws the logo at 24x24, `pickDominantColor` ignores transparent and near-white/black pixels and favours saturated buckets; nothing is stored server-side), darkened in dark mode,
+`experimental_backgroundImage`; `heroTint` in `lib/hero-tint.ts` tints it with the colour of the logo shown (`useCompanyLogoTint`: the negative logo in dark mode, falling back to the positive logo's colour when the negative is white or mono and has none), computed on the device by `lib/image-tint.ts` (Skia draws the logo at 24x24, `pickDominantColor` ignores transparent and near-white/black pixels and favours saturated buckets; nothing is stored server-side), darkened in dark mode,
 neutral grey when null, and picks the white or black foreground for the name by
 luminance), the logo in a rounded
-card with a soft shadow (the negative logo in dark mode when present), the
-name, the description clamped to four lines with "More", the website, then
+card with a soft shadow (the negative logo in dark mode when present; artwork
+that runs into its own edges is drawn at 84% so it never touches the card,
+`useImageBleed`/`logoTouchesEdge`), the name, the description (in the reader's
+language from `descriptionTranslations`, else `description`) clamped to four lines with "More", the website, then
 Representatives (`AvatarRow`, as Podcasts' Hosts & Guests; opens
 `people/[id]`), Challenges (opens `projects/challenge`, only those already
 public) and Activities (opens `schedule/[id]`). Empty sections are omitted; a
@@ -1243,7 +1245,9 @@ work is deduplicated, at most two decodes run at once, each after interactions.
 The page's `useImageTint` reads the cache synchronously, so a prefetched hero
 is already tinted; an uncached one shows the neutral hero and fades the tint in.
 Colours are not persisted, so a photo hidden later leaves no trace after a
-restart.
+restart. The same decode also records whether the artwork reaches its own
+edges (`useImageBleed`); the company album's round medallions shrink such a
+logo from 74% to 62% so the circle does not cut its corners.
 
 **Speakers and companies on activities.** The schedule detail adds Speakers
 (avatar, name, companies as a truncated subtitle joined with " · "; opens `people/[id]`; without a photo the avatar shows the first letters of first name and surname on the account avatar's blue, via `UserAvatar`, as do the company's Representatives) and Companies (logo,

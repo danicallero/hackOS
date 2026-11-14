@@ -13,6 +13,7 @@ import {
   type SponsorCollectionItem,
 } from "@/lib/diary-sponsors";
 import { useLocale } from "@/lib/i18n";
+import { useImageBleed } from "@/lib/image-tint";
 import { colors, radius, type } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
 
@@ -167,6 +168,8 @@ function Medallion({
   collected: boolean;
 }) {
   const logo = item.logoUrl;
+  // Artwork that runs into its edges would have its corners cut by the circle (H44).
+  const fill = useImageBleed(logo) ? 0.62 : 0.74;
   return (
     <View style={{ height: size, width: size }}>
       <View
@@ -192,9 +195,9 @@ function Medallion({
             source={{ uri: logo }}
             contentFit="contain"
             style={{
-              height: size * 0.74,
+              height: size * fill,
               opacity: collected ? 1 : 0.5,
-              width: size * 0.74,
+              width: size * fill,
             }}
           />
         ) : (

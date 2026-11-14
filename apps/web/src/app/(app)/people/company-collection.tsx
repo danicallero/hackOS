@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { companyDescription } from "@/lib/company";
 import { eventDateFormat } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
@@ -425,8 +426,10 @@ export function CompanyCollection({ nameOf }: { nameOf: ChallengeName }) {
                 )}
               </div>
             </div>
-            {open.description && (
-              <p className="text-sm whitespace-pre-line wrap-break-word">{open.description}</p>
+            {companyDescription(open, language) && (
+              <p className="text-sm whitespace-pre-line wrap-break-word">
+                {companyDescription(open, language)}
+              </p>
             )}
             {open.challenges.length > 0 && <Challenges entry={open} nameOf={nameOf} />}
             {open.entry?.note && (

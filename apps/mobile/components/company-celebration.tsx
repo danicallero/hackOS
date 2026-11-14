@@ -18,7 +18,7 @@ import type { DiarySponsor } from "@/lib/diary";
 import { haptic } from "@/lib/haptics";
 import { NO_PHOTO_TINT } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
-import { useImageTint } from "@/lib/image-tint";
+import { useCompanyLogoTint } from "@/lib/image-tint";
 import { colors, radius, type } from "@/theme";
 
 /** The stand just collected (#935). `key` changes per scan so a repeat plays again. */
@@ -94,7 +94,7 @@ function Celebration({
   const dark = useColorScheme() === "dark";
   const reduceMotion = useReducedMotion();
   const { sponsor } = target;
-  const tint = useImageTint(sponsor.logoUrl);
+  const tint = useCompanyLogoTint(sponsor, dark);
   const [r, g, b] = rgb(tint.color);
   const message = `${sponsor.name}. ${t("companyCollected")}`;
 

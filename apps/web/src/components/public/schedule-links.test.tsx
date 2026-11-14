@@ -13,13 +13,7 @@ vi.mock("@/components/common/user-avatar", () => ({
 vi.mock("@/components/common/sponsor-logo", () => ({
   SponsorLogo: ({ alt }: { alt: string }) => <i data-logo={alt} />,
 }));
-vi.mock("next/link", () => ({
-  default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
-    <a href={href} {...rest}>
-      {children}
-    </a>
-  ),
-}));
+vi.mock("next/link", () => import("@/test/next-link-mock"));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;

@@ -13,6 +13,8 @@ export interface SponsorCollectionItem {
   logoUrl: string | null;
   logoNegativeUrl: string | null;
   description: string | null;
+  /** H44: per-language description (companyDescription picks the viewer's). */
+  descriptionTranslations?: Record<string, string>;
   website: string | null;
   challenges: { id: number; name: string }[];
   /** null until this attendee scans the company's stand. */

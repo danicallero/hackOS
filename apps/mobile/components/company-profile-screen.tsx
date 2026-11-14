@@ -27,12 +27,12 @@ import { SymbolView } from "@/components/symbol";
 import { useColorScheme } from "@/components/useColorScheme";
 import { alert } from "@/lib/alert";
 import { ApiError, apiFetch } from "@/lib/api";
-import { type CompanyProfile, fetchCompanyProfile } from "@/lib/company";
+import { type CompanyProfile, companyDescription, fetchCompanyProfile } from "@/lib/company";
 import type { SponsorCollection, SponsorCollectionEntry } from "@/lib/diary-sponsors";
 import { haptic } from "@/lib/haptics";
 import { heroTint } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
-import { useImageTint } from "@/lib/image-tint";
+import { useCompanyLogoTint, useImageBleed } from "@/lib/image-tint";
 import { safeBack } from "@/lib/navigation";
 import { resolveScheduleText } from "@/lib/schedule";
 import { colors, radius, type } from "@/theme";
@@ -61,9 +61,10 @@ export function Logo({
   size?: number;
 }) {
   // The negative artwork is drawn for dark grounds.
-  const photo = useApiImage(
-    dark && profile.logoNegativeUrl ? profile.logoNegativeUrl : profile.logoUrl,
-  );
+  const shown = dark && profile.logoNegativeUrl ? profile.logoNegativeUrl : profile.logoUrl;
+  const photo = useApiImage(shown);
+  // Artwork without its own margin is drawn smaller so it never touches the tile (H44).
+  const inset = useImageBleed(shown) ? 0.84 : 1;
   const ground = dark && profile.logoNegativeUrl ? colors.elevatedSurface : colors.accentText;
   return (
     <View
@@ -101,7 +102,11 @@ export function Logo({
             accessible={false}
             contentFit="contain"
             style={[
-              { height: size - 28, opacity: muted ? 0.5 : 1, width: size - 28 },
+              {
+                height: (size - 28) * inset,
+                opacity: muted ? 0.5 : 1,
+                width: (size - 28) * inset,
+              },
               !photo.loaded && loadingImageStyle,
             ]}
           />
@@ -258,10 +263,11 @@ export function CompanyProfileScreen() {
   // An uncollected company keeps the neutral grey hero instead of its logo colour.
   // The colour is computed on the device (prefetched from the lists); until it
   // is ready the neutral hero shows, then the tint fades in over it.
-  const logoTint = useImageTint(uncollected ? null : profile?.logoUrl);
+  const logoTint = useCompanyLogoTint(uncollected ? null : (profile ?? null), dark);
   const hero = heroTint(logoTint.color, dark);
   const neutralHero = heroTint(null, dark);
   const site = profile?.website;
+  const description = profile ? companyDescription(profile, language) : null;
   const descriptionStyle = {
     color: colors.label,
     fontSize: type.callout.fontSize,
@@ -350,14 +356,14 @@ export function CompanyProfileScreen() {
             </View>
 
             <View style={{ gap: 24, ...readable.content }}>
-              {profile.description ? (
+              {description ? (
                 <View style={{ gap: 6 }}>
                   <Text
                     selectable
                     numberOfLines={expanded ? undefined : DESCRIPTION_LINES}
                     style={descriptionStyle}
                   >
-                    {profile.description}
+                    {description}
                   </Text>
                   {/* iOS reports only the clamped lines, so measure an unclamped copy. */}
                   <Text
@@ -372,7 +378,7 @@ export function CompanyProfileScreen() {
                       { opacity: 0, position: "absolute", left: 0, right: 0 },
                     ]}
                   >
-                    {profile.description}
+                    {description}
                   </Text>
                   {clamped && !expanded ? (
                     <PressableFeedback

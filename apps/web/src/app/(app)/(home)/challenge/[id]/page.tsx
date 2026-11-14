@@ -26,7 +26,7 @@ import { usePublishedWinners } from "@/hooks/use-published-winners";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { useLogoColor } from "@/lib/company";
+import { useCompanyLogoColor } from "@/lib/company";
 import { useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
@@ -76,7 +76,10 @@ export default function PublicChallengePage() {
   const hasOpenApplications = applicationForms ? applicationForms.applications.length > 0 : null;
   const applicationsFailed = applicationsError != null;
 
-  const logoColor = useLogoColor(challenge?.enterprise.logoUrl);
+  const logoColor = useCompanyLogoColor({
+    logoUrl: challenge?.enterprise.logoUrl,
+    logoNegativeUrl: challenge?.enterprise.logoNegativeUrl,
+  });
 
   useEffect(() => {
     if (challenge) document.title = displayText(challenge.title, language);
