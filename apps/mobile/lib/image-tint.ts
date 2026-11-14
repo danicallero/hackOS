@@ -1,4 +1,4 @@
-import { pickDominantColor } from "@hackos/shared/image-color";
+import { logoTouchesEdge, pickDominantColor } from "@hackos/shared/image-color";
 import { AlphaType, ColorType, Skia } from "@shopify/react-native-skia";
 import { useEffect, useState } from "react";
 import { InteractionManager } from "react-native";
@@ -6,8 +6,14 @@ import { apiImageSource } from "./directory";
 
 const SAMPLE = 24;
 
-/** Download the image, draw it at 24x24 with Skia and pick its colour. */
-async function decodeImageTint(uri: string): Promise<string | null> {
+/** What an image's pixels say: its colour, and whether its artwork runs into its edges (H44). */
+export interface ImageReading {
+  color: string | null;
+  bleed: boolean;
+}
+
+/** Download the image, draw it at 24x24 with Skia and read its colour and edges. */
+async function decodeImageTint(uri: string): Promise<ImageReading | null> {
   const source = apiImageSource(uri);
   const response = await fetch(source.uri, { headers: source.headers });
   if (!response.ok) return null;
@@ -31,7 +37,9 @@ async function decodeImageTint(uri: string): Promise<string | null> {
     alphaType: AlphaType.Unpremul,
   });
   // Unpremul RGBA_8888 reads back as bytes; floats would mean a different format.
-  return pixels && !(pixels instanceof Float32Array) ? pickDominantColor(pixels) : null;
+  return pixels && !(pixels instanceof Float32Array)
+    ? { color: pickDominantColor(pixels), bleed: logoTouchesEdge(pixels, SAMPLE, SAMPLE) }
+    : null;
 }
 
 type Listener = () => void;
@@ -41,13 +49,13 @@ type Listener = () => void;
  * work deduplicated and at most `concurrency` decodes running, each started
  * through `schedule` (off the interaction path) so lists never stutter.
  */
-export function createTintCache(
-  decode: (uri: string) => Promise<string | null>,
+export function createTintCache<T = string>(
+  decode: (uri: string) => Promise<T | null>,
   schedule: (run: () => void) => void,
   concurrency = 2,
 ) {
-  const done = new Map<string, string | null>();
-  const inflight = new Map<string, Promise<string | null>>();
+  const done = new Map<string, T | null>();
+  const inflight = new Map<string, Promise<T | null>>();
   const waiting: (() => void)[] = [];
   let running = 0;
   const listeners = new Map<string, Set<Listener>>();
@@ -59,12 +67,12 @@ export function createTintCache(
     }
   }
 
-  function prefetch(uri: string | null | undefined): Promise<string | null> | null {
+  function prefetch(uri: string | null | undefined): Promise<T | null> | null {
     if (!uri) return null;
     if (done.has(uri)) return Promise.resolve(done.get(uri) ?? null);
     const pending = inflight.get(uri);
     if (pending) return pending;
-    const promise = new Promise<string | null>((resolve) => {
+    const promise = new Promise<T | null>((resolve) => {
       waiting.push(() =>
         schedule(() => {
           void decode(uri)
@@ -117,7 +125,8 @@ export function prefetchImageTint(uri: string | null | undefined): void {
 }
 
 export function getCachedImageTint(uri: string | null | undefined): string | null | undefined {
-  return cache.get(uri);
+  const reading = cache.get(uri);
+  return reading === undefined ? undefined : (reading?.color ?? null);
 }
 
 /** Forget every colour (sign-out): a photo hidden later must not linger. */
@@ -144,10 +153,41 @@ export function useImageTint(uri: string | null | undefined): {
     void cache.prefetch(uri);
     return off;
   }, [uri]);
-  const color = cache.get(uri) ?? null;
+  const color = cache.get(uri)?.color ?? null;
   return {
     color,
     settled: !uri || cache.get(uri) !== undefined,
     fromCache: initial.uri === uri && initial.hit,
   };
+}
+
+/** True once an image is known to run into its own edges, so its tile adds the margin (H44). */
+export function useImageBleed(uri: string | null | undefined): boolean {
+  const [, rerender] = useState(0);
+  useEffect(() => {
+    if (!uri) return;
+    const off = cache.subscribe(uri, () => rerender((n) => n + 1));
+    void cache.prefetch(uri);
+    return off;
+  }, [uri]);
+  return cache.get(uri)?.bleed ?? false;
+}
+
+/**
+ * A company's colour (H44), read from the logo the viewer sees: the negative
+ * artwork on dark grounds. A negative that lost the brand colours (white or
+ * mono) has none, so the positive logo's colour is used instead.
+ */
+export function useCompanyLogoTint(
+  logo: { logoUrl: string | null | undefined; logoNegativeUrl?: string | null } | null,
+  dark: boolean,
+): ReturnType<typeof useImageTint> {
+  const negative =
+    dark && logo?.logoNegativeUrl && logo.logoNegativeUrl !== logo.logoUrl
+      ? logo.logoNegativeUrl
+      : null;
+  const shown = useImageTint(negative);
+  const positive = useImageTint(logo?.logoUrl);
+  if (!negative || shown.color) return negative ? shown : positive;
+  return shown.settled ? positive : { color: null, settled: false, fromCache: false };
 }

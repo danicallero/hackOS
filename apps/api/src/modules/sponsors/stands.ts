@@ -5,7 +5,11 @@ import { audit } from "../../lib/audit.js";
 import { AppError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { assertFixtureEnterpriseScope } from "../../lib/fixture-queue-scope.js";
 import { isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
-import { ENTERPRISE_HAS_REAL, ENTERPRISE_HAS_SYNTHETIC } from "./service.js";
+import {
+  descriptionTranslations,
+  ENTERPRISE_HAS_REAL,
+  ENTERPRISE_HAS_SYNTHETIC,
+} from "./service.js";
 
 /**
  * Company tags (#935). Staff define NFC tags or wristbands (by the 7-byte
@@ -33,6 +37,8 @@ export interface SponsorCard {
   logoUrl: string | null;
   logoNegativeUrl: string | null;
   description: string | null;
+  /** H44: per-language description (non-empty only). */
+  descriptionTranslations: Record<string, string>;
   website: string | null;
   challenges: { id: number; name: string }[];
 }
@@ -295,7 +301,7 @@ export async function visibleSponsorCards(
   if (enterpriseIds.length === 0) return new Map();
   const { rows } = await db.query(
     `SELECT e.id, e.name, e.logo_url, COALESCE(e.logo_negative_url, e.logo_url) AS logo_negative_url,
-            e.description, e.website,
+            e.description, e.description_i18n, e.website,
             COALESCE((
               SELECT jsonb_agg(jsonb_build_object('id', c.id, 'name', c.title) ORDER BY c.title, c.id)
                 FROM challenges c
@@ -319,6 +325,7 @@ export async function visibleSponsorCards(
         logoUrl: row.logo_url ?? null,
         logoNegativeUrl: row.logo_negative_url ?? null,
         description: row.description ?? null,
+        descriptionTranslations: descriptionTranslations(row.description_i18n),
         website: row.website ?? null,
         challenges: (row.challenges as { id: number; name: string }[]).map((c) => ({
           id: Number(c.id),

@@ -9,6 +9,8 @@ export interface CompanyProfile {
   logoNegativeUrl: string | null;
   website: string | null;
   description: string | null;
+  /** H44: per-language description; prefer it over `description` (see companyDescription). */
+  descriptionTranslations?: Record<string, string>;
   representatives: {
     userId: number;
     name: string;
@@ -18,6 +20,14 @@ export interface CompanyProfile {
   }[];
   challenges: { id: number; title: string; summary: string | null }[];
   activities: ScheduleItem[];
+}
+
+/** A company's description in the viewer's language, else its fallback text (H44). */
+export function companyDescription(
+  company: { description: string | null; descriptionTranslations?: Record<string, string> },
+  language: string,
+): string | null {
+  return company.descriptionTranslations?.[language] || company.description || null;
 }
 
 /** A speaker on a schedule item (H48 extension). */

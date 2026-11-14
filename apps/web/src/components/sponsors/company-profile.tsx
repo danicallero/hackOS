@@ -18,9 +18,9 @@ import { isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import {
   type CompanyProfile as Company,
+  companyDescription,
   fetchCompanyProfile,
-  heroGradient,
-  useLogoColor,
+  useCompanyLogoColor,
 } from "@/lib/company";
 import { eventDateFormat } from "@/lib/datetime";
 import { socialLinkText } from "@/lib/directory";
@@ -70,12 +70,13 @@ export function CompanyProfile({ id }: { id: number }) {
 export function CompanyView({ company, context }: { company: Company; context: React.ReactNode }) {
   const { t, language } = useLocale();
   const [expanded, setExpanded] = useState(false);
-  const logoColor = useLogoColor(company.logoUrl);
+  const logoColor = useCompanyLogoColor(company);
   const { data: event } = useServerResource(["public", "event"], () => getPublicEvent());
   const zone = event?.timezone;
   const clock = eventDateFormat(language, "clock", zone);
   const weekdayShort = new Intl.DateTimeFormat(language, { weekday: "short", timeZone: zone });
-  const long = (company.description?.length ?? 0) > 280;
+  const description = companyDescription(company, language);
+  const long = (description?.length ?? 0) > 280;
 
   return (
     <>
@@ -115,7 +116,7 @@ export function CompanyView({ company, context }: { company: Company; context: R
         </header>
       </HeroBleed>
       <PageLayout width="reading">
-        {company.description && (
+        {description && (
           <div className="space-y-1">
             <p
               className={
@@ -124,7 +125,7 @@ export function CompanyView({ company, context }: { company: Company; context: R
                   : "line-clamp-4 max-w-prose wrap-anywhere text-pretty"
               }
             >
-              {company.description}
+              {description}
             </p>
             {long && (
               <Button

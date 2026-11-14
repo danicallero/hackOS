@@ -216,7 +216,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
         params: enterpriseIdParam,
         summary: "Read a company's profile",
         description:
-          "H44/H45 company page for signed-in users: name, logos, website and description; `representatives` (the company's sponsor members, with `avatarUrl` only while they share their photo on their public profile); `challenges` (only revealed ones, with a `summary` cut from the description); and `activities`, the caller's own schedule feed (same audience and visibility rules as GET /api/public/activities, H59) narrowed to the items linked to the company plus those a member of the company speaks at, each once, by start time. A hidden or not-yet-revealed company answers 404 unless the caller is staff, who see everything it has.",
+          "H44/H45 company page for signed-in users: name, logos, website and description (`description` is the fallback text, `descriptionTranslations` the per-language versions to prefer); `representatives` (the company's sponsor members, with `avatarUrl` only while they share their photo on their public profile); `challenges` (only revealed ones, with a `summary` cut from the description); and `activities`, the caller's own schedule feed (same audience and visibility rules as GET /api/public/activities, H59) narrowed to the items linked to the company plus those a member of the company speaks at, each once, by start time. A hidden or not-yet-revealed company answers 404 unless the caller is staff, who see everything it has.",
         response: { 200: enterpriseProfileResponse },
       },
     },
@@ -255,7 +255,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
         body: updateEnterpriseBody,
         summary: "Update a scoped enterprise",
         description:
-          "Sponsor representatives may update their profile fields; global administrators may update all enterprise fields (H44).",
+          "Sponsor representatives may update their profile fields; global administrators may update all enterprise fields (H44). `descriptionI18n` ({en, es, gl}) sets the per-language description and overwrites `description` with its first non-empty translation (en, es, gl); all-empty clears both.",
       },
     },
     async (req) => {

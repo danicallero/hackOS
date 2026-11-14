@@ -34,7 +34,7 @@ export function registerDiaryRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Read my event diary",
         description:
-          "The caller's saved people and sponsor stands, favourites first, then newest. Each entry carries the person's current public profile card or the sponsor's current public card (name, logo, description, website, published challenges); either is null while the profile is hidden or the sponsor is not revealed. Private to the caller; requires event access (#935).",
+          "The caller's saved people and sponsor stands, favourites first, then newest. Each entry carries the person's current public profile card or the sponsor's current public card (name, logo, description with its per-language `descriptionTranslations`, website, published challenges); either is null while the profile is hidden or the sponsor is not revealed. Private to the caller; requires event access (#935).",
       },
     },
     async (req) => listDiary(ownerOf(req)),

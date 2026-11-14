@@ -93,6 +93,7 @@ export function CompanyMarks({
             logoUrl={e.logoUrl}
             alt={e.name}
             className="h-4 w-auto max-w-16 object-contain"
+            inset={false}
           />
         ) : (
           <span key={e.id} className="truncate text-xs">
@@ -218,6 +219,7 @@ export function ScheduleLinksDetail({ item }: { item: Links }) {
                         logoUrl={e.logoUrl}
                         alt=""
                         className="max-h-8 max-w-12 object-contain"
+                        inset={false}
                       />
                     ) : (
                       <span

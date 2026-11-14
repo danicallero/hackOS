@@ -16,6 +16,7 @@ import { fromDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import {
+  descriptionPayload,
   type EnterpriseFormValues,
   EnterpriseKindPriorityFields,
   EnterpriseLogoUrlFields,
@@ -43,7 +44,7 @@ export function CreateEnterpriseModal({
       website: "",
       logoUrl: "",
       logoNegativeUrl: "",
-      description: "",
+      description: { en: "", es: "", gl: "" },
       priority: "",
       kind: "sponsor",
       visibility: "hidden",
@@ -92,7 +93,7 @@ export function CreateEnterpriseModal({
         website: values.website || null,
         logoUrl: values.logoUrl || null,
         logoNegativeUrl: values.logoNegativeUrl || null,
-        description: values.description || null,
+        ...descriptionPayload(values.description),
         priority: values.priority ? Number(values.priority) : null,
         kind: values.kind,
         visibility: values.visibility,

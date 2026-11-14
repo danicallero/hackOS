@@ -625,6 +625,7 @@ Table enterprises {
   available_from "timestamp with time zone"
   created_at "timestamp with time zone" [not null, default: `now()`]
   description text
+  description_i18n jsonb [note: 'H44: {"en","es","gl"} description; description mirrors the first non-empty one.']
   director_id integer
   event_key text [not null, default: `current_edition()`]
   id integer [pk, increment, not null]

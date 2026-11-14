@@ -468,7 +468,9 @@ person shares their photo on their public profile; a speaker's `enterprises` lis
 `[]` clears it); an unknown or inactive id answers 400 and nothing is saved. The
 write is audited in the same transaction with the ids before and after.
 `GET /api/enterprises/:id/profile` (any signed-in user; sponsors module) is the
-company page: details, `representatives` (the company's `sponsors` members, with `firstName`/`surname` like speakers),
+company page: details (`description` is the fallback text, `descriptionTranslations` the per-language
+versions edited through `descriptionI18n` on `POST`/`PATCH /api/enterprises`, which mirror the first non-empty
+translation, en → es → gl, into `description`), `representatives` (the company's `sponsors` members, with `firstName`/`surname` like speakers),
 revealed `challenges` (`summary` = start of the description) and `activities` —
 the caller's own audience-filtered schedule feed narrowed to items linked to the
 company or spoken at by one of its members, once each, by start time. A hidden

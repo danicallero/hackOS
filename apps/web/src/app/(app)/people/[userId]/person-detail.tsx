@@ -158,6 +158,7 @@ export function PersonProfile({
                     logoUrl={c.logoUrl}
                     alt=""
                     className="max-h-8 max-w-14 shrink-0 object-contain"
+                    inset={false}
                   />
                 ) : null}
                 <span className="wrap-anywhere">{c.name}</span>

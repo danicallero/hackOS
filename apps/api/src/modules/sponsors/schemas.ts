@@ -1,3 +1,4 @@
+import { i18nTextSchema } from "@hackos/shared/questions";
 import { z } from "zod";
 import { publicActivitySchema } from "../logistics/schemas.js";
 
@@ -19,6 +20,7 @@ export const createEnterpriseBody = z
     logoUrl: z.string().url().nullish(),
     logoNegativeUrl: z.string().url().nullish(),
     description: z.string().nullish(),
+    descriptionI18n: i18nTextSchema.nullish(), // per-language description; description mirrors it
     priority: z.number().int().positive().nullish(),
     kind: enterpriseKindEnum.default("sponsor"),
     visibility: visibilityEnum.default("hidden"),
@@ -28,7 +30,7 @@ export const createEnterpriseBody = z
 
 /**
  * Superset patch. Admins may set every field; owners are limited to their
- * profile (website/logoUrl/description) — enforced in the route by rejecting
+ * profile (website/logos/description and its translations) — enforced in the route by rejecting
  * the admin-only keys below.
  */
 export const updateEnterpriseBody = z
@@ -38,6 +40,7 @@ export const updateEnterpriseBody = z
     logoUrl: z.string().url().nullish(),
     logoNegativeUrl: z.string().url().nullish(),
     description: z.string().nullish(),
+    descriptionI18n: i18nTextSchema.nullish(), // per-language description; description mirrors it
     priority: z.number().int().positive().nullish(),
     kind: enterpriseKindEnum.optional(),
     visibility: visibilityEnum.optional(),
@@ -51,6 +54,7 @@ export const OWNER_EDITABLE_KEYS = [
   "logoUrl",
   "logoNegativeUrl",
   "description",
+  "descriptionI18n",
 ] as const;
 
 /** Admin bulk visibility flip from the enterprises list (H45). */
@@ -189,6 +193,8 @@ export const enterpriseProfileResponse = z.object({
   logoNegativeUrl: z.string().nullable(),
   website: z.string().nullable(),
   description: z.string().nullable(),
+  /** H44: per-language description (es/gl/en, non-empty only); empty when only `description` is set. */
+  descriptionTranslations: z.record(z.string(), z.string()),
   representatives: z.array(
     z.object({
       userId: z.number().int(),
