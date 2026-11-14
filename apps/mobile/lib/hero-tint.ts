@@ -35,7 +35,10 @@ export function heroTint(
   const tint = (dark ? base.map((v) => Math.round(v * 0.6)) : base) as RGB;
   const alpha = dark ? 0.85 : 0.8;
   const ground = dark ? 0 : 255;
-  const shown = tint.map((v) => Math.round(v * alpha + ground * (1 - alpha))) as RGB;
+  // The name sits about halfway down, where the gradient has already faded to
+  // roughly half strength: judge contrast there, not at the top edge.
+  const strength = alpha * 0.5;
+  const shown = tint.map((v) => Math.round(v * strength + ground * (1 - strength))) as RGB;
   // Contrast against white vs black text: pick the better one.
   const foreground = luminance(shown) > 0.179 ? "black" : "white";
   const [r, g, b] = tint;

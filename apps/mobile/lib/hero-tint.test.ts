@@ -15,8 +15,8 @@ describe("hero tint", () => {
   });
 
   it("picks the foreground by luminance", () => {
-    // Light mode: a dark tint at strength reads with white, a light one with black.
-    expect(heroTint("#001f5c", false).foreground).toBe("white");
+    // Light mode: the name sits where the gradient has faded, so even a dark tint reads with black.
+    expect(heroTint("#001f5c", false).foreground).toBe("black");
     expect(heroTint("#ffe066", false).foreground).toBe("black");
     // Dark mode: the darkened tint over black reads with white.
     expect(heroTint("#001f5c", true).foreground).toBe("white");
