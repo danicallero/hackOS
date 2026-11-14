@@ -669,7 +669,11 @@ debe ser compatible con la anterior en:
 Mientras `proxy` no está en marcha, `api` y `web` aún publican los puertos.
 El primer release que lo incluye los mueve una vez: recrea `api`, `worker` y
 `web` sin puertos y arranca `proxy`, con un corte de pocos segundos. Hacerlo
-fuera de horas de uso. A partir de ahí todos los despliegues son relevos.
+fuera de horas de uso. En producción el actualizador automático
+(`hackos-auto-update.timer`, cada 5 min) desplegaría ese release en cuanto se
+publique: fijar antes una retención (`services.sh production deploy
+sha-<actual>` con `release_action=rollback` deja `mode=hold`) y promoverlo a
+mano en la ventana elegida. A partir de ahí todos los despliegues son relevos.
 
 ### Validación en staging
 
