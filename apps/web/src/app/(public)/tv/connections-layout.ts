@@ -172,61 +172,230 @@ export function layoutGraph(
   return result;
 }
 
-/** Ids of the nodes that get a text label: every named company, then the most
- * connected named people, capped so 500+ nodes never turn into clutter. */
-export function labelledNodeIds(nodes: TvConnectionNode[], maxPeople = 14, maxCompanies = 12) {
-  const byDegree = (a: TvConnectionNode, b: TvConnectionNode) =>
-    b.degree - a.degree || (a.id < b.id ? -1 : 1);
-  const named = nodes.filter((node) => node.label?.trim());
-  const companies = named.filter((node) => node.kind === "company").sort(byDegree);
-  const people = named.filter((node) => node.kind === "person").sort(byDegree);
-  // Hubs of one or two links are not worth a label.
-  return new Set(
-    [
-      ...companies.slice(0, maxCompanies),
-      ...people.filter((p) => p.degree >= 3).slice(0, maxPeople),
-    ].map((node) => node.id),
-  );
+const byDegree = (a: TvConnectionNode, b: TvConnectionNode) =>
+  b.degree - a.degree || (a.id < b.id ? -1 : 1);
+
+export interface Section {
+  /** People in the section, most connected first. */
+  people: string[];
+  /** Companies whose people are mostly in this section; they anchor the camera. */
+  companies: string[];
+  /** Name of the most connected labelled node, or null when none has a name. */
+  title: string | null;
 }
 
-export interface FocusGroup {
-  hub: string;
-  members: Set<string>;
+const MIN_SECTION_PEOPLE = 3;
+const MAX_SECTIONS = 12;
+
+/**
+ * Deterministic label propagation over the people, with companies as fixed
+ * anchors (they vote with half weight but never change). Same snapshot, same
+ * sections; ids are hashed for the visit order, never Math.random. Sections are
+ * ordered by size so the camera starts with the biggest group. Graphs too
+ * small to split return no sections and the wall just shows the overview.
+ */
+export function detectSections(nodes: TvConnectionNode[], edges: TvConnectionEdge[]): Section[] {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const people = nodes.filter((node) => node.kind === "person");
+  if (people.length < MIN_SECTION_PEOPLE * 2) return [];
+  const adjacency = new Map<string, string[]>(nodes.map((node) => [node.id, []]));
+  for (const edge of edges) {
+    if (edge.source === edge.target || !byId.has(edge.source) || !byId.has(edge.target)) continue;
+    adjacency.get(edge.source)?.push(edge.target);
+    adjacency.get(edge.target)?.push(edge.source);
+  }
+  const label = new Map(nodes.map((node) => [node.id, node.id]));
+  const order = people.map((node) => node.id).sort((a, b) => hashUnit(a, 7) - hashUnit(b, 7));
+  for (let round = 0; round < 15; round++) {
+    let changed = false;
+    for (const id of order) {
+      const votes = new Map<string, number>();
+      for (const other of adjacency.get(id) ?? []) {
+        const weight = byId.get(other)?.kind === "company" ? 0.5 : 1;
+        const vote = label.get(other) as string;
+        votes.set(vote, (votes.get(vote) ?? 0) + weight);
+      }
+      const current = label.get(id) as string;
+      let best = current;
+      let bestWeight = votes.get(current) ?? 0;
+      for (const [vote, weight] of votes) {
+        if (weight > bestWeight || (weight === bestWeight && vote < best && vote !== current)) {
+          best = vote;
+          bestWeight = weight;
+        }
+      }
+      if (best !== current) {
+        label.set(id, best);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+
+  const groups = new Map<string, TvConnectionNode[]>();
+  for (const person of people) {
+    const key = label.get(person.id) as string;
+    groups.set(key, [...(groups.get(key) ?? []), person]);
+  }
+  const kept = [...groups.entries()]
+    .filter(([, members]) => members.length >= MIN_SECTION_PEOPLE)
+    .sort((a, b) => b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1))
+    .slice(0, MAX_SECTIONS);
+  const home = new Map<string, number>();
+  for (const company of nodes.filter((node) => node.kind === "company")) {
+    const tally = new Map<number, number>();
+    for (const other of adjacency.get(company.id) ?? []) {
+      const index = kept.findIndex(([, members]) => members.some((m) => m.id === other));
+      if (index >= 0) tally.set(index, (tally.get(index) ?? 0) + 1);
+    }
+    let best = -1;
+    let count = 0;
+    for (const [index, n] of [...tally].sort((a, b) => a[0] - b[0]))
+      if (n > count) {
+        best = index;
+        count = n;
+      }
+    if (best >= 0) home.set(company.id, best);
+  }
+  return kept.map(([, members], index) => {
+    const companies = nodes
+      .filter((node) => home.get(node.id) === index)
+      .sort(byDegree)
+      .map((node) => node.id);
+    const sorted = [...members].sort(byDegree);
+    const titled = [...sorted, ...companies.map((id) => byId.get(id) as TvConnectionNode)]
+      .filter((node) => node.label?.trim())
+      .sort(byDegree)[0];
+    return { people: sorted.map((n) => n.id), companies, title: titled?.label.trim() ?? null };
+  });
+}
+
+/** Section index per person, so each community gets its own tint. */
+export function sectionIndexById(sections: Section[]): Map<string, number> {
+  const map = new Map<string, number>();
+  sections.forEach((section, index) => {
+    for (const id of section.people) map.set(id, index);
+    for (const id of section.companies) map.set(id, index);
+  });
+  return map;
+}
+
+/** Camera steps: -1 is the whole-network overview, n is section n. The overview
+ * opens the loop and returns after every `every` sections. */
+export function buildSequence(sectionCount: number, every = 3): number[] {
+  const steps: number[] = [-1];
+  for (let i = 0; i < sectionCount; i++) {
+    steps.push(i);
+    if ((i + 1) % every === 0 && i + 1 < sectionCount) steps.push(-1);
+  }
+  return sectionCount === 0 ? steps : [...steps, -1];
+}
+
+export interface Camera {
+  zoom: number;
+  cx: number;
+  cy: number;
+}
+
+/** Camera centred on a section's people and home companies; overview is the full frame. */
+export function cameraFor(
+  section: Section | null,
+  world: Map<string, Point>,
+  width: number,
+  height: number,
+): Camera {
+  const overview = { zoom: 1, cx: width / 2, cy: height / 2 };
+  if (!section) return overview;
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const id of [...section.people, ...section.companies]) {
+    const point = world.get(id);
+    if (!point) continue;
+    minX = Math.min(minX, point.x);
+    maxX = Math.max(maxX, point.x);
+    minY = Math.min(minY, point.y);
+    maxY = Math.max(maxY, point.y);
+  }
+  if (!Number.isFinite(minX)) return overview;
+  const span = Math.min(width, height) * 0.2;
+  const zoom = Math.min(
+    5,
+    Math.max(
+      1.3,
+      Math.min(
+        (width * 0.78) / Math.max(maxX - minX, span),
+        (height * 0.7) / Math.max(maxY - minY, span),
+      ),
+    ),
+  );
+  return { zoom, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 + (height * 0.03) / zoom };
+}
+
+export interface LabelCandidate {
+  id: string;
+  text: string;
+  /** Screen position and radius of the node at rest. */
+  x: number;
+  y: number;
+  r: number;
+  priority: number;
+}
+export interface PlacedLabel {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  anchor: "start" | "end";
 }
 
 /**
- * Neighbourhoods the wall cycles through: the most connected nodes first, each
- * hub with everyone it links to, skipping hubs an earlier group already shows.
- * Only a highlight order — the graph itself is always drawn in full.
+ * Greedy, collision-free label placement in screen space: highest priority
+ * first, right of the node (left when it would leave the frame), skipping any
+ * box that overlaps one already placed or leaves the viewport. Capped.
  */
-export function buildFocusGroups(
-  nodes: TvConnectionNode[],
-  edges: TvConnectionEdge[],
-  maxGroups = 10,
-): FocusGroup[] {
-  const adjacency = new Map<string, Set<string>>();
-  for (const node of nodes) adjacency.set(node.id, new Set());
-  for (const edge of edges) {
-    adjacency.get(edge.source)?.add(edge.target);
-    adjacency.get(edge.target)?.add(edge.source);
+export function selectLabels(
+  candidates: LabelCandidate[],
+  width: number,
+  height: number,
+  fontSize: number,
+  max: number,
+): PlacedLabel[] {
+  const placed: PlacedLabel[] = [];
+  const boxes: Array<[number, number, number, number]> = [];
+  const margin = fontSize * 0.5;
+  const sorted = [...candidates]
+    .filter((c) => c.text.trim())
+    .sort((a, b) => b.priority - a.priority || (a.id < b.id ? -1 : 1));
+  for (const c of sorted) {
+    if (placed.length >= max) break;
+    if (c.x < 0 || c.x > width || c.y < 0 || c.y > height) continue;
+    const textWidth = c.text.length * fontSize * 0.58;
+    for (const anchor of ["start", "end"] as const) {
+      const gap = c.r + fontSize * 0.3;
+      const x = anchor === "start" ? c.x + gap : c.x - gap;
+      const left = anchor === "start" ? x : x - textWidth;
+      const box: [number, number, number, number] = [
+        left - 4,
+        c.y - fontSize * 0.7,
+        left + textWidth + 4,
+        c.y + fontSize * 0.7,
+      ];
+      if (box[0] < margin || box[2] > width - margin || box[1] < margin || box[3] > height - margin)
+        continue;
+      if (boxes.some((o) => box[0] < o[2] && box[2] > o[0] && box[1] < o[3] && box[3] > o[1]))
+        continue;
+      boxes.push(box);
+      placed.push({ id: c.id, text: c.text, x, y: c.y, anchor });
+      break;
+    }
   }
-  const order = [...nodes].sort((a, b) => b.degree - a.degree || (a.id < b.id ? -1 : 1));
-  const covered = new Set<string>();
-  const groups: FocusGroup[] = [];
-  for (const node of order) {
-    if (groups.length >= maxGroups) break;
-    const around = adjacency.get(node.id);
-    if (!around || around.size === 0 || covered.has(node.id)) continue;
-    const members = new Set([node.id, ...around]);
-    for (const id of members) covered.add(id);
-    groups.push({ hub: node.id, members });
-  }
-  return groups;
+  return placed;
 }
 
-/** Node diameter in `unit`-scaled px: area follows degree, with a floor so a
- * single link is still visible from across the room. */
-export function nodeSize(degree: number, kind: "person" | "company", unit: number): number {
-  const base = kind === "company" ? 16 : 7;
-  return unit * (base + Math.sqrt(Math.max(0, degree)) * (kind === "company" ? 3.2 : 3));
+/** Node radius in px at overview zoom; area follows degree. */
+export function nodeRadius(degree: number, kind: "person" | "company", unit: number): number {
+  const d = Math.sqrt(Math.max(0, degree));
+  return unit * (kind === "company" ? 7 + d * 1.6 : 2.4 + d * 0.9);
 }

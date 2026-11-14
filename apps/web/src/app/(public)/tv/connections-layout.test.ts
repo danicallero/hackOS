@@ -1,6 +1,12 @@
 import type { TvConnectionEdge, TvConnectionNode } from "@hackos/shared/tv-connections";
 import { describe, expect, it } from "vitest";
-import { buildFocusGroups, labelledNodeIds, layoutGraph } from "./connections-layout";
+import {
+  buildSequence,
+  cameraFor,
+  detectSections,
+  layoutGraph,
+  selectLabels,
+} from "./connections-layout";
 
 function sampleGraph(people: number, companies = 6) {
   const nodes: TvConnectionNode[] = [];
@@ -8,7 +14,7 @@ function sampleGraph(people: number, companies = 6) {
   for (let c = 0; c < companies; c++)
     nodes.push({ id: `c${c}`, kind: "company", label: `Company ${c}`, degree: 0 });
   for (let p = 0; p < people; p++)
-    nodes.push({ id: `p${p}`, kind: "person", label: p % 3 ? null : `Person ${p}`, degree: 0 });
+    nodes.push({ id: `p${p}`, kind: "person", label: p % 3 ? "" : `Person ${p}`, degree: 0 });
   const add = (source: string, target: string) => {
     edges.push({ source, target });
     for (const node of nodes) if (node.id === source || node.id === target) node.degree++;
@@ -56,7 +62,7 @@ describe("layoutGraph", () => {
   it("places a new node next to the neighbour it connects to", () => {
     const base = sampleGraph(40);
     const first = layoutGraph(base.nodes, base.edges);
-    const nodes = [...base.nodes, { id: "new", kind: "person" as const, label: null, degree: 1 }];
+    const nodes = [...base.nodes, { id: "new", kind: "person" as const, label: "N", degree: 1 }];
     const edges = [...base.edges, { source: "new", target: "p5" }];
     const next = layoutGraph(nodes, edges, first);
     const anchor = next.get("p5");
@@ -66,7 +72,7 @@ describe("layoutGraph", () => {
 
   it("ignores edges to unknown nodes and handles an empty graph", () => {
     expect(layoutGraph([], []).size).toBe(0);
-    const nodes: TvConnectionNode[] = [{ id: "a", kind: "person", label: null, degree: 1 }];
+    const nodes: TvConnectionNode[] = [{ id: "a", kind: "person", label: "A", degree: 1 }];
     expect(layoutGraph(nodes, [{ source: "a", target: "ghost" }]).size).toBe(1);
   });
 
@@ -79,50 +85,111 @@ describe("layoutGraph", () => {
   });
 });
 
-describe("labelledNodeIds", () => {
-  it("labels companies and well-connected named people only", () => {
-    const nodes: TvConnectionNode[] = [
-      { id: "co", kind: "company", label: "Acme", degree: 1 },
-      { id: "hub", kind: "person", label: "Ana", degree: 9 },
-      { id: "leaf", kind: "person", label: "Leo", degree: 1 },
-      { id: "anon", kind: "person", label: null, degree: 20 },
-    ];
-    expect([...labelledNodeIds(nodes)].sort()).toEqual(["co", "hub"]);
+/** Three tight cliques of people, each with its own company, joined by one bridge. */
+function cliques(size = 6) {
+  const nodes: TvConnectionNode[] = [];
+  const edges: TvConnectionEdge[] = [];
+  for (let c = 0; c < 3; c++) {
+    nodes.push({ id: `co${c}`, kind: "company", label: `Co ${c}`, degree: size });
+    for (let i = 0; i < size; i++) {
+      nodes.push({ id: `c${c}p${i}`, kind: "person", label: `P ${c}-${i}`, degree: size });
+      edges.push({ source: `c${c}p${i}`, target: `co${c}` });
+      for (let j = i + 1; j < size; j++) edges.push({ source: `c${c}p${i}`, target: `c${c}p${j}` });
+    }
+  }
+  edges.push({ source: "c0p0", target: "c1p0" });
+  return { nodes, edges };
+}
+
+describe("detectSections", () => {
+  it("finds the cliques deterministically, ordered by size, with company anchors", () => {
+    const { nodes, edges } = cliques();
+    const a = detectSections(nodes, edges);
+    const b = detectSections([...nodes].reverse(), [...edges].reverse());
+    expect(a).toHaveLength(3);
+    for (const section of a) {
+      expect(section.people).toHaveLength(6);
+      expect(new Set(section.people.map((id) => id.slice(0, 2))).size).toBe(1);
+      expect(section.companies).toHaveLength(1);
+      expect(section.title).toMatch(/^Co |^P /);
+    }
+    expect(b.map((s) => [...s.people].sort())).toEqual(a.map((s) => [...s.people].sort()));
   });
 
-  it("caps labels so large graphs stay readable", () => {
-    const { nodes } = sampleGraph(500, 40);
-    for (const node of nodes) node.degree = 5;
-    expect(labelledNodeIds(nodes).size).toBeLessThanOrEqual(26);
+  it("returns no sections for a tiny graph and copes with null labels", () => {
+    expect(detectSections([], [])).toEqual([]);
+    const nodes: TvConnectionNode[] = [
+      { id: "a", kind: "person", label: null as unknown as string, degree: 1 },
+      { id: "b", kind: "person", label: "B", degree: 1 },
+    ];
+    expect(detectSections(nodes, [{ source: "a", target: "b" }])).toEqual([]);
+  });
+
+  it("gives one section for one community and handles a 520-node graph", () => {
+    const one = cliques(7);
+    const single = detectSections(
+      one.nodes.filter((n) => n.id.startsWith("c0") || n.id === "co0"),
+      one.edges.filter((e) => e.source.startsWith("c0") && e.target.startsWith("c0")),
+    );
+    expect(single).toHaveLength(1);
+    const { nodes, edges } = sampleGraph(514);
+    const started = performance.now();
+    const sections = detectSections(nodes, edges);
+    expect(sections.length).toBeLessThanOrEqual(12);
+    expect(performance.now() - started).toBeLessThan(2_000);
   });
 });
 
-describe("buildFocusGroups", () => {
-  it("starts at the biggest hub and skips hubs already covered", () => {
-    const nodes: TvConnectionNode[] = [
-      { id: "h", kind: "company", label: "H", degree: 3 },
-      { id: "a", kind: "person", label: null, degree: 1 },
-      { id: "b", kind: "person", label: null, degree: 1 },
-      { id: "c", kind: "person", label: null, degree: 2 },
-      { id: "x", kind: "person", label: null, degree: 1 },
-      { id: "y", kind: "person", label: null, degree: 1 },
-    ];
-    const edges = [
-      { source: "h", target: "a" },
-      { source: "h", target: "b" },
-      { source: "h", target: "c" },
-      { source: "c", target: "x" },
-      { source: "x", target: "y" },
-    ];
-    const groups = buildFocusGroups(nodes, edges);
-    expect(groups[0].hub).toBe("h");
-    expect([...groups[0].members].sort()).toEqual(["a", "b", "c", "h"]);
-    expect(groups.map((g) => g.hub)).not.toContain("a");
-    expect(buildFocusGroups([], [])).toEqual([]);
+describe("buildSequence", () => {
+  it("opens and closes on the overview and revisits it periodically", () => {
+    expect(buildSequence(0)).toEqual([-1]);
+    expect(buildSequence(2)).toEqual([-1, 0, 1, -1]);
+    expect(buildSequence(7)).toEqual([-1, 0, 1, 2, -1, 3, 4, 5, -1, 6, -1]);
   });
+});
 
-  it("limits the rotation length", () => {
-    const { nodes, edges } = sampleGraph(500);
-    expect(buildFocusGroups(nodes, edges, 8).length).toBeLessThanOrEqual(8);
+describe("cameraFor", () => {
+  it("frames the overview and zooms onto a section within bounds", () => {
+    const world = new Map([
+      ["a", { x: 100, y: 100 }],
+      ["b", { x: 200, y: 150 }],
+    ]);
+    expect(cameraFor(null, world, 1000, 800)).toEqual({ zoom: 1, cx: 500, cy: 400 });
+    const cam = cameraFor({ people: ["a", "b"], companies: [], title: null }, world, 1000, 800);
+    expect(cam.zoom).toBeGreaterThan(1.29);
+    expect(cam.zoom).toBeLessThanOrEqual(5);
+    expect(cam.cx).toBeCloseTo(150, 0);
+    expect(cameraFor({ people: ["x"], companies: [], title: null }, world, 1000, 800).zoom).toBe(1);
+  });
+});
+
+describe("selectLabels", () => {
+  it("never overlaps, respects the cap and priority, and stays in frame", () => {
+    const candidates = Array.from({ length: 80 }, (_, i) => ({
+      id: `n${i}`,
+      text: `Person number ${i}`,
+      x: 100 + (i % 10) * 20,
+      y: 100 + Math.floor(i / 10) * 12,
+      r: 6,
+      priority: i,
+    }));
+    const placed = selectLabels(candidates, 1000, 800, 20, 12);
+    expect(placed.length).toBeGreaterThan(0);
+    expect(placed.length).toBeLessThanOrEqual(12);
+    expect(placed[0].id).toBe("n79");
+    const box = (l: (typeof placed)[number]) => {
+      const w = l.text.length * 20 * 0.58;
+      const left = l.anchor === "start" ? l.x : l.x - w;
+      return [left, l.y - 10, left + w, l.y + 10];
+    };
+    for (const a of placed)
+      for (const b of placed) {
+        if (a === b) continue;
+        const [x0, y0, x1, y1] = box(a);
+        const [u0, v0, u1, v1] = box(b);
+        expect(x0 < u1 && x1 > u0 && y0 < v1 && y1 > v0).toBe(false);
+      }
+    expect(selectLabels([{ ...candidates[0], x: -5 }], 1000, 800, 20, 5)).toEqual([]);
+    expect(selectLabels([{ ...candidates[0], text: " " }], 1000, 800, 20, 5)).toEqual([]);
   });
 });

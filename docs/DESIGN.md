@@ -1429,13 +1429,15 @@ the rules that bind UI work:
   (`WifiQr` carries its own white plate), generated locally — never through an
   external QR service, which both breaks on a venue with no uplink and hands the
   venue Wi-Fi password to a third party.
-- **Data visualisations are silent.** The connections graph
-  (`(public)/tv/connections-view.tsx`) draws every node, labels only a capped
-  set of named hubs and companies, and highlights one neighbourhood at a time on
-  a timer — never on hover or focus. It does not use `useFitToViewport`, keeps
-  node positions stable between refreshes, and pauses its rotation when the page
-  is hidden or `prefers-reduced-motion` is set. Chart colours come from the
-  `--chart-*` tokens, so both colour schemes work.
+- **Data visualisations are silent and guided.** The connections graph
+  (`(public)/tv/connections-view.tsx`) has no legend or stats row. A camera
+  tours the network on a timer — overview, then one community at a time with
+  its names and companies, the rest faded — and a caption names the current
+  section. Never hover, focus or roam. Labels are collision-free and capped,
+  node positions stay stable between refreshes, the tour pauses while the page
+  is hidden, and `prefers-reduced-motion` steps without animating. Communities
+  are tinted softly; companies stay distinct as outlined rounded squares. Colours
+  come from the `--chart-*` / semantic tokens, so both colour schemes work.
 - Semantic tokens and both colour schemes apply as everywhere else — venues run
   screens in both.
 

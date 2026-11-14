@@ -27,7 +27,7 @@ describe("ConnectionsGraph", () => {
     const nodes: TvConnectionNode[] = Array.from({ length: 520 }, (_, i) => ({
       id: `n${i}`,
       kind: i % 40 === 0 ? "company" : "person",
-      label: i % 2 ? null : `Name ${i}`,
+      label: i % 2 ? (null as unknown as string) : `Name ${i}`,
       degree: 2,
     }));
     const edges: TvConnectionEdge[] = nodes.slice(1).map((node, i) => ({
@@ -40,12 +40,24 @@ describe("ConnectionsGraph", () => {
     const root = createRoot(container);
     const started = performance.now();
     await act(async () =>
-      root.render(<ConnectionsGraph nodes={nodes} edges={edges} label="graph" />),
+      root.render(
+        <ConnectionsGraph
+          nodes={nodes}
+          edges={edges}
+          label="graph"
+          overviewLabel="Whole network"
+          sectionLabel={(name, people) => `${name} ${people}`}
+        />,
+      ),
     );
     await new Promise((resolve) => setTimeout(resolve, 300));
     const svg = container.querySelector("svg");
     expect(svg).not.toBeNull();
     expect(svg?.querySelectorAll("path").length).toBeGreaterThan(500);
+    expect(svg?.querySelectorAll("circle, rect").length).toBe(520);
+    expect(container.querySelector("[data-testid=connections-caption]")?.textContent).toBe(
+      "Whole network",
+    );
     expect(performance.now() - started).toBeLessThan(5_000);
     act(() => root.unmount());
     container.remove();

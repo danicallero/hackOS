@@ -75,11 +75,12 @@ describe("ConnectionsView", () => {
     expect(container.querySelector("[aria-busy=true]")).not.toBeNull();
   });
 
-  it("renders the graph with totals", async () => {
+  it("renders the graph without a stats row", async () => {
     getTvConnections.mockResolvedValue(snapshot());
     await render();
     expect(container.querySelector("[data-testid=graph]")?.getAttribute("data-nodes")).toBe("2");
-    expect(container.textContent).toContain("connectionsPeople");
+    expect(container.querySelector("[data-testid=graph]")).not.toBeNull();
+    expect(container.textContent).not.toContain("connectionsPeople");
     expect(container.textContent).not.toContain("connectionsTruncated");
   });
 

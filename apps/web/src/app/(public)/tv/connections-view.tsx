@@ -78,7 +78,7 @@ export function ConnectionsView({
 
   return (
     <TvScreen>
-      {({ portrait }) => (
+      {() => (
         <>
           <TvHeader title={t("modeConnections")} icon={UsersThreeIcon} eventName={event.name} />
           <TvBody className="gap-[1em] p-[1.5em]">
@@ -95,45 +95,16 @@ export function ConnectionsView({
               <TvEmpty text={t("connectionsEmpty")} />
             ) : (
               <>
-                <div
-                  className={
-                    portrait
-                      ? "flex flex-wrap items-baseline gap-x-[1.5em] gap-y-[0.25em] text-[1.25em]"
-                      : "flex flex-wrap items-baseline gap-x-[2em] gap-y-[0.25em] text-[1.5em]"
-                  }
-                >
-                  <span className="font-semibold tabular-nums">
-                    {t("connectionsPeople", { count: data.totals.people })}
-                  </span>
-                  <span className="font-semibold tabular-nums">
-                    {t("connectionsCompanies", { count: data.totals.companies })}
-                  </span>
-                  <span className="font-semibold tabular-nums">
-                    {t("connectionsLinks", { count: data.totals.connections })}
-                  </span>
-                  <span className="text-muted-foreground ml-auto flex items-center gap-[1.25em] text-[0.8em]">
-                    <span className="flex items-center gap-[0.4em]">
-                      <span
-                        aria-hidden="true"
-                        className="inline-block size-[0.8em] rounded-full"
-                        style={{ background: "var(--chart-1)" }}
-                      />
-                      {t("connectionsLegendPerson")}
-                    </span>
-                    <span className="flex items-center gap-[0.4em]">
-                      <span
-                        aria-hidden="true"
-                        className="border-foreground inline-block size-[0.8em] rounded-[0.15em] border"
-                        style={{ background: "var(--chart-3)" }}
-                      />
-                      {t("connectionsLegendCompany")}
-                    </span>
-                  </span>
-                </div>
                 <div className="min-h-0 flex-1">
                   <ConnectionsGraph
                     nodes={data.nodes}
                     edges={data.edges}
+                    overviewLabel={t("connectionsOverview")}
+                    sectionLabel={(name, people) =>
+                      name
+                        ? `${name} · ${t("connectionsPeople", { count: people })}`
+                        : t("connectionsPeople", { count: people })
+                    }
                     label={t("connectionsGraphLabel", {
                       people: data.totals.people,
                       companies: data.totals.companies,
