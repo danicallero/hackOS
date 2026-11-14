@@ -152,7 +152,9 @@ Both files live in private object storage under `profiles/<user id>/`
 exposes anonymously (only `enterprises/` is public). `<op>` is derived from
 the upload's `Idempotency-Key`, so a retried upload addresses the same
 object. The type is sniffed from the bytes (PNG/JPEG/WebP signatures, `%PDF-`)
-and the declared type is ignored; photos are capped at 2 MB, CVs at 5 MB.
+and the declared type is ignored; photos and CVs are capped at 5 MB. Web and
+mobile compress a larger photo on the device to fit the cap instead of
+refusing it; photos stored before the cap was enforced stay as they are.
 Oversize, empty and unsupported files are explicit 400s. The object is written
 while the owner's `users` row is locked, the same lock H54 removal takes, and
 a replaced or removed object is deleted after the row commits.

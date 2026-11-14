@@ -283,7 +283,7 @@ distributed to other Expo Router apps without importing hackOS code.
   a photo exists, Remove photo (`components/profile-photo-menu.tsx`, one hook
   `lib/use-profile-photo.ts`). The picker crops square (`allowsEditing`), then
   `lib/profile-photo.ts` re-crops the centre square, downsizes to 1024 px and
-  re-encodes as JPEG at 0.8, far under the API's 2 MB cap, and posts it as
+  re-encodes as JPEG at 0.8, far under the API's 5 MB cap, and posts it as
   multipart `file` to `POST /api/me/photo` (removal is `DELETE`), each attempt
   under its own `Idempotency-Key`. The avatar shows a spinner meanwhile and
   `/api/me` is refetched afterwards: the API answers a new `?v=` route, which is

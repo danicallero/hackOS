@@ -1,7 +1,7 @@
 import { MAX_IMAGES_PER_FIELD, type TemplateField } from "@hackos/shared/forms";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
-import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import { ImageManipulator } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { HeaderHeightContext } from "expo-router/react-navigation";
@@ -38,6 +38,7 @@ import { SymbolView } from "@/components/symbol";
 import { useColorScheme } from "@/components/useColorScheme";
 import { alert } from "@/lib/alert";
 import { ApiError, apiFetch } from "@/lib/api";
+import { compressPhotoFile, PHOTO_MAX_BYTES, savePhotoWithin } from "@/lib/compress-photo";
 import { formatEventTime } from "@/lib/event-time";
 import { heroTint, NO_PHOTO_TINT } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
@@ -435,8 +436,8 @@ function AddRow({
 
 const PHOTO_EDGE = 2048;
 
-/** H16: system photo picker; every photo leaves the device as a bounded JPEG. */
-async function pickPhotos(limit: number) {
+/** H16: system photo picker; every photo leaves the device as a JPEG within the cap. */
+async function pickPhotos(limit: number, maxBytes: number) {
   const picked = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ["images"],
     allowsMultipleSelection: limit > 1,
@@ -452,21 +453,26 @@ async function pickPhotos(limit: number) {
       context = context.resize(
         asset.width >= asset.height ? { width: PHOTO_EDGE } : { height: PHOTO_EDGE },
       );
-    const image = await context.renderAsync();
-    const saved = await image.saveAsync({ compress: 0.8, format: SaveFormat.JPEG });
+    const uri = await savePhotoWithin(await context.renderAsync(), maxBytes);
     const base = (asset.fileName ?? `photo-${index + 1}`).replace(/\.[^.]+$/, "");
-    parts.push({ uri: saved.uri, name: `${base}.jpg` });
+    parts.push({ uri, name: `${base}.jpg` });
   }
   return parts;
 }
 
-async function pickDocument(field: TemplateField) {
+async function pickDocument(field: TemplateField, maxBytes: number) {
   const picked = await DocumentPicker.getDocumentAsync({
     type: field.allowed_file_types?.length ? field.allowed_file_types : "*/*",
     copyToCacheDirectory: true,
   });
-  if (picked.canceled || !picked.assets[0]) return [];
-  return [{ uri: picked.assets[0].uri, name: picked.assets[0].name }];
+  const asset = picked.canceled ? null : picked.assets[0];
+  if (!asset) return [];
+  // A photo picked as a file is shrunk like any other photo instead of refused.
+  if (asset.mimeType?.startsWith("image/") && (asset.size ?? 0) > maxBytes) {
+    const base = asset.name.replace(/\.[^.]+$/, "");
+    return [{ uri: await compressPhotoFile(asset.uri, maxBytes), name: `${base}.jpg` }];
+  }
+  return [{ uri: asset.uri, name: asset.name }];
 }
 
 export function ProjectEditor({
@@ -563,13 +569,16 @@ export function ProjectEditor({
     setError(null);
     try {
       const current = draft.responses[field.key];
+      const limit = Math.min((field.max_file_size_mb ?? 5) * 1024 * 1024, PHOTO_MAX_BYTES);
       const parts =
         field.kind === "images"
-          ? await pickPhotos(MAX_IMAGES_PER_FIELD - (Array.isArray(current) ? current.length : 0))
-          : await pickDocument(field);
+          ? await pickPhotos(
+              MAX_IMAGES_PER_FIELD - (Array.isArray(current) ? current.length : 0),
+              limit,
+            )
+          : await pickDocument(field, limit);
       if (!parts.length) return;
       setUploading(field.key);
-      const limit = (field.max_file_size_mb ?? 5) * 1024 * 1024;
       await trackProjectTask(
         project.id,
         (async () => {

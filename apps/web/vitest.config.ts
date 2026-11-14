@@ -7,6 +7,7 @@ const browserTests = [
   "src/lib/privacy-removal.test.ts",
   "src/lib/url-tab.test.ts",
   "src/lib/offline-queue.test.ts",
+  "src/lib/compress-image.test.ts",
 ];
 
 export default defineConfig({

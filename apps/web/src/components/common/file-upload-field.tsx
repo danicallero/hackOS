@@ -15,6 +15,7 @@ import { IconButton } from "@/components/common/icon-button";
 import { Button } from "@/components/ui/button";
 import { apiUpload } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { compressPhoto, PHOTO_MAX_BYTES, STORED_PHOTO_TYPES } from "@/lib/compress-image";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
@@ -75,8 +76,9 @@ export function FileUploadField({
   const accept = allowedTypes?.length ? allowedTypes.join(",") : undefined;
   const maxMb = maxSizeMb ?? 10;
 
-  async function upload(file: File) {
+  async function upload(picked: File) {
     setUploadError(null);
+    const file = await shrinkPhoto(picked, allowedTypes, maxMb);
     const ext = `.${(file.name.split(".").pop() ?? "").toLowerCase()}`;
     if (allowedTypes?.length && !allowedTypes.includes(ext)) {
       const message = t("fileTypeNotAllowed", { ext, allowed: allowedTypes.join(", ") });
@@ -202,4 +204,21 @@ export function FileUploadField({
       </p>
     </div>
   );
+}
+
+/**
+ * A photo over the cap is compressed on device (JPEG when the field accepts
+ * it, otherwise its own format) instead of refused; other files are unchanged.
+ * A photo that still cannot fit falls through to the size check.
+ */
+async function shrinkPhoto(file: File, allowedTypes: string[] | undefined, maxMb: number) {
+  const maxBytes = Math.min(maxMb * 1024 * 1024, PHOTO_MAX_BYTES);
+  if (!STORED_PHOTO_TYPES.includes(file.type) || file.size <= maxBytes) return file;
+  const jpeg = !allowedTypes?.length || allowedTypes.some((t) => t === ".jpg" || t === ".jpeg");
+  const output = jpeg ? "image/jpeg" : (file.type as "image/png" | "image/webp");
+  try {
+    return await compressPhoto(file, { maxBytes, output });
+  } catch {
+    return file;
+  }
 }
