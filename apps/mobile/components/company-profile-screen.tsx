@@ -17,14 +17,8 @@ import { AvatarRow } from "@/components/avatar-row";
 import { Desaturate } from "@/components/company-album";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { FavouriteStar } from "@/components/favourite-star";
-import { GlassView } from "@/components/glass-view";
-import {
-  AndroidStatusBarScrim,
-  EmptyState,
-  LegacyHeaderIconButton,
-  Section,
-  Separator,
-} from "@/components/native-ui";
+import { FloatingBackButton } from "@/components/floating-back-button";
+import { AndroidStatusBarScrim, EmptyState, Section, Separator } from "@/components/native-ui";
 import { loadingImageStyle, useApiImage } from "@/components/person-avatar";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { NoteRow, QuickAction } from "@/components/profile-parts";
@@ -275,22 +269,7 @@ export function CompanyProfileScreen() {
   } as const;
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
-      {floatingBack ? (
-        <View style={{ left: 16, position: "absolute", top: insets.top + 8, zIndex: 10 }}>
-          <GlassView
-            colorScheme="auto"
-            glassEffectStyle="regular"
-            isInteractive
-            style={{ borderRadius: radius.full, height: 44, width: 44 }}
-          >
-            <LegacyHeaderIconButton
-              accessibilityLabel={t("back")}
-              icon="chevron.left"
-              onPress={() => safeBack(router, "/")}
-            />
-          </GlassView>
-        </View>
-      ) : null}
+      {floatingBack ? <FloatingBackButton onPress={() => safeBack(router, "/")} /> : null}
       {process.env.EXPO_OS === "ios" ? (
         <Stack.Screen options={{ headerBackVisible: !floatingBack }} />
       ) : null}

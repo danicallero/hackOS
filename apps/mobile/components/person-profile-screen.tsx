@@ -10,13 +10,12 @@ import { AppRefreshControl } from "@/components/app-refresh-control";
 import { CvViewer } from "@/components/cv-viewer";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { FavouriteStar } from "@/components/favourite-star";
-import { GlassView } from "@/components/glass-view";
+import { FloatingBackButton } from "@/components/floating-back-button";
 import { HelperCompany, HelperPresence } from "@/components/help-desk/rows";
 import {
   AndroidStatusBarScrim,
   EmptyState,
   InfoRow,
-  LegacyHeaderIconButton,
   Section,
   Separator,
   StatusPill,
@@ -45,7 +44,7 @@ import { useImageTint } from "@/lib/image-tint";
 import { safeBack } from "@/lib/navigation";
 import { reportContent } from "@/lib/reports";
 import { isPadIdiom } from "@/lib/tabs";
-import { colors, radius, type } from "@/theme";
+import { colors, type } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
 
 const notFound = () => new ApiError("Person not found", 404, "not_found");
@@ -234,29 +233,7 @@ export function PersonProfileScreen({
 
   return (
     <View ref={avatarCollapse.hostRef} onLayout={avatarCollapse.onHostLayout} style={{ flex: 1 }}>
-      {floatingBack ? (
-        <View
-          style={{
-            left: 16,
-            position: "absolute",
-            top: insets.top + 8,
-            zIndex: 10,
-          }}
-        >
-          <GlassView
-            colorScheme="auto"
-            glassEffectStyle="regular"
-            isInteractive
-            style={{ borderRadius: radius.full, height: 44, width: 44 }}
-          >
-            <LegacyHeaderIconButton
-              accessibilityLabel={t("back")}
-              icon="chevron.left"
-              onPress={goBack}
-            />
-          </GlassView>
-        </View>
-      ) : null}
+      {floatingBack ? <FloatingBackButton onPress={goBack} /> : null}
       {process.env.EXPO_OS === "ios" ? (
         <Stack.Screen
           options={{
