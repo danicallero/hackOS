@@ -2,6 +2,11 @@ import { expect, shellUser, test } from "./fixtures";
 
 // H44, H63: shared profiles retain their origin and sample private photos.
 test("company representative photo tint and return navigation", async ({ page }, info) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
   await page.addInitScript(() => {
     localStorage.setItem("hackos-language", "en");
     localStorage.setItem("hackos.cookie-notice.dismissed", "true");
@@ -130,4 +135,7 @@ test("company representative photo tint and return navigation", async ({ page },
   await expect(page.locator('img[src="http://localhost:3000/api/logo-dark"]')).toBeVisible();
   await expect(page.locator('img[src="http://localhost:3000/api/logo"]')).toBeHidden();
   await page.screenshot({ path: info.outputPath("helper-role-narrow-dark.png"), fullPage: true });
+  expect(
+    errors.filter((message) => /useInsertionEffect|Maximum update depth/.test(message)),
+  ).toEqual([]);
 });

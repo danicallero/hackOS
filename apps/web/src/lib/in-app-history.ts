@@ -18,7 +18,10 @@ interface HistoryEntry {
 const locations = new Map<number, HistoryEntry>();
 const listeners = new Set<() => void>();
 const notify = () => {
-  for (const listener of listeners) listener();
+  // H44, H63: Next updates history in an insertion effect; notify React after that commit.
+  queueMicrotask(() => {
+    for (const listener of listeners) listener();
+  });
 };
 
 export function subscribeInAppHistory(listener: () => void): () => void {
