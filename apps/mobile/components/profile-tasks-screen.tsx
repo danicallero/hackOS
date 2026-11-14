@@ -110,6 +110,40 @@ export default function ProfileTasksScreen() {
 
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
+      <View style={{ paddingTop: 16 + topInset, paddingBottom: 16 }}>
+        <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
+          <Text
+            accessibilityRole="header"
+            selectable
+            style={{
+              color: colors.label,
+              fontSize: type.title3.fontSize,
+              fontWeight: "700",
+              textAlign: "center",
+            }}
+          >
+            {title}
+          </Text>
+        </View>
+        <FloatingGlassButton
+          top={16 + topInset}
+          side="left"
+          icon="xmark"
+          accessibilityLabel={editing ? t("cancel") : t("profileTasksLater")}
+          disabled={saving}
+          onPress={() => router.back()}
+        />
+        <FloatingGlassButton
+          top={16 + topInset}
+          side="right"
+          icon="checkmark"
+          tintColor={colors.accent}
+          accessibilityLabel={t("save")}
+          accessibilityState={{ busy: saving }}
+          disabled={saving || !canSave}
+          onPress={() => void save()}
+        />
+      </View>
       {intolerancesError ? (
         <RequestFeedback
           error={intolerancesError}
@@ -128,24 +162,9 @@ export default function ProfileTasksScreen() {
           paddingVertical: 16,
           ...readable.content,
           paddingBottom: Math.max(32, insets.bottom + 16),
-          paddingTop: 16 + topInset,
+          paddingTop: 16,
         }}
       >
-        <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
-          <Text
-            accessibilityRole="header"
-            selectable
-            style={{
-              color: colors.label,
-              fontSize: type.title3.fontSize,
-              fontWeight: "700",
-              textAlign: "center",
-            }}
-          >
-            {title}
-          </Text>
-        </View>
-
         {showDietary ? (
           <>
             <Section>
@@ -219,25 +238,6 @@ export default function ProfileTasksScreen() {
           <RequestFeedback error={new Error(saveError)} onRetry={() => void save()} />
         ) : null}
       </ScrollView>
-
-      <FloatingGlassButton
-        top={16 + topInset}
-        side="left"
-        icon="xmark"
-        accessibilityLabel={editing ? t("cancel") : t("profileTasksLater")}
-        disabled={saving}
-        onPress={() => router.back()}
-      />
-      <FloatingGlassButton
-        top={16 + topInset}
-        side="right"
-        icon="checkmark"
-        tintColor={colors.accent}
-        accessibilityLabel={t("save")}
-        accessibilityState={{ busy: saving }}
-        disabled={saving || !canSave}
-        onPress={() => void save()}
-      />
     </View>
   );
 }
