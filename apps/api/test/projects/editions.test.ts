@@ -1,7 +1,7 @@
-import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
-import { assignRole, asUser, createRole, createUser, useTestApp } from "../helpers.js";
+import { closeOld, scoped, setup } from "../edition-fixtures.js";
+import { asUser, createUser, useTestApp } from "../helpers.js";
 
 /**
  * Projects and gallery per edition (H18, H20; docs/multi-edition-plan.md §4,
@@ -9,29 +9,6 @@ import { assignRole, asUser, createRole, createUser, useTestApp } from "../helpe
  * projects public and read-only.
  */
 const getApp = useTestApp();
-
-function scoped(userId: number, edition?: string): Record<string, string> {
-  return { ...asUser(userId), ...(edition ? { "x-edition": edition } : {}) };
-}
-
-async function setup() {
-  await pool.query("INSERT INTO event_config (id, event_key, name) VALUES (1, 'e2026', 'E2026')");
-  await pool.query(
-    `INSERT INTO editions (event_key, name, status, closed_at) VALUES
-       ('e2', 'E2', 'active', NULL), ('old', 'Old', 'active', NULL)`,
-  );
-  const admin = await createUser();
-  const roleId = await createRole([CAPABILITIES.ADMIN_ALL], { isProtected: true });
-  await assignRole(admin, roleId);
-  return { admin };
-}
-
-/** Seed a past edition while it is open, then close it (read-only). */
-async function closeOld(): Promise<void> {
-  await pool.query(
-    "UPDATE editions SET status = 'closed', closed_at = now() WHERE event_key = 'old'",
-  );
-}
 
 async function repo(name: string, eventKey: string, status = "submitted"): Promise<number> {
   const { rows } = await pool.query(
