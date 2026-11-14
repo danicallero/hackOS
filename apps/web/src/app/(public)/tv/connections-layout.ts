@@ -336,7 +336,7 @@ export function cameraFor(
 export interface LabelCandidate {
   id: string;
   text: string;
-  /** Screen position and radius of the node at rest. */
+  /** Screen position and on-screen radius of the node at rest. */
   x: number;
   y: number;
   r: number;
@@ -347,13 +347,22 @@ export interface PlacedLabel {
   text: string;
   x: number;
   y: number;
-  anchor: "start" | "end";
+  anchor: "start" | "end" | "middle";
+}
+/** A node that labels must not cover (screen space, square half-size or radius). */
+export interface Obstacle {
+  id: string;
+  x: number;
+  y: number;
+  r: number;
 }
 
 /**
  * Greedy, collision-free label placement in screen space: highest priority
- * first, right of the node (left when it would leave the frame), skipping any
- * box that overlaps one already placed or leaves the viewport. Capped.
+ * first; tries right, left, above and below the node (always adjacent, offset
+ * from its on-screen radius) and takes the first box that stays in the frame
+ * and overlaps neither a placed label nor any other node (company squares
+ * included). Capped.
  */
 export function selectLabels(
   candidates: LabelCandidate[],
@@ -361,6 +370,7 @@ export function selectLabels(
   height: number,
   fontSize: number,
   max: number,
+  obstacles: Obstacle[] = [],
 ): PlacedLabel[] {
   const placed: PlacedLabel[] = [];
   const boxes: Array<[number, number, number, number]> = [];
@@ -368,26 +378,33 @@ export function selectLabels(
   const sorted = [...candidates]
     .filter((c) => c.text.trim())
     .sort((a, b) => b.priority - a.priority || (a.id < b.id ? -1 : 1));
+  const hits = (a: number[], b: number[]) =>
+    a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
   for (const c of sorted) {
     if (placed.length >= max) break;
     if (c.x < 0 || c.x > width || c.y < 0 || c.y > height) continue;
     const textWidth = c.text.length * fontSize * 0.58;
-    for (const anchor of ["start", "end"] as const) {
-      const gap = c.r + fontSize * 0.3;
-      const x = anchor === "start" ? c.x + gap : c.x - gap;
-      const left = anchor === "start" ? x : x - textWidth;
-      const box: [number, number, number, number] = [
-        left - 4,
-        c.y - fontSize * 0.7,
-        left + textWidth + 4,
-        c.y + fontSize * 0.7,
-      ];
+    const half = fontSize * 0.7;
+    const gap = c.r + fontSize * 0.3;
+    const options: Array<{ anchor: PlacedLabel["anchor"]; x: number; y: number; left: number }> = [
+      { anchor: "start", x: c.x + gap, y: c.y, left: c.x + gap },
+      { anchor: "end", x: c.x - gap, y: c.y, left: c.x - gap - textWidth },
+      { anchor: "middle", x: c.x, y: c.y - c.r - half, left: c.x - textWidth / 2 },
+      { anchor: "middle", x: c.x, y: c.y + c.r + half, left: c.x - textWidth / 2 },
+    ];
+    for (const option of options) {
+      const box = [option.left - 4, option.y - half, option.left + textWidth + 4, option.y + half];
       if (box[0] < margin || box[2] > width - margin || box[1] < margin || box[3] > height - margin)
         continue;
-      if (boxes.some((o) => box[0] < o[2] && box[2] > o[0] && box[1] < o[3] && box[3] > o[1]))
+      if (boxes.some((o) => hits(box, o))) continue;
+      if (
+        obstacles.some(
+          (o) => o.id !== c.id && hits(box, [o.x - o.r, o.y - o.r, o.x + o.r, o.y + o.r]),
+        )
+      )
         continue;
-      boxes.push(box);
-      placed.push({ id: c.id, text: c.text, x, y: c.y, anchor });
+      boxes.push(box as [number, number, number, number]);
+      placed.push({ id: c.id, text: c.text, x: option.x, y: option.y, anchor: option.anchor });
       break;
     }
   }
@@ -397,5 +414,17 @@ export function selectLabels(
 /** Node radius in px at overview zoom; area follows degree. */
 export function nodeRadius(degree: number, kind: "person" | "company", unit: number): number {
   const d = Math.sqrt(Math.max(0, degree));
-  return unit * (kind === "company" ? 7 + d * 1.6 : 2.4 + d * 0.9);
+  return unit * (kind === "company" ? 9 + d * 1.6 : 3.2 + d * 1);
+}
+
+/** On-screen radius at a camera zoom: people scale with it, company squares only
+ * with its square root so a zoomed section is never hidden behind them. */
+export function apparentRadius(
+  degree: number,
+  kind: "person" | "company",
+  unit: number,
+  zoom: number,
+): number {
+  const r = nodeRadius(degree, kind, unit);
+  return kind === "company" ? r * Math.sqrt(zoom) : r * zoom;
 }

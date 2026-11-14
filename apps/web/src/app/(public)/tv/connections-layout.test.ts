@@ -1,6 +1,7 @@
 import type { TvConnectionEdge, TvConnectionNode } from "@hackos/shared/tv-connections";
 import { describe, expect, it } from "vitest";
 import {
+  apparentRadius,
   buildSequence,
   cameraFor,
   detectSections,
@@ -179,7 +180,7 @@ describe("selectLabels", () => {
     expect(placed[0].id).toBe("n79");
     const box = (l: (typeof placed)[number]) => {
       const w = l.text.length * 20 * 0.58;
-      const left = l.anchor === "start" ? l.x : l.x - w;
+      const left = l.anchor === "start" ? l.x : l.anchor === "end" ? l.x - w : l.x - w / 2;
       return [left, l.y - 10, left + w, l.y + 10];
     };
     for (const a of placed)
@@ -191,5 +192,47 @@ describe("selectLabels", () => {
       }
     expect(selectLabels([{ ...candidates[0], x: -5 }], 1000, 800, 20, 5)).toEqual([]);
     expect(selectLabels([{ ...candidates[0], text: " " }], 1000, 800, 20, 5)).toEqual([]);
+  });
+});
+
+describe("label placement next to the dot", () => {
+  const base = { id: "a", text: "Ana", x: 500, y: 400, r: 10, priority: 1 };
+
+  it("sits adjacent to its node, offset by the on-screen radius", () => {
+    const [label] = selectLabels([base], 1000, 800, 20, 5);
+    expect(label.anchor).toBe("start");
+    expect(label.y).toBe(400);
+    expect(label.x - base.x).toBeGreaterThanOrEqual(base.r);
+    expect(label.x - base.x).toBeLessThan(base.r + 20);
+  });
+
+  it("moves away from a company square instead of covering it", () => {
+    const company = { id: "co", x: 540, y: 400, r: 30 };
+    const [label] = selectLabels([base], 1000, 800, 20, 5, [company]);
+    const w = base.text.length * 20 * 0.58;
+    const left =
+      label.anchor === "start" ? label.x : label.anchor === "end" ? label.x - w : label.x - w / 2;
+    const overlaps =
+      left < company.x + company.r &&
+      left + w > company.x - company.r &&
+      label.y - 14 < company.y + company.r &&
+      label.y + 14 > company.y - company.r;
+    expect(overlaps).toBe(false);
+    expect(Math.hypot(label.x - base.x, label.y - base.y)).toBeLessThan(120);
+  });
+
+  it("skips a label rather than covering a node when nothing fits", () => {
+    const ring = [
+      { id: "r", x: 520, y: 400, r: 40 },
+      { id: "l", x: 480, y: 400, r: 40 },
+      { id: "u", x: 500, y: 370, r: 40 },
+      { id: "d", x: 500, y: 430, r: 40 },
+    ];
+    expect(selectLabels([base], 1000, 800, 20, 5, ring)).toEqual([]);
+  });
+
+  it("grows company squares slower than the camera zoom", () => {
+    expect(apparentRadius(4, "company", 1, 4) / apparentRadius(4, "company", 1, 1)).toBeCloseTo(2);
+    expect(apparentRadius(4, "person", 1, 4) / apparentRadius(4, "person", 1, 1)).toBeCloseTo(4);
   });
 });

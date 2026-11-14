@@ -1,9 +1,10 @@
 "use client";
 
 import type { TvConnectionEdge, TvConnectionNode } from "@hackos/shared/tv-connections";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useElementSize } from "@/hooks/use-element-size";
 import {
+  apparentRadius,
   buildSequence,
   type Camera,
   cameraFor,
@@ -11,6 +12,7 @@ import {
   type LabelCandidate,
   layoutGraph,
   nodeRadius,
+  type Obstacle,
   type Positions,
   type Section,
   sectionIndexById,
@@ -80,10 +82,10 @@ export function ConnectionsGraph({
   const worldRef = useRef<SVGGElement>(null);
   const camera = useRef<Camera | null>(null);
   const frame = useRef(0);
-  const lastStep = useRef<number | null>(null);
   const [palette, setPalette] = useState<Palette | null>(null);
   const [cursor, setCursor] = useState(0);
-  const [shown, setShown] = useState(-1);
+  // The camera the labels were laid out for; they show only while the real camera is there.
+  const [rest, setRest] = useState<{ step: number; camera: Camera } | null>(null);
   const [settled, setSettled] = useState(false);
 
   // Settled once per snapshot; the previous snapshot's positions seed the next.
@@ -97,7 +99,7 @@ export function ConnectionsGraph({
   const sequence = useMemo(() => buildSequence(sections.length), [sections.length]);
   const step = sequence[cursor % sequence.length] ?? -1;
   const section: Section | null = sections[step] ?? null;
-  const shownSection: Section | null = sections[shown] ?? null;
+  const shownSection: Section | null = rest ? (sections[rest.step] ?? null) : null;
 
   const unit = Math.max(0.5, Math.min(width, height) / 1000);
   const world = useMemo(() => {
@@ -135,8 +137,9 @@ export function ConnectionsGraph({
   );
 
   // Own camera: one transform on the world group, tweened per frame. A poll
-  // only retargets from the current camera, so it never snaps back mid-move.
-  useEffect(() => {
+  // retargets from the current camera, so it never snaps back mid-move. Company
+  // squares are counter-scaled so they grow with the square root of the zoom.
+  useLayoutEffect(() => {
     const group = worldRef.current;
     if (!group || width === 0 || height === 0) return;
     const apply = (c: Camera) => {
@@ -145,17 +148,32 @@ export function ConnectionsGraph({
         "transform",
         `translate(${width / 2} ${height / 2}) scale(${c.zoom}) translate(${-c.cx} ${-c.cy})`,
       );
+      const k = c.zoom ** -0.5;
+      for (const el of group.querySelectorAll<SVGElement>("[data-company]")) {
+        const x = el.dataset.x;
+        const y = el.dataset.y;
+        el.setAttribute(
+          "transform",
+          `translate(${x} ${y}) scale(${k}) translate(${-Number(x)} ${-Number(y)})`,
+        );
+      }
     };
-    const changed = lastStep.current !== step;
-    lastStep.current = step;
-    const from = camera.current;
-    if (!from || reduced) {
-      apply(target);
-      setShown(step);
+    const settle = () => {
+      setRest({ step, camera: target });
       setSettled(true);
+    };
+    const from = camera.current;
+    const near =
+      from &&
+      Math.abs(from.cx - target.cx) < 0.5 &&
+      Math.abs(from.cy - target.cy) < 0.5 &&
+      Math.abs(from.zoom / target.zoom - 1) < 0.01;
+    if (!from || reduced || near) {
+      apply(target);
+      settle();
       return;
     }
-    if (changed) setSettled(false);
+    setSettled(false);
     const started = performance.now();
     const tick = (now: number) => {
       const t = Math.min(1, (now - started) / MOVE_MS);
@@ -166,10 +184,7 @@ export function ConnectionsGraph({
         cy: from.cy + (target.cy - from.cy) * e,
       });
       if (t < 1) frame.current = requestAnimationFrame(tick);
-      else {
-        setShown(step);
-        setSettled(true);
-      }
+      else settle();
     };
     frame.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame.current);
@@ -232,7 +247,12 @@ export function ConnectionsGraph({
   const nodeEls = useMemo(() => {
     if (!palette) return null;
     return [...nodes]
-      .sort((a, b) => a.degree - b.degree || (a.id < b.id ? -1 : 1))
+      .sort(
+        (a, b) =>
+          Number(b.kind === "company") - Number(a.kind === "company") ||
+          a.degree - b.degree ||
+          (a.id < b.id ? -1 : 1),
+      )
       .map((node) => {
         const p = world.get(node.id);
         if (!p) return null;
@@ -242,6 +262,9 @@ export function ConnectionsGraph({
           return (
             <rect
               key={node.id}
+              data-company=""
+              data-x={p.x}
+              data-y={p.y}
               x={p.x - r}
               y={p.y - r}
               width={r * 2}
@@ -249,7 +272,8 @@ export function ConnectionsGraph({
               rx={r * 0.3}
               fill={palette.company}
               stroke={palette.foreground}
-              strokeWidth={1.5 * unit}
+              strokeWidth={2 * unit}
+              vectorEffect="non-scaling-stroke"
               style={{ opacity, transition: fade }}
             />
           );
@@ -266,9 +290,9 @@ export function ConnectionsGraph({
       });
   }, [nodes, world, lit, palette, tint, dark, unit, fade]);
 
-  // Labels are laid out for the camera at rest and only shown once it settles.
+  // Labels are laid out for the camera at rest, in the same projection as the dots.
   const placed = useMemo(() => {
-    const cam = cameraFor(shownSection, world, width, height);
+    const cam = rest?.camera ?? cameraFor(null, world, width, height);
     const project = (id: string) => {
       const p = world.get(id);
       return p
@@ -277,6 +301,7 @@ export function ConnectionsGraph({
     };
     const byId = new Map(nodes.map((n) => [n.id, n]));
     const candidates: LabelCandidate[] = [];
+    const obstacles: Obstacle[] = [];
     const ids = shownSection
       ? new Set([
           ...shownSection.people,
@@ -289,22 +314,25 @@ export function ConnectionsGraph({
     for (const id of ids) {
       const node = byId.get(id);
       const at = project(id);
-      if (!node?.label || !at) continue;
+      if (!node || !at) continue;
+      const r = apparentRadius(node.degree, node.kind, unit, cam.zoom);
+      obstacles.push({ id, x: at.x, y: at.y, r });
+      if (!node.label?.trim()) continue;
       candidates.push({
         id,
         text: node.label.trim(),
         x: at.x,
         y: at.y,
-        r: nodeRadius(node.degree, node.kind, unit) * cam.zoom,
+        r,
         priority: node.degree + (node.kind === "company" ? 1000 : 0),
       });
     }
-    const fontSize = (shownSection ? 24 : 20) * unit;
+    const fontSize = (shownSection ? 28 : 26) * unit;
     return {
-      labels: selectLabels(candidates, width, height, fontSize, shownSection ? 20 : 14),
+      labels: selectLabels(candidates, width, height, fontSize, shownSection ? 20 : 14, obstacles),
       fontSize,
     };
-  }, [shownSection, world, width, height, nodes, adjacency, kinds, unit]);
+  }, [rest, shownSection, world, width, height, nodes, adjacency, kinds, unit]);
 
   const people = shownSection?.people.length ?? 0;
   const caption = shownSection ? sectionLabel(shownSection.title, people) : overviewLabel;
@@ -327,7 +355,7 @@ export function ConnectionsGraph({
             style={{ opacity: settled ? 1 : 0, transition: reduced ? undefined : "opacity 400ms" }}
             fontFamily={palette.fontFamily}
             fontSize={placed.fontSize}
-            fontWeight={600}
+            fontWeight={700}
             fill={palette.foreground}
             stroke={palette.background}
             strokeWidth={placed.fontSize * 0.3}
@@ -343,7 +371,7 @@ export function ConnectionsGraph({
         </svg>
       )}
       <p
-        className="bg-background/75 text-foreground absolute bottom-[0.5em] left-[0.5em] max-w-[90%] truncate rounded-[0.4em] px-[0.7em] py-[0.3em] text-[1.6em] font-semibold"
+        className="bg-background text-foreground border-foreground/30 absolute bottom-[0.5em] left-[0.5em] max-w-[90%] truncate rounded-[0.4em] border-2 px-[0.8em] py-[0.35em] text-[2.6em] leading-tight font-bold"
         style={{ opacity: settled ? 1 : 0, transition: reduced ? undefined : "opacity 400ms" }}
         data-testid="connections-caption"
       >
