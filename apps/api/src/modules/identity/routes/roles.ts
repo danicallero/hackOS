@@ -71,6 +71,15 @@ const readRoles = requireAnyCapability(
   CAPABILITIES.INVITES_MANAGE,
 );
 
+const manageAccess = routeAccess({
+  kind: "capability",
+  capability: CAPABILITIES.PERMISSIONS_MANAGE,
+});
+const roleUserParams = z.object({
+  roleId: z.coerce.number().int(),
+  userId: z.coerce.number().int(),
+});
+
 const permissionState = z.enum(["allow", "deny", "inherit"]);
 const roleIdParams = z.object({ roleId: z.coerce.number().int() });
 
@@ -223,7 +232,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/role-templates",
     {
       preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "List role-creation templates",
         description:
@@ -285,7 +294,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId",
     {
       preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Read a role",
         description:
@@ -301,7 +310,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles",
     {
       preHandler: manageWithIdempotency,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Create a role",
         description:
@@ -378,7 +387,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId",
     {
       preHandler: manageWithIdempotency,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Rename or toggle visibility of a role",
         description:
@@ -436,7 +445,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/position",
     {
       preHandler: manageWithIdempotency,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Reorder a role",
         description:
@@ -488,7 +497,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/capabilities",
     {
       preHandler: manageWithIdempotency,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Replace a role's tri-state capability grants",
         description:
@@ -552,7 +561,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId",
     {
       preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Soft-delete a role",
         description:
@@ -594,7 +603,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/restore",
     {
       preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Restore a soft-deleted role",
         description:
@@ -646,7 +655,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/seed-diff",
     {
       preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Compare a seeded role against its seed-time snapshot",
         description:
@@ -697,7 +706,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/reset-to-default",
     {
       preHandler: manageWithIdempotency,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Reset a seeded role's capabilities to its seed-time snapshot",
         description:
@@ -793,15 +802,12 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/users/:userId",
     {
       preHandler: manageWithIdempotency,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         description:
           "Assigns the role to the user in the viewed edition, enforcing role-authority rules. Audited in the same transaction (H8/H53).",
         summary: "Assign a role to a user",
-        params: z.object({
-          roleId: z.coerce.number().int(),
-          userId: z.coerce.number().int(),
-        }),
+        params: roleUserParams,
         response: { 200: roleResponse },
       },
     },
@@ -860,15 +866,12 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/users/:userId",
     {
       preHandler: manageWithIdempotency,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         description:
           "Removes the role from the user in the viewed edition only, enforcing role-authority rules. Audited in the same transaction (H8/H53).",
         summary: "Remove a role from a user",
-        params: z.object({
-          roleId: z.coerce.number().int(),
-          userId: z.coerce.number().int(),
-        }),
+        params: roleUserParams,
         response: { 200: roleResponse },
       },
     },
@@ -971,7 +974,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/capability-catalogue",
     {
       preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "List every known capability",
         description: "The full shared capability catalogue (H8), for the role capability editor.",

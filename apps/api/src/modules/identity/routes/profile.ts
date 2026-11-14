@@ -445,6 +445,15 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     await idempotencyGuard(req, reply);
   };
 
+  const adminRemovalAccess = {
+    preHandler: [requireCapability(CAPABILITIES.ADMIN_ALL), adminRemovalIdempotency],
+    config: routeAccess({
+      kind: "capability",
+      capability: CAPABILITIES.ADMIN_ALL,
+      edition: "global",
+    }),
+  };
+
   api.get(
     "/api/me",
     {
@@ -1192,12 +1201,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   api.delete(
     "/api/users/:id",
     {
-      preHandler: [requireCapability(CAPABILITIES.ADMIN_ALL), adminRemovalIdempotency],
-      config: routeAccess({
-        kind: "capability",
-        capability: CAPABILITIES.ADMIN_ALL,
-        edition: "global",
-      }),
+      ...adminRemovalAccess,
       schema: {
         summary: "Delete a user account",
         description:
@@ -1301,12 +1305,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   api.post(
     "/api/users/:id/anonymize",
     {
-      preHandler: [requireCapability(CAPABILITIES.ADMIN_ALL), adminRemovalIdempotency],
-      config: routeAccess({
-        kind: "capability",
-        capability: CAPABILITIES.ADMIN_ALL,
-        edition: "global",
-      }),
+      ...adminRemovalAccess,
       schema: {
         summary: "Anonymize a user account",
         description:

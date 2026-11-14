@@ -449,10 +449,14 @@ export async function scrubRelationships(
     [userId],
   );
   await client.query(`DELETE FROM sponsors WHERE user_id = $1`, [userId]);
-  await client.query(`DELETE FROM announcement_reads WHERE user_id = $1`, [userId]);
-  await client.query(`DELETE FROM announcement_recipients WHERE user_id = $1`, [userId]);
-  await client.query(`DELETE FROM notification_preferences WHERE user_id = $1`, [userId]);
-  await client.query(`DELETE FROM notification_outbox WHERE user_id = $1`, [userId]);
+  for (const table of [
+    "announcement_reads",
+    "announcement_recipients",
+    "notification_preferences",
+    "notification_outbox",
+  ] as const) {
+    await client.query(`DELETE FROM ${table} WHERE user_id = $1`, [userId]);
+  }
 
   await client.query(
     `DELETE FROM wallet_pass_devices
