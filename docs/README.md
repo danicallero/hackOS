@@ -64,6 +64,9 @@ Architecture & modules:
 - [Native projects](./projects.md) — drafts, autosave, form snapshots,
   phases, gallery/consent, uploads, invitations, queue eligibility and winner
   publication.
+- [Multi-edition support](./multi-edition-plan.md) — editions catalogue, roles per
+  edition, the `X-Edition` viewed edition, read-only closed editions, closing
+  effects, badge reassignment and erasure across editions (Spanish).
 - [HackUDC 2027 onboarding](./onboarding.md) — edition identity, attendance evidence, resumable steps, RSVP answers and mentor publication.
 - [Public profile (#934)](./directory.md) — the opt-in profile shown to the
   people who scan you, what they can see, access, moderation and

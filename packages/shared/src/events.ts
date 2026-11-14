@@ -95,6 +95,8 @@ export const EVENTS = {
   /** H64-H66: a help request the user follows or was routed changed; `{ requestId, status }`. */
   HELPDESK_REQUEST_CHANGED: "helpdesk.request.changed",
   EXPORT_REQUEST_CHANGED: "exports.request.status_changed", // H54
+  /** An edition was created, activated, closed or reopened; `{ eventKey, status }` (H53). */
+  EDITION_CHANGED: "edition.changed",
 } as const;
 
 export type EventName = (typeof EVENTS)[keyof typeof EVENTS];
