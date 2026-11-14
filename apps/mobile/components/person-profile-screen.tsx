@@ -10,13 +10,12 @@ import { AppRefreshControl } from "@/components/app-refresh-control";
 import { CvViewer } from "@/components/cv-viewer";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { FavouriteStar } from "@/components/favourite-star";
-import { GlassView } from "@/components/glass-view";
+import { FloatingBackButton } from "@/components/floating-back-button";
 import { HelperCompany, HelperPresence } from "@/components/help-desk/rows";
 import {
   AndroidStatusBarScrim,
   EmptyState,
   InfoRow,
-  LegacyHeaderIconButton,
   Section,
   Separator,
   StatusPill,
@@ -45,7 +44,7 @@ import { useImageTint } from "@/lib/image-tint";
 import { safeBack } from "@/lib/navigation";
 import { reportContent } from "@/lib/reports";
 import { isPadIdiom } from "@/lib/tabs";
-import { colors, radius, type } from "@/theme";
+import { colors, type } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
 
 const notFound = () => new ApiError("Person not found", 404, "not_found");
@@ -106,11 +105,9 @@ export function PersonProfileScreen({
   // Opened without a scan (a speaker or representative), there is no CV, star or note.
   const showCv = source !== "diary" || entry !== null;
   const usesCustomAndroidHeader = process.env.EXPO_OS === "android";
-  // iOS keeps the native back button, a circle on iOS 26, whenever there is a
-  // screen to return to. A custom headerLeft is wrapped in a wide glass pill,
-  // so a cold deep link (nothing to pop, H59) floats the same 44pt glass
-  // circle Android uses instead.
-  const [floatingBack] = useState(() => usesCustomAndroidHeader || !router.canGoBack());
+  // The zoom transition's cancelled swipe-to-dismiss leaves the native back
+  // button hidden, so these screens always draw their own glass circle.
+  const floatingBack = true;
 
   const load = useCallback(async () => {
     const request = ++requestId.current;
@@ -236,29 +233,7 @@ export function PersonProfileScreen({
 
   return (
     <View ref={avatarCollapse.hostRef} onLayout={avatarCollapse.onHostLayout} style={{ flex: 1 }}>
-      {floatingBack ? (
-        <View
-          style={{
-            left: 16,
-            position: "absolute",
-            top: insets.top + 8,
-            zIndex: 10,
-          }}
-        >
-          <GlassView
-            colorScheme="auto"
-            glassEffectStyle="regular"
-            isInteractive
-            style={{ borderRadius: radius.full, height: 44, width: 44 }}
-          >
-            <LegacyHeaderIconButton
-              accessibilityLabel={t("back")}
-              icon="chevron.left"
-              onPress={goBack}
-            />
-          </GlassView>
-        </View>
-      ) : null}
+      {floatingBack ? <FloatingBackButton onPress={goBack} /> : null}
       {process.env.EXPO_OS === "ios" ? (
         <Stack.Screen
           options={{

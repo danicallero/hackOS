@@ -1544,6 +1544,10 @@ labels the overlay with it. The API reports `created` only as the status code
 (201 vs 200), which `apiFetch` does not expose, so "new" is decided against the
 loaded diary entries. Not verified on a device.
 
+Scanning a stand (QR, NFC or a `/s/<code>` link) plays `components/company-celebration.tsx` instead:
+the logo springs in over a wash of its own colour (`useImageTint`) with pulsing rings and a rising
+haptic beat (about 3 s), and the company page opens underneath as it fades. Tap to skip.
+
 `apiFetch` returns API timestamps as `Date` objects (Better Auth's client JSON
 parser revives ISO strings), so diary ordering goes through `timestampOf`
 rather than string comparison. Menus use `MenuTriggerIcon` (`native-ui.tsx`)

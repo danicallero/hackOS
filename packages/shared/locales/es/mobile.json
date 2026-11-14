@@ -852,6 +852,7 @@
   "standsRemoveTagConfirm": "¿Quitar esta etiqueta?",
   "standsRemoveQrDetail": "Las copias impresas de este código dejarán de funcionar.",
   "standsRemoveTagFailed": "No se ha podido quitar la etiqueta.",
+  "companyCollected": "Añadida a tu colección",
   "companyTagCollecting": "Coleccionando…",
   "accountNetworkingProfile": "Editar perfil de networking",
   "profilePhotoTitle": "Foto",

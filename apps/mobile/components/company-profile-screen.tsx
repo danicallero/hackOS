@@ -17,14 +17,8 @@ import { AvatarRow } from "@/components/avatar-row";
 import { Desaturate } from "@/components/company-album";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { FavouriteStar } from "@/components/favourite-star";
-import { GlassView } from "@/components/glass-view";
-import {
-  AndroidStatusBarScrim,
-  EmptyState,
-  LegacyHeaderIconButton,
-  Section,
-  Separator,
-} from "@/components/native-ui";
+import { FloatingBackButton } from "@/components/floating-back-button";
+import { AndroidStatusBarScrim, EmptyState, Section, Separator } from "@/components/native-ui";
 import { loadingImageStyle, useApiImage } from "@/components/person-avatar";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { NoteRow, QuickAction } from "@/components/profile-parts";
@@ -44,7 +38,7 @@ import { resolveScheduleText } from "@/lib/schedule";
 import { colors, radius, type } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
 
-const LOGO = 132;
+const LOGO = 168;
 const TITLE_AT = 150;
 const DESCRIPTION_LINES = 4;
 
@@ -54,14 +48,17 @@ type State =
   | { status: "missing" }
   | { status: "error"; error: Error };
 
-function Logo({
+/** The company's logo on its own tile (also the stand-scan celebration's centrepiece). */
+export function Logo({
   profile,
   dark,
   muted,
+  size = LOGO,
 }: {
-  profile: CompanyProfile;
+  profile: Pick<CompanyProfile, "logoUrl" | "logoNegativeUrl">;
   dark: boolean;
   muted: boolean;
+  size?: number;
 }) {
   // The negative artwork is drawn for dark grounds.
   const photo = useApiImage(
@@ -75,9 +72,9 @@ function Logo({
         borderCurve: "continuous",
         borderRadius: radius.sheet,
         boxShadow: "0 10px 28px rgba(0, 0, 0, 0.25)",
-        height: LOGO,
+        height: size,
         overflow: "hidden",
-        width: LOGO,
+        width: size,
       }}
     >
       {/* Its own blend group with the card's ground, so Desaturate drains the logo, not the page. */}
@@ -104,7 +101,7 @@ function Logo({
             accessible={false}
             contentFit="contain"
             style={[
-              { height: LOGO - 36, opacity: muted ? 0.5 : 1, width: LOGO - 36 },
+              { height: size - 28, opacity: muted ? 0.5 : 1, width: size - 28 },
               !photo.loaded && loadingImageStyle,
             ]}
           />
@@ -137,9 +134,10 @@ export function CompanyProfileScreen() {
   // Scroll distance at which the large name has gone under the bar; the bar's blur and title wait for it.
   const [titleAt, setTitleAt] = useState(TITLE_AT);
   const request = useRef(0);
-  const usesCustomAndroidHeader = process.env.EXPO_OS === "android";
   // iOS keeps the native back circle; a cold deep link has nothing to pop (H59).
-  const [floatingBack] = useState(() => usesCustomAndroidHeader || !router.canGoBack());
+  // The zoom transition's cancelled swipe-to-dismiss leaves the native back
+  // button hidden, so these screens always draw their own glass circle.
+  const floatingBack = true;
 
   const load = useCallback(async () => {
     const current = ++request.current;
@@ -271,22 +269,7 @@ export function CompanyProfileScreen() {
   } as const;
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
-      {floatingBack ? (
-        <View style={{ left: 16, position: "absolute", top: insets.top + 8, zIndex: 10 }}>
-          <GlassView
-            colorScheme="auto"
-            glassEffectStyle="regular"
-            isInteractive
-            style={{ borderRadius: radius.full, height: 44, width: 44 }}
-          >
-            <LegacyHeaderIconButton
-              accessibilityLabel={t("back")}
-              icon="chevron.left"
-              onPress={() => safeBack(router, "/")}
-            />
-          </GlassView>
-        </View>
-      ) : null}
+      {floatingBack ? <FloatingBackButton onPress={() => safeBack(router, "/")} /> : null}
       {process.env.EXPO_OS === "ios" ? (
         <Stack.Screen options={{ headerBackVisible: !floatingBack }} />
       ) : null}

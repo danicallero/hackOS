@@ -8,6 +8,10 @@ import { AppRefreshControl } from "@/components/app-refresh-control";
 import { BadgeLinkActions, type ScanActionLabels } from "@/components/badge-link-actions";
 import { CompanyAlbum } from "@/components/company-album";
 import {
+  CompanyCelebration,
+  type CompanyCelebrationTarget,
+} from "@/components/company-celebration";
+import {
   ConnectionCelebration,
   type ConnectionCelebrationTarget,
 } from "@/components/connection-celebration";
@@ -136,6 +140,10 @@ export function DiaryScreen() {
   // The person met, held back from the list until the celebration ends.
   const metEntry = useRef<DiaryEntry | null>(null);
   const celebrations = useRef(0);
+  const [companyCelebration, setCompanyCelebration] = useState<CompanyCelebrationTarget | null>(
+    null,
+  );
+  const companyId = useRef<number | null>(null);
   const { me } = useMeContext();
   const [highlightId, setHighlightId] = useState<number | null>(null);
   const [busyKeys, setBusyKeys] = useState<ReadonlySet<string>>(new Set());
@@ -263,7 +271,7 @@ export function DiaryScreen() {
   async function submitScan(code: string, fromQr = false) {
     const value = code.trim();
     // The camera keeps reading under the celebration; ignore it until it ends.
-    if (!value || scanInFlight.current || metEntry.current) return;
+    if (!value || scanInFlight.current || metEntry.current || companyId.current !== null) return;
     scanInFlight.current = true;
     setScanning(true);
     try {
@@ -295,10 +303,17 @@ export function DiaryScreen() {
         });
         return;
       }
+      if (entry.kind === "sponsor" && entry.sponsor) {
+        // A collected stand: its logo celebrates over the screen, and the
+        // company page opens underneath (revealCompany) as the overlay fades.
+        void loadCollection();
+        celebrations.current += 1;
+        companyId.current = entry.sponsor.enterpriseId;
+        setCompanyCelebration({ key: celebrations.current, sponsor: entry.sponsor });
+        return;
+      }
       if (fromQr) setInput(null);
       if (entry.kind === "sponsor") {
-        // A collected stand: show its badge celebrating at the top of the
-        // album, once the album has the new order.
         setSection("companies");
         setHighlightId(entry.sponsor?.enterpriseId ?? null);
         await loadCollection();
@@ -338,6 +353,18 @@ export function DiaryScreen() {
     setSavedId(entry.id);
     setSection("people");
     if (entry.person) openPerson(entry.person.userId);
+  }
+
+  function revealCompany() {
+    setSection("companies");
+    scrollToTop();
+    if (companyId.current !== null) router.push(`/companies/${companyId.current}`);
+  }
+
+  function finishCompanyCelebration() {
+    companyId.current = null;
+    setCompanyCelebration(null);
+    setInput(null);
   }
 
   function finishCelebration() {
@@ -595,6 +622,11 @@ export function DiaryScreen() {
   };
   const overlays = (
     <>
+      <CompanyCelebration
+        target={input === "qr" ? null : companyCelebration}
+        onCovered={revealCompany}
+        onDone={finishCompanyCelebration}
+      />
       <ConnectionCelebration
         target={input === "qr" ? null : celebration}
         self={celebrationSelf}
@@ -626,6 +658,12 @@ export function DiaryScreen() {
             onValue={(code) => void submitScan(code, true)}
           />
         ) : null}
+        <CompanyCelebration
+          inline
+          target={input === "qr" ? companyCelebration : null}
+          onCovered={revealCompany}
+          onDone={finishCompanyCelebration}
+        />
         <ConnectionCelebration
           inline
           target={input === "qr" ? celebration : null}
