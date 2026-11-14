@@ -10,6 +10,8 @@ vi.mock("@/hooks/use-element-size", () => ({
 
 import {
   ConnectionsGraph,
+  DATA_MS,
+  LABEL_LEAD_MS,
   logoCandidates,
   MOVE_MS,
   OVERVIEW_DWELL_MS,
@@ -160,6 +162,87 @@ describe("ConnectionsGraph", () => {
       expect(group?.getAttribute("stroke")).toBeNull();
       expect(group?.getAttribute("paint-order")).toBeNull();
       observer.disconnect();
+      act(() => root.unmount());
+      container.remove();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("animates a data update: kept nodes stay, new ones grow in, removed ones fade then drop", async () => {
+    vi.useFakeTimers({
+      toFake: [
+        "setTimeout",
+        "clearTimeout",
+        "requestAnimationFrame",
+        "cancelAnimationFrame",
+        "performance",
+      ],
+    });
+    try {
+      const person = (id: string, degree = 2): TvConnectionNode => ({
+        id,
+        kind: "person",
+        label: id,
+        degree,
+      });
+      const company: TvConnectionNode = { id: "co", kind: "company", label: "Co", degree: 4 };
+      const ids = ["a", "b", "c", "d"];
+      const first = {
+        nodes: [company, ...ids.map((i) => person(i))],
+        edges: ids.map((i) => ({ source: i, target: "co" })),
+      };
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      const show = (s: { nodes: TvConnectionNode[]; edges: TvConnectionEdge[] }) =>
+        act(async () =>
+          root.render(<ConnectionsGraph nodes={s.nodes} edges={s.edges} label="g" />),
+        );
+      const el = (id: string) => container.querySelector<SVGElement>(`[data-nid="${id}"]`);
+      await show(first);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      const kept = el("b");
+      const keptCompany = el("co");
+      expect(kept).not.toBeNull();
+
+      // Identical content in fresh arrays: nothing is touched.
+      await show({
+        nodes: first.nodes.map((n) => ({ ...n })),
+        edges: first.edges.map((e) => ({ ...e })),
+      });
+      expect(el("b")).toBe(kept);
+      expect(container.querySelectorAll("[data-ghost]")).toHaveLength(0);
+
+      // a leaves, e arrives.
+      const second = {
+        nodes: [company, ...["b", "c", "d", "e"].map((i) => person(i))],
+        edges: ["b", "c", "d", "e"].map((i) => ({ source: i, target: "co" })),
+      };
+      await show(second);
+      const added = el("e");
+      expect(added).not.toBeNull();
+      expect(Number(added?.style.opacity)).toBe(0);
+      expect(el("a")?.dataset.ghost).toBe("");
+      expect(container.querySelector('line[data-a="a"]')?.getAttribute("data-ghost")).toBe("");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LABEL_LEAD_MS + DATA_MS / 2);
+      });
+      // Mid-transition: still mounted, partly faded.
+      const mid = Number(el("a")?.style.opacity);
+      expect(mid).toBeGreaterThan(0);
+      expect(mid).toBeLessThan(0.92);
+      expect(Number(added?.style.opacity)).toBeGreaterThan(0);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DATA_MS + 200);
+      });
+      expect(el("a")).toBeNull();
+      expect(el("b")).toBe(kept);
+      expect(el("co")).toBe(keptCompany);
+      expect(el("e")).toBe(added);
+      expect(Number(added?.style.opacity)).toBeGreaterThan(0.5);
       act(() => root.unmount());
       container.remove();
     } finally {

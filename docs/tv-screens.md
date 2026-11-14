@@ -97,6 +97,13 @@ are all there is. Display rules:
   opacity and stroke width directly onto stable DOM nodes (React renders nothing per
   frame, elements keep their keys; dimming eases instead of popping; labels fade out
   300 ms before the move starts);
+  a data update is a transition on the same loop (`DATA_MS` 1 s, or the camera move's
+  length): content-equal snapshots are ignored (`snapshotSignature`), new nodes grow in
+  from their neighbours' centroid, removed nodes and edges stay mounted as ghosts while
+  they fade (`diffSnapshots`), survivors glide to their new positions, and updates that
+  land mid-transition are coalesced (`createCoalescer`) into one. The tour cursor
+  survives: a vanished section's slot resolves to whatever is there and the camera eases
+  there from where it is. Reduced motion applies updates at once;
   `cameraFor` frames the section's people and home companies. In a section its
   people, their companies and their edges are lit, the rest fades to ~10 %
   (opacity transitions). Names are placed only once the camera settles, by
@@ -299,7 +306,13 @@ implemented in `apps/api/src/modules/queue/tv-connections.ts` and tested in
 `apps/api/test/queue/tv-connections.test.ts`.
 
 - **One aggregate SQL**, not `visibleDirectoryEntries`, scoped by
-  `current_edition()`. Cached in the shared cache for **15 s** per edition;
+  `current_edition()`. Eligibility is computed once (inlined `user_event_access`
+  logic in a MATERIALIZED CTE), diary entries of the edition are scanned once,
+  and pairs are deduped with LEAST/GREATEST. The query runs after
+  `SET LOCAL enable_nestloop = off` (same implicit transaction) because the
+  planner underestimates the CTEs and otherwise nested-loops the diary
+  (~800 ms vs ~4 ms at 500 attendees). `sharedCache` already single-flights
+  expiry (in-process promise plus Valkey lock). Cached in the shared cache for **15 s** per edition;
   that TTL is the stale-data bound for sharing changes, account removal and edition
   switches (nothing else caches it). SSE stays payload-free and nothing is
   broadcast per scan: screens refetch on their own poll or on the existing TV

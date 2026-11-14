@@ -8,14 +8,19 @@ import {
   buildSequence,
   type Camera,
   cameraFor,
+  createCoalescer,
   detectSections,
+  diffSnapshots,
+  edgeKey,
   type LabelCandidate,
   layoutGraph,
   nodeRadius,
   type Obstacle,
   type Positions,
   type Section,
+  type Snapshot,
   selectLabels,
+  snapshotSignature,
 } from "./connections-layout";
 
 /** Camera timing: a calm overview, then one section at a time. */
@@ -26,6 +31,8 @@ export const MOVE_MS = 1_600;
 export const TOP_LABELS = 4;
 /** Labels fade out this long before the camera starts to move. */
 export const LABEL_LEAD_MS = 300;
+/** A data update with the camera at rest: new nodes grow in, removed ones fade, kept ones glide. */
+export const DATA_MS = 1_000;
 
 /**
  * org-roam-ui look, always dark: the wall graph draws its own flat canvas whatever
@@ -105,9 +112,21 @@ function usePlayback(): { visible: boolean; reduced: boolean } {
   return { visible, reduced };
 }
 
+interface NodeState {
+  x: number;
+  y: number;
+  o: number;
+  s: number;
+}
+interface EdgeState {
+  o: number;
+  w: number;
+}
+const NO_GHOSTS = { nodes: [] as TvConnectionNode[], edges: [] as TvConnectionEdge[] };
+
 export function ConnectionsGraph({
-  nodes,
-  edges,
+  nodes: inNodes,
+  edges: inEdges,
   label,
 }: {
   nodes: TvConnectionNode[];
@@ -120,12 +139,13 @@ export function ConnectionsGraph({
   const worldRef = useRef<SVGGElement>(null);
   const camera = useRef<Camera | null>(null);
   const frame = useRef(0);
-  // Current dim/focus values of every node and edge. They are animated by the camera
-  // loop straight on the DOM nodes (no React render per frame); React only reads them
-  // as the initial style of an element it (re)creates, so a re-render never resets a fade.
-  const focus = useRef({
-    nodes: new Map<string, number>(),
-    edges: new Map<string, { o: number; w: number }>(),
+  // Live state of every node (position, opacity, scale) and edge (opacity, width). The
+  // one rAF loop animates it straight on the DOM nodes (no React render per frame);
+  // React only reads it as the initial attributes of an element it (re)renders, so a
+  // re-render never resets a fade or a move.
+  const scene = useRef({
+    nodes: new Map<string, NodeState>(),
+    edges: new Map<string, EdgeState>(),
   });
   const palette: Palette = PALETTE;
   const [cursor, setCursor] = useState(0);
@@ -135,6 +155,20 @@ export function ConnectionsGraph({
   // Nothing is painted until the first camera is in place.
   const [shown, setShown] = useState(false);
 
+  // A poll hands over fresh arrays every time; only a change of content is an update.
+  const signature = useMemo(() => snapshotSignature(inNodes, inEdges), [inNodes, inEdges]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: identity follows content
+  const incoming = useMemo<Snapshot>(() => ({ nodes: inNodes, edges: inEdges }), [signature]);
+  const [committed, setCommitted] = useState<Snapshot>(incoming);
+  // Updates that land mid-transition are coalesced and applied when it ends.
+  const queue = useRef(createCoalescer<Snapshot>());
+  const animating = useRef(false);
+  useEffect(() => {
+    const next = queue.current.offer(incoming, animating.current);
+    if (next) setCommitted(next);
+  }, [incoming]);
+  const { nodes, edges } = committed;
+
   // Settled once per snapshot; the previous snapshot's positions seed the next.
   const positions = useMemo(() => {
     const next = layoutGraph(nodes, edges, previous.current);
@@ -143,6 +177,9 @@ export function ConnectionsGraph({
   }, [nodes, edges]);
   const sections = useMemo(() => detectSections(nodes, edges), [nodes, edges]);
   const sequence = useMemo(() => buildSequence(sections.length), [sections.length]);
+  // The tour is a cursor into the sequence: when a data change removes the section
+  // being shown, the same slot now resolves to whatever section sits there, and the
+  // camera simply eases to it from where it is.
   const step = sequence[cursor % sequence.length] ?? -1;
   const section: Section | null = sections[step] ?? null;
   const shownSection: Section | null = rest ? (sections[rest.step] ?? null) : null;
@@ -217,72 +254,200 @@ export function ConnectionsGraph({
   const logos = useResolvedLogos(nodes, dark);
   const degrees = useMemo(() => new Map(nodes.map((n) => [n.id, n.degree])), [nodes]);
 
-  // Own camera: ONE rAF loop that writes the world transform, the company counter-scale
-  // and every dim/focus opacity straight onto stable DOM nodes. Nothing here renders
-  // React, so a transition costs the browser one style/paint pass per frame, not a
-  // reconciliation of ~1500 elements. A poll retargets from the current camera and
-  // current opacities, so it never snaps back mid-move.
-  // `logos` and `world` re-key the effect when elements are (re)drawn, so new DOM nodes get the camera and focus.
+  // New nodes start (invisible, small) on their neighbours; the very first snapshot
+  // starts in place. Only ids the scene does not know yet are touched, so this is
+  // idempotent (StrictMode, re-renders).
+  useMemo(() => {
+    const sc = scene.current;
+    const first = sc.nodes.size === 0 && !camera.current;
+    for (const node of nodes) {
+      if (sc.nodes.has(node.id)) continue;
+      const p = world.get(node.id);
+      if (!p) continue;
+      if (first) {
+        sc.nodes.set(node.id, { x: p.x, y: p.y, o: 0.92, s: 1 });
+        continue;
+      }
+      const near = (adjacency.get(node.id) ?? [])
+        .map((id) => sc.nodes.get(id))
+        .filter((n): n is NodeState => Boolean(n));
+      const at = near.length
+        ? {
+            x: near.reduce((a, n) => a + n.x, 0) / near.length,
+            y: near.reduce((a, n) => a + n.y, 0) / near.length,
+          }
+        : p;
+      sc.nodes.set(node.id, { x: at.x, y: at.y, o: 0, s: 0.3 });
+    }
+    if (!first)
+      for (const edge of edges)
+        if (!sc.edges.has(edgeKey(edge))) sc.edges.set(edgeKey(edge), { o: 0, w: 0.7 * unit });
+  }, [nodes, edges, world, adjacency, unit]);
+
+  // Removed nodes and edges stay mounted (as "ghosts") while they fade out, then drop.
+  const history = useRef<{ cur: Snapshot; prev: Snapshot | null }>({
+    cur: committed,
+    prev: null,
+  });
+  const ghostSet = useMemo(() => {
+    if (history.current.cur !== committed)
+      history.current = { cur: committed, prev: history.current.cur };
+    const prev = history.current.prev;
+    if (!prev) return NO_GHOSTS;
+    const diff = diffSnapshots(prev, committed);
+    const gone = new Set(diff.removedNodes);
+    const goneEdges = new Set(diff.removedEdges);
+    return {
+      nodes: prev.nodes.filter((n) => gone.has(n.id)),
+      edges: prev.edges.filter((e) => goneEdges.has(edgeKey(e))),
+    };
+  }, [committed]);
+  const [dropped, setDropped] = useState<Snapshot | null>(null);
+  const ghosts = dropped === committed ? NO_GHOSTS : ghostSet;
+
+  // Own camera: ONE rAF loop that writes the world transform and every node's
+  // position, scale and opacity and every edge's opacity and width straight onto
+  // stable DOM nodes. Nothing here renders React, so a transition costs the browser one
+  // style/paint pass per frame, not a reconciliation of ~1500 elements. A section move,
+  // a data update or a poll retargets from the live camera and scene, so nothing snaps
+  // back mid-move; the rAF loop is the only writer.
+  // `logos` re-keys the effect when company elements are (re)drawn, so they get the camera.
   // biome-ignore lint/correctness/useExhaustiveDependencies: see above
   useLayoutEffect(() => {
     const group = worldRef.current;
-    if (!group || width === 0 || height === 0) return;
-    const store = focus.current;
-    const nodeEntries = [...group.querySelectorAll<SVGElement>("[data-nid]")].map((el) => {
+    if (!group || width === 0 || height === 0) {
+      animating.current = false;
+      return;
+    }
+    const sc = scene.current;
+    interface NodeEntry {
+      el: SVGElement;
+      id: string;
+      st: NodeState;
+      from: NodeState;
+      to: NodeState;
+      company: boolean;
+      moves: boolean;
+      fades: boolean;
+    }
+    const nodeEntries: NodeEntry[] = [];
+    const entryById = new Map<string, NodeEntry>();
+    for (const el of group.querySelectorAll<SVGElement>("[data-nid]")) {
       const id = el.dataset.nid as string;
-      const to = lit ? (lit.has(id) ? 1 : 0.1) : 0.92;
-      return { el, id, from: store.nodes.get(id) ?? Number(el.style.opacity || to), to };
-    });
-    const edgeEntries = [...group.querySelectorAll<SVGElement>("[data-eid]")].map((el) => {
-      const a = el.dataset.a as string;
-      const b = el.dataset.b as string;
-      const hub = Math.sqrt(Math.max(degrees.get(a) ?? 1, degrees.get(b) ?? 1));
-      const on = lit
-        ? lit.has(a) && lit.has(b) && Boolean(members?.has(a) || members?.has(b))
-        : false;
-      const to = {
-        o: lit ? (on ? 0.75 / (1 + hub * 0.12) : 0.03) : 0.34 / (1 + hub * 0.25),
-        w: (on ? 1.4 : 0.7) * unit,
+      const st = sc.nodes.get(id);
+      if (!st) continue;
+      const ghost = el.dataset.ghost !== undefined;
+      const w = world.get(id);
+      const to: NodeState =
+        ghost || !w
+          ? { x: st.x, y: st.y, o: 0, s: 0.3 }
+          : { x: w.x, y: w.y, o: lit ? (lit.has(id) ? 1 : 0.1) : 0.92, s: 1 };
+      const from = { ...st };
+      const entry: NodeEntry = {
+        el,
+        id,
+        st,
+        from,
+        to,
+        company: el.dataset.company !== undefined,
+        moves: from.x !== to.x || from.y !== to.y || from.s !== to.s,
+        fades: from.o !== to.o,
       };
-      const key = `${a}|${b}`;
-      const from = store.edges.get(key) ?? { o: Number(el.style.opacity || to.o), w: to.w };
-      return { el, key, from, to };
-    });
-    const companies = [...group.querySelectorAll<SVGElement>("[data-company]")];
-    const paintCamera = (c: Camera) => {
+      nodeEntries.push(entry);
+      entryById.set(id, entry);
+    }
+    interface EdgeEntry {
+      el: SVGElement;
+      a: NodeState;
+      b: NodeState;
+      es: EdgeState;
+      from: EdgeState;
+      to: EdgeState;
+      moves: boolean;
+    }
+    const edgeEntries: EdgeEntry[] = [];
+    for (const el of group.querySelectorAll<SVGElement>("[data-eid]")) {
+      const aId = el.dataset.a as string;
+      const bId = el.dataset.b as string;
+      const a = sc.nodes.get(aId);
+      const b = sc.nodes.get(bId);
+      if (!a || !b) continue;
+      const key = `${aId}|${bId}`;
+      const hub = Math.sqrt(Math.max(degrees.get(aId) ?? 1, degrees.get(bId) ?? 1));
+      const on = lit
+        ? lit.has(aId) && lit.has(bId) && Boolean(members?.has(aId) || members?.has(bId))
+        : false;
+      let es = sc.edges.get(key);
+      if (!es) {
+        es = { o: Number(el.style.opacity) || 0, w: (on ? 1.4 : 0.7) * unit };
+        sc.edges.set(key, es);
+      }
+      const ghost = el.dataset.ghost !== undefined;
+      const to: EdgeState = ghost
+        ? { o: 0, w: es.w }
+        : {
+            o: lit ? (on ? 0.75 / (1 + hub * 0.12) : 0.03) : 0.34 / (1 + hub * 0.25),
+            w: (on ? 1.4 : 0.7) * unit,
+          };
+      edgeEntries.push({
+        el,
+        a,
+        b,
+        es,
+        from: { ...es },
+        to,
+        moves: Boolean(entryById.get(aId)?.moves || entryById.get(bId)?.moves),
+      });
+    }
+    const paint = (c: Camera, e: number) => {
       camera.current = c;
       group.setAttribute(
         "transform",
         `translate(${width / 2} ${height / 2}) scale(${c.zoom}) translate(${-c.cx} ${-c.cy})`,
       );
+      // Company logos are counter-scaled so they grow with the square root of the zoom.
       const k = c.zoom ** -0.5;
-      for (const el of companies) {
-        const x = el.dataset.x;
-        const y = el.dataset.y;
-        el.setAttribute(
-          "transform",
-          `translate(${x} ${y}) scale(${k}) translate(${-Number(x)} ${-Number(y)})`,
-        );
-      }
-    };
-    const paintFocus = (e: number) => {
       for (const n of nodeEntries) {
-        const o = n.from + (n.to - n.from) * e;
-        n.el.style.opacity = String(o);
-        store.nodes.set(n.id, o);
+        if (n.moves) {
+          n.st.x = n.from.x + (n.to.x - n.from.x) * e;
+          n.st.y = n.from.y + (n.to.y - n.from.y) * e;
+          n.st.s = n.from.s + (n.to.s - n.from.s) * e;
+        }
+        if (n.fades) {
+          n.st.o = n.from.o + (n.to.o - n.from.o) * e;
+          n.el.style.opacity = String(n.st.o);
+        }
+        if (n.moves || n.company)
+          n.el.setAttribute(
+            "transform",
+            `translate(${n.st.x} ${n.st.y}) scale(${n.st.s * (n.company ? k : 1)})`,
+          );
       }
       for (const n of edgeEntries) {
-        const o = n.from.o + (n.to.o - n.from.o) * e;
-        const w = n.from.w + (n.to.w - n.from.w) * e;
-        n.el.style.opacity = String(o);
-        n.el.setAttribute("stroke-width", String(w));
-        store.edges.set(n.key, { o, w });
+        n.es.o = n.from.o + (n.to.o - n.from.o) * e;
+        n.es.w = n.from.w + (n.to.w - n.from.w) * e;
+        n.el.style.opacity = String(n.es.o);
+        n.el.setAttribute("stroke-width", String(n.es.w));
+        if (n.moves) {
+          n.el.setAttribute("x1", String(n.a.x));
+          n.el.setAttribute("y1", String(n.a.y));
+          n.el.setAttribute("x2", String(n.b.x));
+          n.el.setAttribute("y2", String(n.b.y));
+        }
       }
     };
     const settle = () => {
+      animating.current = false;
       setRest({ step, camera: target });
       setSettled(true);
       setShown(true);
+      setDropped(committed);
+      const liveNodes = new Set(nodes.map((n) => n.id));
+      for (const id of sc.nodes.keys()) if (!liveNodes.has(id)) sc.nodes.delete(id);
+      const liveEdges = new Set(edges.map(edgeKey));
+      for (const key of sc.edges.keys()) if (!liveEdges.has(key)) sc.edges.delete(key);
+      const pending = queue.current.release();
+      if (pending) setCommitted(pending);
     };
     const from = camera.current;
     const cameraNear =
@@ -290,49 +455,66 @@ export function ConnectionsGraph({
       Math.abs(from.cx - target.cx) < 0.5 &&
       Math.abs(from.cy - target.cy) < 0.5 &&
       Math.abs(from.zoom / target.zoom - 1) < 0.01;
-    const focusNear =
-      nodeEntries.every((n) => Math.abs(n.from - n.to) < 0.02) &&
+    const sceneNear =
+      nodeEntries.every(
+        (n) =>
+          Math.abs(n.from.x - n.to.x) < 0.5 &&
+          Math.abs(n.from.y - n.to.y) < 0.5 &&
+          Math.abs(n.from.o - n.to.o) < 0.02 &&
+          Math.abs(n.from.s - n.to.s) < 0.01,
+      ) &&
       edgeEntries.every(
         (n) => Math.abs(n.from.o - n.to.o) < 0.01 && Math.abs(n.from.w - n.to.w) < 0.01,
       );
-    if (!from || reduced || (cameraNear && focusNear)) {
-      paintCamera(target);
-      paintFocus(1);
+    if (!from || reduced || (cameraNear && sceneNear)) {
+      for (const n of nodeEntries) {
+        n.moves = true;
+        n.fades = true;
+      }
+      for (const n of edgeEntries) n.moves = true;
+      paint(target, 1);
       settle();
       return;
     }
+    animating.current = true;
     setSettled(false);
+    const duration = cameraNear ? DATA_MS : MOVE_MS;
     const started = performance.now() + LABEL_LEAD_MS;
     const tick = (now: number) => {
-      const t = Math.min(1, Math.max(0, (now - started) / MOVE_MS));
+      const t = Math.min(1, Math.max(0, (now - started) / duration));
       const e = ease(t);
-      paintCamera({
-        zoom: from.zoom * (target.zoom / from.zoom) ** e,
-        cx: from.cx + (target.cx - from.cx) * e,
-        cy: from.cy + (target.cy - from.cy) * e,
-      });
-      paintFocus(e);
+      paint(
+        {
+          zoom: from.zoom * (target.zoom / from.zoom) ** e,
+          cx: from.cx + (target.cx - from.cx) * e,
+          cy: from.cy + (target.cy - from.cy) * e,
+        },
+        e,
+      );
       if (t < 1) frame.current = requestAnimationFrame(tick);
       else settle();
     };
     frame.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame.current);
-  }, [target, step, reduced, width, height, lit, members, degrees, unit, logos, world]);
+  }, [target, step, reduced, width, height, lit, members, degrees, unit, logos, world, committed]);
 
-  // Render is independent of the camera and of which section is lit: elements keep
-  // their keys and their DOM nodes for the whole life of a snapshot.
+  // Render never depends on the camera or on which section is lit: elements keep their
+  // keys and DOM nodes for the life of a snapshot, and read their live attributes from
+  // the scene.
   const edgeEls = useMemo(() => {
-    return edges.map((edge) => {
-      const a = world.get(edge.source);
-      const b = world.get(edge.target);
+    const sc = scene.current;
+    const draw = (edge: TvConnectionEdge, ghost: boolean) => {
+      const a = sc.nodes.get(edge.source);
+      const b = sc.nodes.get(edge.target);
       if (!a || !b) return null;
       const hub = Math.sqrt(Math.max(degrees.get(edge.source) ?? 1, degrees.get(edge.target) ?? 1));
-      const key = `${edge.source}|${edge.target}`;
-      const now = focus.current.edges.get(key);
+      const key = edgeKey(edge);
+      const now = sc.edges.get(key);
       return (
         <line
           key={key}
           data-eid=""
+          data-ghost={ghost ? "" : undefined}
           data-a={edge.source}
           data-b={edge.target}
           x1={a.x}
@@ -345,79 +527,81 @@ export function ConnectionsGraph({
           style={{ opacity: now?.o ?? 0.34 / (1 + hub * 0.25) }}
         />
       );
-    });
-  }, [edges, world, unit, degrees]);
+    };
+    return [...edges.map((e) => draw(e, false)), ...ghosts.edges.map((e) => draw(e, true))];
+  }, [edges, ghosts, unit, degrees]);
 
   const nodeEls = useMemo(() => {
-    return [...nodes]
-      .sort(
-        (a, b) =>
-          Number(b.kind === "company") - Number(a.kind === "company") ||
-          a.degree - b.degree ||
-          (a.id < b.id ? -1 : 1),
-      )
-      .map((node) => {
-        const p = world.get(node.id);
-        if (!p) return null;
-        const r = nodeRadius(node.degree, node.kind, unit);
-        const opacity = focus.current.nodes.get(node.id) ?? 0.92;
-        if (node.kind === "company") {
-          const logo = logos.get(`${dark}|${node.id}`);
-          const wanted = logoCandidates(node, dark).length > 0;
-          // Still probing: draw nothing yet rather than flashing the fallback.
-          if (wanted && logo === undefined) return null;
-          return (
-            <g
-              key={node.id}
-              data-nid={node.id}
-              data-company=""
-              data-x={p.x}
-              data-y={p.y}
-              style={{ opacity }}
-            >
-              {logo ? (
-                <image
-                  href={logo}
-                  x={p.x - r}
-                  y={p.y - r}
-                  width={r * 2}
-                  height={r * 2}
-                  preserveAspectRatio="xMidYMid meet"
-                />
-              ) : (
-                <>
-                  <circle
-                    cx={p.x}
-                    cy={p.y}
-                    r={r}
-                    fill={palette.neutral}
-                    stroke={palette.neutralRing}
-                    strokeWidth={r * 0.14}
-                  />
-                  <text
-                    x={p.x}
-                    y={p.y}
-                    dy="0.35em"
-                    textAnchor="middle"
-                    fontSize={r * 1.05}
-                    fontWeight={700}
-                    fontFamily="inherit"
-                    fill={palette.neutralText}
-                  >
-                    {Array.from(node.label.trim())[0]?.toUpperCase() ?? ""}
-                  </text>
-                </>
-              )}
-            </g>
-          );
-        }
+    const sc = scene.current;
+    const k = (camera.current?.zoom ?? 1) ** -0.5;
+    const draw = (node: TvConnectionNode, ghost: boolean) => {
+      const st = sc.nodes.get(node.id);
+      if (!st || (!ghost && !world.get(node.id))) return null;
+      const r = nodeRadius(node.degree, node.kind, unit);
+      const common = {
+        "data-nid": node.id,
+        "data-ghost": ghost ? "" : undefined,
+        style: { opacity: st.o },
+      };
+      if (node.kind === "company") {
+        const logo = logos.get(`${dark}|${node.id}`);
+        const wanted = logoCandidates(node, dark).length > 0;
+        // Still probing: draw nothing yet rather than flashing the fallback.
+        if (wanted && logo === undefined && !ghost) return null;
         return (
-          <g key={node.id} data-nid={node.id} style={{ opacity }}>
-            <circle cx={p.x} cy={p.y} r={r} fill={palette.person} />
+          <g
+            key={node.id}
+            {...common}
+            data-company=""
+            transform={`translate(${st.x} ${st.y}) scale(${st.s * k})`}
+          >
+            {logo ? (
+              <image
+                href={logo}
+                x={-r}
+                y={-r}
+                width={r * 2}
+                height={r * 2}
+                preserveAspectRatio="xMidYMid meet"
+              />
+            ) : (
+              <>
+                <circle
+                  r={r}
+                  fill={palette.neutral}
+                  stroke={palette.neutralRing}
+                  strokeWidth={r * 0.14}
+                />
+                <text
+                  dy="0.35em"
+                  textAnchor="middle"
+                  fontSize={r * 1.05}
+                  fontWeight={700}
+                  fontFamily="inherit"
+                  fill={palette.neutralText}
+                >
+                  {Array.from(node.label.trim())[0]?.toUpperCase() ?? ""}
+                </text>
+              </>
+            )}
           </g>
         );
-      });
-  }, [nodes, world, logos, unit]);
+      }
+      return (
+        <g key={node.id} {...common} transform={`translate(${st.x} ${st.y}) scale(${st.s})`}>
+          <circle r={r} fill={palette.person} />
+        </g>
+      );
+    };
+    const order = (a: TvConnectionNode, b: TvConnectionNode) =>
+      Number(b.kind === "company") - Number(a.kind === "company") ||
+      a.degree - b.degree ||
+      (a.id < b.id ? -1 : 1);
+    return [
+      ...[...nodes].sort(order).map((n) => draw(n, false)),
+      ...[...ghosts.nodes].sort(order).map((n) => draw(n, true)),
+    ];
+  }, [nodes, ghosts, world, logos, unit]);
 
   // Labels are laid out for the camera at rest, in the same projection as the dots.
   const placed = useMemo(() => {

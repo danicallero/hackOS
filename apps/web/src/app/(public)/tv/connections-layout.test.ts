@@ -4,10 +4,13 @@ import {
   apparentRadius,
   buildSequence,
   cameraFor,
+  createCoalescer,
   detectSections,
+  diffSnapshots,
   layoutGraph,
   nodeRadius,
   selectLabels,
+  snapshotSignature,
 } from "./connections-layout";
 
 function sampleGraph(people: number, companies = 6) {
@@ -269,5 +272,57 @@ describe("label placement next to the dot", () => {
   it("grows company logos slower than the camera zoom", () => {
     expect(apparentRadius(4, "company", 1, 4) / apparentRadius(4, "company", 1, 1)).toBeCloseTo(2);
     expect(apparentRadius(4, "person", 1, 4) / apparentRadius(4, "person", 1, 1)).toBeCloseTo(4);
+  });
+});
+
+describe("snapshot updates", () => {
+  const person = (id: string, degree = 1) => ({ id, kind: "person" as const, label: id, degree });
+  const prev = {
+    nodes: [person("a"), person("b"), person("c")],
+    edges: [
+      { source: "a", target: "b" },
+      { source: "b", target: "c" },
+    ],
+  };
+  const next = {
+    nodes: [person("b"), person("c"), person("d")],
+    edges: [
+      { source: "b", target: "c" },
+      { source: "c", target: "d" },
+    ],
+  };
+
+  it("diffs added, removed and kept nodes and edges", () => {
+    const d = diffSnapshots(prev, next);
+    expect(d.addedNodes).toEqual(["d"]);
+    expect(d.removedNodes).toEqual(["a"]);
+    expect(d.keptNodes).toEqual(["b", "c"]);
+    expect(d.addedEdges).toEqual(["c|d"]);
+    expect(d.removedEdges).toEqual(["a|b"]);
+    expect(d.keptEdges).toEqual(["b|c"]);
+    expect(diffSnapshots(null, next).addedNodes).toHaveLength(3);
+  });
+
+  it("signature ignores order, notices content", () => {
+    const shuffled = { nodes: [...prev.nodes].reverse(), edges: [...prev.edges].reverse() };
+    expect(snapshotSignature(shuffled.nodes, shuffled.edges)).toBe(
+      snapshotSignature(prev.nodes, prev.edges),
+    );
+    expect(snapshotSignature(next.nodes, next.edges)).not.toBe(
+      snapshotSignature(prev.nodes, prev.edges),
+    );
+    expect(snapshotSignature([person("a", 2)], [])).not.toBe(snapshotSignature([person("a")], []));
+  });
+
+  it("coalesces updates that land mid-transition into the newest one", () => {
+    const q = createCoalescer<string>();
+    expect(q.offer("one", false)).toBe("one");
+    expect(q.offer("two", true)).toBeNull();
+    expect(q.offer("three", true)).toBeNull();
+    expect(q.release()).toBe("three");
+    expect(q.release()).toBeNull();
+    q.offer("four", true);
+    expect(q.offer("five", false)).toBe("five");
+    expect(q.release()).toBeNull();
   });
 });

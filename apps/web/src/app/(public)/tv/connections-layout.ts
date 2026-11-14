@@ -439,3 +439,78 @@ export function apparentRadius(
   const r = nodeRadius(degree, kind, unit);
   return kind === "company" ? r * Math.sqrt(zoom) : r * zoom;
 }
+
+export interface Snapshot {
+  nodes: TvConnectionNode[];
+  edges: TvConnectionEdge[];
+}
+
+export const edgeKey = (e: TvConnectionEdge): string => `${e.source}|${e.target}`;
+
+/** Order-insensitive content signature: equal signature = nothing to animate. */
+export function snapshotSignature(nodes: TvConnectionNode[], edges: TvConnectionEdge[]): string {
+  const n = nodes.map(
+    (x) => `${x.id}:${x.kind}:${x.label}:${x.degree}:${x.logoUrl ?? ""}:${x.logoNegativeUrl ?? ""}`,
+  );
+  return `${n.sort().join("|")}#${edges.map(edgeKey).sort().join("|")}`;
+}
+
+export interface SnapshotDiff {
+  addedNodes: string[];
+  removedNodes: string[];
+  keptNodes: string[];
+  addedEdges: string[];
+  removedEdges: string[];
+  keptEdges: string[];
+}
+
+/** What a data update adds, removes and keeps, by node id and `source|target` edge key. */
+export function diffSnapshots(prev: Snapshot | null, next: Snapshot): SnapshotDiff {
+  const split = (before: string[], after: string[]) => {
+    const was = new Set(before);
+    const is = new Set(after);
+    return {
+      added: after.filter((k) => !was.has(k)),
+      removed: before.filter((k) => !is.has(k)),
+      kept: after.filter((k) => was.has(k)),
+    };
+  };
+  const n = split(
+    prev?.nodes.map((x) => x.id) ?? [],
+    next.nodes.map((x) => x.id),
+  );
+  const e = split(prev?.edges.map(edgeKey) ?? [], next.edges.map(edgeKey));
+  return {
+    addedNodes: n.added,
+    removedNodes: n.removed,
+    keptNodes: n.kept,
+    addedEdges: e.added,
+    removedEdges: e.removed,
+    keptEdges: e.kept,
+  };
+}
+
+/**
+ * Coalesces updates that arrive while a transition runs: only the newest is kept
+ * and handed out when the transition ends, so a burst becomes one transition.
+ */
+export function createCoalescer<T>() {
+  let pending: T | null = null;
+  return {
+    /** Returns `next` to apply now, or null if it was parked behind a running transition. */
+    offer(next: T, busy: boolean): T | null {
+      if (busy) {
+        pending = next;
+        return null;
+      }
+      pending = null;
+      return next;
+    },
+    /** The parked update to apply once the transition has ended, if any. */
+    release(): T | null {
+      const next = pending;
+      pending = null;
+      return next;
+    },
+  };
+}
