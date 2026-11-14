@@ -1,7 +1,6 @@
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
-import { HeaderHeightContext } from "expo-router/react-navigation";
 import Stack from "expo-router/stack";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type LayoutChangeEvent, Text, View } from "react-native";
 import Animated, { FadeIn, runOnJS, useAnimatedReaction } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -77,12 +76,10 @@ export function PersonProfileScreen({
   const readable = useParticipantLayout("list");
   const dark = useColorScheme() === "dark";
   const insets = useSafeAreaInsets();
-  // iOS shows the transparent native header, whose height the automatic
-  // inset adds above the avatar's true top (#935).
-  const headerHeight = useContext(HeaderHeightContext) ?? 0;
-  const avatarCollapse = useProfileAvatarCollapse(undefined, {
-    headerHeight: process.env.EXPO_OS === "ios" ? headerHeight : 0,
-  });
+  // iOS pads the content itself instead of an automatic inset under the
+  // transparent header: a cancelled swipe-to-dismiss changes that inset for a
+  // moment and left the page shifted, half-collapsing the avatar.
+  const avatarCollapse = useProfileAvatarCollapse(undefined, { insetAdjusted: false });
   // The bar's blur and title appear only once the large name has scrolled under it.
   const [nameBottom, setNameBottom] = useState<number | null>(null);
   const [titleShown, setTitleShown] = useState(false);
@@ -268,10 +265,7 @@ export function PersonProfileScreen({
         onTouchStart={avatarCollapse.onScrollBeginDrag}
         onContentSizeChange={avatarCollapse.onContentSizeChange}
         scrollEventThrottle={16}
-        contentInsetAdjustmentBehavior="automatic"
-        // iOS clamps programmatic scrolls to the raw inset (0), not the
-        // automatic one, so the avatar's true top would land mid-morph (#935).
-        scrollToOverflowEnabled
+        contentInsetAdjustmentBehavior="never"
         style={{ backgroundColor: colors.background, flex: 1 }}
         contentContainerStyle={{
           flexGrow: 1,
@@ -280,7 +274,7 @@ export function PersonProfileScreen({
           minHeight: person ? avatarCollapse.contentMinHeight : undefined,
           paddingBottom: Math.max(40, insets.bottom + 24),
           ...readable.content,
-          paddingTop: usesCustomAndroidHeader ? insets.top + 64 : 8,
+          paddingTop: insets.top + (usesCustomAndroidHeader ? 64 : 52),
         }}
         refreshControl={
           <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
