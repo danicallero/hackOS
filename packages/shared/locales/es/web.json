@@ -1109,8 +1109,6 @@
   "modeConnections": "Grafo de conexiones",
   "modeConnectionsDetail": "Red en vivo de conexiones entre asistentes y empresas.",
   "connectionsGraphLabel": "Grafo de conexiones: {people} personas, {companies} empresas, {connections} conexiones",
-  "connectionsPeople": "{count} personas",
-  "connectionsOverview": "Toda la red",
   "connectionsEmpty": "Aún no hay conexiones. Aparecerán aquí a medida que los asistentes se conozcan en el evento.",
   "connectionsUnavailable": "El grafo de conexiones no está disponible ahora mismo. Reintentando…",
   "connectionsTruncated": "Se muestra una parte de la red. Los totales incluyen a todo el mundo.",

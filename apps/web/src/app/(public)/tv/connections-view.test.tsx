@@ -80,7 +80,6 @@ describe("ConnectionsView", () => {
     await render();
     expect(container.querySelector("[data-testid=graph]")?.getAttribute("data-nodes")).toBe("2");
     expect(container.querySelector("[data-testid=graph]")).not.toBeNull();
-    expect(container.textContent).not.toContain("connectionsPeople");
     expect(container.textContent).not.toContain("connectionsTruncated");
   });
 

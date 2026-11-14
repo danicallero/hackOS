@@ -1109,8 +1109,6 @@
   "modeConnections": "Connections graph",
   "modeConnectionsDetail": "Live network of attendee and company connections.",
   "connectionsGraphLabel": "Connections graph: {people} people, {companies} companies, {connections} connections",
-  "connectionsPeople": "{count} people",
-  "connectionsOverview": "Whole network",
   "connectionsEmpty": "No connections yet. They will appear here as attendees meet at the event.",
   "connectionsUnavailable": "The connections graph is not available right now. Retrying…",
   "connectionsTruncated": "Showing part of the network. Totals include everyone.",

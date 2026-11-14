@@ -69,12 +69,21 @@ mode. The countdown remains available as a block of the `live` composition.
 renders the typed `TvConnectionsResponse` from `@hackos/shared/tv-connections`
 (#934, #935). Only people who share their networking profile are in the data, so
 every person node carries a name; the view still treats a missing label
-defensively. There is no stats row or legend: the header, the graph and a
-caption are all there is. Display rules:
+defensively. There is no stats row, legend or caption: the header and the graph
+are all there is. Display rules:
 
-- Plain SVG drawn by `connections-graph.tsx` (no chart library): thin curved
-  low-opacity edges, people as dots sized by degree and tinted by community,
-  companies as larger rounded squares with an outline.
+- Plain SVG drawn by `connections-graph.tsx` (no chart library), styled after
+  org-roam-ui: dark radial canvas (light twin in light mode), thin translucent
+  links, every person the same single colour with a soft glow, radius growing
+  with the square root of degree (leaf ~4.6 px to hub 22 px at 1000 px height,
+  capped; no controls). Communities steer only the camera and dimming, never colour.
+- Companies are drawn *as* their logo (SVG `<image>`, no frame), always bigger
+  than any person, with the company name label. The negative logo is used on dark
+  canvases, the plain one on light; each URL is probed off-DOM, a failed variant
+  falls back to the other, and a company with no loadable logo is a large neutral
+  disc with its initial. The logos are the already-public sponsor URLs (`logoUrl`,
+  `logoNegativeUrl` on company nodes); the web app sets no CSP and `<image>` needs
+  no CORS since nothing reads pixels.
 - Sections: `detectSections` runs a deterministic label propagation over the
   people (companies are fixed anchors that vote at half weight; visit order comes
   from a hash of the id, never `Math.random`). Communities of 3+ people become
@@ -87,8 +96,7 @@ caption are all there is. Display rules:
   people, their companies and their edges are lit, the rest fades to ~10 %
   (opacity transitions). Names are placed only once the camera settles, by
   `selectLabels` (priority = companies, then degree; collision-free, inside the
-  frame, capped), and fade in; a caption at the bottom-left names the section
-  (its most-connected named node and `N people`, or "Whole network").
+  frame, capped), and fade in. Nothing else is drawn on the canvas: no caption.
 - Motion: the loop pauses while the page is hidden; with
   `prefers-reduced-motion` it still steps through sections but jumps without
   animation. Nothing reacts to hover, focus or clicks, and there is no roam.
@@ -300,7 +308,11 @@ implemented in `apps/api/src/modules/queue/tv-connections.ts` and tested in
   and `degree` and `totals` count visible people only.
 - **Labels.** A person's `label` is always their display name (surname only if
   `show_surname`, else initial); it is never null. Company label is its name.
-  No photos.
+  No photos. Company nodes (only) also carry `logoUrl` and `logoNegativeUrl`
+  (`string | null`): the already-public sponsor logo fields, in the same form
+  as `/api/public/sponsors` and the sponsors TV mode
+  (`COALESCE(logo_negative_url, logo_url)` for the negative). Person nodes have
+  neither key.
 - **Node ids** are `base64url(HMAC-SHA256(key, kind:id))[0..22]`, where `key`
   is derived from `BETTER_AUTH_SECRET` and the current UTC hour. Ids are stable
   within the hour (layout continuity) and uncorrelatable across hours; raw user

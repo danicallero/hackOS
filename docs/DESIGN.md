@@ -1432,12 +1432,12 @@ the rules that bind UI work:
 - **Data visualisations are silent and guided.** The connections graph
   (`(public)/tv/connections-view.tsx`) has no legend or stats row. A camera
   tours the network on a timer — overview, then one community at a time with
-  its names and companies, the rest faded — and a caption names the current
-  section. Never hover, focus or roam. Labels are collision-free and capped,
+  its names and companies, the rest faded; there is no caption. Never hover, focus or roam. Labels are collision-free and capped,
   node positions stay stable between refreshes, the tour pauses while the page
-  is hidden, and `prefers-reduced-motion` steps without animating. Communities
-  are tinted softly; companies stay distinct as outlined rounded squares. Colours
-  come from the `--chart-*` / semantic tokens, so both colour schemes work.
+  is hidden, and `prefers-reduced-motion` steps without animating. All
+  people share one colour and are sized strongly by degree; companies are their
+  logo (negative variant on dark, neutral initial disc as fallback). Dark is the
+  hero look, with a tuned light variant.
 - Semantic tokens and both colour schemes apply as everywhere else — venues run
   screens in both.
 

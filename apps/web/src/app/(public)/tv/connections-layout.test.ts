@@ -6,6 +6,7 @@ import {
   cameraFor,
   detectSections,
   layoutGraph,
+  nodeRadius,
   selectLabels,
 } from "./connections-layout";
 
@@ -112,7 +113,6 @@ describe("detectSections", () => {
       expect(section.people).toHaveLength(6);
       expect(new Set(section.people.map((id) => id.slice(0, 2))).size).toBe(1);
       expect(section.companies).toHaveLength(1);
-      expect(section.title).toMatch(/^Co |^P /);
     }
     expect(b.map((s) => [...s.people].sort())).toEqual(a.map((s) => [...s.people].sort()));
   });
@@ -156,11 +156,11 @@ describe("cameraFor", () => {
       ["b", { x: 200, y: 150 }],
     ]);
     expect(cameraFor(null, world, 1000, 800)).toEqual({ zoom: 1, cx: 500, cy: 400 });
-    const cam = cameraFor({ people: ["a", "b"], companies: [], title: null }, world, 1000, 800);
+    const cam = cameraFor({ people: ["a", "b"], companies: [] }, world, 1000, 800);
     expect(cam.zoom).toBeGreaterThan(1.29);
     expect(cam.zoom).toBeLessThanOrEqual(5);
     expect(cam.cx).toBeCloseTo(150, 0);
-    expect(cameraFor({ people: ["x"], companies: [], title: null }, world, 1000, 800).zoom).toBe(1);
+    expect(cameraFor({ people: ["x"], companies: [] }, world, 1000, 800).zoom).toBe(1);
   });
 });
 
@@ -231,7 +231,16 @@ describe("label placement next to the dot", () => {
     expect(selectLabels([base], 1000, 800, 20, 5, ring)).toEqual([]);
   });
 
-  it("grows company squares slower than the camera zoom", () => {
+  it("sizes people strongly by degree and keeps every company bigger", () => {
+    const leaf = nodeRadius(1, "person", 1);
+    const hub = nodeRadius(30, "person", 1);
+    expect(hub / leaf).toBeGreaterThan(3);
+    expect(leaf).toBeLessThan(6);
+    expect(nodeRadius(10_000, "person", 1)).toBeLessThan(nodeRadius(0, "company", 1));
+    expect(nodeRadius(1, "person", 2)).toBeCloseTo(leaf * 2);
+  });
+
+  it("grows company logos slower than the camera zoom", () => {
     expect(apparentRadius(4, "company", 1, 4) / apparentRadius(4, "company", 1, 1)).toBeCloseTo(2);
     expect(apparentRadius(4, "person", 1, 4) / apparentRadius(4, "person", 1, 1)).toBeCloseTo(4);
   });

@@ -8,7 +8,7 @@ vi.mock("@/hooks/use-element-size", () => ({
   useElementSize: () => ({ ref: useRef(null), width: 1080, height: 1400 }),
 }));
 
-import { ConnectionsGraph } from "./connections-graph";
+import { ConnectionsGraph, logoCandidates } from "./connections-graph";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -40,25 +40,53 @@ describe("ConnectionsGraph", () => {
     const root = createRoot(container);
     const started = performance.now();
     await act(async () =>
-      root.render(
-        <ConnectionsGraph
-          nodes={nodes}
-          edges={edges}
-          label="graph"
-          overviewLabel="Whole network"
-          sectionLabel={(name, people) => `${name} ${people}`}
-        />,
-      ),
+      root.render(<ConnectionsGraph nodes={nodes} edges={edges} label="graph" />),
     );
     await new Promise((resolve) => setTimeout(resolve, 300));
     const svg = container.querySelector("svg");
     expect(svg).not.toBeNull();
     expect(svg?.querySelectorAll("path").length).toBeGreaterThan(500);
-    expect(svg?.querySelectorAll("circle, rect").length).toBe(520);
-    expect(container.querySelector("[data-testid=connections-caption]")?.textContent).toBe(
-      "Whole network",
-    );
+    expect(svg?.querySelectorAll("circle").length).toBeGreaterThanOrEqual(520);
+    expect(container.querySelector("[data-testid=connections-caption]")).toBeNull();
     expect(performance.now() - started).toBeLessThan(5_000);
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("picks the negative logo on dark and falls back to the plain one", () => {
+    const co = {
+      id: "c",
+      kind: "company" as const,
+      label: "Acme",
+      degree: 2,
+      logoUrl: "https://x/a.png",
+      logoNegativeUrl: "https://x/a-neg.png",
+    };
+    expect(logoCandidates(co, true)).toEqual(["https://x/a-neg.png", "https://x/a.png"]);
+    expect(logoCandidates(co, false)).toEqual(["https://x/a.png"]);
+    expect(logoCandidates({ ...co, logoNegativeUrl: co.logoUrl }, true)).toEqual([co.logoUrl]);
+    expect(logoCandidates({ ...co, logoUrl: null, logoNegativeUrl: null }, true)).toEqual([]);
+  });
+
+  it("draws a company without a logo as a neutral disc with its initial", async () => {
+    const nodes: TvConnectionNode[] = [
+      { id: "c", kind: "company", label: "acme", degree: 2, logoUrl: null, logoNegativeUrl: null },
+      { id: "a", kind: "person", label: "Ana", degree: 1 },
+      { id: "b", kind: "person", label: "Bo", degree: 1 },
+    ];
+    const edges = [
+      { source: "a", target: "c" },
+      { source: "b", target: "c" },
+    ];
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () =>
+      root.render(<ConnectionsGraph nodes={nodes} edges={edges} label="graph" />),
+    );
+    const company = container.querySelector("[data-company]");
+    expect(company?.querySelector("image")).toBeNull();
+    expect(company?.querySelector("text")?.textContent).toBe("A");
     act(() => root.unmount());
     container.remove();
   });

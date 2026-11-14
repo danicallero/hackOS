@@ -15,7 +15,6 @@ import {
   type Obstacle,
   type Positions,
   type Section,
-  sectionIndexById,
   selectLabels,
 } from "./connections-layout";
 
@@ -25,22 +24,77 @@ export const SECTION_DWELL_MS = 10_000;
 export const MOVE_MS = 1_600;
 
 interface Palette {
-  company: string;
+  person: string;
   edge: string;
   foreground: string;
-  background: string;
+  /** Neutral disc behind a company without a (loadable) logo. */
+  neutral: string;
+  neutralText: string;
+  /** Halo colour around the label text, matching the canvas edge. */
+  canvasEdge: string;
+  canvas: string;
   fontFamily: string;
   dark: boolean;
 }
 
-const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+/** org-roam-ui look: dark hero canvas with one quiet node colour; a calm light twin. */
+const LOOK = {
+  dark: {
+    person: "#9aa8ff",
+    edge: "#a9b4e8",
+    neutral: "#2b2f45",
+    neutralText: "#dfe4ff",
+    canvasEdge: "#0b0c14",
+    canvas: "radial-gradient(ellipse at 50% 45%, #1b1e2e 0%, #11121c 55%, #0b0c14 100%)",
+  },
+  light: {
+    person: "#4a5bd0",
+    edge: "#5a64a0",
+    neutral: "#e3e6f4",
+    neutralText: "#2b3170",
+    canvasEdge: "#eef0f8",
+    canvas: "radial-gradient(ellipse at 50% 45%, #ffffff 0%, #f6f7fc 55%, #eceef7 100%)",
+  },
+} as const;
 
-/** Community tint: golden-angle hues, soft enough to stay secondary to the names. */
-export function communityColor(index: number, dark: boolean): string {
-  if (index < 0) return dark ? "hsl(220 10% 62%)" : "hsl(220 10% 52%)";
-  const hue = (index * 137.5 + 210) % 360;
-  return dark ? `hsl(${hue} 55% 66%)` : `hsl(${hue} 50% 44%)`;
+/**
+ * The logo to draw for a company: the negative variant on dark canvases, the
+ * plain one on light; a variant that failed to load falls back to the other
+ * (same rule as SponsorLogo). Null = no usable logo, draw the neutral disc.
+ */
+export function logoCandidates(node: TvConnectionNode, dark: boolean): string[] {
+  const urls = dark ? [node.logoNegativeUrl, node.logoUrl] : [node.logoUrl];
+  return urls.filter((u, i, all): u is string => Boolean(u) && all.indexOf(u) === i);
 }
+
+/** Probes each company's logo off-DOM so a dead URL falls back instead of drawing a broken image. */
+function useResolvedLogos(nodes: TvConnectionNode[], dark: boolean): Map<string, string | null> {
+  const [resolved, setResolved] = useState<Map<string, string | null>>(new Map());
+  const started = useRef(new Set<string>());
+  useEffect(() => {
+    for (const node of nodes) {
+      if (node.kind !== "company") continue;
+      const key = `${dark ? "d" : "l"}|${node.id}|${node.logoUrl}|${node.logoNegativeUrl}`;
+      if (started.current.has(key)) continue;
+      started.current.add(key);
+      const done = (url: string | null) =>
+        setResolved((m) => new Map(m).set(`${dark}|${node.id}`, url));
+      const urls = logoCandidates(node, dark);
+      const attempt = (i: number) => {
+        const url = urls[i];
+        if (!url) return done(null);
+        const img = new Image();
+        img.onload = () => done(url);
+        img.onerror = () => attempt(i + 1);
+        img.src = url;
+      };
+      attempt(0);
+    }
+  }, [nodes, dark]);
+  return resolved;
+}
+
+const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
 /** Hidden tabs pause the camera; reduced motion keeps the steps but drops the animation. */
 function usePlayback(): { visible: boolean; reduced: boolean } {
@@ -67,14 +121,10 @@ export function ConnectionsGraph({
   nodes,
   edges,
   label,
-  overviewLabel,
-  sectionLabel,
 }: {
   nodes: TvConnectionNode[];
   edges: TvConnectionEdge[];
   label: string;
-  overviewLabel: string;
-  sectionLabel: (name: string | null, people: number) => string;
 }) {
   const { ref, width, height } = useElementSize<HTMLDivElement>();
   const { visible, reduced } = usePlayback();
@@ -95,7 +145,6 @@ export function ConnectionsGraph({
     return next;
   }, [nodes, edges]);
   const sections = useMemo(() => detectSections(nodes, edges), [nodes, edges]);
-  const tint = useMemo(() => sectionIndexById(sections), [sections]);
   const sequence = useMemo(() => buildSequence(sections.length), [sections.length]);
   const step = sequence[cursor % sequence.length] ?? -1;
   const section: Section | null = sections[step] ?? null;
@@ -216,6 +265,7 @@ export function ConnectionsGraph({
 
   const fade = reduced ? undefined : `opacity ${MOVE_MS}ms ease-in-out`;
   const dark = palette?.dark ?? false;
+  const logos = useResolvedLogos(nodes, dark);
 
   const edgeEls = useMemo(() => {
     if (!palette) return null;
@@ -223,8 +273,8 @@ export function ConnectionsGraph({
       const a = world.get(edge.source);
       const b = world.get(edge.target);
       if (!a || !b) return null;
-      const mx = (a.x + b.x) / 2 - (b.y - a.y) * 0.12;
-      const my = (a.y + b.y) / 2 + (b.x - a.x) * 0.12;
+      const mx = (a.x + b.x) / 2 - (b.y - a.y) * 0.06;
+      const my = (a.y + b.y) / 2 + (b.x - a.x) * 0.06;
       const on = lit
         ? lit.has(edge.source) &&
           lit.has(edge.target) &&
@@ -236,9 +286,9 @@ export function ConnectionsGraph({
           d={`M${a.x} ${a.y}Q${mx} ${my} ${b.x} ${b.y}`}
           fill="none"
           stroke={palette.edge}
-          strokeWidth={on ? 1.6 * unit : 0.8 * unit}
+          strokeWidth={on ? 1.4 * unit : 0.7 * unit}
           vectorEffect="non-scaling-stroke"
-          style={{ opacity: lit ? (on ? 0.55 : 0.03) : 0.14, transition: fade }}
+          style={{ opacity: lit ? (on ? 0.6 : 0.03) : palette.dark ? 0.2 : 0.26, transition: fade }}
         />
       );
     });
@@ -257,38 +307,57 @@ export function ConnectionsGraph({
         const p = world.get(node.id);
         if (!p) return null;
         const r = nodeRadius(node.degree, node.kind, unit);
-        const opacity = lit ? (lit.has(node.id) ? 1 : 0.1) : 0.85;
-        if (node.kind === "company")
+        const opacity = lit ? (lit.has(node.id) ? 1 : 0.1) : 0.92;
+        if (node.kind === "company") {
+          const logo = logos.get(`${dark}|${node.id}`);
+          const wanted = logoCandidates(node, dark).length > 0;
+          // Still probing: draw nothing yet rather than flashing the fallback.
+          if (wanted && logo === undefined) return null;
           return (
-            <rect
+            <g
               key={node.id}
               data-company=""
               data-x={p.x}
               data-y={p.y}
-              x={p.x - r}
-              y={p.y - r}
-              width={r * 2}
-              height={r * 2}
-              rx={r * 0.3}
-              fill={palette.company}
-              stroke={palette.foreground}
-              strokeWidth={2 * unit}
-              vectorEffect="non-scaling-stroke"
               style={{ opacity, transition: fade }}
-            />
+            >
+              {logo ? (
+                <image
+                  href={logo}
+                  x={p.x - r}
+                  y={p.y - r}
+                  width={r * 2}
+                  height={r * 2}
+                  preserveAspectRatio="xMidYMid meet"
+                />
+              ) : (
+                <>
+                  <circle cx={p.x} cy={p.y} r={r} fill={palette.neutral} />
+                  <text
+                    x={p.x}
+                    y={p.y}
+                    dy="0.35em"
+                    textAnchor="middle"
+                    fontSize={r * 1.1}
+                    fontWeight={700}
+                    fontFamily={palette.fontFamily}
+                    fill={palette.neutralText}
+                  >
+                    {Array.from(node.label.trim())[0]?.toUpperCase() ?? ""}
+                  </text>
+                </>
+              )}
+            </g>
           );
+        }
         return (
-          <circle
-            key={node.id}
-            cx={p.x}
-            cy={p.y}
-            r={r}
-            fill={communityColor(tint.get(node.id) ?? -1, dark)}
-            style={{ opacity, transition: fade }}
-          />
+          <g key={node.id} style={{ opacity, transition: fade }}>
+            <circle cx={p.x} cy={p.y} r={r * 2.4} fill="url(#tv-graph-glow)" />
+            <circle cx={p.x} cy={p.y} r={r} fill={palette.person} />
+          </g>
         );
       });
-  }, [nodes, world, lit, palette, tint, dark, unit, fade]);
+  }, [nodes, world, lit, palette, logos, dark, unit, fade]);
 
   // Labels are laid out for the camera at rest, in the same projection as the dots.
   const placed = useMemo(() => {
@@ -334,19 +403,24 @@ export function ConnectionsGraph({
     };
   }, [rest, shownSection, world, width, height, nodes, adjacency, kinds, unit]);
 
-  const people = shownSection?.people.length ?? 0;
-  const caption = shownSection ? sectionLabel(shownSection.title, people) : overviewLabel;
-
   return (
     <div
       ref={ref}
       role="img"
       aria-label={label}
       className="relative size-full min-h-0 min-w-0 overflow-hidden"
+      style={{ background: palette?.canvas }}
       data-testid="connections-graph"
     >
       {palette && width > 0 && height > 0 && (
         <svg width={width} height={height} aria-hidden="true" className="absolute inset-0">
+          <defs>
+            <radialGradient id="tv-graph-glow">
+              <stop offset="0%" stopColor={palette.person} stopOpacity={dark ? 0.3 : 0.16} />
+              <stop offset="45%" stopColor={palette.person} stopOpacity={dark ? 0.08 : 0.04} />
+              <stop offset="100%" stopColor={palette.person} stopOpacity={0} />
+            </radialGradient>
+          </defs>
           <g ref={worldRef}>
             <g>{edgeEls}</g>
             <g>{nodeEls}</g>
@@ -355,10 +429,10 @@ export function ConnectionsGraph({
             style={{ opacity: settled ? 1 : 0, transition: reduced ? undefined : "opacity 400ms" }}
             fontFamily={palette.fontFamily}
             fontSize={placed.fontSize}
-            fontWeight={700}
+            fontWeight={600}
             fill={palette.foreground}
-            stroke={palette.background}
-            strokeWidth={placed.fontSize * 0.3}
+            stroke={palette.canvasEdge}
+            strokeWidth={placed.fontSize * 0.28}
             strokeLinejoin="round"
             paintOrder="stroke"
           >
@@ -370,13 +444,6 @@ export function ConnectionsGraph({
           </g>
         </svg>
       )}
-      <p
-        className="bg-background text-foreground border-foreground/30 absolute bottom-[0.5em] left-[0.5em] max-w-[90%] truncate rounded-[0.4em] border-2 px-[0.8em] py-[0.35em] text-[2.6em] leading-tight font-bold"
-        style={{ opacity: settled ? 1 : 0, transition: reduced ? undefined : "opacity 400ms" }}
-        data-testid="connections-caption"
-      >
-        {caption}
-      </p>
     </div>
   );
 }
@@ -395,13 +462,12 @@ function readPalette(element: HTMLElement): Palette {
     return toRgba(resolved, context);
   };
   const foreground = color("--foreground");
+  const dark = luminance(foreground) > 0.5;
   return {
-    company: color("--chart-3"),
-    edge: color("--muted-foreground"),
-    foreground,
-    background: color("--background"),
+    ...LOOK[dark ? "dark" : "light"],
+    foreground: dark ? "#e8ebff" : "#1d2150",
     fontFamily: getComputedStyle(element).fontFamily,
-    dark: luminance(foreground) > 0.5,
+    dark,
   };
 }
 

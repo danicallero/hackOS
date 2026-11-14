@@ -13,6 +13,10 @@ export interface TvConnectionNode {
   label: string;
   /** Number of edges, so the view can size and focus without recounting. */
   degree: number;
+  /** Company only: the public sponsor logo (same value as the sponsors TV mode); null or absent when none. */
+  logoUrl?: string | null;
+  /** Company only: dark-background variant, falling back to `logoUrl` like the sponsors TV mode. */
+  logoNegativeUrl?: string | null;
 }
 
 export interface TvConnectionEdge {

@@ -195,6 +195,39 @@ describe("GET /api/tv/connections eligibility", () => {
     expect(raw).not.toContain("SecretCorp");
   });
 
+  it("exposes the public sponsor logos on companies only", async () => {
+    const a = await person();
+    const b = await person();
+    const withLogo = await company("LogoCo");
+    const plain = await company("PlainCo");
+    const logoOnly = await company("OnlyLogoCo");
+    await pool.query(
+      `UPDATE enterprises SET logo_url = 'https://cdn.example/logo.svg',
+              logo_negative_url = 'https://cdn.example/logo-neg.svg' WHERE id = $1`,
+      [withLogo],
+    );
+    await pool.query(
+      `UPDATE enterprises SET logo_url = 'https://cdn.example/only.png' WHERE id = $1`,
+      [logoOnly],
+    );
+    await meet(a, { user: b });
+    for (const co of [withLogo, plain, logoOnly]) await meet(a, { enterprise: co });
+    const { body, raw } = await graphRaw();
+    const by = (label: string) => body.nodes.find((n) => n.label === label);
+    expect(by("LogoCo")).toMatchObject({
+      logoUrl: "https://cdn.example/logo.svg",
+      logoNegativeUrl: "https://cdn.example/logo-neg.svg",
+    });
+    expect(by("OnlyLogoCo")).toMatchObject({
+      logoUrl: "https://cdn.example/only.png",
+      logoNegativeUrl: "https://cdn.example/only.png",
+    });
+    expect(by("PlainCo")).toMatchObject({ logoUrl: null, logoNegativeUrl: null });
+    for (const n of body.nodes.filter((x) => x.kind === "person"))
+      expect(n).not.toHaveProperty("logoUrl");
+    expect(raw.match(/https?:\/\//g)?.length).toBe(4);
+  });
+
   it("excludes another edition's entries and companies", async () => {
     await pool.query(
       `INSERT INTO editions (event_key, name, status) VALUES ('old', 'Old', 'active')`,
@@ -223,7 +256,11 @@ describe("GET /api/tv/connections eligibility", () => {
     );
     expect(raw).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
     for (const n of body.nodes) {
-      expect(Object.keys(n).sort()).toEqual(["degree", "id", "kind", "label"]);
+      expect(Object.keys(n).sort()).toEqual(
+        n.kind === "company"
+          ? ["degree", "id", "kind", "label", "logoNegativeUrl", "logoUrl"]
+          : ["degree", "id", "kind", "label"],
+      );
       expect(n.id).toMatch(/^[A-Za-z0-9_-]{22}$/);
       expect([String(a), String(b), String(co)]).not.toContain(n.id);
     }

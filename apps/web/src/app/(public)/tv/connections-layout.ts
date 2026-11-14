@@ -180,8 +180,6 @@ export interface Section {
   people: string[];
   /** Companies whose people are mostly in this section; they anchor the camera. */
   companies: string[];
-  /** Name of the most connected labelled node, or null when none has a name. */
-  title: string | null;
 }
 
 const MIN_SECTION_PEOPLE = 3;
@@ -263,21 +261,8 @@ export function detectSections(nodes: TvConnectionNode[], edges: TvConnectionEdg
       .sort(byDegree)
       .map((node) => node.id);
     const sorted = [...members].sort(byDegree);
-    const titled = [...sorted, ...companies.map((id) => byId.get(id) as TvConnectionNode)]
-      .filter((node) => node.label?.trim())
-      .sort(byDegree)[0];
-    return { people: sorted.map((n) => n.id), companies, title: titled?.label.trim() ?? null };
+    return { people: sorted.map((n) => n.id), companies };
   });
-}
-
-/** Section index per person, so each community gets its own tint. */
-export function sectionIndexById(sections: Section[]): Map<string, number> {
-  const map = new Map<string, number>();
-  sections.forEach((section, index) => {
-    for (const id of section.people) map.set(id, index);
-    for (const id of section.companies) map.set(id, index);
-  });
-  return map;
 }
 
 /** Camera steps: -1 is the whole-network overview, n is section n. The overview
@@ -411,10 +396,18 @@ export function selectLabels(
   return placed;
 }
 
-/** Node radius in px at overview zoom; area follows degree. */
+/** Largest person radius (units); every company is bigger than this. */
+const PERSON_MAX = 22;
+
+/**
+ * Node radius in px at overview zoom. People grow with the square root of their
+ * degree, from a tiny leaf (~4.6) to a capped hub (22); companies render their
+ * logo and always start above the biggest person.
+ */
 export function nodeRadius(degree: number, kind: "person" | "company", unit: number): number {
   const d = Math.sqrt(Math.max(0, degree));
-  return unit * (kind === "company" ? 9 + d * 1.6 : 3.2 + d * 1);
+  if (kind === "company") return unit * Math.min(44, PERSON_MAX + 8 + d * 1.6);
+  return unit * Math.min(PERSON_MAX, 1.8 + d * 2.8);
 }
 
 /** On-screen radius at a camera zoom: people scale with it, company squares only

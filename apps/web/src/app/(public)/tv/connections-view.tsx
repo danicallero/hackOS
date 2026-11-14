@@ -99,12 +99,6 @@ export function ConnectionsView({
                   <ConnectionsGraph
                     nodes={data.nodes}
                     edges={data.edges}
-                    overviewLabel={t("connectionsOverview")}
-                    sectionLabel={(name, people) =>
-                      name
-                        ? `${name} · ${t("connectionsPeople", { count: people })}`
-                        : t("connectionsPeople", { count: people })
-                    }
                     label={t("connectionsGraphLabel", {
                       people: data.totals.people,
                       companies: data.totals.companies,

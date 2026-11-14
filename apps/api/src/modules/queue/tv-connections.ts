@@ -42,6 +42,8 @@ interface GraphRow {
   b_id: number | null;
   label: string | null;
   degree: number | null;
+  logo_url?: string | null;
+  logo_negative_url?: string | null;
 }
 
 /**
@@ -66,7 +68,8 @@ WITH people AS (
    WHERE u.is_test_account = false
      AND u.id IN (SELECT user_id FROM user_event_access)
 ), companies AS (
-  SELECT e.id, e.name AS label
+  SELECT e.id, e.name AS label, e.logo_url,
+         COALESCE(e.logo_negative_url, e.logo_url) AS logo_negative_url
     FROM enterprises e
    WHERE e.event_key = current_edition() AND e.visibility = 'visible'
      AND NOT ${ENTERPRISE_HAS_SYNTHETIC}
@@ -89,12 +92,13 @@ WITH people AS (
   SELECT k, id, count(*)::int AS degree FROM ends GROUP BY k, id
 )
 SELECT 'n' AS row_type, deg.k AS a_kind, deg.id AS a_id, NULL::text AS b_kind, NULL::int AS b_id,
-       CASE deg.k WHEN 'p' THEN pe.label ELSE co.label END AS label, deg.degree
+       CASE deg.k WHEN 'p' THEN pe.label ELSE co.label END AS label, deg.degree,
+       co.logo_url, co.logo_negative_url
   FROM deg
   LEFT JOIN people pe ON deg.k = 'p' AND pe.id = deg.id
   LEFT JOIN companies co ON deg.k = 'c' AND co.id = deg.id
 UNION ALL
-SELECT 'e', ak, a, bk, b, NULL, NULL FROM edges`;
+SELECT 'e', ak, a, bk, b, NULL, NULL, NULL, NULL FROM edges`;
 
 interface RawEdge {
   a: string;
@@ -109,7 +113,17 @@ export function buildGraph(
 ): TvConnectionsResponse {
   const idOf = nodeIdFactory(now);
   const key = (kind: "p" | "c", id: number) => `${kind}${id}`;
-  const nodes = new Map<string, { kind: Kind; internal: number; label: string; degree: number }>();
+  const nodes = new Map<
+    string,
+    {
+      kind: Kind;
+      internal: number;
+      label: string;
+      degree: number;
+      logoUrl: string | null;
+      logoNegativeUrl: string | null;
+    }
+  >();
   const edges: RawEdge[] = [];
   for (const row of rows) {
     if (row.row_type === "n") {
@@ -118,6 +132,8 @@ export function buildGraph(
         internal: Number(row.a_id),
         label: row.label ?? "",
         degree: Number(row.degree),
+        logoUrl: row.logo_url ?? null,
+        logoNegativeUrl: row.logo_negative_url ?? null,
       });
     } else {
       edges.push({
@@ -175,7 +191,17 @@ export function buildGraph(
     .filter((k) => used.has(k))
     .map((k) => {
       const n = nodes.get(k)!;
-      return { id: idOf(n.kind, n.internal), kind: n.kind, label: n.label, degree: n.degree };
+      const out: TvConnectionNode = {
+        id: idOf(n.kind, n.internal),
+        kind: n.kind,
+        label: n.label,
+        degree: n.degree,
+      };
+      if (n.kind === "company") {
+        out.logoUrl = n.logoUrl;
+        out.logoNegativeUrl = n.logoNegativeUrl;
+      }
+      return out;
     });
   const outEdges: TvConnectionEdge[] = keptEdges.map((e) => {
     const a = nodes.get(e.a)!;
