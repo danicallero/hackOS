@@ -1,7 +1,7 @@
 "use client";
 
 import type { TvConnectionEdge, TvConnectionNode } from "@hackos/shared/tv-connections";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useElementSize } from "@/hooks/use-element-size";
 import {
   apparentRadius,
@@ -14,6 +14,7 @@ import {
   edgeKey,
   type LabelCandidate,
   layoutGraph,
+  linkAlpha,
   nodeRadius,
   type Obstacle,
   type Positions,
@@ -188,10 +189,10 @@ export function ConnectionsGraph({
   // Rescale the settled layout to its own bounds, padded by the biggest logo, so the
   // first frame is centred and nothing is clipped whatever shape the force pass took.
   const world = useMemo(() => {
-    const pad = Math.min(
-      Math.max(nodeRadius(0, "company", unit) * 1.6, 8),
-      Math.min(width, height) * 0.2,
-    );
+    // ~6% margin, never less than a logo's radius, so nothing is clipped.
+    const logo = nodeRadius(0, "company", unit) * 1.1;
+    const padX = Math.min(Math.max(logo, width * 0.06), width * 0.2);
+    const padY = Math.min(Math.max(logo, height * 0.06), height * 0.2);
     let minX = Number.POSITIVE_INFINITY;
     let minY = Number.POSITIVE_INFINITY;
     let maxX = Number.NEGATIVE_INFINITY;
@@ -207,8 +208,8 @@ export function ConnectionsGraph({
     const map = new Map<string, { x: number; y: number }>();
     for (const [id, p] of positions)
       map.set(id, {
-        x: pad + ((p.x - minX) / spanX) * (width - pad * 2),
-        y: pad + ((p.y - minY) / spanY) * (height - pad * 2),
+        x: padX + ((p.x - minX) / spanX) * (width - padX * 2),
+        y: padY + ((p.y - minY) / spanY) * (height - padY * 2),
       });
     return map;
   }, [positions, width, height, unit]);
@@ -253,6 +254,15 @@ export function ConnectionsGraph({
   const dark = true;
   const logos = useResolvedLogos(nodes, dark);
   const degrees = useMemo(() => new Map(nodes.map((n) => [n.id, n.degree])), [nodes]);
+  // Links fade by their most connected *person*: hub bundles stay faint.
+  const personDegree = useCallback(
+    (a: string, b: string) =>
+      Math.max(
+        kinds.get(a) === "person" ? (degrees.get(a) ?? 1) : 1,
+        kinds.get(b) === "person" ? (degrees.get(b) ?? 1) : 1,
+      ),
+    [kinds, degrees],
+  );
 
   // New nodes start (invisible, small) on their neighbours; the very first snapshot
   // starts in place. Only ids the scene does not know yet are touched, so this is
@@ -373,7 +383,7 @@ export function ConnectionsGraph({
       const b = sc.nodes.get(bId);
       if (!a || !b) continue;
       const key = `${aId}|${bId}`;
-      const hub = Math.sqrt(Math.max(degrees.get(aId) ?? 1, degrees.get(bId) ?? 1));
+      const pd = personDegree(aId, bId);
       const on = lit
         ? lit.has(aId) && lit.has(bId) && Boolean(members?.has(aId) || members?.has(bId))
         : false;
@@ -386,7 +396,7 @@ export function ConnectionsGraph({
       const to: EdgeState = ghost
         ? { o: 0, w: es.w }
         : {
-            o: lit ? (on ? 0.75 / (1 + hub * 0.12) : 0.03) : 0.34 / (1 + hub * 0.25),
+            o: linkAlpha(pd, lit ? (on ? "focus" : "dim") : "overview"),
             w: (on ? 1.4 : 0.7) * unit,
           };
       edgeEntries.push({
@@ -496,7 +506,20 @@ export function ConnectionsGraph({
     };
     frame.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame.current);
-  }, [target, step, reduced, width, height, lit, members, degrees, unit, logos, world, committed]);
+  }, [
+    target,
+    step,
+    reduced,
+    width,
+    height,
+    lit,
+    members,
+    personDegree,
+    unit,
+    logos,
+    world,
+    committed,
+  ]);
 
   // Render never depends on the camera or on which section is lit: elements keep their
   // keys and DOM nodes for the life of a snapshot, and read their live attributes from
@@ -507,7 +530,6 @@ export function ConnectionsGraph({
       const a = sc.nodes.get(edge.source);
       const b = sc.nodes.get(edge.target);
       if (!a || !b) return null;
-      const hub = Math.sqrt(Math.max(degrees.get(edge.source) ?? 1, degrees.get(edge.target) ?? 1));
       const key = edgeKey(edge);
       const now = sc.edges.get(key);
       return (
@@ -524,12 +546,14 @@ export function ConnectionsGraph({
           stroke={palette.edge}
           strokeWidth={now?.w ?? 0.7 * unit}
           vectorEffect="non-scaling-stroke"
-          style={{ opacity: now?.o ?? 0.34 / (1 + hub * 0.25) }}
+          style={{
+            opacity: now?.o ?? linkAlpha(personDegree(edge.source, edge.target), "overview"),
+          }}
         />
       );
     };
     return [...edges.map((e) => draw(e, false)), ...ghosts.edges.map((e) => draw(e, true))];
-  }, [edges, ghosts, unit, degrees]);
+  }, [edges, ghosts, unit, personDegree]);
 
   const nodeEls = useMemo(() => {
     const sc = scene.current;
@@ -594,7 +618,7 @@ export function ConnectionsGraph({
       );
     };
     const order = (a: TvConnectionNode, b: TvConnectionNode) =>
-      Number(b.kind === "company") - Number(a.kind === "company") ||
+      Number(a.kind === "company") - Number(b.kind === "company") ||
       a.degree - b.degree ||
       (a.id < b.id ? -1 : 1);
     return [

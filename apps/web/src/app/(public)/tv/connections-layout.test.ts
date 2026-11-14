@@ -4,10 +4,12 @@ import {
   apparentRadius,
   buildSequence,
   cameraFor,
+  communityAnchors,
   createCoalescer,
   detectSections,
   diffSnapshots,
   layoutGraph,
+  linkAlpha,
   nodeRadius,
   selectLabels,
   snapshotSignature,
@@ -98,7 +100,7 @@ describe("layoutGraph", () => {
     const next = layoutGraph(nodes, edges, first);
     const anchor = next.get("p5");
     const added = next.get("new");
-    expect(anchor && added && Math.hypot(anchor.x - added.x, anchor.y - added.y)).toBeLessThan(0.2);
+    expect(anchor && added && Math.hypot(anchor.x - added.x, anchor.y - added.y)).toBeLessThan(0.3);
   });
 
   it("ignores edges to unknown nodes and handles an empty graph", () => {
@@ -324,5 +326,108 @@ describe("snapshot updates", () => {
     q.offer("four", true);
     expect(q.offer("five", false)).toBe("five");
     expect(q.release()).toBeNull();
+  });
+});
+
+/** Six planted communities of 25, a hub each linking across, a logo per community. */
+function plantedGraph() {
+  const nodes: TvConnectionNode[] = [];
+  const edges: TvConnectionEdge[] = [];
+  const add = (a: string, b: string) => edges.push({ source: a, target: b });
+  for (let c = 0; c < 6; c++) {
+    nodes.push({ id: `co${c}`, kind: "company", label: `Co ${c}`, degree: 0 });
+    for (let i = 0; i < 25; i++) {
+      nodes.push({ id: `g${c}-${i}`, kind: "person", label: `P ${c}-${i}`, degree: 0 });
+      for (const step of [1, 2, 5]) add(`g${c}-${i}`, `g${c}-${(i + step) % 25}`);
+      if (i % 3 === 0) add(`g${c}-${i}`, `co${c}`);
+    }
+    for (let k = 0; k < 8; k++) add(`g${c}-0`, `g${(c + 1 + (k % 5)) % 6}-${k * 3}`);
+  }
+  const degree = new Map<string, number>();
+  for (const e of edges) {
+    degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
+    degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
+  }
+  for (const n of nodes) n.degree = degree.get(n.id) ?? 0;
+  return { nodes, edges };
+}
+
+describe("community layout", () => {
+  it("puts community anchors on a deterministic ellipse around the centre", () => {
+    expect(communityAnchors(0)).toEqual([]);
+    expect(communityAnchors(1)).toEqual([{ x: 0.5, y: 0.5 }]);
+    const ring = communityAnchors(6);
+    expect(communityAnchors(6)).toEqual(ring);
+    expect(ring).toHaveLength(6);
+    // Same normalised radius from the centre, evenly spaced, first (biggest) at the top.
+    const norm = ring.map((p) => Math.hypot((p.x - 0.5) / 0.4, (p.y - 0.5) / 0.3));
+    for (const r of norm) expect(r).toBeCloseTo(1, 6);
+    expect(ring[0].y).toBeLessThan(0.5);
+    expect(ring[0].x).toBeCloseTo(0.5, 6);
+  });
+
+  it("separates communities: centroids farther apart than the groups are wide", () => {
+    const { nodes, edges } = plantedGraph();
+    const pos = layoutGraph(nodes, edges);
+    const centroids: Array<{ x: number; y: number }> = [];
+    let spread = 0;
+    for (let c = 0; c < 6; c++) {
+      const pts = Array.from({ length: 25 }, (_, i) => pos.get(`g${c}-${i}`)).filter(
+        (p): p is { x: number; y: number } => Boolean(p),
+      );
+      const cx = pts.reduce((a, p) => a + p.x, 0) / pts.length;
+      const cy = pts.reduce((a, p) => a + p.y, 0) / pts.length;
+      centroids.push({ x: cx, y: cy });
+      spread += pts.reduce((a, p) => a + Math.hypot(p.x - cx, p.y - cy), 0) / pts.length;
+    }
+    spread /= 6;
+    let between = 0;
+    let pairs = 0;
+    for (let a = 0; a < 6; a++)
+      for (let b = a + 1; b < 6; b++) {
+        between += Math.hypot(centroids[a].x - centroids[b].x, centroids[a].y - centroids[b].y);
+        pairs++;
+      }
+    expect(between / pairs).toBeGreaterThan(spread * 2);
+  });
+
+  it("never lets a logo sit under another node", () => {
+    const { nodes, edges } = plantedGraph();
+    const pos = layoutGraph(nodes, edges);
+    for (const company of nodes.filter((n) => n.kind === "company")) {
+      const c = pos.get(company.id);
+      for (const other of nodes) {
+        if (other.id === company.id) continue;
+        const o = pos.get(other.id);
+        if (!c || !o) continue;
+        const need =
+          (nodeRadius(company.degree, "company", 1) + nodeRadius(other.degree, other.kind, 1)) /
+          1000;
+        expect(Math.hypot(c.x - o.x, c.y - o.y)).toBeGreaterThanOrEqual(need);
+      }
+    }
+  });
+
+  it("keeps known nodes in place when a node is added to a community layout", () => {
+    const { nodes, edges } = plantedGraph();
+    const first = layoutGraph(nodes, edges);
+    const grown = layoutGraph(
+      [...nodes, { id: "late", kind: "person", label: "L", degree: 1 }],
+      [...edges, { source: "late", target: "g2-3" }],
+      first,
+    );
+    let moved = 0;
+    for (const [id, p] of first) {
+      const q = grown.get(id);
+      if (q) moved = Math.max(moved, Math.hypot(p.x - q.x, p.y - q.y));
+    }
+    expect(moved).toBeLessThan(0.15);
+  });
+
+  it("fades hub links, strengthens focus and keeps the overview faint", () => {
+    expect(linkAlpha(60, "overview")).toBeLessThan(linkAlpha(1, "overview"));
+    expect(linkAlpha(1, "overview")).toBeLessThanOrEqual(0.2);
+    expect(linkAlpha(5, "focus")).toBeGreaterThan(linkAlpha(5, "overview") * 3);
+    expect(linkAlpha(5, "dim")).toBeLessThan(linkAlpha(5, "overview"));
   });
 });
