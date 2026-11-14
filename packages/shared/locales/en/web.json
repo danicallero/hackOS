@@ -4330,5 +4330,8 @@
   "rsvpAudiencePlaceholder": "Select roles…",
   "profileRsvpTitle": "RSVP",
   "rsvpNoItems": "No activities are asking for your RSVP.",
-  "helpDeskIntervalAfterLastDay": "Availability must end by the end of the last hacking day."
+  "helpDeskIntervalAfterLastDay": "Availability must end by the end of the last hacking day.",
+  "resendDecisionsConfirmTitle": "Resend {count} decisions?",
+  "resendDecisionsWarning": "Each applicant gets the email again. Accepted applicants get a new confirmation link and their previous link stops working.",
+  "batchSkipFailed": "Could not be processed."
 }

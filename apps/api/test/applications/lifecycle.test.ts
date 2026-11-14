@@ -2120,3 +2120,157 @@ describe("revoke spot + batch actions (M2)", () => {
     ).toBe(403);
   });
 });
+
+describe("decision batches at scale (H14, H15)", () => {
+  async function decideAndSend(responseId: number, decision: "accepted" | "rejected") {
+    const a = await getApp();
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decide`,
+      headers: asUser(decider),
+      payload: { decision },
+    });
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/send-decision`,
+      headers: asUser(decider),
+    });
+  }
+
+  async function tokenStateOf(responseId: number): Promise<{ used: boolean }> {
+    const { rows } = await pool.query(
+      `SELECT t.used_at FROM application_responses r
+         JOIN email_verification_tokens t ON t.id = r.confirmation_token_id
+        WHERE r.id = $1`,
+      [responseId],
+    );
+    return { used: rows[0].used_at !== null };
+  }
+
+  it("accepting a user on a second form keeps the first form's confirmation link valid", async () => {
+    const a = await getApp();
+    const firstApp = await createApplication();
+    const secondApp = await createApplication();
+    const userId = await createUser({ emailVerified: true });
+    const responseIds: number[] = [];
+    for (const appId of [firstApp, secondApp]) {
+      await a.inject({
+        method: "PUT",
+        url: `/api/applications/${appId}/response`,
+        headers: asUser(userId),
+        payload: { responses: { motivation: "yes" } },
+      });
+      await a.inject({
+        method: "POST",
+        url: `/api/applications/${appId}/response/submit`,
+        headers: asUser(userId),
+        payload: { food_intolerances: [], shirt_size: "M" },
+      });
+      const { rows } = await pool.query(
+        `SELECT id FROM application_responses WHERE user_id = $1 AND application_id = $2`,
+        [userId, appId],
+      );
+      responseIds.push(rows[0].id);
+    }
+
+    await decideAndSend(responseIds[0] as number, "accepted");
+    await decideAndSend(responseIds[1] as number, "accepted");
+
+    expect(await tokenStateOf(responseIds[0] as number)).toEqual({ used: false });
+    expect(await tokenStateOf(responseIds[1] as number)).toEqual({ used: false });
+  });
+
+  it("resending an expired acceptance re-checks capacity", async () => {
+    const a = await getApp();
+    const appId = await createApplication({ capacity: 1 });
+    const expired = await toAcceptedSent(appId);
+    await expireConfirmationWindow(expired.responseId);
+    // What the expiry worker does once the window has passed (H15).
+    await pool.query(`UPDATE application_responses SET status = 'expired' WHERE id = $1`, [
+      expired.responseId,
+    ]);
+    const taker = await toAcceptedSent(appId); // takes the freed slot
+    expect((await getResponse(taker.responseId)).status).toBe("accepted");
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/responses/${expired.responseId}/resend-decision`,
+      headers: asUser(decider),
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.details.code).toBe("capacity_full");
+    expect((await getResponse(expired.responseId)).status).toBe("expired");
+  });
+
+  it("replays a keyed resend instead of emailing and rotating the link again", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId, responseId } = await toAcceptedSent(appId);
+    const key = `resend-${crypto.randomUUID()}`;
+
+    const first = await a.inject({
+      method: "POST",
+      url: "/api/responses/batch/resend-decision",
+      headers: { ...asUser(decider), "Idempotency-Key": key },
+      payload: { response_ids: [responseId] },
+    });
+    expect(first.statusCode).toBe(200);
+    const tokenAfterFirst = await latestConfirmationToken(userId);
+
+    const replay = await a.inject({
+      method: "POST",
+      url: "/api/responses/batch/resend-decision",
+      headers: { ...asUser(decider), "Idempotency-Key": key },
+      payload: { response_ids: [responseId] },
+    });
+    expect(replay.headers["idempotency-replayed"]).toBe("true");
+    expect(await latestConfirmationToken(userId)).toBe(tokenAfterFirst);
+    const { rows } = await pool.query(
+      `SELECT count(*)::int AS n FROM notification_outbox WHERE user_id = $1`,
+      [userId],
+    );
+    expect(rows[0].n).toBe(2); // the original send + one resend
+  });
+
+  it("processes ids in the caller's order and reports stable skip codes", async () => {
+    const a = await getApp();
+    const appId = await createApplication({ capacity: 1 });
+    const first = await submittedApplicant(appId);
+    const second = await submittedApplicant(appId);
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/responses/batch/decide",
+      headers: asUser(decider),
+      // The higher id is ranked first, so it gets the only place.
+      payload: { response_ids: [second.responseId, first.responseId], decision: "accepted" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().processed).toBe(1);
+    expect((await getResponse(second.responseId)).status).toBe("accepted_internal");
+    expect(res.json().skipped).toEqual([
+      expect.objectContaining({ id: first.responseId, code: "capacity_full" }),
+    ]);
+
+    const again = await a.inject({
+      method: "POST",
+      url: "/api/responses/batch/decide",
+      headers: asUser(decider),
+      payload: { response_ids: [second.responseId], decision: "rejected" },
+    });
+    expect(again.json().skipped[0].code).toBe("response_status_changed");
+  });
+
+  it("rejects repeated ids in one batch", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { responseId } = await toAcceptedSent(appId);
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/responses/batch/resend-decision",
+      headers: asUser(decider),
+      payload: { response_ids: [responseId, responseId] },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});

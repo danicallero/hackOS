@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { BATCH_MAX, runChunkedBatch } from "./chunked-batch";
+import { BATCH_MAX, groupSkips, runChunkedBatch, skipReasonText } from "./chunked-batch";
 
 describe("runChunkedBatch (H14)", () => {
   it("splits more than BATCH_MAX ids into sequential requests and merges results", async () => {
@@ -21,16 +21,47 @@ describe("runChunkedBatch (H14)", () => {
     const send = vi.fn(async () => ({ sent: 3 }));
     const result = await runChunkedBatch([1, 2, 3], send);
     expect(send).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ processed: 3, skipped: [] });
+    expect(result).toEqual({ processed: 3, skipped: [], unsent: [], error: null });
   });
 
-  it("stops at the first failing chunk", async () => {
-    const ids = Array.from({ length: 201 }, (_, i) => i + 1);
+  it("stops at a failing chunk and keeps the committed chunks' results", async () => {
+    const ids = Array.from({ length: 250 }, (_, i) => i + 1);
+    const failure = new Error("boom");
     const send = vi
       .fn()
-      .mockResolvedValueOnce({ processed: BATCH_MAX })
-      .mockRejectedValueOnce(new Error("boom"));
-    await expect(runChunkedBatch(ids, send)).rejects.toThrow("boom");
+      .mockResolvedValueOnce({
+        processed: 99,
+        skipped: [{ id: 7, code: "capacity_full", reason: "x" }],
+      })
+      .mockRejectedValueOnce(failure);
+    const result = await runChunkedBatch(ids, send);
     expect(send).toHaveBeenCalledTimes(2);
+    expect(result.processed).toBe(99);
+    expect(result.skipped).toEqual([{ id: 7, code: "capacity_full", reason: "x" }]);
+    expect(result.unsent).toEqual(ids.slice(BATCH_MAX));
+    expect(result.error).toBe(failure);
+  });
+});
+
+describe("skip reasons (H14)", () => {
+  const t = ((key: string) => `t:${key}`) as Parameters<typeof skipReasonText>[1];
+
+  it("translates known codes and falls back for unknown or missing ones", () => {
+    expect(skipReasonText("capacity_full", t)).toBe("t:apiError_capacity_full");
+    expect(skipReasonText("deadlock_detected", t)).toBe("t:batchSkipFailed");
+    expect(skipReasonText(undefined, t)).toBe("t:batchSkipFailed");
+  });
+
+  it("groups applicants by reason in first-seen order", () => {
+    expect(
+      groupSkips([
+        { reason: "full", applicant: "Ana" },
+        { reason: "sent", applicant: "Bo" },
+        { reason: "full", applicant: "Cai" },
+      ]),
+    ).toEqual([
+      { reason: "full", applicants: ["Ana", "Cai"] },
+      { reason: "sent", applicants: ["Bo"] },
+    ]);
   });
 });

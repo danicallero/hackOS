@@ -153,7 +153,12 @@ export const listResponsesQuerySchema = z.object({
 // ── batch operations ─────────────────────────────────────────────────────────
 
 export const batchIdsSchema = z.object({
-  response_ids: z.array(z.number().int().positive()).min(1).max(100),
+  response_ids: z
+    .array(z.number().int().positive())
+    .min(1)
+    .max(100)
+    // A repeated id would run the same transition (and email) twice (H14).
+    .refine((ids) => new Set(ids).size === ids.length, "response_ids must be unique"),
 });
 
 export const batchDecideSchema = batchIdsSchema.extend({

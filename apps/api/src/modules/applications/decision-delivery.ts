@@ -22,8 +22,10 @@ import type { ApplicationRow, ResponseRow } from "./types.js";
 
 /**
  * Issue a fresh spot_confirmation token (email_verification_tokens) whose
- * expiry mirrors decision_sent_at + confirmation_window_hours, supersede any
- * prior one, and point the response at it.
+ * expiry mirrors decision_sent_at + confirmation_window_hours, supersede this
+ * response's prior one, and point the response at it. Only this response's
+ * token is superseded: the same user can hold an acceptance on another form
+ * whose link must keep working (H15).
  */
 export async function issueConfirmationToken(
   client: pg.PoolClient,
@@ -33,8 +35,9 @@ export async function issueConfirmationToken(
 ): Promise<string> {
   await client.query(
     `UPDATE email_verification_tokens SET used_at = now()
-     WHERE user_id = $1 AND type = 'spot_confirmation' AND used_at IS NULL`,
-    [response.user_id],
+     WHERE type = 'spot_confirmation' AND used_at IS NULL
+       AND id = (SELECT confirmation_token_id FROM application_responses WHERE id = $1)`,
+    [response.id],
   );
   const token = randomBytes(32).toString("base64url");
   const { rows } = await client.query(

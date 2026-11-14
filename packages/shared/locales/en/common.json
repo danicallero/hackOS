@@ -122,5 +122,9 @@
   "apiError_schedule_audience_role_invalid": "Choose roles that are marked as publicly visible.",
   "apiError_helper_publish_own_consent": "Only the person can publish their help desk profile.",
   "apiError_topic_in_use": "This knowledge area is in use. Merge it into another one instead.",
-  "apiError_rsvp_role_invalid": "Choose roles that are marked as publicly visible."
+  "apiError_rsvp_role_invalid": "Choose roles that are marked as publicly visible.",
+  "apiError_capacity_full": "The form is full.",
+  "apiError_already_sent": "The decision was already sent.",
+  "apiError_response_status_changed": "Its status no longer allows this action.",
+  "apiError_response_not_found": "The application or its account no longer exists."
 }

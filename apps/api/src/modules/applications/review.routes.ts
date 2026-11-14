@@ -269,12 +269,12 @@ export function registerReviewRoutes(app: FastifyInstance): void {
   r.post(
     "/api/responses/:responseId/resend-decision",
     {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      preHandler: [requireCapability(CAPABILITIES.APPLICATIONS_DECIDE), idempotencyGuard],
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: {
         summary: "Resend a decision",
         description:
-          "Re-sends the decision email for a response already at accepted, rejected, or expired (H15) — an expired one returns to accepted, giving a second chance.",
+          "Re-sends the decision email for a response already at accepted, rejected, or expired (H15) — an expired one returns to accepted, giving a second chance, if the form has capacity. Each resend issues a new confirmation link and invalidates the previous one; an Idempotency-Key replays the first result instead of emailing again.",
         params: responseIdParamSchema,
       },
     },
@@ -475,15 +475,16 @@ export function registerReviewRoutes(app: FastifyInstance): void {
   r.post(
     "/api/responses/batch/resend-decision",
     {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      preHandler: [requireCapability(CAPABILITIES.APPLICATIONS_DECIDE), idempotencyGuard],
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: {
         summary: "Batch re-send already-sent decisions",
         description:
           "Explicitly re-sends the decision email for each response id, for responses " +
           "already at accepted, rejected, or expired (an expired one returns to accepted — " +
-          "a second chance). Distinct from batch send-decision, which only sends never-sent " +
-          "internal decisions and never resends.",
+          "a second chance, if the form has capacity). Distinct from batch send-decision, which only " +
+          "sends never-sent internal decisions and never resends. An Idempotency-Key replays the " +
+          "completed batch without emailing again. Each skipped id carries a stable `code`.",
         body: batchIdsSchema,
       },
     },

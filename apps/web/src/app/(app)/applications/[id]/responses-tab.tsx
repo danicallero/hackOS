@@ -49,7 +49,7 @@ import type { FormSection, ResponseRow, TemplateField } from "@/lib/applications
 import { pickText, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
-import { type BatchResponse, runChunkedBatch } from "./chunked-batch";
+import { type BatchResponse, groupSkips, runChunkedBatch, skipReasonText } from "./chunked-batch";
 import { buildResponseColumns } from "./response-columns";
 import { answerValues, hasDietaryRestrictions, matchesResponseSearch } from "./response-filters";
 import { ScoreSelection } from "./score-selection";
@@ -152,6 +152,7 @@ export function ResponsesTab({
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchResult, setBatchResult] = useState<DurableBatchResult | null>(null);
   const [confirmBatchRevoke, setConfirmBatchRevoke] = useState(false);
+  const [confirmBatchResend, setConfirmBatchResend] = useState(false);
   const [exportingKey, setExportingKey] = useState<string | null>(null);
   const [exportFailures, setExportFailures] = useState<ExportFailuresState | null>(null);
   // The table's own search/sort-applied row order, for modal prev/next.
@@ -237,31 +238,39 @@ export function ResponsesTab({
 
   async function batchAction(label: string, path: string, extra: Record<string, unknown> = {}) {
     setBatchBusy(true);
-    try {
-      const { processed, skipped: rawSkipped } = await runChunkedBatch(
-        selectedArr.map((r) => r.id),
-        (response_ids) => api.post<BatchResponse>(path, { ...extra, response_ids }),
-      );
-      const skipped = rawSkipped.map((item) => ({
-        ...item,
-        applicant:
-          allRows.find((row) => row.id === item.id)?.name ??
-          allRows.find((row) => row.id === item.id)?.email ??
-          `#${item.id}`,
-      }));
-      setBatchResult({
-        label,
-        processed: processed ?? Math.max(0, selectedIds.size - skipped.length),
-        skipped,
-      });
-      setSelectedIds(new Set());
-      reloadUnlessModalOpen();
-      if (skipped.length === 0) toast.success(label, { compactTitle: t("toastDecisions") });
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("batchActionFailed")), t("toastDecisions"));
-    } finally {
-      setBatchBusy(false);
+    // Send in the table's visible order so that, when capacity runs out, the
+    // rows staff ranked first are the ones processed first (H14).
+    const position = new Map(visibleRows.map((row, index) => [row.id, index]));
+    const ids = selectedArr
+      .map((row) => row.id)
+      .sort((a, b) => (position.get(a) ?? Infinity) - (position.get(b) ?? Infinity));
+    const result = await runChunkedBatch(ids, (response_ids) =>
+      api.post<BatchResponse>(path, { ...extra, response_ids }),
+    );
+    const applicantName = (id: number) => {
+      const row = allRows.find((candidate) => candidate.id === id);
+      return row?.name ?? row?.email ?? `#${id}`;
+    };
+    const skipped = result.skipped.map((item) => ({
+      id: item.id,
+      reason: skipReasonText(item.code, t),
+      applicant: applicantName(item.id),
+    }));
+    const done = ids.length - result.unsent.length;
+    setBatchResult({
+      label,
+      processed: result.processed ?? Math.max(0, done - skipped.length),
+      skipped,
+    });
+    // Rows a failed chunk never reached stay selected so staff can retry them.
+    setSelectedIds(new Set(result.unsent.map(String)));
+    reloadUnlessModalOpen();
+    if (result.error) {
+      toast.error(apiErrorText(result.error, t, t("batchActionFailed")), t("toastDecisions"));
+    } else if (skipped.length === 0) {
+      toast.success(label, { compactTitle: t("toastDecisions") });
     }
+    setBatchBusy(false);
   }
 
   const selectedArr = useMemo(
@@ -534,9 +543,7 @@ export function ResponsesTab({
                 size="sm"
                 variant="outline"
                 disabled={batchBusy}
-                onClick={() =>
-                  batchAction(t("decisionsResent"), "/api/responses/batch/resend-decision")
-                }
+                onClick={() => setConfirmBatchResend(true)}
                 loading={batchBusy}
               >
                 <PaperPlaneTiltIcon aria-hidden="true" />
@@ -676,9 +683,9 @@ export function ResponsesTab({
                   {t("batchSkippedTitle", { count: batchResult.skipped.length })}
                 </p>
                 <ul className="mt-1 list-disc space-y-1 pl-5">
-                  {batchResult.skipped.map((item) => (
-                    <li key={item.id}>
-                      {item.applicant}: {item.reason}
+                  {groupSkips(batchResult.skipped).map((group) => (
+                    <li key={group.reason}>
+                      {group.applicants.join(", ")}: {group.reason}
                     </li>
                   ))}
                 </ul>
@@ -695,6 +702,21 @@ export function ResponsesTab({
           </AlertDescription>
         </Alert>
       )}
+
+      <AlertModal
+        open={confirmBatchResend}
+        onOpenChange={setConfirmBatchResend}
+        title={t("resendDecisionsConfirmTitle", { count: selectedIds.size })}
+        description={t("resendDecisionsWarning")}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("resend")}
+        pending={batchBusy}
+        onConfirm={() => {
+          void batchAction(t("decisionsResent"), "/api/responses/batch/resend-decision").finally(
+            () => setConfirmBatchResend(false),
+          );
+        }}
+      />
 
       <AlertModal
         open={confirmBatchRevoke}

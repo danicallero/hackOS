@@ -122,5 +122,9 @@
   "apiError_schedule_audience_role_invalid": "Elige roles marcados como visibles públicamente.",
   "apiError_helper_publish_own_consent": "Solo la propia persona puede publicar su perfil del help desk.",
   "apiError_topic_in_use": "Esta área de conocimiento está en uso. Fusiónala con otra.",
-  "apiError_rsvp_role_invalid": "Elige roles marcados como públicos."
+  "apiError_rsvp_role_invalid": "Elige roles marcados como públicos.",
+  "apiError_capacity_full": "El formulario está completo.",
+  "apiError_already_sent": "La decisión ya se había enviado.",
+  "apiError_response_status_changed": "Su estado ya no permite esta acción.",
+  "apiError_response_not_found": "La solicitud o su cuenta ya no existe."
 }
