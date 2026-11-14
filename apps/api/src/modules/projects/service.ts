@@ -312,7 +312,7 @@ export async function enrollReposInMandatoryChallenges(
   const { rows } = await client.query(
     `SELECT id, mandatory FROM challenges
       WHERE is_test_account = $1
-        ${onlyChallengeIds ? "AND id = ANY($2::int[])" : ""}
+        ${onlyChallengeIds ? "AND id = ANY($2::int[])" : "AND event_key = current_edition()"}
       ORDER BY id FOR SHARE`,
     onlyChallengeIds ? [fixtureMarker, onlyChallengeIds] : [fixtureMarker],
   );
@@ -393,6 +393,7 @@ async function computePublicChallenges(winnersVisible: boolean): Promise<PublicC
        JOIN sponsors s ON s.id = c.author
        JOIN enterprises e ON e.id = s.enterprise_id
       WHERE c.visibility = 'visible' AND c.is_test_account = false
+        AND c.event_key = current_edition()
       ORDER BY c.available_from NULLS FIRST, c.id ASC`,
   );
 
@@ -444,9 +445,11 @@ async function activeProjectMemberCount(db: Queryable, repoId: number) {
 }
 export async function hasMyProject(userId: number, db: Queryable = pool) {
   return !!(
-    await db.query(`SELECT 1 FROM submissions WHERE user_id=$1 AND status='active' LIMIT 1`, [
-      userId,
-    ])
+    await db.query(
+      `SELECT 1 FROM submissions s JOIN repos r ON r.id=s.repo_id
+        WHERE s.user_id=$1 AND s.status='active' AND r.event_key=current_edition() LIMIT 1`,
+      [userId],
+    )
   ).rowCount;
 }
 export async function canCreateMyProject(userId: number, db: Queryable = pool) {
@@ -454,7 +457,7 @@ export async function canCreateMyProject(userId: number, db: Queryable = pool) {
 }
 export async function myProjects(userId: number) {
   const { rows } = await pool.query(
-    `SELECT s.repo_id FROM submissions s JOIN repos r ON r.id=s.repo_id JOIN users u ON u.id=s.user_id WHERE s.user_id=$1 AND s.status='active' AND r.is_test_account=u.is_test_account ORDER BY s.repo_id`,
+    `SELECT s.repo_id FROM submissions s JOIN repos r ON r.id=s.repo_id JOIN users u ON u.id=s.user_id WHERE s.user_id=$1 AND s.status='active' AND r.is_test_account=u.is_test_account AND r.event_key=current_edition() ORDER BY s.repo_id`,
     [userId],
   );
   return nativeProjects(
@@ -465,9 +468,10 @@ export async function myProjects(userId: number) {
 export async function listReposForScope(scope: RepositoryAccessScope) {
   const ids = scope.fullAccess
     ? (
-        await pool.query(`SELECT id FROM repos WHERE is_test_account=$1 ORDER BY id`, [
-          scope.fixtureMarker === true,
-        ])
+        await pool.query(
+          `SELECT id FROM repos WHERE is_test_account=$1 AND event_key=current_edition() ORDER BY id`,
+          [scope.fixtureMarker === true],
+        )
       ).rows.map((row) => row.id)
     : await repositoryIdsForScope(scope);
   return Promise.all(ids.map((id) => staffProject(id, scope)));
@@ -749,6 +753,12 @@ export async function addRepoChallenge(
     const marker = await assertQueueRepoScope(db, actorId, id);
     if (marker !== challenge.rows[0].is_test_account)
       throw new ForbiddenError("Project and challenge scope differ");
+    // Challenges are per edition (H44): a project only enters its own edition's challenges.
+    const sameEdition = await db.query(
+      `SELECT 1 FROM repos r JOIN challenges c ON c.event_key=r.event_key WHERE r.id=$1 AND c.id=$2`,
+      [id, challengeId],
+    );
+    if (!sameEdition.rowCount) throw new NotFoundError("Challenge not found");
     await db.query(
       `INSERT INTO project_challenges(repo_id,challenge_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
       [id, challengeId],
@@ -857,6 +867,7 @@ export async function bulkAddRepoChallenge(actorId: number, challengeId: number)
                         AND qe.status NOT IN('cancelled','disqualified','completed')) AS queued
          FROM repos r
         WHERE r.submission_status='submitted' AND r.is_test_account=$2
+          AND r.event_key=(SELECT event_key FROM challenges WHERE id=$1)
         ORDER BY r.id`,
       [challengeId, marker],
     );
@@ -923,6 +934,7 @@ export async function bulkRemoveRepoChallenge(actorId: number, challengeId: numb
                            AND qe.status NOT IN('cancelled','disqualified'))) AS active
          FROM repos r
         WHERE r.is_test_account=$2
+          AND r.event_key=(SELECT event_key FROM challenges WHERE id=$1)
           AND (EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.repo_id=r.id AND pc.challenge_id=$1)
             OR EXISTS(SELECT 1 FROM queue_entries qe WHERE qe.repo_id=r.id AND qe.challenge_id=$1))
         ORDER BY r.id`,
@@ -1042,7 +1054,7 @@ export async function createRepoNative(
       throw new NotFoundError("Project member not found");
     const requestedChallengeIds = [...new Set(input.challengeIds)];
     const challenges = await db.query(
-      `SELECT id FROM challenges WHERE id=ANY($1::int[]) AND is_test_account=$2`,
+      `SELECT id FROM challenges WHERE id=ANY($1::int[]) AND is_test_account=$2 AND event_key=current_edition()`,
       [requestedChallengeIds, marker],
     );
     if (challenges.rowCount !== requestedChallengeIds.length)
@@ -1067,7 +1079,7 @@ export async function createRepoNative(
       );
     const challengeIds = new Set(input.challengeIds);
     const mandatory = await db.query(
-      `SELECT id FROM challenges WHERE mandatory AND is_test_account=$1`,
+      `SELECT id FROM challenges WHERE mandatory AND is_test_account=$1 AND event_key=current_edition()`,
       [marker],
     );
     for (const row of mandatory.rows) challengeIds.add(row.id);

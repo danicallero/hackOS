@@ -86,7 +86,7 @@ export function registerReportRoutes(app: FastifyInstance): void {
         querystring: listQuery,
         summary: "List reported content",
         description:
-          "The organiser report inbox, open reports first and then newest, at most 200. Reports about projects need `projects:edit`, reports about profiles need `users:write`; a moderator sees only the kinds they hold. Reports by synthetic review accounts are visible only to synthetic moderators. The reported content itself is read live from its own page, never copied here (H18).",
+          "The organiser report inbox of the viewed edition (X-Edition): project reports follow their project, profile reports follow the reporter's diary entry of that edition. Open reports first and then newest, at most 200. Reports about projects need `projects:edit`, reports about profiles need `users:write`; a moderator sees only the kinds they hold. Reports by synthetic review accounts are visible only to synthetic moderators. The reported content itself is read live from its own page, never copied here (H18).",
         response: { 200: z.object({ items: z.array(reportSchema) }) },
       },
     },

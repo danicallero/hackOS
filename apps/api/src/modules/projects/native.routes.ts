@@ -26,7 +26,7 @@ import {
   submitNativeProject,
   withdrawNativeSubmission,
 } from "./native.js";
-import { assertGalleryVisible, projectPhase, projectViewer } from "./policy.js";
+import { assertGalleryVisible, isArchivedEdition, projectPhase, projectViewer } from "./policy.js";
 import { addMyProjectChallenge } from "./service.js";
 
 /** Backstop for clock boundaries (winner reveal) that emit no event; events invalidate sooner (H18). */
@@ -219,7 +219,7 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
         querystring: projectGalleryQuerySchema,
         summary: "List project gallery",
         description:
-          "Paginated no-store project gallery honoring SQL-clock opening, audience, draft visibility and current name/photo consent on every read (#1008,#1009). Optional winnersOnly=true filters published winners before pagination; with challengeId it matches winners of that challenge (H60). Project staff (PROJECTS_READ) may browse before it opens. The audience-independent projection is computed once and shared through Valkey (30 s TTL, invalidated by project, public-content and directory changes); the viewer's own projects are always read live. A refusal is 403 with `details.reason` `gallery_closed` (with `details.opensAt`, null while unscheduled, and the event `details.timeZone`) or `gallery_audience` (H18).",
+          "Paginated no-store project gallery honoring SQL-clock opening, audience, draft visibility and current name/photo consent on every read (#1008,#1009). Optional winnersOnly=true filters published winners before pagination; with challengeId it matches winners of that challenge (H60). Project staff (PROJECTS_READ) may browse before it opens. Scoped to the viewed edition (X-Edition): the opening, audience and draft rules of event settings apply to the current edition only, while the submitted projects of a closed, past edition are public. Each project carries its `edition` (`eventKey`, `name`). The audience-independent projection is computed once and shared through Valkey (30 s TTL, invalidated by project, public-content and directory changes); the viewer's own projects are always read live. A refusal is 403 with `details.reason` `gallery_closed` (with `details.opensAt`, null while unscheduled, and the event `details.timeZone`) or `gallery_audience` (H18).",
       },
     },
     async (q, reply) => {
@@ -227,17 +227,20 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
       await assertGalleryVisible(pool, q.userId);
       const phase = await projectPhase(pool);
       const viewer = await projectViewer(pool, q.userId);
+      // Plan §8.2: event_config's gallery rules govern the current edition only;
+      // an archived (closed, non-current) edition lists its submitted projects.
+      const draftVisibility = (await isArchivedEdition(pool)) ? "team_only" : phase.draftVisibility;
       const { page, pageSize, search, challengeId, winnersOnly } = q.query;
       // One request computes the viewer-independent projection; every other
       // phone in the same audience reads it from the shared cache (H18).
       const shared = await sharedCache(
         "gallery",
         JSON.stringify([
-          phase.draftVisibility,
+          draftVisibility,
           // Synthetic accounts see fixture projects only, everyone else real ones (H18).
           viewer.fixtureMarker,
           // Attendance only changes the list while drafts are for attendees.
-          phase.draftVisibility === "attendees" ? viewer.attendee : null,
+          draftVisibility === "attendees" ? viewer.attendee : null,
           search ?? null,
           challengeId ?? null,
           winnersOnly ?? false,
@@ -252,9 +255,9 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
                 .map((winner) => winner.repoId)
             : null;
           const { rows } = await pool.query(
-            `SELECT r.id,count(*) OVER()::int AS total FROM repos r WHERE r.is_test_account=$8 AND (r.submission_status='submitted' OR ($1<>'team_only' AND ($1='public' OR $2))) AND ($3::text IS NULL OR r.name ILIKE $3) AND ($4::int IS NULL OR EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.repo_id=r.id AND pc.challenge_id=$4)) AND ($7::int[] IS NULL OR r.id=ANY($7)) ORDER BY r.id LIMIT $5 OFFSET $6`,
+            `SELECT r.id,count(*) OVER()::int AS total FROM repos r WHERE r.is_test_account=$8 AND r.event_key=current_edition() AND (r.submission_status='submitted' OR ($1<>'team_only' AND ($1='public' OR $2))) AND ($3::text IS NULL OR r.name ILIKE $3) AND ($4::int IS NULL OR EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.repo_id=r.id AND pc.challenge_id=$4)) AND ($7::int[] IS NULL OR r.id=ANY($7)) ORDER BY r.id LIMIT $5 OFFSET $6`,
             [
-              phase.draftVisibility,
+              draftVisibility,
               viewer.attendee,
               search ? likeContains(search) : null,
               challengeId ?? null,
@@ -298,7 +301,7 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
         params,
         summary: "Read gallery project",
         description:
-          "Returns no-store gallery content from the last submitted snapshot, including for the project’s own team, and current consented active member display through the gallery phase policy; names are null when sharing is disabled (#1008,#1009).",
+          "The project's own edition decides, not the viewed one, so shared links keep working across editions; the payload carries `edition` (`eventKey`, `name`). Returns no-store gallery content from the last submitted snapshot, including for the project’s own team, and current consented active member display through the gallery phase policy; names are null when sharing is disabled (#1008,#1009).",
       },
     },
     (q, reply) => {

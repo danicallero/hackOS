@@ -67,7 +67,7 @@ export async function publishWinnersNow(actorId: number, id: number) {
 export async function publishDueWinners() {
   const ids = await withTransaction(async (db) => {
     const { rows } = await db.query(
-      `SELECT id FROM challenges WHERE winners_published_at IS NULL AND winners_publish_at<=now() AND is_test_account=false ORDER BY id FOR UPDATE SKIP LOCKED`,
+      `SELECT id FROM challenges WHERE winners_published_at IS NULL AND winners_publish_at<=now() AND is_test_account=false AND event_key=current_edition() AND event_key NOT IN(SELECT event_key FROM editions WHERE status='closed') ORDER BY id FOR UPDATE SKIP LOCKED`,
     );
     if (rows.length > 0) {
       await db.query(`UPDATE challenges SET winners_published_at=now() WHERE id=ANY($1::int[])`, [
@@ -97,13 +97,24 @@ export async function visibleWinnerRows(
   projectIds?: number[],
   /** The caller already ran the gallery audience check for the viewer this result is shared with. */
   accessChecked = false,
+  /** One challenge by id (its edition comes from its own row, not the viewed one). */
+  challengeId?: number,
 ) {
-  if (!accessChecked && !(await canViewGallery(db, userId))) return [];
+  // By-id reads (projects, one challenge) answer per the row's own edition; the
+  // scoped list is checked once for the viewed edition (plan §4, H60).
+  const byId = projectIds !== undefined || challengeId !== undefined;
+  if (!accessChecked && !byId && !(await canViewGallery(db, userId))) return [];
   const { rows } = await db.query(
-    `SELECT w.challenge_id AS "challengeId",w.rank,w.repo_id AS "repoId",c.title AS "challengeTitle",r.name AS "repoName" FROM challenge_winners w JOIN challenges c ON c.id=w.challenge_id JOIN repos r ON r.id=w.repo_id WHERE c.winners_published_at IS NOT NULL AND c.winners_published_at<=now() AND c.visibility='visible' AND c.is_test_account=false AND r.is_test_account=false AND r.submission_status='submitted' AND ($1::int[] IS NULL OR r.id=ANY($1)) ORDER BY c.id,w.rank`,
-    [projectIds ?? null],
+    `SELECT c.event_key AS "eventKey",w.challenge_id AS "challengeId",w.rank,w.repo_id AS "repoId",c.title AS "challengeTitle",r.name AS "repoName" FROM challenge_winners w JOIN challenges c ON c.id=w.challenge_id JOIN repos r ON r.id=w.repo_id WHERE c.winners_published_at IS NOT NULL AND c.winners_published_at<=now() AND c.visibility='visible' AND c.is_test_account=false AND r.is_test_account=false AND r.submission_status='submitted' AND ($1::int[] IS NULL OR r.id=ANY($1)) AND ($1::int[] IS NOT NULL OR $2::int IS NOT NULL OR c.event_key=current_edition()) AND ($2::int IS NULL OR c.id=$2) ORDER BY c.id,w.rank`,
+    [projectIds ?? null, challengeId ?? null],
   );
-  return rows;
+  if (accessChecked || !byId) return rows.map(({ eventKey: _edition, ...row }) => row);
+  const allowed = new Map<string, boolean>();
+  for (const key of new Set(rows.map((row) => String(row.eventKey))))
+    allowed.set(key, await canViewGallery(db, userId, key));
+  return rows
+    .filter((row) => allowed.get(String(row.eventKey)))
+    .map(({ eventKey: _edition, ...row }) => row);
 }
 /**
  * Published winners once the viewer passes the gallery audience check. The

@@ -46,6 +46,11 @@ const member = {
   ...routeAccessOption({ kind: "authenticated" }),
   preHandler: [requireAuth, idempotencyGuard],
 };
+/** The GitHub account link (/api/me/github*) is global data, writable in any edition. */
+const memberGlobal = {
+  ...routeAccessOption({ kind: "authenticated", edition: "global" }),
+  preHandler: [requireAuth, idempotencyGuard],
+};
 
 interface WebhookPayload {
   action?: string;
@@ -196,7 +201,7 @@ export function registerGithubRoutes(app: FastifyInstance) {
   r.post(
     "/api/me/github/complete",
     {
-      ...member,
+      ...memberGlobal,
       schema: {
         body: z.object({
           code: z.string().min(1),
@@ -238,7 +243,7 @@ export function registerGithubRoutes(app: FastifyInstance) {
   r.post(
     "/api/me/github/authorize",
     {
-      ...member,
+      ...memberGlobal,
       schema: {
         body: z
           .object({ app: z.boolean().optional(), selectAccount: z.boolean().optional() })
@@ -259,7 +264,7 @@ export function registerGithubRoutes(app: FastifyInstance) {
   r.delete(
     "/api/me/github",
     {
-      ...member,
+      ...memberGlobal,
       schema: {
         summary: "Unlink my GitHub account",
         description:
@@ -344,7 +349,7 @@ export function registerGithubRoutes(app: FastifyInstance) {
       schema: {
         summary: "Read every team's GitHub activity",
         description:
-          "Commits, pull requests and merged pull requests inside the activity window for each project with a linked repository.",
+          "Commits, pull requests and merged pull requests inside the activity window for each project of the viewed edition with a linked repository.",
       },
     },
     async () => ({ teams: await teamActivity() }),
@@ -390,7 +395,11 @@ export async function registerGithubWebhook(app: FastifyInstance) {
     scoped.post(
       "/api/github/webhook",
       {
-        ...routeAccessOption({ kind: "token", policy: "github-webhook-signature" }),
+        ...routeAccessOption({
+          kind: "token",
+          policy: "github-webhook-signature",
+          edition: "global",
+        }),
         schema: {
           summary: "GitHub App webhook",
           description:

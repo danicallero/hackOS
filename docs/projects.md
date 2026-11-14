@@ -294,3 +294,13 @@ explains removal of answers, files, roster, queues and judging data. A rejected
 deletion keeps the dialog open with its error. Team removal and leaving likewise
 identify the affected person/project in their confirmations; a sole member sees
 deletion instead of an impossible leave action.
+
+## Editions (multi-edition)
+
+- Enterprises, challenges and repos belong to one edition (`event_key`); lists, "my projects", the gallery, sponsor lists, stand tags and judges are scoped to the viewed edition (`X-Edition`, default current). Enterprise names are unique per edition (`enterprises_edition_name_key`); enterprises are never recurrent or cloned.
+- By-id reads (`/api/public/projects/:id`, a project, a challenge) derive the edition from the row and return `edition: { eventKey, name }`, so shared links keep working from any viewed edition.
+- Gallery opening, audience and draft visibility in event settings govern the current edition only. Submitted, non-hidden projects of a closed, non-current edition are public.
+- Projects of a closed edition are read-only: member/staff edits answer 409 `edition_closed`; `canEdit`/`canSubmit`/`canWithdraw` are false.
+- Project limits (team size, GitHub required) read event settings, which apply to the current edition.
+- GitHub: webhook and `/api/me/github*` are global; activity and the TV ranking follow the repos of the viewed edition. Content reports follow their repo or the reporter's diary entry of the viewed edition.
+- Stand tags: `code` stays globally unique. A tag whose company belongs to a previous edition can be re-added to a company of the current edition (audited as `stand_tag.reassigned`); a tag held by a current-edition company is a 409. Scanning a code of a closed edition answers 409 `edition_closed` and writes nothing.

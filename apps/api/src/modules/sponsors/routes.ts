@@ -97,7 +97,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
         querystring: publicSponsorsQuery,
         summary: "List public sponsors",
         description:
-          "Returns every visible enterprise for the public event site, ordered by priority (1 first); enterprises sharing a priority keep their manual order, then creation order. `kind=sponsor` or `kind=collaborator` filters to one group (H45).",
+          "Returns every visible enterprise for the public event site, ordered by priority (1 first); enterprises sharing a priority keep their manual order, then creation order. `kind=sponsor` or `kind=collaborator` filters to one group. Scoped to the viewed edition (X-Edition) (H45).",
       },
     },
     async (req) => ({
@@ -118,7 +118,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List enterprises",
         description:
-          "Lists all sponsor enterprises, for global sponsor administrators and the Rooms admin page's enterprise picker (H43, H46).",
+          "Lists the viewed edition's sponsor enterprises, for global sponsor administrators and the Rooms admin page's enterprise picker. Enterprises belong to one edition; the same name may exist in several (H43, H46).",
       },
     },
     async (req) => ({
@@ -134,7 +134,8 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
       schema: {
         body: createEnterpriseBody,
         summary: "Create an enterprise",
-        description: "Creates a sponsor enterprise under global sponsor administration (H43).",
+        description:
+          "Creates a sponsor enterprise in the viewed edition under global sponsor administration. The name is unique per edition: a duplicate answers 409 (H43).",
       },
     },
     async (req, reply) => {
@@ -183,7 +184,8 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
       preHandler: requireAuth,
       schema: {
         summary: "Get my enterprise",
-        description: "Returns the caller's sponsor enterprise affiliation (H44).",
+        description:
+          "Returns the caller's sponsor enterprise affiliation in the viewed edition (H44).",
       },
     },
     async (req) => myEnterprise(actor(req.userId)),
