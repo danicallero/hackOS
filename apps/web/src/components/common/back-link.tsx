@@ -49,7 +49,9 @@ export function BackLink({
       data-back-link=""
       aria-label={t("backToParent", { name: label })}
       className={cn(
-        "button-interaction type-meta inline-flex items-center gap-1 transition-colors hover:text-foreground",
+        // Padding gives the hover fill room around the text; the matching
+        // negative margin keeps the arrow aligned with the page title.
+        "button-interaction type-meta -mx-2 -my-1 inline-flex items-center gap-1 rounded-md px-2 py-1 transition-colors hover:text-foreground",
         className,
       )}
     >
