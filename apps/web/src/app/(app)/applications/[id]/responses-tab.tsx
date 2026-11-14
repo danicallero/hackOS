@@ -543,7 +543,7 @@ export function ResponsesTab({
                 {t("resend")}
               </Button>
             )}
-            {workspace === "outbox" && (
+            {(workspace === "outbox" || workspace === "sent") && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -589,67 +589,24 @@ export function ResponsesTab({
                   >
                     {t("backToReview")}
                   </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            {workspace === "sent" && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    size={isMobile ? "icon-sm" : "sm"}
-                    variant="outline"
-                    disabled={batchBusy}
-                    aria-label={t("more")}
-                  >
-                    <DotsThreeIcon aria-hidden="true" />
-                    {!isMobile && t("more")}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>{t("revert")}</DropdownMenuLabel>
-                  <DropdownMenuItem
-                    onClick={() =>
-                      batchAction(
-                        t("revertedToAcceptedInternal"),
-                        "/api/responses/batch/revert-decision",
-                        { decision: "accepted" },
-                      )
-                    }
-                  >
-                    {t("toAcceptedUnsend")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() =>
-                      batchAction(
-                        t("revertedToRejectedInternal"),
-                        "/api/responses/batch/revert-decision",
-                        { decision: "rejected" },
-                      )
-                    }
-                  >
-                    {t("toRejectedUnsend")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() =>
-                      batchAction(t("movedBackToReview"), "/api/responses/batch/revert-decision", {
-                        decision: "review",
-                      })
-                    }
-                  >
-                    {t("backToReview")}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => batchAction(t("reaccepted"), "/api/responses/batch/re-accept")}
-                  >
-                    {t("reacceptDeclinedExpired")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={() => setConfirmBatchRevoke(true)}
-                  >
-                    {t("revokeSpot")}
-                  </DropdownMenuItem>
+                  {workspace === "sent" && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() =>
+                          batchAction(t("reaccepted"), "/api/responses/batch/re-accept")
+                        }
+                      >
+                        {t("reacceptDeclinedExpired")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() => setConfirmBatchRevoke(true)}
+                      >
+                        {t("revokeSpot")}
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
