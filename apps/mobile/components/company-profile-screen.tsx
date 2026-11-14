@@ -140,9 +140,10 @@ export function CompanyProfileScreen() {
   // Scroll distance at which the large name has gone under the bar; the bar's blur and title wait for it.
   const [titleAt, setTitleAt] = useState(TITLE_AT);
   const request = useRef(0);
-  const usesCustomAndroidHeader = process.env.EXPO_OS === "android";
   // iOS keeps the native back circle; a cold deep link has nothing to pop (H59).
-  const [floatingBack] = useState(() => usesCustomAndroidHeader || !router.canGoBack());
+  // The zoom transition's cancelled swipe-to-dismiss leaves the native back
+  // button hidden, so these screens always draw their own glass circle.
+  const floatingBack = true;
 
   const load = useCallback(async () => {
     const current = ++request.current;
