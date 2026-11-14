@@ -200,6 +200,8 @@ describe("person profile activities", () => {
     const card = res.json().preview;
     expect(card.activities.map((i: { title: string }) => i.title)).toEqual(["Workshop", "Talk"]);
     expect(card.activities[0]).toMatchObject({ id: earlier, location: null });
-    expect(card.enterprises).toEqual([{ id: acme, name: "Acme", logoUrl: null }]);
+    expect(card.enterprises).toEqual([
+      { id: acme, name: "Acme", logoUrl: null, logoNegativeUrl: null },
+    ]);
   });
 });

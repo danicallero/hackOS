@@ -25,7 +25,7 @@ test("company representative photo tint and return navigation", async ({ page },
       return route.fulfill({
         contentType: "image/svg+xml",
         headers: {
-          "access-control-allow-origin": "http://localhost:3001",
+          "access-control-allow-origin": new URL(page.url()).origin,
           "access-control-allow-credentials": "true",
         },
         body: '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><path fill="#b87532" d="M0 0h32v32H0z"/></svg>',
