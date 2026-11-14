@@ -1783,6 +1783,12 @@ search as People, and Schedule's persistent `FilterMenu` beside it (Role and
 Knowledge multi-selects over the loaded list, `filterHelpers` in
 `lib/help-desk.ts`). The root's first row opens it with "N available".
 
+The Request help sheet (H64) keeps its `ScrollView` directly under the native
+screen on iOS, matching New project. A flex wrapper between a `formSheet` and
+its scroll view can clip the form when native detent sizing settles. The
+transparent header still uses measured top padding, and keyboard insets remain
+enabled. Ordinary help pages and Android modals retain the full-height wrapper.
+
 **Requests (H64–H66).** New request (sheet, Close / Send), always for the person sending it: details and location in one
 group, Knowledge topics and Challenge rows in another, and a "Prefer a sponsor"
 switch with its one-line consequence. "Other" is its own group above the catalogue in the topic

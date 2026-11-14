@@ -128,8 +128,8 @@ export function HelpPage({
   const sheetTop = onClose ? headerHeight : 0;
   // Only a user pull spins the control; background revalidation stays silent.
   const [pulling, setPulling] = useState(false);
-  return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+  const page = (
+    <>
       <ScrollView
         style={{ flex: 1, backgroundColor: colors.background }}
         contentInsetAdjustmentBehavior={onClose ? "never" : "automatic"}
@@ -309,7 +309,14 @@ export function HelpPage({
           ) : null}
         </Stack.Toolbar>
       ) : null}
-    </View>
+    </>
+  );
+  // H64: formSheet sizes a direct scroll child natively after presentation. A flex
+  // wrapper can collapse independently of that correction and clip the form.
+  return onClose && Platform.OS === "ios" ? (
+    page
+  ) : (
+    <View style={{ flex: 1, backgroundColor: colors.background }}>{page}</View>
   );
 }
 
