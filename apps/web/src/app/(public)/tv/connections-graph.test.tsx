@@ -87,6 +87,9 @@ describe("ConnectionsGraph", () => {
     const company = container.querySelector("[data-company]");
     expect(company?.querySelector("image")).toBeNull();
     expect(company?.querySelector("text")?.textContent).toBe("A");
+    // No company name label anywhere; glow gradients are gone too.
+    expect(container.textContent).not.toContain("acme");
+    expect(container.querySelector("radialGradient, filter")).toBeNull();
     act(() => root.unmount());
     container.remove();
   });

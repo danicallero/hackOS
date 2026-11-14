@@ -37,7 +37,7 @@ interface Palette {
   dark: boolean;
 }
 
-/** org-roam-ui look: dark hero canvas with one quiet node colour; a calm light twin. */
+/** org-roam-ui look: flat dark hero canvas with one quiet node colour; a flat light twin. */
 const LOOK = {
   dark: {
     person: "#9aa8ff",
@@ -45,15 +45,15 @@ const LOOK = {
     neutral: "#2b2f45",
     neutralText: "#dfe4ff",
     canvasEdge: "#0b0c14",
-    canvas: "radial-gradient(ellipse at 50% 45%, #1b1e2e 0%, #11121c 55%, #0b0c14 100%)",
+    canvas: "#0b0c14",
   },
   light: {
     person: "#4a5bd0",
     edge: "#5a64a0",
     neutral: "#e3e6f4",
     neutralText: "#2b3170",
-    canvasEdge: "#eef0f8",
-    canvas: "radial-gradient(ellipse at 50% 45%, #ffffff 0%, #f6f7fc 55%, #eceef7 100%)",
+    canvasEdge: "#f4f5fb",
+    canvas: "#f4f5fb",
   },
 } as const;
 
@@ -352,7 +352,6 @@ export function ConnectionsGraph({
         }
         return (
           <g key={node.id} style={{ opacity, transition: fade }}>
-            <circle cx={p.x} cy={p.y} r={r * 2.4} fill="url(#tv-graph-glow)" />
             <circle cx={p.x} cy={p.y} r={r} fill={palette.person} />
           </g>
         );
@@ -386,14 +385,15 @@ export function ConnectionsGraph({
       if (!node || !at) continue;
       const r = apparentRadius(node.degree, node.kind, unit, cam.zoom);
       obstacles.push({ id, x: at.x, y: at.y, r });
-      if (!node.label?.trim()) continue;
+      // Companies are their logo: obstacles for person names, never labelled themselves.
+      if (node.kind === "company" || !node.label?.trim()) continue;
       candidates.push({
         id,
         text: node.label.trim(),
         x: at.x,
         y: at.y,
         r,
-        priority: node.degree + (node.kind === "company" ? 1000 : 0),
+        priority: node.degree,
       });
     }
     const fontSize = (shownSection ? 28 : 26) * unit;
@@ -414,13 +414,6 @@ export function ConnectionsGraph({
     >
       {palette && width > 0 && height > 0 && (
         <svg width={width} height={height} aria-hidden="true" className="absolute inset-0">
-          <defs>
-            <radialGradient id="tv-graph-glow">
-              <stop offset="0%" stopColor={palette.person} stopOpacity={dark ? 0.3 : 0.16} />
-              <stop offset="45%" stopColor={palette.person} stopOpacity={dark ? 0.08 : 0.04} />
-              <stop offset="100%" stopColor={palette.person} stopOpacity={0} />
-            </radialGradient>
-          </defs>
           <g ref={worldRef}>
             <g>{edgeEls}</g>
             <g>{nodeEls}</g>

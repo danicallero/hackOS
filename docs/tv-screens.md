@@ -73,12 +73,12 @@ defensively. There is no stats row, legend or caption: the header and the graph
 are all there is. Display rules:
 
 - Plain SVG drawn by `connections-graph.tsx` (no chart library), styled after
-  org-roam-ui: dark radial canvas (light twin in light mode), thin translucent
-  links, every person the same single colour with a soft glow, radius growing
+  org-roam-ui: flat dark canvas (flat light twin in light mode), thin translucent
+  links, every person the same single flat colour (no glow), radius growing
   with the square root of degree (leaf ~4.6 px to hub 22 px at 1000 px height,
   capped; no controls). Communities steer only the camera and dimming, never colour.
 - Companies are drawn *as* their logo (SVG `<image>`, no frame), always bigger
-  than any person, with the company name label. The negative logo is used on dark
+  than any person, with no name label (their logo is the node). The negative logo is used on dark
   canvases, the plain one on light; each URL is probed off-DOM, a failed variant
   falls back to the other, and a company with no loadable logo is a large neutral
   disc with its initial. The logos are the already-public sponsor URLs (`logoUrl`,
@@ -89,13 +89,13 @@ are all there is. Display rules:
   from a hash of the id, never `Math.random`). Communities of 3+ people become
   sections, biggest first, at most 12. Graphs under 6 people, or with no 3-person
   community, only show the overview.
-- Camera loop (`buildSequence`): overview (6 s, calm, only company names) →
+- Camera loop (`buildSequence`): overview (6 s, calm, no names) →
   section 1 … section 3 → overview → section 4 … The camera is one SVG transform
   tweened per frame (1.6 s ease-in-out, zoom interpolated in log space);
   `cameraFor` frames the section's people and home companies. In a section its
   people, their companies and their edges are lit, the rest fades to ~10 %
   (opacity transitions). Names are placed only once the camera settles, by
-  `selectLabels` (priority = companies, then degree; collision-free, inside the
+  `selectLabels` (people only, priority = degree; companies are obstacles; collision-free, inside the
   frame, capped), and fade in. Nothing else is drawn on the canvas: no caption.
 - Motion: the loop pauses while the page is hidden; with
   `prefers-reduced-motion` it still steps through sections but jumps without
