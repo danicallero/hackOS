@@ -3586,7 +3586,7 @@
   "uploadPhoto": "Upload photo",
   "changePhoto": "Change photo",
   "removePhoto": "Remove photo",
-  "photoFileHint": "PNG, JPEG or WebP, up to 2 MB.",
+  "photoFileHint": "Choose a JPEG, PNG or WebP photo.",
   "photoUpdated": "Photo updated.",
   "photoRemoved": "Photo removed.",
   "toastUploadPhoto": "Upload photo",

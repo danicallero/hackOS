@@ -205,7 +205,7 @@ export function registerPhotoRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Upload my photo",
         description:
-          "Multipart upload of the caller's account photo: PNG, JPEG or WebP (identified from the bytes, not the declared type), up to 2 MB. Stored privately under the caller's profile prefix and served only through GET /api/users/:id/photo; the previous photo object is deleted. Returns the new `image` route. Audited without the file. Accounts being removed (H54) are refused (#934).",
+          "Multipart upload of the caller's account photo: PNG, JPEG or WebP (identified from the bytes, not the declared type), up to 5 MB; clients compress larger photos before uploading. Stored privately under the caller's profile prefix and served only through GET /api/users/:id/photo; the previous photo object is deleted. Returns the new `image` route. Audited without the file. Accounts being removed (H54) are refused (#934).",
         response: { 200: photoResponse },
       },
     },
@@ -236,7 +236,7 @@ export function registerPhotoRoutes(app: FastifyInstance): void {
         params: photoParams,
         summary: "Upload a person's photo",
         description:
-          "Staff replace someone's account photo from user management, with the same rules as POST /api/me/photo: PNG, JPEG or WebP identified from the bytes, up to 2 MB, stored privately under that person's profile prefix; the previous object is deleted. Returns the new `image` route. Audited as an admin change without the file. 404 for an unknown or out-of-scope account; accounts being removed (H54) answer 409 (#934, H8).",
+          "Staff replace someone's account photo from user management, with the same rules as POST /api/me/photo: PNG, JPEG or WebP identified from the bytes, up to 5 MB, stored privately under that person's profile prefix; the previous object is deleted. Returns the new `image` route. Audited as an admin change without the file. 404 for an unknown or out-of-scope account; accounts being removed (H54) answer 409 (#934, H8).",
         response: { 200: photoResponse },
       },
     },
