@@ -264,7 +264,8 @@ export function PersonProfileScreen({
           options={{
             title: titleShown && person ? person.displayName : "",
             headerTitle: titleShown && person ? person.displayName : "",
-            headerBackVisible: !floatingBack,
+            // Never re-applied while the native back button is in use: touching it mid-transition can leave it hidden after a cancelled zoom dismiss.
+            ...(floatingBack ? { headerBackVisible: false } : {}),
             scrollEdgeEffects: { top: titleShown ? "soft" : "hidden" },
           }}
         />

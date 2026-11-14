@@ -291,7 +291,7 @@ export function CompanyProfileScreen() {
         </View>
       ) : null}
       {process.env.EXPO_OS === "ios" ? (
-        <Stack.Screen options={{ headerBackVisible: !floatingBack }} />
+        <Stack.Screen options={floatingBack ? { headerBackVisible: false } : {}} />
       ) : null}
       <Animated.ScrollView
         testID="company-profile"
