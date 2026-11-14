@@ -205,6 +205,35 @@ describe("edition lifecycle (H8, H53)", () => {
     expect(audits.rows[0].n).toBe(1);
   });
 
+  it("restores timing and onboarding when returning to an edition (H53)", async () => {
+    const app = await getApp();
+    await seedCurrentEdition();
+    await pool.query(`UPDATE event_config SET
+      hacking_starts_at = '2026-11-01T10:00:00Z',
+      hacking_ends_at = '2026-11-02T10:00:00Z', show_start_countdown = true,
+      presence_auto_entry_at = '2026-11-01T09:00:00Z',
+      project_drafts_open_at = '2026-10-01T00:00:00Z',
+      project_submissions_close_at = '2026-11-02T09:00:00Z',
+      project_gallery_opens_at = '2026-11-02T12:00:00Z',
+      onboarding_config = '{"steps":["welcome"]}' WHERE id = 1`);
+    const fields = `hacking_starts_at, hacking_ends_at, show_start_countdown,
+      presence_auto_entry_at, project_drafts_open_at, project_submissions_close_at,
+      project_gallery_opens_at, onboarding_config`;
+    const before = await pool.query(`SELECT ${fields} FROM event_config WHERE id = 1`);
+    await createEdition("e2027", "draft");
+    const admin = await superadmin();
+    for (const key of ["e2027", "e2026"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/editions/${key}/activate`,
+        headers: idem(admin),
+      });
+      expect(response.statusCode).toBe(200);
+    }
+    const after = await pool.query(`SELECT ${fields} FROM event_config WHERE id = 1`);
+    expect(after.rows).toEqual(before.rows);
+  });
+
   it("closes an edition with its effects, notifies nobody and becomes read-only", async () => {
     const app = await getApp();
     await seedCurrentEdition();

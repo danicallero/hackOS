@@ -13,8 +13,8 @@ import { broadcast } from "../../lib/sse.js";
  *   draft --activate--> active --close--> closed --reopen--> active
  *
  * `event_config` keeps the live settings of the current edition; activating
- * another edition snapshots them on the previous edition and starts the new
- * one with empty per-edition windows and onboarding. People's data is never
+ * another edition snapshots them on the previous edition and restores saved
+ * windows and onboarding, or starts a new edition with empty values. People's data is never
  * copied. Closing is one transaction: project drafts become not_submitted,
  * pending queue entries are cancelled (not evaluated), open/claimed help
  * requests are cancelled, help windows end and judging sessions end — with
@@ -217,16 +217,22 @@ export async function activateEditionInTransaction(
         WHERE event_key = $1`,
       [previous],
     );
-    // A new edition starts with empty per-edition timing and onboarding
+    // H53: restore returning editions; only new editions start with empty timing and onboarding
     // (RSVP settings and forms are keyed by edition already).
     await client.query(
       `UPDATE event_config
           SET event_key = $1, name = $2, event_starts_at = $3, event_ends_at = $4,
-              hacking_starts_at = NULL, hacking_ends_at = NULL, show_start_countdown = false,
-              presence_auto_entry_at = NULL, project_drafts_open_at = NULL,
-              project_submissions_close_at = NULL, project_gallery_opens_at = NULL,
-              onboarding_config = '{}'::jsonb, onboarding_revision = onboarding_revision + 1
-        WHERE id = 1`,
+              hacking_starts_at = saved.hacking_starts_at, hacking_ends_at = saved.hacking_ends_at,
+              show_start_countdown = COALESCE(saved.show_start_countdown, false),
+              presence_auto_entry_at = saved.presence_auto_entry_at,
+              project_drafts_open_at = saved.project_drafts_open_at,
+              project_submissions_close_at = saved.project_submissions_close_at,
+              project_gallery_opens_at = saved.project_gallery_opens_at,
+              onboarding_config = COALESCE(saved.onboarding_config, '{}'::jsonb),
+              onboarding_revision = event_config.onboarding_revision + 1
+         FROM editions e
+         CROSS JOIN LATERAL jsonb_populate_record(NULL::event_config, e.settings_snapshot) saved
+        WHERE event_config.id = 1 AND e.event_key = $1`,
       [eventKey, target.name, target.starts_at, target.ends_at],
     );
     // The previous edition's pending pre-event email belongs to that event.

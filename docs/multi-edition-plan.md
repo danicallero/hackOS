@@ -452,3 +452,8 @@ No hay decisiones de producto abiertas. Quedan estas comprobaciones:
   con las mismas reglas de elegibilidad. La emisión, revocación y
   configuración por parte del staff siguen bloqueadas hasta reabrir.
 
+
+Al volver a activar una edición existente se restauran sus ventanas temporales
+y su configuración de onboarding desde `settings_snapshot`; solo una edición
+nueva empieza con estos valores vacíos. La revisión de onboarding aumenta
+al cambiar de edición. Las credenciales Wi-Fi no se guardan en el snapshot.
