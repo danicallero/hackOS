@@ -44,7 +44,7 @@ import { resolveScheduleText } from "@/lib/schedule";
 import { colors, radius, type } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
 
-const LOGO = 132;
+const LOGO = 168;
 const TITLE_AT = 150;
 const DESCRIPTION_LINES = 4;
 
@@ -54,14 +54,17 @@ type State =
   | { status: "missing" }
   | { status: "error"; error: Error };
 
-function Logo({
+/** The company's logo on its own tile (also the stand-scan celebration's centrepiece). */
+export function Logo({
   profile,
   dark,
   muted,
+  size = LOGO,
 }: {
-  profile: CompanyProfile;
+  profile: Pick<CompanyProfile, "logoUrl" | "logoNegativeUrl">;
   dark: boolean;
   muted: boolean;
+  size?: number;
 }) {
   // The negative artwork is drawn for dark grounds.
   const photo = useApiImage(
@@ -75,9 +78,9 @@ function Logo({
         borderCurve: "continuous",
         borderRadius: radius.sheet,
         boxShadow: "0 10px 28px rgba(0, 0, 0, 0.25)",
-        height: LOGO,
+        height: size,
         overflow: "hidden",
-        width: LOGO,
+        width: size,
       }}
     >
       {/* Its own blend group with the card's ground, so Desaturate drains the logo, not the page. */}
@@ -104,7 +107,7 @@ function Logo({
             accessible={false}
             contentFit="contain"
             style={[
-              { height: LOGO - 36, opacity: muted ? 0.5 : 1, width: LOGO - 36 },
+              { height: size - 28, opacity: muted ? 0.5 : 1, width: size - 28 },
               !photo.loaded && loadingImageStyle,
             ]}
           />

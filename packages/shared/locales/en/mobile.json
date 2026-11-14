@@ -852,6 +852,7 @@
   "standsRemoveTagConfirm": "Remove this tag?",
   "standsRemoveQrDetail": "Printed copies of this code will stop working.",
   "standsRemoveTagFailed": "Could not remove the tag.",
+  "companyCollected": "Added to your collection",
   "companyTagCollecting": "Collecting…",
   "accountNetworkingProfile": "Edit networking profile",
   "profilePhotoTitle": "Photo",

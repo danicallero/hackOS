@@ -192,9 +192,9 @@ function Medallion({
             source={{ uri: logo }}
             contentFit="contain"
             style={{
-              height: size * 0.62,
+              height: size * 0.74,
               opacity: collected ? 1 : 0.5,
-              width: size * 0.62,
+              width: size * 0.74,
             }}
           />
         ) : (

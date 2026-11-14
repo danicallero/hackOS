@@ -645,6 +645,13 @@ describe("Companies", () => {
     });
     // The link is consumed so returning to the Diary does not collect again.
     expect(mockSetParams).toHaveBeenCalledWith({ collect: undefined });
+    // The logo celebrates, and the company page opens underneath it.
+    await screen.findByTestId("company-celebration");
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith(`/companies/${sponsorEntry.sponsor?.enterpriseId}`),
+    );
+    await fireEvent.press(screen.getByTestId("company-celebration"));
+    await waitFor(() => expect(screen.queryByTestId("company-celebration")).toBeNull());
     expect(await screen.findByText("Acme")).toBeTruthy();
     expect(calls("/api/me/diary/scan")).toHaveLength(1);
   });
