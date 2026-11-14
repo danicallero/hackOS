@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
+import { HeroBleed } from "@/components/common/hero-bleed";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
@@ -19,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useLiveQuery } from "@/hooks/use-live-query";
 import { api, isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { precomputeLogoColor } from "@/lib/company";
+import { precomputeLogoColor, useLogoColor } from "@/lib/company";
 import { eventDateFormat } from "@/lib/datetime";
 import { apiAssetUrl, type DirectoryEntry, personCompanies } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
@@ -113,6 +114,7 @@ export function PersonProfile({
   const { t } = useLocale();
   const { nameOf } = useChallengeNames();
   const { language } = useLocale();
+  const photoColor = useLogoColor(entry.photoUrl);
   const companies = personCompanies(entry);
   useEffect(() => {
     for (const c of companies) precomputeLogoColor(c.logoUrl);
@@ -242,61 +244,62 @@ export function PersonProfile({
   }
 
   return (
-    <PageLayout width="reading">
-      <PageHeader
-        context={context}
-        leading={
+    <>
+      <HeroBleed color={entry.photoColor ?? photoColor}>
+        {context}
+        <header className="flex flex-col items-center gap-3 pt-6 text-center sm:flex-row sm:items-center sm:gap-6 sm:text-left">
           <UserAvatar
             name={entry.displayName}
             image={entry.photoUrl}
-            className="size-16"
-            fallbackClassName="text-lg"
+            className="size-28 shrink-0 shadow-md ring-4 ring-background/70 sm:size-32"
+            fallbackClassName="text-3xl"
             showInitials
             decorative
             presenceLabel={present ? t("helpDeskPresent") : undefined}
           />
-        }
-        title={entry.displayName}
-        meta={
-          entry.headline ? (
-            <span className="text-muted-foreground wrap-anywhere text-sm">{entry.headline}</span>
-          ) : undefined
-        }
-        secondaryActions={
-          visibleRole ? <Badge variant="secondary">{visibleRole}</Badge> : undefined
-        }
-        primaryAction={
-          entry.cvUrl ? (
-            <CvViewer
-              path={entry.cvUrl}
-              name={entry.displayName}
-              trigger={
-                <Button type="button" variant="outline" size="sm">
-                  <FilePdfIcon aria-hidden="true" />
-                  {t("viewCv")}
-                </Button>
-              }
-            />
-          ) : undefined
-        }
-      />
-      {entry.bio && (
-        <p className="max-w-prose whitespace-pre-line wrap-anywhere text-pretty">{entry.bio}</p>
-      )}
-      {rows.length > 0 && (
-        <dl className="divide-y divide-border/60">
-          {rows.map((row) => (
-            <div
-              key={row.id}
-              className="grid min-w-0 gap-1 py-3 text-sm sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-4"
-            >
-              <dt className="text-muted-foreground">{row.label}</dt>
-              <dd className="min-w-0">{row.value}</dd>
+          <div className="min-w-0 space-y-2">
+            <h1 className="font-display text-3xl leading-tight wrap-anywhere sm:text-4xl">
+              {entry.displayName}
+            </h1>
+            {entry.headline && (
+              <p className="text-muted-foreground wrap-anywhere text-sm">{entry.headline}</p>
+            )}
+          </div>
+          {(visibleRole || entry.cvUrl) && (
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+              {visibleRole && <Badge variant="secondary">{visibleRole}</Badge>}
+              {entry.cvUrl && (
+                <CvViewer
+                  path={entry.cvUrl}
+                  name={entry.displayName}
+                  trigger={
+                    <Button type="button" variant="outline" size="sm">
+                      <FilePdfIcon aria-hidden="true" />
+                      {t("viewCv")}
+                    </Button>
+                  }
+                />
+              )}
             </div>
-          ))}
-        </dl>
-      )}
-      {children}
-    </PageLayout>
+          )}
+        </header>
+      </HeroBleed>
+      <PageLayout width="reading">
+        {entry.bio && (
+          <p className="max-w-prose whitespace-pre-line wrap-anywhere text-pretty">{entry.bio}</p>
+        )}
+        {rows.map((row) => (
+          <section
+            key={row.id}
+            aria-label={row.label}
+            className="min-w-0 space-y-2 border-t border-border/60 pt-5 text-sm"
+          >
+            <h2 className="type-meta font-medium text-muted-foreground">{row.label}</h2>
+            <div className="min-w-0 text-base">{row.value}</div>
+          </section>
+        ))}
+        {children}
+      </PageLayout>
+    </>
   );
 }

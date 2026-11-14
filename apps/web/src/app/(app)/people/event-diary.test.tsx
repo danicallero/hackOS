@@ -150,6 +150,10 @@ function button(label: string) {
   return container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
 }
 
+function tile(label: string) {
+  return container.querySelector<HTMLAnchorElement>(`a[aria-label="${label}"]`);
+}
+
 function tab(name: string) {
   return [...container.querySelectorAll('[role="tab"]')].find(
     (el) => el.textContent === name,
@@ -353,8 +357,8 @@ describe("Companies collection (#935)", () => {
     expect(get).toHaveBeenCalledWith("/api/me/diary/sponsors");
     expect(container.textContent).toContain('diaryCollectionCount {"collected":1,"total":3}');
     expect(container.textContent).toContain("diaryCollectionHint");
-    expect(button("Acme")).not.toBeNull();
-    expect(button("Beta: diaryNotCollected")).not.toBeNull();
+    expect(tile("Acme")?.getAttribute("href")).toBe("/companies/5");
+    expect(tile("Beta: diaryNotCollected")).not.toBeNull();
   });
 
   it("celebrates a complete collection and says so when there is nothing to collect", async () => {
@@ -377,7 +381,7 @@ describe("Companies collection (#935)", () => {
     patch.mockResolvedValue({ ...stand(), starred: true });
     await openCompanies();
     const user = userEvent.setup();
-    await act(async () => user.click(button("Acme")!));
+    await act(async () => user.click(button("moreActions")!));
     const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
     expect(dialog.textContent).toContain("We make things");
     expect(dialog.textContent).toContain("Open data");
@@ -411,7 +415,7 @@ describe("Companies collection (#935)", () => {
     await openCompanies();
     const user = userEvent.setup();
     await act(async () => user.click(button("diaryFavourites")!));
-    expect(button("Acme")).not.toBeNull();
-    expect(button("Beta")).toBeNull();
+    expect(tile("Acme")).not.toBeNull();
+    expect(tile("Beta")).toBeNull();
   });
 });

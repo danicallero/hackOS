@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PageLayout } from "@/components/common/page-layout";
-import { ProjectsSectionHeader } from "@/components/common/section-navigation";
 import { ProjectOverview } from "@/components/projects/project-overview";
 import { ProjectRecordActions } from "@/components/projects/project-record-actions";
+import { ProjectRecordHero } from "@/components/projects/project-record-hero";
 import { ApiError } from "@/lib/api";
 import { INDEXABLE_ROBOTS, SITE_URL, SOCIAL_IMAGE_PATH } from "@/lib/metadata";
 import { galleryProject, projectAssetUrl } from "../data";
@@ -53,11 +53,12 @@ export default async function ProjectGalleryPage({ params }: { params: Promise<{
   }
   const { project, copy, language } = data;
   return (
-    <PageLayout className="max-w-6xl">
-      <GalleryRefresh />
-      <ProjectsSectionHeader
-        recordName={project.name}
-        recordAction={
+    <>
+      <ProjectRecordHero
+        name={project.name}
+        files={project.files}
+        assetUrl={projectAssetUrl}
+        actions={
           <ProjectRecordActions
             id={project.id}
             isMember={project.isMember === true || project.canEdit}
@@ -65,21 +66,25 @@ export default async function ProjectGalleryPage({ params }: { params: Promise<{
           />
         }
       />
-      <ProjectOverview
-        showQueue={project.isMember === true || project.canInspect === true}
-        project={project}
-        language={language}
-        assetUrl={projectAssetUrl}
-        labels={{
-          team: copy.surfaceTeam,
-          challenges: copy.challenges,
-          details: copy.projectDetailsTitle,
-          pending: copy.pendingInvitesTitle,
-          rank: copy.rankLabel,
-          noMembers: copy.noMembers,
-          noChallenges: copy.noChallenges,
-        }}
-      />
-    </PageLayout>
+      <PageLayout className="max-w-6xl">
+        <GalleryRefresh />
+        <ProjectOverview
+          showQueue={project.isMember === true || project.canInspect === true}
+          project={project}
+          language={language}
+          assetUrl={projectAssetUrl}
+          labels={{
+            team: copy.surfaceTeam,
+            challenges: copy.challenges,
+            details: copy.projectDetailsTitle,
+            pending: copy.pendingInvitesTitle,
+            rank: copy.rankLabel,
+            noMembers: copy.noMembers,
+            noChallenges: copy.noChallenges,
+            description: copy.projectDescriptionFieldLabel,
+          }}
+        />
+      </PageLayout>
+    </>
   );
 }

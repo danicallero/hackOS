@@ -1,40 +1,6 @@
 jest.mock("./directory", () => ({ apiImageSource: (uri: string) => ({ uri }) }));
 
-import { createTintCache, pickDominantColor } from "./image-tint";
-
-const px = (r: number, g: number, b: number, a = 255) => [r, g, b, a];
-const repeat = (pixel: number[], n: number) => Array.from({ length: n }, () => pixel).flat();
-
-describe("pickDominantColor", () => {
-  it("returns a solid colour as is", () => {
-    expect(pickDominantColor(repeat(px(51, 102, 204), 64))).toBe("#3366cc");
-  });
-
-  it("ignores transparent, near-white and near-black pixels", () => {
-    const pixels = [
-      ...repeat(px(255, 255, 255), 200),
-      ...repeat(px(0, 0, 0), 200),
-      ...repeat(px(200, 30, 30, 0), 200),
-      ...repeat(px(51, 102, 204), 10),
-    ];
-    expect(pickDominantColor(pixels)).toBe("#3366cc");
-  });
-
-  it("prefers the larger and the more saturated bucket", () => {
-    expect(
-      pickDominantColor([...repeat(px(200, 30, 30), 30), ...repeat(px(30, 30, 200), 10)]),
-    ).toBe("#c81e1e");
-    // Equal size: the saturated blue beats the washed-out grey.
-    expect(
-      pickDominantColor([...repeat(px(130, 128, 126), 20), ...repeat(px(20, 60, 220), 20)]),
-    ).toBe("#143cdc");
-  });
-
-  it("returns null without a usable pixel", () => {
-    expect(pickDominantColor([])).toBeNull();
-    expect(pickDominantColor(repeat(px(255, 255, 255), 50))).toBeNull();
-  });
-});
+import { createTintCache } from "./image-tint";
 
 describe("tint cache", () => {
   const flush = () => new Promise((resolve) => setImmediate(resolve));

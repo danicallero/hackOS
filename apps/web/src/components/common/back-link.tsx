@@ -46,6 +46,7 @@ export function BackLink({
     <Link
       href={href}
       onClick={onClick}
+      data-back-link=""
       aria-label={t("backToParent", { name: label })}
       className={cn(
         "button-interaction type-meta inline-flex items-center gap-1 transition-colors hover:text-foreground",
