@@ -51,6 +51,7 @@ function buildModes(
     { value: "sponsors", label: t("sponsors"), detail: t("modeSponsorsDetail") },
     { value: "wifi", label: t("modeWifi"), detail: t("modeWifiDetail") },
     { value: "github", label: t("modeGithub"), detail: t("modeGithubDetail") },
+    { value: "connections", label: t("modeConnections"), detail: t("modeConnectionsDetail") },
   ];
 }
 

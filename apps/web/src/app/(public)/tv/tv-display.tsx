@@ -1,6 +1,7 @@
 "use client";
 
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
+import { TV_CONNECTIONS_MODE } from "@hackos/shared/tv-connections";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
@@ -34,6 +35,7 @@ import {
 } from "@/lib/tv";
 import { cn } from "@/lib/utils";
 import { announcementContent } from "./announcement-content";
+import { ConnectionsView } from "./connections-view";
 import { GithubView } from "./github-view";
 import { EmbeddedAnnouncement, LiveScreen, ScheduleBlock } from "./live-screen";
 import { MarqueeText } from "./marquee-text";
@@ -905,6 +907,9 @@ export function TvDisplay() {
   const [data, setData] = useState<TvData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
+  // Bumped on every public invalidation so views with their own endpoint (the
+  // connections graph) can refetch without opening a second event stream.
+  const [invalidation, setInvalidation] = useState(0);
 
   // The initial snapshot is the only time the display needs every resource.
   // Subsequent SSE updates are intentionally scoped below so React keeps the
@@ -961,14 +966,17 @@ export function TvDisplay() {
   // needs (queue/TV plus public content). Always refetch sanitized projections
   // rather than deriving screen state from an SSE payload: raw queue events
   // stay on the operational-only channel.
-  const refreshPublicProjection = useJitteredCallback(() => void load(), TV_REFRESH_JITTER_MS);
+  const refreshPublicProjection = useJitteredCallback(() => {
+    setInvalidation((count) => count + 1);
+    void load();
+  }, TV_REFRESH_JITTER_MS);
 
   useEventSource(REALTIME_SCOPES.PUBLIC_TV, {
     events: [EVENTS.DATA_CHANGED],
     onEvent: refreshPublicProjection,
   });
 
-  return <TvView data={data} error={error} />;
+  return <TvView data={data} error={error} invalidation={invalidation} />;
 }
 
 /**
@@ -976,7 +984,15 @@ export function TvDisplay() {
  * resolved state without every loading branch having to satisfy the rules of
  * hooks.
  */
-function TvView({ data, error }: { data: TvData | null; error: string | null }) {
+function TvView({
+  data,
+  error,
+  invalidation,
+}: {
+  data: TvData | null;
+  error: string | null;
+  invalidation: number;
+}) {
   const { t } = useLocale();
   const fallbackState: TvState = {
     mode: "rooms",
@@ -1042,6 +1058,8 @@ function TvView({ data, error }: { data: TvData | null; error: string | null }) 
   if (mode === "wifi")
     return <WifiView venue={data.venue} event={data.event} announcement={embeddedAnnouncement} />;
   if (mode === "github") return <GithubView event={data.event} />;
+  if (mode === TV_CONNECTIONS_MODE)
+    return <ConnectionsView event={data.event} invalidation={invalidation} />;
   if (mode === "rooms")
     return <RoomsView rooms={data.rooms} event={data.event} announcement={embeddedAnnouncement} />;
   return null;
