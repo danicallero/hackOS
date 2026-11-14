@@ -1,3 +1,4 @@
+import { TV_GRAPH_VISIBLE_DEFAULT } from "@hackos/shared/public-profile";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
@@ -489,6 +490,7 @@ interface ProfileRow {
   location_note: string | null;
   socials: SocialLink[];
   share_cv: boolean;
+  tv_graph_visible: boolean;
   cv_key: string | null;
   cv_filename: string | null;
   cv_uploaded_at: Date | null;
@@ -507,6 +509,7 @@ const DEFAULT_PROFILE: ProfileRow = {
   location_note: null,
   socials: [],
   share_cv: false,
+  tv_graph_visible: TV_GRAPH_VISIBLE_DEFAULT,
   cv_key: null,
   cv_filename: null,
   cv_uploaded_at: null,
@@ -572,6 +575,7 @@ async function presentProfile(
       .filter(({ kind }) => kind !== "github")
       .map(({ kind, url }) => ({ kind, url })),
     shareCv: profile.share_cv,
+    tvGraphVisible: profile.tv_graph_visible,
     cv: formCv
       ? {
           filename: formCv.filename,
@@ -592,7 +596,7 @@ async function presentProfile(
 }
 
 const PROFILE_COLUMNS = `directory_visible, show_surname, show_photo, show_project, show_github, headline, bio,
-  location_note, socials, share_cv, cv_key, cv_filename, cv_uploaded_at, consented_at, onboarding_completed_at`;
+  location_note, socials, share_cv, tv_graph_visible, cv_key, cv_filename, cv_uploaded_at, consented_at, onboarding_completed_at`;
 
 async function readProfile(db: Queryable, userId: number, lock = false): Promise<ProfileRow> {
   const { rows } = await db.query<ProfileRow>(
@@ -646,6 +650,7 @@ const FIELD_COLUMNS = {
   locationNote: "location_note",
   socials: "socials",
   shareCv: "share_cv",
+  tvGraphVisible: "tv_graph_visible",
 } as const satisfies Record<keyof ProfileSettings, keyof ProfileRow>;
 
 const SETTINGS_FIELDS = Object.keys(FIELD_COLUMNS) as (keyof ProfileSettings)[];
@@ -735,14 +740,22 @@ export async function updatePublicProfile(
         "Only the person can start sharing their profile",
       );
     }
+    // Opting into the public TV graph is the person's own consent, like sharing.
+    if (actor.source === "admin" && next.tvGraphVisible && !before.tv_graph_visible) {
+      throw new AppError(
+        409,
+        "profile_consent_required",
+        "Only the person can show themselves on the TV graph",
+      );
+    }
     if (next.shareCv && !before.cv_key && !(await readFormCv(db, userId))) {
       throw new BadRequestError("Upload a CV before sharing it");
     }
     const { rows } = await db.query<ProfileRow>(
       `INSERT INTO user_public_profiles
          (user_id, directory_visible, show_surname, show_photo, show_project, show_github, headline,
-          location_note, bio, socials, share_cv, consented_at, onboarding_completed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, CASE WHEN $2 THEN now() END, CASE WHEN $12 THEN now() END)
+          location_note, bio, socials, share_cv, tv_graph_visible, consented_at, onboarding_completed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $13, CASE WHEN $2 THEN now() END, CASE WHEN $12 THEN now() END)
        ON CONFLICT (user_id) DO UPDATE SET
          directory_visible = EXCLUDED.directory_visible,
          show_surname = EXCLUDED.show_surname,
@@ -754,6 +767,7 @@ export async function updatePublicProfile(
          bio = EXCLUDED.bio,
          socials = EXCLUDED.socials,
          share_cv = EXCLUDED.share_cv,
+         tv_graph_visible = EXCLUDED.tv_graph_visible,
          onboarding_completed_at = COALESCE(user_public_profiles.onboarding_completed_at, EXCLUDED.onboarding_completed_at),
          consented_at = CASE
            WHEN EXCLUDED.directory_visible AND NOT user_public_profiles.directory_visible THEN now()
@@ -773,6 +787,7 @@ export async function updatePublicProfile(
         JSON.stringify(next.socials),
         next.shareCv,
         completeOnboarding,
+        next.tvGraphVisible,
       ],
     );
     const after = rows[0] as ProfileRow;

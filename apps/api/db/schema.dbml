@@ -1627,6 +1627,7 @@ Table user_public_profiles {
   show_project boolean [not null, default: `true`]
   show_surname boolean [not null, default: `false`]
   socials jsonb [not null, default: `'[]'::jsonb`, note: '#935: [{kind, url}] — kind in linkedin|github|x|instagram|website|other, url https.']
+  tv_graph_visible boolean [not null, default: `true`, note: '#934: show this person as a node (and their connections as edges) on the public TV graph. Default on; no row = on. Independent of directory_visible. Staff may turn it off, never on.']
   updated_at "timestamp with time zone" [not null, default: `now()`]
   user_id integer [pk, not null]
 

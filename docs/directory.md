@@ -138,12 +138,15 @@ including the account photo, stays in `users` and is projected, never copied.
 | `socials` | `[]` | Up to 6 distinct `{kind, url}`; `kind` is `linkedin`, `x`, `instagram`, `website` or `other`; a submitted `github` entry is dropped, because the GitHub link is the member's linked GitHub account (`POST /api/me/github/authorize`). Readers see `https://github.com/<login>` appended to the stored links only while the account is linked and `show_github` is true. `url` must be https (a bare host gets `https://`; credentials and hosts without a dot are rejected) and is stored in the parsed URL's canonical form. |
 | `share_cv` | `false` | Readers may download the CV. Requires an uploaded or application CV (400 otherwise); removing the CV clears it. |
 | `cv_key`, `cv_filename`, `cv_uploaded_at` | `NULL` | The private CV object, its sanitized original name and upload time; all set or all null. |
+| `tv_graph_visible` | `true` | Show the person (and their connections) on the public TV networking graph (migration `1002`; #934, #935). Independent of `directory_visible`: settable while the profile is not shared. No row means on. Only the stored choice exists so far; the graph itself is not built yet. |
 | `onboarding_completed_at` | `NULL` | Explicit completion or opt-out of the web profile step (migration `0104`); separate from sharing consent. |
 | `consented_at` | `NULL` | Stamped on every hidden→visible transition; required while visible. |
 
 Text is trimmed, empty text becomes `NULL`, and control characters are
-rejected. `PUT` may omit `bio`, `socials` and `shareCv` to keep their stored
-values.
+rejected. `PUT` may omit `bio`, `socials`, `shareCv` and `tvGraphVisible` to
+keep their stored values; `GET` and `PUT` responses always carry
+`tvGraphVisible` (boolean, default `true`). Older clients that never send it are
+unaffected. Shared name and default: `packages/shared/src/public-profile.ts`.
 
 ### Account photo and CV storage
 
@@ -329,13 +332,20 @@ A `PUT` that repeats the stored settings (or the hidden defaults, without a row)
 and does not newly complete onboarding, writes nothing, is not
 audited and broadcasts nothing. Every other `PUT` writes one `audit_log` row
 (`public_profile.updated`) in the same transaction, recording the changed field
-names and visibility before/after but never the free text or links. CV uploads
+names and visibility before/after but never the free text or links (a graph
+switch change is just `tvGraphVisible` in `changedFields`). CV uploads
 and removals write the same action with `changedFields: ["cv"]` (plus
 `shareCv` when removal stops sharing), never the file name. Photo uploads and
 removals write `user.photo_updated` / `user.photo_removed` on the `user`
 entity with only `hasPhoto` before/after. Moderation writes
 `public_profile.moderated` with the staff reason and answers 409 for an account
 being removed.
+
+Moderation (`PUT /api/users/:id/public-profile`, `users:write`) may set
+`tvGraphVisible: false` but never `true`: turning it on answers 409
+`profile_consent_required`, like starting to share, because appearing on the public
+screen is the person's own consent. Removal-pending accounts are refused (owner
+404 at the caller gate, 409 in the service; staff 409).
 
 A card's challenges exclude cancelled and disqualified queue entries.
 

@@ -5,6 +5,7 @@ export * from "./events.js";
 export * from "./forms.js";
 export * from "./onboarding.js";
 export * from "./projects.js";
+export * from "./public-profile.js";
 export * from "./questions.js";
 export * from "./role-grant-triggers.js";
 export * from "./ui-test-ids.js";

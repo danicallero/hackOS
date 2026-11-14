@@ -299,7 +299,8 @@ scanning one of their company tags (NFC tag or wristband, QR, or the tag link
 public sponsor profile. Full detail: [`diary.md`](./diary.md).
 
 ### directory (#934)
-Opt-in public profile: the caller's profile (bio, links and a shareable CV)
+Opt-in public profile: the caller's profile (bio, links, a shareable CV and the
+independent, default-on `tvGraphVisible` public-TV-graph switch)
 under `/api/me/public-profile`, the profile and shared-CV reads of people the
 caller saved in their diary (there is no listing), and `users:write`
 moderation. The account photo (`/api/me/photo`, staff edits through
