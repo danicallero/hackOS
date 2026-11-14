@@ -73,15 +73,16 @@ defensively. There is no stats row, legend or caption: the header and the graph
 are all there is. Display rules:
 
 - Plain SVG drawn by `connections-graph.tsx` (no chart library), styled after
-  org-roam-ui: flat dark canvas (flat light twin in light mode), thin translucent
-  links, every person the same single flat colour (no glow), radius growing
+  org-roam-ui: flat dark canvas (always dark, whatever the theme), thin translucent
+  straight links (lower opacity on hubs), every person the same single flat colour (no glow), radius growing
   with the square root of degree (leaf ~4.6 px to hub 22 px at 1000 px height,
   capped; no controls). Communities steer only the camera and dimming, never colour.
 - Companies are drawn *as* their logo (SVG `<image>`, no frame), always bigger
   than any person, with no name label (their logo is the node). The negative logo is used on dark
   canvases, the plain one on light; each URL is probed off-DOM, a failed variant
-  falls back to the other, and a company with no loadable logo is a large neutral
-  disc with its initial. The logos are the already-public sponsor URLs (`logoUrl`,
+  falls back to the other, and a company with no loadable logo is a neutral
+  disc with a ring and its initial, the same footprint as a logo. We never clip or
+  frame a logo: a rounded tile in the demo is part of the seeded SVG itself. The logos are the already-public sponsor URLs (`logoUrl`,
   `logoNegativeUrl` on company nodes); the web app sets no CSP and `<image>` needs
   no CORS since nothing reads pixels.
 - Sections: `detectSections` runs a deterministic label propagation over the
@@ -91,16 +92,23 @@ are all there is. Display rules:
   community, only show the overview.
 - Camera loop (`buildSequence`): overview (6 s, calm, no names) →
   section 1 … section 3 → overview → section 4 … The camera is one SVG transform
-  tweened per frame (1.6 s ease-in-out, zoom interpolated in log space);
+  tweened per frame (1.6 s ease-in-out, zoom interpolated in log space) by one
+  rAF loop that writes the transform, the company counter-scale and every dim/focus
+  opacity and stroke width directly onto stable DOM nodes (React renders nothing per
+  frame, elements keep their keys; dimming eases instead of popping; labels fade out
+  300 ms before the move starts);
   `cameraFor` frames the section's people and home companies. In a section its
   people, their companies and their edges are lit, the rest fades to ~10 %
   (opacity transitions). Names are placed only once the camera settles, by
-  `selectLabels` (people only, priority = degree; companies are obstacles; collision-free, inside the
-  frame, capped), and fade in. Nothing else is drawn on the canvas: no caption.
+  `selectLabels` (only the section's top 4 people by degree, `TOP_LABELS`, in small plain text with no
+  stroke, halo or box; the overview names nobody; every node is an obstacle;
+  collision-free, inside the frame), and fade in. Nothing else is drawn on the canvas: no caption.
 - Motion: the loop pauses while the page is hidden; with
   `prefers-reduced-motion` it still steps through sections but jumps without
   animation. Nothing reacts to hover, focus or clicks, and there is no roam.
-- Layout is computed by our own deterministic force pass (`layoutGraph`):
+- Layout is computed by our own deterministic force pass (`layoutGraph`); repulsion
+  and a collision radius scale with each node's drawn radius, so logos repel clearly
+  more than people and keep their distance from each other and from dots:
   positions are seeded from the node id, kept by id across polls, new nodes start
   next to their neighbours, and the simulation runs a bounded number of steps
   then stops. Node ids rotate server-side, so a rotation re-seeds the layout once.

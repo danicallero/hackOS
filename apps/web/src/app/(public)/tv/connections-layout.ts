@@ -47,7 +47,7 @@ function seedPoint(id: string, anchor: Point | null): Point {
 }
 
 /**
- * Positions in the unit square for every node. `previous` positions are kept
+ * Positions around the unit square (soft bounds -0.6..1.6) for every node. `previous` positions are kept
  * as the starting point (and only gently relaxed), new nodes are seeded next to
  * their already placed neighbours, then a bounded force simulation settles and
  * stops — there is no running simulation afterwards.
@@ -58,6 +58,7 @@ export function layoutGraph(
   previous?: Positions,
 ): Positions {
   const ids = nodes.map((node) => node.id).sort();
+  const byId = new Map(nodes.map((node) => [node.id, node]));
   const index = new Map(ids.map((id, i) => [id, i]));
   const n = ids.length;
   const result: Positions = new Map();
@@ -118,6 +119,17 @@ export function layoutGraph(
   const mostlyKnown = kept / n > 0.8;
   const maxIterations = mostlyKnown ? 40 : 220;
   const iterations = Math.max(25, Math.min(maxIterations, Math.floor(PAIR_BUDGET / (n * n))));
+  // Heavier nodes push harder: weight follows the drawn radius, so logos (the biggest
+  // nodes) repel clearly more than people and keep breathing room; `gap[i]` is the
+  // node's collision radius in unit-square coordinates (≈ 1000 px wide world).
+  const weight = new Float64Array(n);
+  const gap = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const node = byId.get(ids[i]);
+    const r = node ? nodeRadius(node.degree, node.kind, 1) : 3;
+    weight[i] = r / 4;
+    gap[i] = (r / 1000) * 1.5;
+  }
   const rest = 0.6 / Math.sqrt(n);
   const repulsion = 0.25 / n;
   const fx = new Float64Array(n);
@@ -133,13 +145,17 @@ export function layoutGraph(
         let dx = x[i] - x[j];
         let dy = y[i] - y[j];
         let d2 = dx * dx + dy * dy;
-        if (d2 > 0.09) continue; // beyond ~0.3 the push is negligible
+        if (d2 > 0.16) continue; // beyond ~0.4 the push is negligible
         if (d2 < 1e-8) {
           dx = hashUnit(ids[i], 3 + step) - 0.5;
           dy = hashUnit(ids[j], 4 + step) - 0.5;
           d2 = dx * dx + dy * dy + 1e-8;
         }
-        const f = repulsion / d2;
+        const w = Math.sqrt(weight[i] * weight[j]);
+        let f = (repulsion * w) / d2;
+        // Never let two nodes sit inside each other's collision radius.
+        const min = gap[i] + gap[j];
+        if (d2 < min * min) f += (repulsion * 4 * w) / d2;
         fx[i] += dx * f;
         fy[i] += dy * f;
         fx[j] -= dx * f;
@@ -162,8 +178,10 @@ export function layoutGraph(
       const mag = Math.hypot(fx[i], fy[i]);
       const cap = 0.03 * alpha;
       const scale = mag > cap ? cap / mag : 1;
-      x[i] = clamp(x[i] + fx[i] * scale * alpha);
-      y[i] = clamp(y[i] + fy[i] * scale * alpha);
+      // Soft walls only: a hard clamp at the unit square piled nodes into straight
+      // columns; the view rescales to the settled bounds anyway.
+      x[i] = Math.max(-0.6, Math.min(1.6, x[i] + fx[i] * scale * alpha));
+      y[i] = Math.max(-0.6, Math.min(1.6, y[i] + fy[i] * scale * alpha));
     }
     alpha *= cooling;
   }
@@ -397,17 +415,17 @@ export function selectLabels(
 }
 
 /** Largest person radius (units); every company is bigger than this. */
-const PERSON_MAX = 22;
+const PERSON_MAX = 36;
 
 /**
  * Node radius in px at overview zoom. People grow with the square root of their
- * degree, from a tiny leaf (~4.6) to a capped hub (22); companies render their
- * logo and always start above the biggest person.
+ * degree, from a tiny leaf (2.4) to a capped hub (36), so hubs read as landmarks;
+ * companies render their logo and always start above the biggest person.
  */
 export function nodeRadius(degree: number, kind: "person" | "company", unit: number): number {
-  const d = Math.sqrt(Math.max(0, degree));
-  if (kind === "company") return unit * Math.min(44, PERSON_MAX + 8 + d * 1.6);
-  return unit * Math.min(PERSON_MAX, 1.8 + d * 2.8);
+  const d = Math.sqrt(Math.max(1, degree));
+  if (kind === "company") return unit * Math.min(60, PERSON_MAX + 4 + d * 1.5);
+  return unit * Math.min(PERSON_MAX, 2.4 + (d - 1) * 3.6);
 }
 
 /** On-screen radius at a camera zoom: people scale with it, company squares only

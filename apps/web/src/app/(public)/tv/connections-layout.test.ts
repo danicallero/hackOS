@@ -28,17 +28,43 @@ function sampleGraph(people: number, companies = 6) {
   return { nodes, edges };
 }
 
+describe("layoutGraph spacing", () => {
+  it("keeps companies apart from each other and from people, deterministically", () => {
+    const { nodes, edges } = sampleGraph(60, 6);
+    const a = layoutGraph(nodes, edges);
+    const b = layoutGraph(nodes, edges);
+    expect([...b]).toEqual([...a]);
+    const dist = (x: string, y: string) => {
+      const p = a.get(x);
+      const q = a.get(y);
+      return Math.hypot((p?.x ?? 0) - (q?.x ?? 0), (p?.y ?? 0) - (q?.y ?? 0));
+    };
+    const companies = nodes.filter((n) => n.kind === "company").map((n) => n.id);
+    const people = nodes.filter((n) => n.kind === "person").map((n) => n.id);
+    let closestCompanies = Number.POSITIVE_INFINITY;
+    for (const x of companies)
+      for (const y of companies)
+        if (x < y) closestCompanies = Math.min(closestCompanies, dist(x, y));
+    let closestPerson = Number.POSITIVE_INFINITY;
+    for (const x of companies)
+      for (const y of people) closestPerson = Math.min(closestPerson, dist(x, y));
+    // Unit-square distances: logos (r≈0.045) must not touch each other or a dot.
+    expect(closestCompanies).toBeGreaterThan(0.09);
+    expect(closestPerson).toBeGreaterThan(0.02);
+  });
+});
+
 describe("layoutGraph", () => {
-  it("is deterministic and keeps every node inside the unit square", () => {
+  it("is deterministic and stays bounded (the view rescales to the settled bounds)", () => {
     const { nodes, edges } = sampleGraph(60);
     const a = layoutGraph(nodes, edges);
     const b = layoutGraph([...nodes].reverse(), edges);
     expect(a.size).toBe(nodes.length);
     for (const [id, point] of a) {
-      expect(point.x).toBeGreaterThanOrEqual(0);
-      expect(point.x).toBeLessThanOrEqual(1);
-      expect(point.y).toBeGreaterThanOrEqual(0);
-      expect(point.y).toBeLessThanOrEqual(1);
+      expect(point.x).toBeGreaterThanOrEqual(-0.6);
+      expect(point.x).toBeLessThanOrEqual(1.6);
+      expect(point.y).toBeGreaterThanOrEqual(-0.6);
+      expect(point.y).toBeLessThanOrEqual(1.6);
       expect(b.get(id)).toEqual(point);
     }
   });

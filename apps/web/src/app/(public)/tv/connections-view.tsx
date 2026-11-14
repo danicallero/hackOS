@@ -77,7 +77,8 @@ export function ConnectionsView({
   const empty = data !== null && data.nodes.length === 0;
 
   return (
-    <TvScreen>
+    // Always the dark wall look: this view paints its own flat canvas, header included.
+    <TvScreen className="dark bg-[#0b0c14] text-foreground">
       {() => (
         <>
           <TvHeader title={t("modeConnections")} icon={UsersThreeIcon} eventName={event.name} />
