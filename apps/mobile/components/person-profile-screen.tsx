@@ -42,6 +42,7 @@ import { useLocale } from "@/lib/i18n";
 import { useImageTint } from "@/lib/image-tint";
 import { safeBack } from "@/lib/navigation";
 import { reportContent } from "@/lib/reports";
+import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import { isPadIdiom } from "@/lib/tabs";
 import { colors, type } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
@@ -76,6 +77,7 @@ export function PersonProfileScreen({
   const readable = useParticipantLayout("list");
   const dark = useColorScheme() === "dark";
   const insets = useSafeAreaInsets();
+  const tabBarBottomInset = useRouterTabBarBottomInset();
   // iOS pads the content itself instead of an automatic inset under the
   // transparent header: a cancelled swipe-to-dismiss changes that inset for a
   // moment and left the page shifted, half-collapsing the avatar.
@@ -272,7 +274,7 @@ export function PersonProfileScreen({
           gap: 24,
           // A short profile still scrolls to the collapsed avatar (#935).
           minHeight: person ? avatarCollapse.contentMinHeight : undefined,
-          paddingBottom: Math.max(40, insets.bottom + 24),
+          paddingBottom: Math.max(40, tabBarBottomInset + 24),
           ...readable.content,
           paddingTop: insets.top + (usesCustomAndroidHeader ? 64 : 52),
         }}
@@ -307,7 +309,14 @@ export function PersonProfileScreen({
         ) : (
           <>
             <ProfileCard
-              beforeKnowledge={helper ? <HelperCompany helper={helper} /> : undefined}
+              beforeKnowledge={
+                helper?.affiliation &&
+                !(person.enterprises ?? []).some(
+                  (company) => company.name === helper.affiliation,
+                ) ? (
+                  <HelperCompany helper={helper} />
+                ) : undefined
+              }
               data={person}
               nameColor={hero?.foreground}
               onNameLayout={(event: LayoutChangeEvent) => {

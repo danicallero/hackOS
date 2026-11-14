@@ -364,3 +364,32 @@ it("preserves the rendered profile after refresh fails, then retries without los
   await waitFor(() => expect(screen.queryByText("requestError")).toBeNull());
   expect(screen.getByText("Ana Souto")).toBeTruthy();
 });
+
+it.each([
+  true,
+  false,
+])("shows the helper affiliation once, with a company link when available (H63): %s", async (linked) => {
+  jest.mocked(apiFetch).mockImplementation(async (path: string) => {
+    if (path === "/api/helpdesk/helpers/101")
+      return {
+        profile: {
+          ...profile,
+          enterprises: linked ? [{ id: 4, name: "Acme", logoUrl: null }] : [],
+        },
+        affiliation: "Acme",
+        affiliationLogoUrl: null,
+        challenges: [],
+        availability: [],
+        present: false,
+        scheduledNow: false,
+      };
+    return { items: [] };
+  });
+  await renderMobile(<PersonProfileScreen source="helpDesk" />);
+  await screen.findByText("Ana Souto");
+  expect(screen.getAllByText("Acme")).toHaveLength(1);
+  if (linked) {
+    await fireEvent.press(screen.getByRole("button", { name: "Acme" }));
+    expect(mockRouterPush).toHaveBeenCalledWith("/companies/4");
+  }
+});
