@@ -383,7 +383,7 @@ describe("bound and density", () => {
     expect(body.edges.length).toBeLessThanOrEqual(TV_GRAPH_MAX_EDGES);
     expect(body.nodes.length).toBeLessThanOrEqual(TV_GRAPH_MAX_NODES);
     expect(raw.length).toBeLessThan(2_000_000);
-    expect(elapsed).toBeLessThan(3000);
+    expect(elapsed).toBeLessThan(1000);
   });
 });
 

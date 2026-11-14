@@ -55,7 +55,9 @@ interface GraphRow {
  * current-edition company. The label is the display name with the surname rule.
  */
 const GRAPH_SQL = `
-WITH people AS (
+WITH ed AS MATERIALIZED (
+  SELECT current_edition() AS k
+), people AS MATERIALIZED (
   SELECT u.id,
          btrim(
            u.name || CASE
@@ -66,26 +68,36 @@ WITH people AS (
     FROM users u
     JOIN user_public_profiles p ON p.user_id = u.id AND p.directory_visible
    WHERE u.is_test_account = false
-     AND u.id IN (SELECT user_id FROM user_event_access)
-), companies AS (
+     AND u.account_state = 'active' AND u.anonymized_at IS NULL
+     AND EXISTS (
+       SELECT 1 FROM user_roles ur
+       JOIN roles r ON r.id = ur.role_id
+       WHERE ur.user_id = u.id AND r.event_access = true AND r.deleted_at IS NULL
+         AND (ur.event_key IS NULL OR ur.event_key = (SELECT k FROM ed)))
+), companies AS MATERIALIZED (
   SELECT e.id, e.name AS label, e.logo_url,
          COALESCE(e.logo_negative_url, e.logo_url) AS logo_negative_url
     FROM enterprises e
-   WHERE e.event_key = current_edition() AND e.visibility = 'visible'
+   WHERE e.event_key = (SELECT k FROM ed) AND e.visibility = 'visible'
      AND NOT ${ENTERPRISE_HAS_SYNTHETIC}
+), entries AS MATERIALIZED (
+  SELECT d.owner_id, d.target_user_id, d.enterprise_id
+    FROM diary_entries d
+   WHERE d.event_key = (SELECT k FROM ed)
+     AND (d.target_user_id IS NOT NULL OR d.enterprise_id IS NOT NULL)
 ), edges AS (
-  SELECT DISTINCT 'p'::text AS ak, LEAST(d.owner_id, d.target_user_id) AS a,
-         'p'::text AS bk, GREATEST(d.owner_id, d.target_user_id) AS b
-    FROM diary_entries d
-   WHERE d.event_key = current_edition() AND d.target_user_id IS NOT NULL
-     AND d.owner_id IN (SELECT id FROM people)
-     AND d.target_user_id IN (SELECT id FROM people)
+  SELECT 'p'::text AS ak, LEAST(x.owner_id, x.target_user_id) AS a,
+         'p'::text AS bk, GREATEST(x.owner_id, x.target_user_id) AS b
+    FROM entries x
+   WHERE x.target_user_id IS NOT NULL
+     AND x.owner_id IN (SELECT id FROM people)
+     AND x.target_user_id IN (SELECT id FROM people)
   UNION
-  SELECT 'p', d.owner_id, 'c', d.enterprise_id
-    FROM diary_entries d
-   WHERE d.event_key = current_edition() AND d.enterprise_id IS NOT NULL
-     AND d.owner_id IN (SELECT id FROM people)
-     AND d.enterprise_id IN (SELECT id FROM companies)
+  SELECT 'p', x.owner_id, 'c', x.enterprise_id
+    FROM entries x
+   WHERE x.enterprise_id IS NOT NULL
+     AND x.owner_id IN (SELECT id FROM people)
+     AND x.enterprise_id IN (SELECT id FROM companies)
 ), ends AS (
   SELECT ak AS k, a AS id FROM edges UNION ALL SELECT bk, b FROM edges
 ), deg AS (
@@ -99,6 +111,14 @@ SELECT 'n' AS row_type, deg.k AS a_kind, deg.id AS a_id, NULL::text AS b_kind, N
   LEFT JOIN companies co ON deg.k = 'c' AND co.id = deg.id
 UNION ALL
 SELECT 'e', ak, a, bk, b, NULL, NULL, NULL, NULL FROM edges`;
+
+/**
+ * Fallback for #934/#935: the CTEs are built on joins the planner estimates at
+ * ~1 row (no statistics on materialized CTEs), so it picks nested loops that
+ * rescan the diary (O(entries x people)). Hash joins are what we want at every
+ * size: 500 attendees 17 ms (restructured) -> 4 ms (hash only), old query 800 ms.
+ */
+const NO_NESTLOOP = "SET LOCAL enable_nestloop = off";
 
 interface RawEdge {
   a: string;
@@ -212,6 +232,10 @@ export function buildGraph(
 }
 
 export async function tvConnections(): Promise<TvConnectionsResponse> {
-  const { rows } = await pool.query<GraphRow>(GRAPH_SQL);
-  return buildGraph(rows, Date.now());
+  // A multi-statement simple query runs in one implicit transaction, so SET LOCAL
+  // is scoped to this read and the pool's edition wrapper still applies.
+  const results = (await pool.query(`${NO_NESTLOOP}; ${GRAPH_SQL}`)) as unknown as {
+    rows: GraphRow[];
+  }[];
+  return buildGraph(results[results.length - 1]?.rows ?? [], Date.now());
 }
