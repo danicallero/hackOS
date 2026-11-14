@@ -109,7 +109,7 @@ The facade still requires every open meal in a self submission.
 - **Alimentación** tab (`meal-plans:export`): `GET /api/logistics/dietary` lists
   every current attendee with intolerances or notes, the per-intolerance counts
   and totals; the web filters by intolerance and searches names, companies and
-  notes. Every read writes an audit row without content.
+  notes. This read-only view does not create audit entries.
 - Attendees change their answers in the onboarding RSVP step (listed only
   while they still have an open item to answer) and in My profile › RSVP
   (always available with event access). Mobile Account uses the same
