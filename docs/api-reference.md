@@ -77,6 +77,10 @@ other module's exported function instead), and, if it does background work, a
 
 ## Modules
 
+### editions (multi-edition · H8, H53)
+
+The edition catalogue and lifecycle: `GET /api/me/editions` (editions the caller may view; clients show a selector only when there is more than one), `GET/POST /api/editions`, `PATCH /api/editions/:eventKey` and `POST /api/editions/:eventKey/activate|close|reopen` (event:manage, audited, idempotent). Closing stops submissions (drafts become `not_submitted`), cancels pending queue entries and open/claimed help requests, ends judging sessions and help windows, and notifies nobody. See [multi-edition plan](./multi-edition-plan.md) and [Edition scope](#edition-scope-multi-edition) below.
+
 ### onboarding (HackUDC 2027 onboarding)
 
 Resolves current-edition participant steps from attendance and profile facts, and persists audited, idempotent decisions. See [onboarding](./onboarding.md).
@@ -655,6 +659,39 @@ never the access check — the server-side policy is; and `public` is an
 explicit, audited allowlist entry, never a default a route falls into by
 omission.
 
+### Edition scope (multi-edition)
+
+One installation hosts several editions ([plan](./multi-edition-plan.md)).
+People, profiles, preferences, roles' definitions and catalogues are global;
+event data carries `event_key` (directly, or through its parent row).
+
+- **Viewed edition.** Clients send `X-Edition: <event_key>`; without it the
+  API acts on the current edition (`event_config.event_key`). The auth hook
+  (`lib/edition.ts`) validates the header: the current edition is always
+  allowed (a person without a role there is an applicant); another edition
+  requires participation in it (`edition_participation`) or the global
+  superadmin; drafts are superadmin-only; anonymous callers may read published
+  editions' public content. `db/pool.ts` then scopes that request's statements
+  with the `hackos.edition` setting, which the SQL function
+  `current_edition()` reads. Edition columns default to it; list and
+  by-person queries filter on it; resource-by-id routes derive the edition from
+  the row. `sharedCache` keys include the viewed edition.
+- **Capabilities** come from the viewed edition's `user_roles` plus protected
+  global roles (`event_key IS NULL`, `system:superadmin`). In a closed edition
+  only capabilities classified `read` in `CAPABILITY_ACCESS`
+  (`packages/shared/src/capabilities.ts`) survive.
+- **Closed editions are read-only.** One shared pre-handler rejects every
+  mutation of a closed viewed edition with `409 edition_closed`, unless the
+  route policy declares `edition: "global"` (account, profile, preferences,
+  devices, catalogues, the edition lifecycle) or the caller is the global
+  superadmin. Routes writing the current edition's singleton settings declare
+  `edition: "current"` and are rejected while another edition is viewed. A
+  participant's own after-event record (self-issued attendance certificates)
+  declares `edition: "self-service"` and still writes a closed edition. A
+  trigger on every edition table (SQLSTATE `HKE01`) is the in-transaction
+  backstop; erasure and the closing transaction itself use
+  `withClosedEditionWrites`.
+
 ### Primary-email verification boundary (H1–H3)
 
 The Better Auth sign-in policy intentionally allows an unverified account to
@@ -684,6 +721,7 @@ return silent success or swallow a failure. The global error handler
 | `ForbiddenError` | 403 | `forbidden` |
 | `NotFoundError` | 404 | `not_found` |
 | `ConflictError` | 409 | `conflict` — capacity full, a double transition, a stale badge, an already-used token |
+| `EditionClosedError` | 409 | `edition_closed` — a write into a closed (read-only) edition |
 | `TooManyRequestsError` | 429 | `too_many_requests` — carries `retryAfterSeconds` |
 | `ServiceUnavailableError` | 503 | `service_unavailable` — a dependent provider/credential isn't configured (e.g. unset Wallet signing keys) |
 

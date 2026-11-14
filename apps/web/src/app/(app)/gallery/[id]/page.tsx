@@ -68,6 +68,9 @@ export default async function ProjectGalleryPage({ params }: { params: Promise<{
       />
       <PageLayout className="max-w-6xl">
         <GalleryRefresh />
+        {project.edition && (
+          <p className="text-muted-foreground -mt-2 text-sm">{project.edition.name}</p>
+        )}
         <ProjectOverview
           showQueue={project.isMember === true || project.canInspect === true}
           project={project}

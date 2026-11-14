@@ -203,7 +203,13 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   const access = {
     authenticated: { kind: "authenticated" } as const,
     publicContent: { kind: "public", anonymousCategory: "public-content" } as const,
-    applePasskit: { kind: "token", policy: "apple-passkit-web-service" } as const,
+    // The device protocol acts on a pass by serial and token; passes of any
+    // edition keep refreshing (multi-edition plan: device data is global).
+    applePasskit: {
+      kind: "token",
+      policy: "apple-passkit-web-service",
+      edition: "global",
+    } as const,
     scopedWallet: { kind: "token", policy: "scoped-wallet-access" } as const,
     accredit: { kind: "capability", capability: CAPABILITIES.ACCREDIT_SCAN } as const,
     presence: { kind: "capability", capability: CAPABILITIES.PRESENCE_SCAN } as const,

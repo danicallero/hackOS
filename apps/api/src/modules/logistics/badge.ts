@@ -1,7 +1,8 @@
 import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import type { Queryable } from "../../db/pool.js";
+import { audit } from "../../lib/audit.js";
 import { isImplausiblyFuture } from "../../lib/clock.js";
-import { AppError } from "../../lib/errors.js";
+import { AppError, ConflictError } from "../../lib/errors.js";
 import { scannerCredentialDigest } from "./credential-tombstones.js";
 
 /**
@@ -43,7 +44,7 @@ export async function resolveByBadge(
   // retired with an account is never reused.
   const tombstone = await db.query(
     `SELECT 1 FROM scanner_revoked_badges
-      WHERE credential_digest = $1
+      WHERE credential_digest = $1 AND event_key = current_edition()
       LIMIT 1`,
     [scannerCredentialDigest("badge", badgeId)],
   );
@@ -56,6 +57,7 @@ export async function resolveByBadge(
   const current = await db.query(
     `SELECT id FROM users
       WHERE badge_id = $1
+        AND badge_event_key = current_edition()
         AND anonymized_at IS NULL
         AND (
           account_state = 'active'
@@ -66,10 +68,14 @@ export async function resolveByBadge(
   if (current.rows[0]) return current.rows[0].id as number;
 
   const revoked = await db.query(
-    `SELECT 1 FROM users
-      WHERE $1 = ANY(badge_id_history)
-         OR (badge_id = $1 AND account_state = 'removal_pending')
-      LIMIT 1`,
+    `SELECT 1 WHERE EXISTS (
+        SELECT 1 FROM badge_id_history h
+         WHERE h.badge_id = $1 AND h.event_key = current_edition()
+      ) OR EXISTS (
+        SELECT 1 FROM users
+         WHERE badge_id = $1 AND badge_event_key = current_edition()
+           AND account_state = 'removal_pending'
+      )`,
     [badgeId],
   );
   if (revoked.rows[0])
@@ -101,7 +107,7 @@ export async function resolveByBadges(
   const digests = badgeIds.map((badgeId) => scannerCredentialDigest("badge", badgeId));
   const tombstones = await db.query<{ credential_digest: string }>(
     `SELECT credential_digest FROM scanner_revoked_badges
-      WHERE credential_digest = ANY($1::text[])`,
+      WHERE credential_digest = ANY($1::text[]) AND event_key = current_edition()`,
     [digests],
   );
   const tombstoned = new Set(tombstones.rows.map((r) => r.credential_digest));
@@ -109,6 +115,7 @@ export async function resolveByBadges(
   const current = await db.query<{ id: number; badge_id: string }>(
     `SELECT id, badge_id FROM users
       WHERE badge_id = ANY($1::text[])
+        AND badge_event_key = current_edition()
         AND anonymized_at IS NULL
         AND account_state = 'active'`,
     [badgeIds],
@@ -118,9 +125,12 @@ export async function resolveByBadges(
   const revoked = await db.query<{ badge_id: string }>(
     `SELECT b AS badge_id FROM unnest($1::text[]) AS b
       WHERE EXISTS (
+        SELECT 1 FROM badge_id_history h
+         WHERE h.badge_id = b AND h.event_key = current_edition()
+      ) OR EXISTS (
         SELECT 1 FROM users
-         WHERE b = ANY(badge_id_history)
-            OR (badge_id = b AND account_state = 'removal_pending')
+         WHERE badge_id = b AND badge_event_key = current_edition()
+           AND account_state = 'removal_pending'
       )`,
     [badgeIds],
   );
@@ -166,4 +176,81 @@ export async function pinBadgeAssignmentTime(
   await client.query(`SELECT set_config('hackos.badge_assigned_at', $1, true)`, [
     assignedAt.toISOString(),
   ]);
+}
+
+/**
+ * Releases a rotated-away or removed badge into the edition-scoped history
+ * (H23, multi-edition plan §9). The history row carries the edition of the
+ * assignment being released, which may be a closed edition, so the insert
+ * runs with closed-edition writes allowed and the previous setting restored.
+ */
+export async function recordReleasedBadge(
+  client: Queryable,
+  userId: number,
+  badgeId: string,
+  editionKey: string,
+): Promise<void> {
+  const prev = await client.query<{ value: string | null }>(
+    `SELECT current_setting('hackos.edition_write_override', true) AS value`,
+  );
+  await client.query(`SELECT set_config('hackos.edition_write_override', 'on', true)`);
+  try {
+    await client.query(
+      `INSERT INTO badge_id_history (user_id, badge_id, event_key)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, badge_id, event_key) DO UPDATE SET released_at = now()`,
+      [userId, badgeId, editionKey],
+    );
+  } finally {
+    await client.query(`SELECT set_config('hackos.edition_write_override', $1, true)`, [
+      prev.rows[0]?.value ?? "",
+    ]);
+  }
+}
+
+/**
+ * A physical code has one holder at a time (H22/H23, multi-edition plan §9).
+ * Before assigning `badgeId` to `userId`: a holder of the CURRENT edition
+ * blocks the assignment; a holder from a previous edition is released (the
+ * code moves to the new person, the old edition keeps its history row) and
+ * the current edition's retired-credential row for the code is lifted, all in
+ * the caller's transaction and audited (H53). Call with the target user row
+ * already locked.
+ */
+export async function claimBadgeCode(
+  client: Queryable,
+  actorId: number,
+  userId: number,
+  badgeId: string,
+  conflictMessage: string,
+): Promise<void> {
+  const { rows } = await client.query<{
+    id: number;
+    badge_event_key: string;
+    in_current_edition: boolean;
+  }>(
+    `SELECT id, badge_event_key, badge_event_key = current_edition() AS in_current_edition
+       FROM users WHERE badge_id = $1 FOR UPDATE`,
+    [badgeId],
+  );
+  const holder = rows[0];
+  if (!holder || holder.id === userId) return;
+  if (holder.in_current_edition) {
+    throw new ConflictError(conflictMessage, { badgeId });
+  }
+  await client.query(`UPDATE users SET badge_id = NULL WHERE id = $1`, [holder.id]);
+  await recordReleasedBadge(client, holder.id, badgeId, holder.badge_event_key);
+  await client.query(
+    `DELETE FROM scanner_revoked_badges
+      WHERE credential_digest = $1 AND event_key = current_edition()`,
+    [scannerCredentialDigest("badge", badgeId)],
+  );
+  await audit(client, {
+    actorId,
+    entityType: "badge",
+    entityId: holder.id,
+    action: "reassign_released",
+    before: { badge_id: badgeId, event_key: holder.badge_event_key },
+    after: { badge_id: null, reassigned_to: userId },
+  });
 }

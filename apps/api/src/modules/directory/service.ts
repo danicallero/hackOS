@@ -94,9 +94,11 @@ const SHOWN_REPOS_SQL = `
    WHERE p.show_project
      AND s.user_id = u.id
      AND s.status = 'active'
+     AND r.event_key = current_edition()
      AND r.is_test_account = false`;
 
 const CHALLENGE_OF_PROJECTS = `c.visibility='visible' AND c.is_test_account=false
+ AND c.event_key = current_edition()
  AND (
    EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.challenge_id=c.id
      AND pc.repo_id IN(SELECT id FROM (${SHOWN_REPOS_SQL}) sr))
@@ -206,9 +208,9 @@ function entrySql(profiles: string, accountLinks = true): string {
          COALESCE((
            SELECT jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name) ORDER BY lower(t.name), t.id)
              FROM helper_profiles hp
-             JOIN helper_topics ht ON ht.user_id = hp.user_id
+             JOIN helper_topics ht ON ht.user_id = hp.user_id AND ht.event_key = hp.event_key
              JOIN help_topics t ON t.id = ht.topic_id
-            WHERE hp.user_id = u.id AND hp.published
+            WHERE hp.user_id = u.id AND hp.published AND hp.event_key = current_edition()
          ), '[]'::jsonb) AS help_topics,
          COALESCE((
            SELECT jsonb_agg(jsonb_build_object('id', s.id, 'title', s.title, 'startsAt', s.starts_at,
@@ -216,7 +218,7 @@ function entrySql(profiles: string, accountLinks = true): string {
                             ORDER BY s.starts_at, s.id)
              FROM schedule_speakers ss
              JOIN schedule s ON s.id = ss.schedule_id
-            WHERE ss.user_id = u.id
+            WHERE ss.user_id = u.id AND s.event_key = current_edition()
               AND s.visibility = 'shown'
               AND (s.publish_at IS NULL OR s.publish_at <= now())
               AND 'participant' = ANY (s.audiences)
@@ -226,7 +228,7 @@ function entrySql(profiles: string, accountLinks = true): string {
              FROM (SELECT e.id, e.name, e.logo_url, min(sp.id) AS sp_id
                      FROM sponsors sp
                      JOIN enterprises e ON e.id = sp.enterprise_id
-                    WHERE sp.user_id = u.id AND e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}
+                    WHERE sp.user_id = u.id AND e.event_key = current_edition() AND e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}
                     GROUP BY e.id, e.name, e.logo_url) m
          ), '[]'::jsonb) AS enterprises
     FROM ${profiles}
@@ -353,7 +355,7 @@ export async function savedByReader(
   userId: number,
 ): Promise<boolean> {
   const { rowCount } = await db.query(
-    "SELECT 1 FROM diary_entries WHERE owner_id = $1 AND target_user_id = $2",
+    "SELECT 1 FROM diary_entries WHERE owner_id = $1 AND target_user_id = $2 AND event_key = current_edition()",
     [readerId, userId],
   );
   return (rowCount ?? 0) > 0;

@@ -53,3 +53,11 @@ exposes only the intended public mentor fields.
 Account removal deletes RSVP answers, onboarding decisions and mentor profiles
 (including expertise through cascade) before anonymizing a retained user row.
 Final user deletion also cascades these tables.
+
+## Editions
+
+Step decisions are stored per `(user, event_key)` and the config comes from
+`event_config`, which holds the current edition's live settings, so a new
+edition starts with an empty onboarding config. `readOnboarding` resolves the
+edition with `current_edition()`; saving the onboarding settings is a
+current-edition write.

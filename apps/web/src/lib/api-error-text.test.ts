@@ -34,6 +34,14 @@ describe("apiErrorText", () => {
     expect(apiErrorText(new Error("network"), tGl, "fb")).toBe("fb");
   });
 
+  it("explains a write into a closed edition in the active language", () => {
+    const err = new ApiError(409, "edition_closed", "Edition closed");
+    expect(apiErrorText(err, tGl, "fb")).toBe(commonGl.apiError_edition_closed);
+    for (const dict of [commonEn, commonEs, commonGl]) {
+      expect((dict as Record<string, string>).apiError_edition_closed).toBeTruthy();
+    }
+  });
+
   it("has es/gl/en copy for every shared reason", () => {
     for (const reason of Object.values(ERROR_REASONS)) {
       const key = errorReasonCopyKey(reason);

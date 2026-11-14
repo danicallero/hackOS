@@ -458,27 +458,16 @@ describe("event editions", () => {
     const meal = await activity({ kinds: ["sponsor"] });
     await putAnswers(sponsor, [{ activityId: meal, answer: "yes" }]);
 
+    await pool.query(
+      `INSERT INTO editions (event_key, name, status) VALUES ('next-edition', 'Next', 'active')
+       ON CONFLICT DO NOTHING`,
+    );
     await pool.query(`UPDATE event_config SET event_key = 'next-edition' WHERE id = 1`);
-    // No settings for the new key yet: nothing is offered, nothing is counted.
+    // Activities and their settings belong to their edition (multi-edition):
+    // the new edition starts with nothing offered, and the old answer stays as history.
     expect(await getItems(sponsor)).toEqual([]);
-
-    // Even with settings, last edition's event access is no evidence for the new one.
-    await pool.query(
-      `INSERT INTO activity_rsvp_settings (activity_id, event_key, enabled, kinds)
-       VALUES ($1, 'next-edition', true, ARRAY['sponsor'])`,
-      [meal],
-    );
-    expect(await getItems(sponsor)).toEqual([]);
-    await pool.query(
-      `INSERT INTO user_role_event_evidence (user_id, role_id, event_key)
-       SELECT user_id, role_id, 'next-edition' FROM user_roles WHERE user_id = $1`,
-      [sponsor],
-    );
-    expect((await getItems(sponsor))[0]).toMatchObject({ answer: null });
-    expect((await putAnswers(sponsor, [{ activityId: meal, answer: "no" }])).statusCode).toBe(200);
     expect(await stored(sponsor)).toEqual([
       { activity_id: meal, event_key: "default", attending: true },
-      { activity_id: meal, event_key: "next-edition", attending: false },
     ]);
   });
 });
@@ -559,6 +548,15 @@ describe("organizer settings", () => {
     const meal = await activity({ kinds: ["sponsor"] });
     const pool = await db();
     const { rows } = await pool.query(`SELECT schedule_id FROM activities WHERE id = $1`, [meal]);
+    await pool.query(
+      `INSERT INTO editions (event_key, name, status) VALUES ('next-edition', 'Next', 'active')
+       ON CONFLICT DO NOTHING`,
+    );
+    await pool.query(
+      `INSERT INTO user_roles (user_id, role_id, event_key)
+       SELECT user_id, role_id, 'next-edition' FROM user_roles WHERE user_id = $1`,
+      [organizer],
+    );
     await pool.query(`UPDATE event_config SET event_key = 'next-edition' WHERE id = 1`);
     const res = await app.inject({
       method: "GET",

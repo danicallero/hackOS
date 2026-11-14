@@ -537,12 +537,13 @@ export async function listAnnouncementsAdmin(
   actorId?: number,
 ): Promise<Announcement[]> {
   const fixtureMarkerSql = announcementFixtureMarkerSql();
-  const markerClause = actorId == null ? "" : ` WHERE ${fixtureMarkerSql} = $1`;
+  const markerClause = actorId == null ? "" : ` AND ${fixtureMarkerSql} = $1`;
   const params = actorId == null ? [] : [await isSyntheticOperator(db, actorId)];
+  // Scoped to the viewed edition (multi-edition plan).
   const { rows } = await db.query(
     `SELECT a.* FROM announcements a
        LEFT JOIN users author ON author.id = a.author_id
-      ${markerClause}
+      WHERE a.event_key = current_edition()${markerClause}
       ORDER BY a.created_at DESC`,
     params,
   );
@@ -555,7 +556,8 @@ export async function listAnnouncementsPublic(db: Queryable): Promise<PublicAnno
   const { rows } = await db.query(
     `SELECT a.id, a.title, a.body, a.translations, a.publish_at, a.expires_at, a.screen_placement FROM announcements a
      LEFT JOIN users author ON author.id = a.author_id
-     WHERE NOT ${fixtureMarkerSql}
+     WHERE a.event_key = current_edition()
+       AND NOT ${fixtureMarkerSql}
        AND (a.publish_at IS NULL OR a.publish_at <= now())
        AND (a.expires_at IS NULL OR a.expires_at > now())
      ORDER BY a.publish_at DESC NULLS LAST, a.created_at DESC`,
@@ -631,12 +633,14 @@ async function resolveRecipients(
     `SELECT DISTINCT u.id, u.language
      FROM users u
      LEFT JOIN user_roles ur ON ur.user_id = u.id
+       AND (ur.event_key IS NULL
+            OR ur.event_key = (SELECT an.event_key FROM announcements an WHERE an.id = $4))
      LEFT JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
      WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
        AND u.is_test_account = $3
        AND ($1::int[] = '{}'::int[] OR r.id = ANY($1::int[]))
        AND ($2::int[] = '{}'::int[] OR u.food_intolerances && $2::int[])`,
-    [announcement.role_ids, announcement.intolerance_ids, fixtureMarker],
+    [announcement.role_ids, announcement.intolerance_ids, fixtureMarker, announcement.id],
   );
   return rows as Array<{ id: number; language: string | null }>;
 }

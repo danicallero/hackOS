@@ -71,6 +71,7 @@ route schemas. Root [`README.md`](../README.md) covers local setup,
 | [Help desk client contract](./help-desk-contract.md) | Request/response contract the web and mobile clients rely on |
 | [Judging timing](./project-lifecycle-audit.md) | Track targets, preparation allowances, timing rules (H30, H33–H37) |
 | [Live Activities / Live Updates](./live-activities.md) | State builders, device registry, push worker, APNs/Android formats (#966) |
+| [Multi-edition support](./multi-edition-plan.md) | Editions, roles per edition, `X-Edition`, read-only closed editions, closing effects (Spanish) |
 | [Native projects](./projects.md) | Drafts, snapshots, phases, gallery, invitations, winners |
 | [Notifications & announcements](./notifications.md) | Announcement model, targeting, and the outbox/dispatch pipeline (H50–H53) |
 | [Onboarding](./onboarding.md) | Edition identity, resumable steps, RSVP answers, mentor publication |

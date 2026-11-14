@@ -35,6 +35,8 @@ export interface NativeProject {
   /** ISO time the phase window closes; shown only when the server provides it. */
   submissionsCloseAt?: string | null;
   files?: ProjectFile[];
+  /** The edition the project belongs to, when the server reports it. */
+  edition?: { eventKey: string; name: string };
 }
 /** H20: reject incomplete payloads before the editor renders collection fields. */
 export function parseNativeProject(value: unknown): NativeProject {

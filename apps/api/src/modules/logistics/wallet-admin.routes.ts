@@ -112,7 +112,12 @@ const translation = z
   .strict();
 export function registerWalletAdminRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
-  const capability = { kind: "capability", capability: CAPABILITIES.WALLET_MANAGE } as const;
+  // Wallet settings are a singleton of the current edition (multi-edition plan).
+  const capability = {
+    kind: "capability",
+    capability: CAPABILITIES.WALLET_MANAGE,
+    edition: "current",
+  } as const;
   r.get(
     "/api/event/wallet",
     {

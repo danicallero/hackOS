@@ -3,6 +3,7 @@ import { RealtimeClient, type ResyncReason } from "@hackos/shared/realtime-clien
 import { AppState, Platform } from "react-native";
 import { authClient } from "./auth-client";
 import { clientHeaders } from "./client-build";
+import { editionHeaders } from "./edition";
 import { API_URL, onApiUrlChange } from "./env";
 
 export type ServerEventResyncReason = ResyncReason;
@@ -20,7 +21,7 @@ export type ServerEventStreamOptions = {
 type Listener = { callback: (event: SseEnvelope) => void; scope: string };
 const listeners = new Map<string, Set<Listener>>();
 const client = new RealtimeClient({
-  headers: () => ({ cookie: authClient.getCookie(), ...clientHeaders() }),
+  headers: () => ({ cookie: authClient.getCookie(), ...clientHeaders(), ...editionHeaders() }),
   onResync: ({ reason, topic, lastEventId }) => {
     emit({
       topic,

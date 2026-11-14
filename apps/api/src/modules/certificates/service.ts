@@ -6,6 +6,7 @@ import { config } from "../../config.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit, auditMany } from "../../lib/audit.js";
 import { recordsToCsv, toCsv } from "../../lib/csv.js";
+import { withClosedEditionWrites } from "../../lib/edition.js";
 import {
   AppError,
   BadRequestError,
@@ -34,6 +35,24 @@ import {
   readCertificateType,
   recipientMatchesType,
 } from "./types.js";
+
+/**
+ * Event facts (name, dates, venue) of the edition this request acts on.
+ * event_config holds the current edition's live settings; another edition
+ * contributes its own name and dates (editions), keeping the venue and
+ * timezone of the organisation's configuration (#1083, H8).
+ */
+const EVENT_INFO_SQL = `
+  SELECT CASE WHEN e.event_key IS NULL OR e.event_key = COALESCE(ec.event_key, 'default')
+              THEN ec.name ELSE e.name END AS name,
+         ec.venue_name, ec.timezone,
+         CASE WHEN e.event_key IS NULL OR e.event_key = COALESCE(ec.event_key, 'default')
+              THEN ec.event_starts_at ELSE e.starts_at END AS event_starts_at,
+         CASE WHEN e.event_key IS NULL OR e.event_key = COALESCE(ec.event_key, 'default')
+              THEN ec.event_ends_at ELSE e.ends_at END AS event_ends_at
+    FROM event_config ec
+    LEFT JOIN editions e ON e.event_key = current_edition()
+   WHERE ec.id = 1`;
 
 /** #1083: the organisation-wide certificate policy (one row). */
 export interface CertificateSettings {
@@ -82,7 +101,7 @@ export async function updateSettings(
       const { rows } = await client.query(
         `UPDATE attendance_certificates
         SET revoked_at=now(), revoked_by=$1, revoked_reason='certificate_award_policy_changed'
-        WHERE revoked_at IS NULL AND snapshot->>'attendancePolicy' IS DISTINCT FROM 'false' AND snapshot->>'manuallyCertified' IS DISTINCT FROM 'true' RETURNING id`,
+        WHERE revoked_at IS NULL AND event_key = current_edition() AND snapshot->>'attendancePolicy' IS DISTINCT FROM 'false' AND snapshot->>'manuallyCertified' IS DISTINCT FROM 'true' RETURNING id`,
         [actorId],
       );
       await auditMany(
@@ -139,7 +158,7 @@ async function readApproval(
   db: pg.Pool | pg.PoolClient = pool,
 ): Promise<CertificateApproval | null> {
   const { rows } = await db.query(
-    `SELECT certified_hours, reason, approved_by, approved_at FROM certificate_approvals WHERE user_id = $1`,
+    `SELECT certified_hours, reason, approved_by, approved_at FROM certificate_approvals WHERE user_id = $1 AND event_key = current_edition()`,
     [userId],
   );
   const row = rows[0];
@@ -196,13 +215,13 @@ async function recordApproval(
   const before = await readApproval(userId, client);
   await client.query(
     `INSERT INTO certificate_approvals(user_id, certified_hours, reason, approved_by)
-    VALUES ($1,$2,$3,$4) ON CONFLICT(user_id) DO UPDATE SET certified_hours=$2, reason=$3, approved_by=$4, approved_at=now()`,
+    VALUES ($1,$2,$3,$4) ON CONFLICT(user_id, event_key) DO UPDATE SET certified_hours=$2, reason=$3, approved_by=$4, approved_at=now()`,
     [userId, certifiedHours, reason, actorId],
   );
   // An existing public code must never verify a different award after a review.
   const { rows } = await client.query(
     `UPDATE attendance_certificates SET revoked_at=now(), revoked_by=$2, revoked_reason='certified_hours_reviewed'
-    WHERE user_id=$1 AND revoked_at IS NULL AND snapshot->>'attendancePolicy' IS DISTINCT FROM 'false' AND ((snapshot->>'hours')::numeric IS DISTINCT FROM $3::numeric OR snapshot->>'manuallyCertified' IS DISTINCT FROM 'true') RETURNING id`,
+    WHERE user_id=$1 AND event_key = current_edition() AND revoked_at IS NULL AND snapshot->>'attendancePolicy' IS DISTINCT FROM 'false' AND ((snapshot->>'hours')::numeric IS DISTINCT FROM $3::numeric OR snapshot->>'manuallyCertified' IS DISTINCT FROM 'true') RETURNING id`,
     [userId, actorId, certifiedHours],
   );
   await auditMany(
@@ -258,6 +277,7 @@ async function presentationsFor(
        JOIN queue_entries q ON q.repo_id = s.repo_id
        JOIN challenges c ON c.id = q.challenge_id
       WHERE s.status = 'active' AND s.user_id = ANY($1::int[])
+        AND q.event_key = current_edition()
         AND (q.completed_at IS NOT NULL OR q.presentation_started_at IS NOT NULL)`,
     [userIds],
   );
@@ -308,7 +328,7 @@ async function typeGate(
   if (definition.requiresEventEnd) {
     const ends = facts
       ? facts.eventEndsAt
-      : ((await db.query(`SELECT event_ends_at FROM event_config WHERE id = 1`)).rows[0]
+      : ((await db.query(`SELECT event_ends_at FROM (${EVENT_INFO_SQL}) event_info`)).rows[0]
           ?.event_ends_at as Date | null | undefined);
     if (!ends || ends.getTime() > Date.now()) return "event_not_ended";
   }
@@ -376,14 +396,14 @@ async function buildSnapshot(
     ? { rows: [preloaded.person] }
     : userId == null
       ? await db.query(
-          `SELECT $1::text AS name, NULL::text AS surname, name AS event_name, venue_name, timezone, event_starts_at, event_ends_at FROM event_config WHERE id=1`,
+          `SELECT $1::text AS name, NULL::text AS surname, name AS event_name, venue_name, timezone, event_starts_at, event_ends_at FROM (${EVENT_INFO_SQL}) event_info`,
           [guestName],
         )
       : await db.query(
           `SELECT u.name, u.surname, c.name AS event_name, c.venue_name, c.timezone,
             c.event_starts_at, c.event_ends_at
-       FROM users u CROSS JOIN event_config c
-      WHERE u.id = $1 AND c.id = 1
+       FROM users u CROSS JOIN (${EVENT_INFO_SQL}) c
+      WHERE u.id = $1
         AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
           [userId],
         );
@@ -428,6 +448,8 @@ export interface CertificateRow {
   supersededAt: string | null;
   /** Attendance changed since this one was issued (only computed when listing a person's documents). */
   outdated: boolean;
+  /** Edition the certificate was issued in. */
+  edition: { eventKey: string; name: string };
 }
 
 function toRow(row: Record<string, unknown>): CertificateRow {
@@ -448,12 +470,17 @@ function toRow(row: Record<string, unknown>): CertificateRow {
     revokedReason: (row.revoked_reason as string | null) ?? null,
     supersededAt: row.superseded_at ? (row.superseded_at as Date).toISOString() : null,
     outdated: false,
+    edition: {
+      eventKey: row.event_key as string,
+      name: (row.edition_name as string | null) ?? (row.event_key as string),
+    },
   };
 }
 
 const COLUMNS = `id, code, user_id, type_id, snapshot->>'typeName' AS type_name,
                  COALESCE(snapshot->>'name','') || COALESCE(' ' || (snapshot->>'surname'),'') AS recipient_name_display, activity_name, variant, locale, source, override_reason, issued_at,
-                 revoked_at, revoked_reason, superseded_at`;
+                 revoked_at, revoked_reason, superseded_at, event_key,
+                 (SELECT e.name FROM editions e WHERE e.event_key = attendance_certificates.event_key) AS edition_name`;
 
 interface IssueOptions {
   userId: number | null;
@@ -524,6 +551,7 @@ async function attendedActivitiesFor(
     `SELECT l.user_id, COALESCE(a.name_i18n ->> $2, a.name) AS name, min(l.logged_at) AS at
        FROM activity_logs l JOIN activities a ON a.id = l.activity_id
       WHERE l.user_id = ANY($1::int[]) AND NOT (a.category = ANY($3::text[]))
+        AND a.event_key = current_edition()
       GROUP BY l.user_id, a.id, a.name, a.name_i18n
       ORDER BY l.user_id, min(l.logged_at), a.id`,
     [userIds, locale, [...MEAL_ACTIVITY_KINDS]],
@@ -680,6 +708,7 @@ async function insertCertificate(
       const { rows: current } = await client.query(
         `SELECT id, variant, snapshot FROM attendance_certificates
           WHERE user_id=$1 AND type_id=$2 AND locale=$3 AND activity_name=$4
+            AND event_key = current_edition()
             AND revoked_at IS NULL AND superseded_at IS NULL FOR UPDATE`,
         [opts.userId, definition.id, opts.locale, activityName],
       );
@@ -708,7 +737,7 @@ async function insertCertificate(
       `INSERT INTO attendance_certificates
          (code, user_id, variant, locale, source, override_reason, issued_by, snapshot, type_id, activity_name, recipient_name, recipient_document_kind, recipient_document_number)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-       ON CONFLICT (user_id, type_id, locale, activity_name) WHERE revoked_at IS NULL AND superseded_at IS NULL DO NOTHING
+       ON CONFLICT (user_id, event_key, type_id, locale, activity_name) WHERE revoked_at IS NULL AND superseded_at IS NULL DO NOTHING
        RETURNING ${COLUMNS}`,
       [
         randomBytes(18).toString("base64url"),
@@ -745,7 +774,7 @@ async function insertCertificate(
     }
     const { rows: live } = await client.query(
       `SELECT ${COLUMNS} FROM attendance_certificates
-        WHERE user_id = $1 AND type_id = $2 AND locale = $3 AND activity_name=$4 AND revoked_at IS NULL AND superseded_at IS NULL`,
+        WHERE user_id = $1 AND type_id = $2 AND locale = $3 AND activity_name=$4 AND event_key = current_edition() AND revoked_at IS NULL AND superseded_at IS NULL`,
       [opts.userId, definition.id, opts.locale, activityName],
     );
     return { ...toRow(live[0]), created: false };
@@ -844,7 +873,7 @@ async function preloadBulk(
       idList,
     ),
     pool.query(
-      `SELECT name AS event_name, venue_name, timezone, event_starts_at, event_ends_at FROM event_config WHERE id = 1`,
+      `SELECT name AS event_name, venue_name, timezone, event_starts_at, event_ends_at FROM (${EVENT_INFO_SQL}) event_info`,
     ),
     attendedActivitiesFor(pool, userIds, locale),
     roleHolders(userIds, definition.audienceRoleIds),
@@ -877,7 +906,8 @@ async function roleHolders(userIds: number[], roleIds: number[] | null): Promise
   if (!roleIds?.length) return new Set();
   const { rows } = await pool.query<{ user_id: number }>(
     `SELECT DISTINCT ur.user_id FROM user_roles ur JOIN roles r ON r.id=ur.role_id
-      WHERE ur.user_id = ANY($1::int[]) AND r.id = ANY($2::int[]) AND r.deleted_at IS NULL`,
+      WHERE ur.user_id = ANY($1::int[]) AND r.id = ANY($2::int[]) AND r.deleted_at IS NULL
+        AND (ur.event_key IS NULL OR ur.event_key = current_edition())`,
     [userIds, roleIds],
   );
   return new Set(rows.map((row) => row.user_id));
@@ -971,8 +1001,11 @@ export async function listForUser(userId: number): Promise<CertificateRow[]> {
   );
   const certificates = rows.map(toRow);
   // Flag current attendance documents whose stated hours or activities no longer match.
+  const scoped = (await pool.query<{ event_key: string }>(`SELECT current_edition() AS event_key`))
+    .rows[0]?.event_key;
   const candidates = rows.filter(
     (row) =>
+      row.event_key === scoped &&
       !row.revoked_at &&
       !row.superseded_at &&
       row.snapshot?.attendancePolicy === true &&
@@ -1002,7 +1035,7 @@ export async function listForUser(userId: number): Promise<CertificateRow[]> {
   return certificates;
 }
 
-/** The id behind a verification code. */
+/** The id behind a verification code (any edition, closed ones included). */
 export async function certificateIdByCode(code: string): Promise<number> {
   const { rows } = await pool.query<{ id: number }>(
     `SELECT id FROM attendance_certificates WHERE code = $1`,
@@ -1055,6 +1088,9 @@ export async function renderCertificate(
   if (first[0].pdf) return stored(first[0]);
 
   return withTransaction(async (client) => {
+    // The stored copy of a closed edition's certificate is still generated on
+    // first use: closing never invalidates a certificate (H8).
+    await withClosedEditionWrites(client, async () => undefined);
     // Concurrent first downloads converge on one generated copy.
     const { rows } = await client.query(
       `SELECT ${columns}, COALESCE(c.recipient_document_number,u.dni) AS dni
@@ -1110,6 +1146,8 @@ export interface Verification {
   generatedAt: string | null;
   /** A newer certificate replaced this one; it remains valid as issued. */
   supersededAt: string | null;
+  /** Edition the certificate was issued in. */
+  edition: { eventKey: string; name: string };
 }
 
 /** Public verification by code: never the DNI, and no personal data once revoked. Generates the stored copy when none exists yet. */
@@ -1121,7 +1159,9 @@ export async function verifyCode(code: string): Promise<Verification> {
   );
   if (pending[0]) await renderCertificate(pending[0].id);
   const { rows } = await pool.query(
-    `SELECT variant, issued_at, revoked_at, snapshot, pdf_sha256, pdf_generated_at, superseded_at FROM attendance_certificates WHERE code = $1`,
+    `SELECT variant, issued_at, revoked_at, snapshot, pdf_sha256, pdf_generated_at, superseded_at, event_key,
+            (SELECT e.name FROM editions e WHERE e.event_key = attendance_certificates.event_key) AS edition_name
+       FROM attendance_certificates WHERE code = $1`,
     [code],
   );
   const row = rows[0];
@@ -1142,6 +1182,7 @@ export async function verifyCode(code: string): Promise<Verification> {
     supersededAt: row.superseded_at ? (row.superseded_at as Date).toISOString() : null,
     sha256: row.pdf_sha256 ?? null,
     generatedAt: row.pdf_generated_at ? (row.pdf_generated_at as Date).toISOString() : null,
+    edition: { eventKey: row.event_key, name: row.edition_name ?? row.event_key },
   };
 }
 
@@ -1185,7 +1226,8 @@ export async function certificateParticipants(
     readSettings(),
     allHours({ actorId, verifiedOnly: true }),
     pool.query(
-      `SELECT user_id, certified_hours, reason, approved_by, approved_at FROM certificate_approvals`,
+      `SELECT user_id, certified_hours, reason, approved_by, approved_at FROM certificate_approvals
+        WHERE event_key = current_edition()`,
     ),
   ]);
   const byUser = new Map(hours.map((row) => [row.userId, row.hours]));
@@ -1226,7 +1268,7 @@ export async function exportCertificateParticipants(
   let csv: string;
   if (options.format === "udc") {
     const { rows: events } = await pool.query(
-      `SELECT name, venue_name, timezone, event_starts_at, event_ends_at FROM event_config WHERE id=1`,
+      `SELECT name, venue_name, timezone, event_starts_at, event_ends_at FROM (${EVENT_INFO_SQL}) event_info`,
     );
     const event = events[0];
     if (!event?.event_starts_at || !event.event_ends_at)
@@ -1427,8 +1469,8 @@ export async function listIssuedCertificates(actorId: number) {
   const fixture = await fixtureReadFilter(pool, actorId, "u");
   const { rows } = await pool.query(
     `SELECT c.id FROM attendance_certificates c LEFT JOIN users u ON u.id=c.user_id
-    WHERE (c.user_id IS NULL AND NOT EXISTS(SELECT 1 FROM users actor WHERE actor.id=$1 AND actor.is_test_account=true))
-       OR (c.user_id IS NOT NULL ${fixture}) ORDER BY c.issued_at DESC,c.id DESC`,
+    WHERE c.event_key = current_edition() AND ((c.user_id IS NULL AND NOT EXISTS(SELECT 1 FROM users actor WHERE actor.id=$1 AND actor.is_test_account=true))
+       OR (c.user_id IS NOT NULL ${fixture})) ORDER BY c.issued_at DESC,c.id DESC`,
     [actorId],
   );
   if (!rows.length) return [];

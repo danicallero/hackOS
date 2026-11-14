@@ -42,7 +42,11 @@ export function registerAutomationRoutes(app: FastifyInstance): void {
   const api = app.withTypeProvider<ZodTypeProvider>();
   // Same capability as the Live Activity timings: event-wide automation lives
   // with event identity and timing.
-  const access = routeAccess({ kind: "capability", capability: CAPABILITIES.EVENT_MANAGE });
+  const access = routeAccess({
+    kind: "capability",
+    capability: CAPABILITIES.EVENT_MANAGE,
+    edition: "current",
+  });
 
   api.get(
     "/api/notifications/automation",

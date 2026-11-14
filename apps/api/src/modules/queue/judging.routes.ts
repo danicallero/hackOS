@@ -434,7 +434,7 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List evaluations",
         description:
-          "Evaluations across challenges. Admins see every challenge inside their fixture boundary; sponsor representatives only their own enterprise's, enforced in the query rather than by a capability. Never cached.",
+          "Evaluations of the viewed edition across challenges. Admins see every challenge inside their fixture boundary; sponsor representatives only their own enterprise's, enforced in the query rather than by a capability. Never cached.",
         querystring: reviewsQuery,
       },
     },

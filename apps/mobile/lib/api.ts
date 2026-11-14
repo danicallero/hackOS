@@ -1,6 +1,7 @@
 import { isMaintenanceError, maintenancePhaseOf } from "@hackos/shared/maintenance";
 import { authClient } from "./auth-client";
 import { clientHeaders } from "./client-build";
+import { editionHeaders } from "./edition";
 import { API_URL } from "./env";
 import { intentKey, settleIntentKey } from "./idempotency-key";
 import { maintenanceStore } from "./maintenance";
@@ -53,6 +54,12 @@ export type ApiFetchInit = RequestInit & {
    * never forwarded as an application header.
    */
   sessionCookie?: string;
+  /**
+   * Target the current edition even while another is being viewed. Scanner
+   * traffic (live, replayed or synced) always sets this: a closed edition
+   * cannot be scanned. Consumed locally, never forwarded.
+   */
+  currentEdition?: boolean;
 };
 
 /**
@@ -67,7 +74,7 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit): Promise<T>
     throw new TypeError(`API path must be root-relative: ${path}`);
   }
 
-  const { sessionCookie, ...requestInit } = init ?? {};
+  const { sessionCookie, currentEdition, ...requestInit } = init ?? {};
   const boundSessionCookie = sessionCookie ?? getCurrentSessionCookie();
 
   // Better Auth appends its own /api/auth base path to relative requests.
@@ -78,6 +85,9 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit): Promise<T>
   const method = requestInit.method?.toUpperCase() ?? "GET";
   const mutationHeaders = new Headers(requestInit.headers);
   for (const [name, value] of Object.entries(clientHeaders())) mutationHeaders.set(name, value);
+  if (!currentEdition) {
+    for (const [name, value] of Object.entries(editionHeaders())) mutationHeaders.set(name, value);
+  }
   const intent =
     !["GET", "HEAD", "OPTIONS"].includes(method) && !mutationHeaders.has("Idempotency-Key")
       ? `${method} ${path} ${typeof requestInit.body === "string" ? requestInit.body : ""}`

@@ -16,3 +16,9 @@ it("aborts and rejects a stalled scanner request even when transport ignores abo
     jest.useRealTimers();
   }
 });
+
+it("always targets the current edition, so replays never carry a viewed edition", async () => {
+  jest.mocked(apiFetch).mockResolvedValue({});
+  await scannerFetch("/api/scanner/snapshot");
+  expect(jest.mocked(apiFetch).mock.calls.at(-1)![1]).toMatchObject({ currentEdition: true });
+});

@@ -5,6 +5,7 @@ import { hashPassword } from "better-auth/crypto";
 import type pg from "pg";
 
 import { audit } from "../../lib/audit.js";
+import { withClosedEditionWrites } from "../../lib/edition.js";
 
 import { ConflictError } from "../../lib/errors.js";
 
@@ -30,7 +31,11 @@ import { assertActiveWildcardHolder, lockRoleGraph } from "./role-authority.js";
 
 import { extractAnonymousAuditFields } from "./sanitize.js";
 
-import { guaranteedMinutesAtRemoval, scrubRelationships } from "./scrub.js";
+import {
+  guaranteedMinutesAtRemoval,
+  guaranteedMinutesPerEdition,
+  scrubRelationships,
+} from "./scrub.js";
 
 import type {
   AccountRemovalAction,
@@ -50,6 +55,7 @@ export async function purgeReviewFixtureAccount(
   client: pg.PoolClient,
   userId: number,
 ): Promise<void> {
+  await withClosedEditionWrites(client, async () => undefined);
   await lockRoleGraph(client);
   const user = await loadUserForRemoval(client, userId);
   if (!user.is_test_account) {
@@ -93,6 +99,7 @@ export async function resetReviewFixtureAccount(
   userId: number,
   fixture: { email: string; name: string; surname: string; password: string },
 ): Promise<void> {
+  await withClosedEditionWrites(client, async () => undefined);
   await lockRoleGraph(client);
   const user = await loadUserForRemoval(client, userId);
   if (!user.is_test_account) {
@@ -121,7 +128,7 @@ export async function resetReviewFixtureAccount(
   await client.query(`DELETE FROM activity_rsvps WHERE user_id = $1`, [user.id]);
   await client.query(`DELETE FROM onboarding_step_states WHERE user_id = $1`, [user.id]);
   await client.query(`DELETE FROM mentor_profiles WHERE user_id = $1`, [user.id]);
-  await client.query(`DELETE FROM user_role_event_evidence WHERE user_id = $1`, [user.id]);
+  await client.query(`DELETE FROM badge_id_history WHERE user_id = $1`, [user.id]);
   await client.query(
     `UPDATE users
         SET email = $2,
@@ -133,7 +140,6 @@ export async function resetReviewFixtureAccount(
             surname = $4,
             dni = NULL,
             badge_id = NULL,
-            badge_id_history = ARRAY[]::text[],
             food_intolerances = ARRAY[]::integer[],
             food_intolerance_notes = NULL,
             dietary_data_state = 'not_provided',
@@ -169,6 +175,7 @@ export async function finalizeAccountRemoval(
     deletedQueueEntries?: DeletedQueueEntryNotification[];
   },
 ): Promise<AccountRemovalResult> {
+  await withClosedEditionWrites(client, async () => undefined);
   await lockRoleGraph(client);
   const user = await loadUserForRemoval(client, options.targetId);
   if (user.account_state !== "removal_pending" || user.removal_action !== options.action) {
@@ -225,6 +232,17 @@ export async function finalizeAccountRemoval(
        VALUES ($1, $2, $3)`,
       [anonymousId, guaranteedMinutes, user.is_test_account],
     );
+    // Per-edition participation, still without any mapping to a person.
+    const perEdition = await guaranteedMinutesPerEdition(client, user.id);
+    if (perEdition.length > 0) {
+      await client.query(
+        `INSERT INTO anonymous_participant_editions
+           (anonymous_participant_id, event_key, guaranteed_presence_minutes)
+         SELECT $1::uuid, t.event_key, t.minutes
+           FROM unnest($2::text[], $3::int[]) AS t(event_key, minutes)`,
+        [anonymousId, perEdition.map((e) => e.eventKey), perEdition.map((e) => e.minutes)],
+      );
+    }
     if (retainedApplicationFields.length > 0) {
       await client.query(
         `INSERT INTO anonymous_participant_fields

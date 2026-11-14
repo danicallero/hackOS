@@ -46,6 +46,14 @@ export function setServerStateIdentity(nextIdentity: string | number | null): vo
   for (const listener of identityListeners) listener();
 }
 
+/** Drop every cached read and make mounted readers refetch (edition switch, edition lifecycle changes). */
+export function invalidateAllServerState(): void {
+  epoch += 1;
+  for (const entry of entries.values()) entry.controller?.abort();
+  entries.clear();
+  for (const listener of identityListeners) listener();
+}
+
 /** Identity epoch snapshot for `useSyncExternalStore`; changes with every identity switch. */
 export function serverStateEpoch(): number {
   return epoch;

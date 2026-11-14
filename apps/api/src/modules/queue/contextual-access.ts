@@ -251,6 +251,17 @@ export function accessibleRoomIds(req: FastifyRequest): Promise<number[] | null>
 }
 
 async function loadAccessibleRoomIds(req: FastifyRequest): Promise<number[] | null> {
+  const roomIds = await loadAccessibleRoomIdsAnyEdition(req);
+  if (roomIds === null || roomIds.length === 0) return roomIds;
+  // Multi-edition: room lists and boards only show the viewed edition's rooms.
+  const { rows } = await pool.query<{ id: number }>(
+    `SELECT id FROM rooms WHERE id = ANY($1::int[]) AND event_key = current_edition() ORDER BY id`,
+    [roomIds],
+  );
+  return rows.map((row) => row.id);
+}
+
+async function loadAccessibleRoomIdsAnyEdition(req: FastifyRequest): Promise<number[] | null> {
   const userId = await requireUser(req);
   const context = getRequestAuthorizationContext(req);
   const [scopedRoomIds, isOperator, isAdmin] = await Promise.all([

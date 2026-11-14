@@ -13,12 +13,13 @@ export type PersonMatch = "ticket" | "badge" | "badge_history" | "profile";
  */
 const PERSON_FIELD_SQL = {
   email: "u.email",
-  badgeId: "u.badge_id",
+  badgeId: "CASE WHEN u.badge_event_key = current_edition() THEN u.badge_id END",
   dni: "u.dni",
   shirtSize: "u.shirt_size",
   notes: "u.notes",
   confirmed: `EXISTS (
     SELECT 1 FROM application_responses ar
+     JOIN applications ap ON ap.id = ar.application_id AND ap.event_key = current_edition()
      WHERE ar.user_id = u.id AND ar.status = 'confirmed')`,
 } as const;
 
@@ -62,7 +63,8 @@ export async function searchPeople(
     `SELECT t.user_id FROM tickets t
       JOIN users u ON u.id = t.user_id
       JOIN user_event_access uea ON uea.user_id = u.id
-     WHERE upper(t.token) = upper($1) AND u.account_state = 'active' AND u.anonymized_at IS NULL${fixtureFilter}`,
+     WHERE upper(t.token) = upper($1) AND t.event_key = current_edition()
+       AND u.account_state = 'active' AND u.anonymized_at IS NULL${fixtureFilter}`,
     [needle],
   );
   if (ticket.rows[0]) {
@@ -70,7 +72,9 @@ export async function searchPeople(
   }
 
   const badge = await pool.query(
-    `SELECT u.id FROM users u WHERE upper(u.badge_id) = upper($1) AND u.account_state = 'active' AND u.anonymized_at IS NULL${fixtureFilter}`,
+    `SELECT u.id FROM users u
+      WHERE upper(u.badge_id) = upper($1) AND u.badge_event_key = current_edition()
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL${fixtureFilter}`,
     [needle],
   );
   if (badge.rows[0]) {
@@ -79,7 +83,9 @@ export async function searchPeople(
 
   const history = await pool.query(
     `SELECT u.id FROM users u
-      WHERE EXISTS (SELECT 1 FROM unnest(u.badge_id_history) b WHERE upper(b) = upper($1))
+      WHERE EXISTS (SELECT 1 FROM badge_id_history h
+                     WHERE h.user_id = u.id AND h.event_key = current_edition()
+                       AND upper(h.badge_id) = upper($1))
         AND u.account_state = 'active' AND u.anonymized_at IS NULL${fixtureFilter}`,
     [needle],
   );
@@ -141,12 +147,15 @@ export interface RosterEntry {
 export async function listPeople(actorId?: number): Promise<RosterEntry[]> {
   const fixtureFilter = await fixtureReadFilter(pool, actorId, "u");
   const { rows } = await pool.query(
-    `SELECT u.id, u.name, u.surname, u.email, u.badge_id, u.dni, uern.role_name AS role,
+    `SELECT u.id, u.name, u.surname, u.email,
+            CASE WHEN u.badge_event_key = current_edition() THEN u.badge_id END AS badge_id,
+            u.dni, uern.role_name AS role,
             EXISTS (
               SELECT 1 FROM user_event_access uea WHERE uea.user_id = u.id
             ) AS event_access,
             EXISTS (
               SELECT 1 FROM application_responses ar
+                JOIN applications ap ON ap.id = ar.application_id AND ap.event_key = current_edition()
                WHERE ar.user_id = u.id AND ar.status = 'confirmed'
             ) AS confirmed,
             last_presence.kind = 'in' AS present
@@ -155,6 +164,7 @@ export async function listPeople(actorId?: number): Promise<RosterEntry[]> {
        LEFT JOIN LATERAL (
          SELECT tl.kind FROM time_logs tl
           WHERE tl.user_id = u.id AND tl.scanned_at <= now()
+            AND tl.event_key = current_edition()
           ORDER BY tl.scanned_at DESC, tl.id DESC
           LIMIT 1
        ) last_presence ON true

@@ -96,7 +96,8 @@ describe("stand tags", () => {
 
     const person = await createUser();
     await pool.query(
-      `UPDATE users SET badge_id = '04000000000001', badge_id_history = ARRAY['04000000000002'] WHERE id = $1`,
+      `WITH h AS (INSERT INTO badge_id_history (user_id, badge_id) VALUES ($1, '04000000000002'))
+       UPDATE users SET badge_id = '04000000000001' WHERE id = $1`,
       [person],
     );
     expect((await addTag({ kind: "nfc", uid: "04000000000001" })).statusCode).toBe(201);
@@ -260,7 +261,8 @@ describe("stand tags", () => {
   it("accepts current and previous badges without changing their person assignments", async () => {
     const person = await createUser();
     await pool.query(
-      `UPDATE users SET badge_id = '04000000000001', badge_id_history = ARRAY['04000000000002'] WHERE id = $1`,
+      `WITH h AS (INSERT INTO badge_id_history (user_id, badge_id) VALUES ($1, '04000000000002'))
+       UPDATE users SET badge_id = '04000000000001' WHERE id = $1`,
       [person],
     );
     for (const uid of ["04000000000001", "04000000000002"]) {
@@ -268,7 +270,7 @@ describe("stand tags", () => {
       expect(res.statusCode).toBe(201);
     }
     const { rows } = await pool.query(
-      `SELECT badge_id, badge_id_history FROM users WHERE id = $1`,
+      `SELECT badge_id, (SELECT array_agg(h.badge_id) FROM badge_id_history h WHERE h.user_id = users.id) AS badge_id_history FROM users WHERE id = $1`,
       [person],
     );
     expect(rows[0]).toEqual({ badge_id: "04000000000001", badge_id_history: ["04000000000002"] });

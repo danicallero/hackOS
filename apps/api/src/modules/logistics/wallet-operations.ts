@@ -3,6 +3,7 @@ import type { WalletAlert } from "@hackos/shared/wallet-settings";
 import { config } from "../../config.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
+import { isScopedEditionClosed } from "../../lib/edition.js";
 import { ConflictError, TooManyRequestsError } from "../../lib/errors.js";
 import { isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
@@ -55,7 +56,8 @@ export async function createWalletOperation(
     await client.query(
       `INSERT INTO wallet_operation_passes(operation_id,pass_id)
       SELECT $1, p.id FROM wallet_passes p JOIN users u ON u.id=p.user_id
-      WHERE p.status <> 'voided' AND u.account_state='active' AND u.anonymized_at IS NULL AND u.is_test_account=$2
+      WHERE p.status <> 'voided' AND p.event_key = current_edition()
+        AND u.account_state='active' AND u.anonymized_at IS NULL AND u.is_test_account=$2
         AND EXISTS (SELECT 1 FROM user_event_access a WHERE a.user_id=u.id)`,
       [id, synthetic],
     );
@@ -101,6 +103,8 @@ interface Delivery extends PassRow {
   attempts: number;
 }
 export async function processWalletOperations(): Promise<number> {
+  // Closed editions are read-only: no deliveries are claimed for them (multi-edition plan §3).
+  if (await isScopedEditionClosed(pool)) return 0;
   // Claims have a lease so a restarted worker can resume durable deliveries.
   const refreshedClasses = new Map<string, Promise<void>>();
   for (let processed = 0; processed < 25; processed++) {

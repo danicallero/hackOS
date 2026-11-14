@@ -1,4 +1,5 @@
 import type { Capability } from "@hackos/shared/capabilities";
+import type { EditionStatus } from "@hackos/shared/editions";
 import type { Language } from "@hackos/shared/locale";
 import type { I18nText } from "@hackos/shared/questions";
 import type { PassFieldLabels, PassFieldVisibility } from "@hackos/shared/wallet-pass-labels";
@@ -38,6 +39,8 @@ export interface Me {
   /** H8: the caller's actual highest-visible role name (null if they hold no visible role). */
   visibleRoleName: string | null;
   capabilities: Capability[];
+  /** The edition these facts are scoped to (the viewed one). */
+  edition?: { eventKey: string; name: string; status: EditionStatus; isCurrent: boolean };
   /** H8: the caller's complete assigned-role set, highest position first — additive next to `visibleRoleName`. */
   roles: AssignedRoleSummary[];
   /** Association facts underlying `visibleRoleName` (H55) — a sponsor rep who also judges needs both workspaces. */

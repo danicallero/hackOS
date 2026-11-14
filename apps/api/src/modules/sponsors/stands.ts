@@ -91,13 +91,30 @@ const IN_USE_MESSAGE = {
   stand: "This tag is already a company tag",
 } as const;
 
-/** #935: person badges and stand tags are independent assignments. Ticket
- * tokens remain reserved; a tag can belong to only one company. */
-async function assertCodeFree(db: pg.PoolClient, code: string): Promise<void> {
+/** A tag that belongs to a company of another edition (plan §9). */
+interface ReassignableTag {
+  id: number;
+  enterpriseId: number;
+}
+
+/**
+ * #935: person badges and stand tags are independent assignments. Ticket
+ * tokens remain reserved; a tag can belong to only one company at a time.
+ * Plan §9: the code stays globally unique, but a tag whose company is NOT in
+ * the scoped edition (a previous one) is free to be reassigned to a company of
+ * the scoped edition; the existing tag is returned in that case. A tag held
+ * by a company of the scoped edition is in use.
+ */
+async function assertCodeFree(
+  db: pg.PoolClient,
+  code: string,
+  target?: { enterpriseId: number },
+): Promise<ReassignableTag | null> {
   const { rows } = await db.query<{ used_by: "ticket" | "stand" }>(
     `SELECT 'ticket' AS used_by FROM tickets WHERE token = $1
      UNION ALL
-     SELECT 'stand' FROM sponsor_stand_tags WHERE code = $1
+     SELECT 'stand' FROM sponsor_stand_tags t JOIN enterprises e ON e.id = t.enterprise_id
+      WHERE t.code = $1 AND e.event_key = current_edition()
      LIMIT 1`,
     [code],
   );
@@ -106,6 +123,20 @@ async function assertCodeFree(db: pg.PoolClient, code: string): Promise<void> {
       code: "stand_tag_in_use",
       usedBy: rows[0].used_by,
     });
+  const { rows: previous } = await db.query<{ id: number; enterprise_id: number }>(
+    `SELECT t.id, t.enterprise_id FROM sponsor_stand_tags t WHERE t.code = $1 FOR UPDATE OF t`,
+    [code],
+  );
+  if (!previous[0]) return null;
+  // Held by another edition: reassignable only to a company of the scoped one.
+  const { rows: ok } = target
+    ? await db.query(`SELECT 1 FROM enterprises WHERE id = $1 AND event_key = current_edition()`, [
+        target.enterpriseId,
+      ])
+    : { rows: [] };
+  if (!ok[0])
+    throw new ConflictError(IN_USE_MESSAGE.stand, { code: "stand_tag_in_use", usedBy: "stand" });
+  return { id: Number(previous[0].id), enterpriseId: Number(previous[0].enterprise_id) };
 }
 
 export async function addStandTag(
@@ -118,7 +149,26 @@ export async function addStandTag(
   return withTransaction(async (db) => {
     await assertEnterpriseExists(db, actorId, enterpriseId);
     const code = input.kind === "nfc" ? input.uid : newQrToken();
-    await assertCodeFree(db, code);
+    const previous = await assertCodeFree(db, code, { enterpriseId });
+    if (previous) {
+      // Plan §9: an explicit, audited staff action moves a previous edition's
+      // tag to this edition's company; its history keeps pointing at the old one.
+      const { rows: moved } = await db.query(
+        `UPDATE sponsor_stand_tags SET enterprise_id = $2, kind = $3, label = $4
+          WHERE id = $1 RETURNING ${TAG_COLUMNS}`,
+        [previous.id, enterpriseId, input.kind, input.label ?? null],
+      );
+      const reassigned = toTag(moved[0]);
+      await audit(db, {
+        actorId,
+        entityType: "enterprise",
+        entityId: enterpriseId,
+        action: "stand_tag.reassigned",
+        before: { tagId: reassigned.id, enterpriseId: previous.enterpriseId },
+        after: { tagId: reassigned.id, kind: reassigned.kind, label: reassigned.label },
+      });
+      return reassigned;
+    }
     const { rows } = await db.query(
       `INSERT INTO sponsor_stand_tags (enterprise_id, kind, code, label)
        VALUES ($1, $2, $3, $4) ON CONFLICT (code) DO NOTHING RETURNING ${TAG_COLUMNS}`,
@@ -193,22 +243,43 @@ export async function removeStandTag(
   });
 }
 
+/** The enterprise owning a scanned code, with its edition and the scoped one. */
+export interface StandCodeOwner {
+  enterpriseId: number;
+  scannable: boolean;
+  /** Edition of the owning enterprise. */
+  eventKey: string;
+  /** Edition the scan runs in (`current_edition()`). */
+  scopedKey: string;
+  editionStatus: "draft" | "active" | "closed";
+}
+
 /**
  * The enterprise a scanned code belongs to, whatever its visibility, and
- * whether staff made its stand scannable (migration 0703).
+ * whether staff made its stand scannable (migration 0703). The caller decides
+ * what a code of another edition means (closed: `EditionClosedError`).
  */
 export async function standEnterpriseForCode(
   db: Queryable,
   code: string,
-): Promise<{ enterpriseId: number; scannable: boolean } | null> {
+): Promise<StandCodeOwner | null> {
   const { rows } = await db.query(
-    `SELECT t.enterprise_id, e.stand_scannable
-       FROM sponsor_stand_tags t JOIN enterprises e ON e.id = t.enterprise_id
+    `SELECT t.enterprise_id, e.stand_scannable, e.event_key, ed.status AS edition_status,
+            current_edition() AS scoped_key
+       FROM sponsor_stand_tags t
+       JOIN enterprises e ON e.id = t.enterprise_id
+       JOIN editions ed ON ed.event_key = e.event_key
       WHERE t.code = $1 FOR SHARE OF t, e`,
     [code.toUpperCase()],
   );
   return rows[0]
-    ? { enterpriseId: Number(rows[0].enterprise_id), scannable: rows[0].stand_scannable === true }
+    ? {
+        enterpriseId: Number(rows[0].enterprise_id),
+        scannable: rows[0].stand_scannable === true,
+        eventKey: String(rows[0].event_key),
+        scopedKey: String(rows[0].scoped_key),
+        editionStatus: rows[0].edition_status,
+      }
     : null;
 }
 
@@ -281,9 +352,10 @@ export interface StandSummary {
 
 /** Enterprises the actor may see: real ones, or only fixtures for a synthetic operator. */
 async function enterpriseScope(db: Queryable, actorId: number): Promise<string> {
-  return (await isSyntheticOperator(db, actorId))
+  const markers = (await isSyntheticOperator(db, actorId))
     ? `(${ENTERPRISE_HAS_SYNTHETIC} AND NOT ${ENTERPRISE_HAS_REAL})`
     : `NOT ${ENTERPRISE_HAS_SYNTHETIC}`;
+  return `(e.event_key = current_edition() AND ${markers})`;
 }
 
 export async function listStands(actorId: number): Promise<StandSummary[]> {

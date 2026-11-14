@@ -189,7 +189,8 @@ export async function listEnterprises(actorId: number) {
   const syntheticOperator = await isSyntheticOperator(pool, actorId);
   const { rows } = await pool.query(
     `SELECT ${COLUMNS} FROM enterprises e
-      WHERE (($1::boolean AND ${ENTERPRISE_HAS_SYNTHETIC} AND NOT ${ENTERPRISE_HAS_REAL})
+      WHERE e.event_key = current_edition()
+        AND (($1::boolean AND ${ENTERPRISE_HAS_SYNTHETIC} AND NOT ${ENTERPRISE_HAS_REAL})
          OR (NOT $1::boolean AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))
       ORDER BY name`,
     [syntheticOperator],
@@ -203,7 +204,9 @@ export async function myEnterprise(userId: number) {
   const { rows } = await pool.query(
     `SELECT ${COLUMNS}
        FROM enterprises e
-      WHERE id = (SELECT enterprise_id FROM sponsors WHERE user_id = $1 ORDER BY id LIMIT 1)
+      WHERE id = (SELECT s.enterprise_id FROM sponsors s
+                    JOIN enterprises se ON se.id = s.enterprise_id AND se.event_key = current_edition()
+                   WHERE s.user_id = $1 ORDER BY s.id LIMIT 1)
         AND (($2::boolean AND ${ENTERPRISE_HAS_SYNTHETIC} AND NOT ${ENTERPRISE_HAS_REAL})
           OR (NOT $2::boolean AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))`,
     [userId, syntheticOperator],
@@ -247,6 +250,7 @@ export async function createEnterprise(input: CreateEnterpriseBody, actorId: num
       return rows[0];
     });
   } catch (err) {
+    // enterprises_edition_name_key: the name is unique per edition (H43, H44).
     if (isUniqueViolation(err))
       throw new ConflictError("An enterprise with that name already exists", { name: input.name });
     throw err;
@@ -455,6 +459,7 @@ export async function listUserEnterprises(userId: number, actorId: number | null
   const { rows } = await pool.query(
     `SELECT ${COLUMNS} FROM enterprises e
       WHERE id IN (SELECT enterprise_id FROM sponsors WHERE user_id = $1)
+        AND e.event_key = current_edition()
         ${markerFilter}
       ORDER BY name`,
     params,
@@ -559,7 +564,8 @@ export async function removeEnterpriseMember(
     // H8: only revoke the Sponsor role once no enterprise affiliation remains
     // — a rep linked to several enterprises keeps sponsor access via any one.
     const { rows: remaining } = await client.query(
-      `SELECT 1 FROM sponsors WHERE user_id = $1 LIMIT 1`,
+      `SELECT 1 FROM sponsors s JOIN enterprises e ON e.id = s.enterprise_id
+        WHERE s.user_id = $1 AND e.event_key = current_edition() LIMIT 1`,
       [userId],
     );
     if (remaining.length === 0) {
@@ -790,6 +796,7 @@ export async function listPublicSponsors(
             COALESCE(e.priority, 9999) AS priority, e.kind
       FROM enterprises e
       WHERE e.visibility = 'visible'
+        AND e.event_key = current_edition()
         AND ($1::text IS NULL OR e.kind = $1)
         AND NOT ${ENTERPRISE_HAS_SYNTHETIC}
       ORDER BY priority ASC, e.position ASC NULLS LAST, e.id ASC`,
@@ -817,6 +824,8 @@ export async function revealDueEnterprises(client: Queryable = pool): Promise<nu
         SET visibility = 'visible',
             available_from = NULL
       WHERE visibility = 'hidden'
+        AND event_key = current_edition()
+        AND event_key NOT IN (SELECT event_key FROM editions WHERE status = 'closed')
         AND available_from IS NOT NULL
         AND available_from <= now()
       RETURNING id`,

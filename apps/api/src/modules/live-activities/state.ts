@@ -180,6 +180,7 @@ export async function loadLiveScannableActivities(
        FROM activities a
        JOIN schedule s ON s.id = a.schedule_id
       WHERE (a.category = ANY($1::text[]) OR a.requires_scan = true)
+        AND a.event_key = current_edition()
         AND s.starts_at <= now() + make_interval(mins => $2)
         AND now() < s.ends_at
       ORDER BY s.starts_at ASC, a.id ASC`,

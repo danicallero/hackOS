@@ -43,6 +43,7 @@ describe("identity, applications and exports route policy ledger", () => {
         kind: "contextual",
         policy: "export-request-create",
         resource: { source: "body", field: "subjectUserId" },
+        edition: "global",
       },
     });
   });

@@ -42,6 +42,8 @@ import { clearTvMode, resolveTvState, setTvLanguage, setTvMode, tvVenueConfig } 
 const tvControlPolicy = {
   kind: "capability" as const,
   capability: CAPABILITIES.TV_CONTROL,
+  // The wall shows the current edition (singleton venue state).
+  edition: "current" as const,
 };
 
 const scopedRefreshQuery = z.object({ topic: scopedRefreshTopic });

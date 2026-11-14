@@ -388,6 +388,7 @@ async function loadApplicationDefinitions(
   const { rows: applications } = await pool.query<{ id: number; name: string; template: unknown }>(
     `SELECT id, name, template FROM applications
       WHERE ($1::integer[] IS NULL OR id = ANY($1))
+        AND event_key = current_edition()
       ORDER BY id`,
     [applicationIds ?? null],
   );
@@ -537,6 +538,7 @@ async function loadApplicationRows(
        JOIN users u ON u.id = r.user_id
       WHERE r.status = ANY($1::app_response_status[])
         AND ($3::integer[] IS NULL OR r.application_id = ANY($3))
+        AND app.event_key = current_edition()
         AND u.account_state = 'active'
         AND u.anonymized_at IS NULL
         AND u.is_test_account = false
@@ -635,7 +637,11 @@ export function registerApplicationBatchExportRoutes(app: FastifyInstance): void
     "/api/exports/applications.zip",
     {
       preHandler: requireCapability(CAPABILITIES.EXPORTS_RUN),
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.EXPORTS_RUN }),
+      config: routeAccess({
+        kind: "capability",
+        capability: CAPABILITIES.EXPORTS_RUN,
+        edition: "global",
+      }),
       schema: {
         summary: "Export selected application responses and documents",
         description:

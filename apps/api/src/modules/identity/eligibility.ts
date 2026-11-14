@@ -47,7 +47,7 @@ async function readOperationalSignals(
          EXISTS (SELECT 1 FROM time_logs WHERE user_id = $1)
          OR EXISTS (SELECT 1 FROM activity_logs WHERE user_id = $1)
          OR EXISTS (SELECT 1 FROM users WHERE id = $1 AND badge_id IS NOT NULL)
-         OR EXISTS (SELECT 1 FROM users WHERE id = $1 AND cardinality(badge_id_history) > 0)
+         OR EXISTS (SELECT 1 FROM badge_id_history WHERE user_id = $1)
        ) AS has_integrity_signals`,
     [userId],
   );
@@ -199,7 +199,7 @@ export async function loadUserForRemoval(
 ): Promise<UserRemovalRow> {
   const { rows } = await client.query<UserRemovalRow>(
     `SELECT id, email, email_verified, name, surname, dni, is_test_account,
-            badge_id, badge_id_history,
+            badge_id, badge_event_key,
             account_state, removal_action,
             removal_requires_exit, removal_expires_at, removal_idempotency_key
        FROM users WHERE id = $1 FOR UPDATE`,

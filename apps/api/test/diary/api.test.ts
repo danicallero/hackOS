@@ -158,7 +158,8 @@ describe("combined badge assignments (#935)", () => {
     const acme = await enterprise("Acme");
     await standTag(acme, old.badge);
     await pool.query(
-      `UPDATE users SET badge_id_history = ARRAY[badge_id], badge_id = NULL WHERE id = $1`,
+      `WITH h AS (INSERT INTO badge_id_history (user_id, badge_id) SELECT id, badge_id FROM users WHERE id = $1 ON CONFLICT DO NOTHING)
+       UPDATE users SET badge_id = NULL WHERE id = $1`,
       [old.id],
     );
     await pool.query(`UPDATE users SET badge_id = $1 WHERE id = $2`, [old.badge, current.id]);
@@ -190,7 +191,8 @@ describe("combined badge assignments (#935)", () => {
         { timeout: 5000, interval: 20 },
       );
       await db.query(
-        `UPDATE users SET badge_id_history = ARRAY[badge_id], badge_id = NULL WHERE id = $1`,
+        `WITH h AS (INSERT INTO badge_id_history (user_id, badge_id) SELECT id, badge_id FROM users WHERE id = $1 ON CONFLICT DO NOTHING)
+         UPDATE users SET badge_id = NULL WHERE id = $1`,
         [old.id],
       );
       await db.query(`UPDATE users SET badge_id = $1 WHERE id = $2`, [old.badge, current.id]);
@@ -313,7 +315,8 @@ describe("scanning people", () => {
 
     const ana = await person("Ana");
     await pool.query(
-      `UPDATE users SET badge_id_history = ARRAY[badge_id], badge_id = '04000000000001' WHERE id = $1`,
+      `WITH h AS (INSERT INTO badge_id_history (user_id, badge_id) SELECT id, badge_id FROM users WHERE id = $1 ON CONFLICT DO NOTHING)
+       UPDATE users SET badge_id = '04000000000001' WHERE id = $1`,
       [ana.id],
     );
     const revoked = await scan(ana.badge);

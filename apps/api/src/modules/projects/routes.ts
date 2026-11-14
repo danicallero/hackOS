@@ -95,7 +95,8 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       ...access({ kind: "public", anonymousCategory: "public-content" }),
       schema: {
         summary: "List public challenges",
-        description: "Lists published challenges for anonymous visitors (H45).",
+        description:
+          "Lists published challenges of the viewed edition (X-Edition) for anonymous visitors (H45).",
         response: { 200: z.object({ items: z.array(publicChallengeSchema) }) },
       },
     },

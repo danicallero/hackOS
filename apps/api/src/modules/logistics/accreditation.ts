@@ -9,7 +9,7 @@ import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { assignAttendeeRole, hasEventAccess } from "../identity/role.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
-import { pinBadgeAssignmentTime } from "./badge.js";
+import { claimBadgeCode, pinBadgeAssignmentTime, recordReleasedBadge } from "./badge.js";
 import { loadPersonCard } from "./cards.js";
 import { scannerCredentialDigest } from "./credential-tombstones.js";
 import { reconcileTicketAccess } from "./tickets.js";
@@ -21,7 +21,8 @@ async function voidBadgePasses(client: pg.PoolClient, userId: number): Promise<v
   await client.query(
     `UPDATE wallet_passes
         SET status = 'voided', last_updated_at = now(), update_tag = extract(epoch from now())::text
-      WHERE user_id = $1 AND purpose = 'badge' AND status <> 'voided'`,
+      WHERE user_id = $1 AND purpose = 'badge' AND status <> 'voided'
+        AND event_key = current_edition()`,
     [userId],
   );
 }
@@ -32,7 +33,7 @@ async function assertTicketNotRevoked(
 ): Promise<void> {
   const revoked = await client.query(
     `SELECT 1 FROM scanner_revoked_tickets
-      WHERE credential_digest = $1
+      WHERE credential_digest = $1 AND event_key = current_edition()
       LIMIT 1`,
     [scannerCredentialDigest("ticket", token)],
   );
@@ -49,8 +50,18 @@ export type CheckInMethod = "qr" | "manual" | "nfc";
 
 export async function resolveByTicket(db: pg.Pool | pg.PoolClient, token: string): Promise<number> {
   await assertTicketNotRevoked(db, token);
-  const ticket = await db.query(`SELECT user_id FROM tickets WHERE token = $1`, [token]);
+  // Tokens are globally unique, but a ticket only admits its own edition: the
+  // edition comes from the row and a token of another edition is refused
+  // clearly rather than reported as unknown (multi-edition plan §9).
+  const ticket = await db.query(
+    `SELECT user_id, event_key = current_edition() AS in_current_edition
+       FROM tickets WHERE token = $1`,
+    [token],
+  );
   if (!ticket.rows[0]) throw new NotFoundError("Ticket not recognized");
+  if (!ticket.rows[0].in_current_edition) {
+    throw new ConflictError("This ticket belongs to another edition");
+  }
   return ticket.rows[0].user_id as number;
 }
 
@@ -70,7 +81,8 @@ export async function lookupByUserId(userId: number, actorId?: number) {
   // handed to a physical person, so the card carries DNI, email and shirt
   // size on top of the shared scanner card.
   const u = await pool.query(
-    `SELECT badge_id, email, dni, shirt_size
+    `SELECT CASE WHEN badge_event_key = current_edition() THEN badge_id END AS badge_id,
+            email, dni, shirt_size
        FROM users
       WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
     [userId],
@@ -78,7 +90,10 @@ export async function lookupByUserId(userId: number, actorId?: number) {
   const row = u.rows[0] ?? {};
   const badge = (row.badge_id ?? null) as string | null;
   const confirmed = await pool.query(
-    `SELECT 1 FROM application_responses WHERE user_id = $1 AND status = 'confirmed' LIMIT 1`,
+    `SELECT 1 FROM application_responses ar
+       JOIN applications a ON a.id = ar.application_id
+      WHERE ar.user_id = $1 AND ar.status = 'confirmed' AND a.event_key = current_edition()
+      LIMIT 1`,
     [userId],
   );
 
@@ -102,7 +117,10 @@ export async function lookupByUserId(userId: number, actorId?: number) {
 }
 
 async function hasTicket(userId: number): Promise<boolean> {
-  const ticket = await pool.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [userId]);
+  const ticket = await pool.query(
+    `SELECT 1 FROM tickets WHERE user_id = $1 AND event_key = current_edition()`,
+    [userId],
+  );
   return ticket.rows.length > 0;
 }
 
@@ -121,10 +139,9 @@ export async function checkIn(
   input: { ticketToken: string; badgeId: string; method: CheckInMethod; assignedAt?: Date },
 ) {
   await assertTicketNotRevoked(pool, input.ticketToken);
-  const t = await pool.query(`SELECT user_id FROM tickets WHERE token = $1`, [input.ticketToken]);
-  if (!t.rows[0]) throw new NotFoundError("Ticket not recognized");
+  const userId = await resolveByTicket(pool, input.ticketToken);
   return checkInUser(actorId, {
-    userId: t.rows[0].user_id as number,
+    userId,
     badgeId: input.badgeId,
     method: input.method,
     assignedAt: input.assignedAt,
@@ -140,7 +157,7 @@ async function assertNotTicketToken(client: pg.PoolClient, badgeId: string): Pro
      UNION ALL
      SELECT 1
        FROM scanner_revoked_tickets
-      WHERE credential_digest = $2
+      WHERE credential_digest = $2 AND event_key = current_edition()
       LIMIT 1`,
     [badgeId, scannerCredentialDigest("ticket", badgeId)],
   );
@@ -155,7 +172,7 @@ async function assertNotTicketToken(client: pg.PoolClient, badgeId: string): Pro
 async function assertBadgeNotRevoked(client: pg.PoolClient, badgeId: string): Promise<void> {
   const revoked = await client.query(
     `SELECT 1 FROM scanner_revoked_badges
-      WHERE credential_digest = $1
+      WHERE credential_digest = $1 AND event_key = current_edition()
       LIMIT 1`,
     [scannerCredentialDigest("badge", badgeId)],
   );
@@ -180,7 +197,8 @@ export async function checkInUser(
   const result = await withTransaction(async (client) => {
     await lockRoleGraph(client);
     const u = await client.query(
-      `SELECT id, badge_id, name, surname
+      `SELECT id, badge_id, badge_event_key, badge_event_key = current_edition() AS badge_current,
+              name, surname
          FROM users
         WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
         FOR UPDATE`,
@@ -191,10 +209,17 @@ export async function checkInUser(
     await assertFixtureSubjectScope(client, actorId, input.userId);
     if (input.attendeeRole) {
       const { rows: existingRole } = await client.query(
-        `SELECT 1 FROM user_roles WHERE user_id = $1
-         UNION ALL SELECT 1 FROM application_responses WHERE user_id = $1 AND status <> 'draft'
-         UNION ALL SELECT 1 FROM sponsors WHERE user_id = $1
-         UNION ALL SELECT 1 FROM enterprise_judges WHERE user_id = $1
+        `SELECT 1 FROM user_roles
+          WHERE user_id = $1 AND (event_key IS NULL OR event_key = current_edition())
+         UNION ALL SELECT 1 FROM application_responses ar
+           JOIN applications a ON a.id = ar.application_id AND a.event_key = current_edition()
+          WHERE ar.user_id = $1 AND ar.status <> 'draft'
+         UNION ALL SELECT 1 FROM sponsors s
+           JOIN enterprises en ON en.id = s.enterprise_id AND en.event_key = current_edition()
+          WHERE s.user_id = $1
+         UNION ALL SELECT 1 FROM enterprise_judges ej
+           JOIN enterprises en ON en.id = ej.enterprise_id AND en.event_key = current_edition()
+          WHERE ej.user_id = $1
          UNION ALL SELECT 1 FROM user_effective_capabilities WHERE user_id = $1
          LIMIT 1`,
         [input.userId],
@@ -214,7 +239,7 @@ export async function checkInUser(
         after: { role: input.attendeeRole, source: "accreditation" },
       });
     }
-    if (user.badge_id) {
+    if (user.badge_id && user.badge_current) {
       throw new ConflictError("User already accredited", {
         userId: input.userId,
         currentBadge: user.badge_id,
@@ -235,10 +260,24 @@ export async function checkInUser(
     await assertNotTicketToken(client, input.badgeId);
     await assertBadgeNotRevoked(client, input.badgeId);
 
-    const owner = await client.query(`SELECT id FROM users WHERE badge_id = $1`, [input.badgeId]);
-    if (owner.rows[0] && owner.rows[0].id !== input.userId) {
-      throw new ConflictError("Badge already assigned to another user", { badgeId: input.badgeId });
+    // A badge kept from a previous edition is released to that edition's
+    // history so the person can be accredited again in this one (H22, §9).
+    if (user.badge_id && !user.badge_current) {
+      await client.query(`UPDATE users SET badge_id = NULL WHERE id = $1`, [input.userId]);
+      await recordReleasedBadge(
+        client,
+        input.userId,
+        user.badge_id as string,
+        user.badge_event_key as string,
+      );
     }
+    await claimBadgeCode(
+      client,
+      actorId,
+      input.userId,
+      input.badgeId,
+      "This badge is in use in this edition",
+    );
 
     await pinBadgeAssignmentTime(client, input.assignedAt, null);
     try {
@@ -248,7 +287,7 @@ export async function checkInUser(
       ]);
     } catch (err) {
       if (isUniqueViolation(err)) {
-        throw new ConflictError("Badge already assigned to another user", {
+        throw new ConflictError("This badge is in use in this edition", {
           badgeId: input.badgeId,
         });
       }
@@ -271,7 +310,7 @@ export async function checkInUser(
          FROM event_config ec
         WHERE ec.id = 1
           AND ec.presence_auto_entry_at IS NOT NULL
-          AND NOT EXISTS (SELECT 1 FROM time_logs WHERE user_id = $1)
+          AND NOT EXISTS (SELECT 1 FROM time_logs WHERE user_id = $1 AND event_key = current_edition())
        RETURNING scanned_at`,
       [input.userId, cin.rows[0].checked_in_at, actorId],
     );
@@ -340,7 +379,8 @@ export async function rotateBadge(
     if (userId == null) {
       const r = await client.query(
         `SELECT id FROM users
-          WHERE badge_id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+          WHERE badge_id = $1 AND badge_event_key = current_edition()
+            AND account_state = 'active' AND anonymized_at IS NULL`,
         [input.currentBadgeId],
       );
       if (!r.rows[0]) throw new NotFoundError("No user holds that badge");
@@ -348,7 +388,8 @@ export async function rotateBadge(
     }
 
     const u = await client.query(
-      `SELECT id, badge_id, badge_id_history, badge_assigned_at
+      `SELECT id, badge_id, badge_event_key, badge_event_key = current_edition() AS badge_current,
+              badge_assigned_at
          FROM users
         WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
         FOR UPDATE`,
@@ -356,39 +397,43 @@ export async function rotateBadge(
     );
     if (!u.rows[0]) throw new NotFoundError("User not found");
     const user = u.rows[0];
-    const oldBadge = user.badge_id as string | null;
+    // Only the current edition's badge is "the old badge"; one kept from a
+    // previous edition is released to that edition's history first (H23).
+    let oldBadge = user.badge_id as string | null;
     await assertFixtureSubjectScope(client, actorId, userId);
+    if (oldBadge && !user.badge_current) {
+      await client.query(`UPDATE users SET badge_id = NULL WHERE id = $1`, [userId]);
+      await recordReleasedBadge(client, userId, oldBadge, user.badge_event_key as string);
+      oldBadge = null;
+    }
 
     await assertNotTicketToken(client, input.newBadgeId);
     await assertBadgeNotRevoked(client, input.newBadgeId);
 
-    const owner = await client.query(`SELECT id FROM users WHERE badge_id = $1`, [
+    await claimBadgeCode(
+      client,
+      actorId,
+      userId,
       input.newBadgeId,
-    ]);
-    if (owner.rows[0] && owner.rows[0].id !== userId) {
-      throw new ConflictError("New badge already assigned to another user", {
-        badgeId: input.newBadgeId,
-      });
-    }
-
-    const history: string[] = oldBadge
-      ? [...(user.badge_id_history ?? []), oldBadge]
-      : (user.badge_id_history ?? []);
+      "This badge is in use in this edition",
+    );
 
     await pinBadgeAssignmentTime(client, input.assignedAt, user.badge_assigned_at as Date | null);
     try {
-      await client.query(`UPDATE users SET badge_id = $1, badge_id_history = $2 WHERE id = $3`, [
+      await client.query(`UPDATE users SET badge_id = $1 WHERE id = $2`, [
         input.newBadgeId,
-        history,
         userId,
       ]);
     } catch (err) {
       if (isUniqueViolation(err)) {
-        throw new ConflictError("New badge already assigned to another user", {
+        throw new ConflictError("This badge is in use in this edition", {
           badgeId: input.newBadgeId,
         });
       }
       throw err;
+    }
+    if (oldBadge && oldBadge !== input.newBadgeId) {
+      await recordReleasedBadge(client, userId, oldBadge, user.badge_event_key as string);
     }
 
     // H28: badge passes are voided on rotation, both Apple and Google (not
@@ -396,7 +441,8 @@ export async function rotateBadge(
     await voidBadgePasses(client, userId);
     const voided = await client.query(
       `SELECT id FROM wallet_passes
-       WHERE user_id = $1 AND purpose = 'badge' AND status = 'voided'`,
+       WHERE user_id = $1 AND purpose = 'badge' AND status = 'voided'
+         AND event_key = current_edition()`,
       [userId],
     );
     voidedPassIds = voided.rows.map((r: { id: number }) => r.id);
@@ -442,7 +488,7 @@ export async function removeBadge(actorId: number, input: { userId: number; reas
   let voidedPassIds: number[] = [];
   const result = await withTransaction(async (client) => {
     const found = await client.query(
-      `SELECT badge_id, badge_id_history
+      `SELECT badge_id, badge_event_key, badge_event_key = current_edition() AS badge_current
          FROM users
         WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
         FOR UPDATE`,
@@ -450,17 +496,22 @@ export async function removeBadge(actorId: number, input: { userId: number; reas
     );
     if (!found.rows[0]) throw new NotFoundError("User not found");
     await assertFixtureSubjectScope(client, actorId, input.userId);
-    const oldBadge = (found.rows[0].badge_id ?? null) as string | null;
+    const oldBadge = (found.rows[0].badge_current ? (found.rows[0].badge_id ?? null) : null) as
+      | string
+      | null;
     if (!oldBadge) throw new ConflictError("User has no active badge", { userId: input.userId });
-    const history = [...(found.rows[0].badge_id_history ?? []), oldBadge];
-    await client.query(`UPDATE users SET badge_id = NULL, badge_id_history = $1 WHERE id = $2`, [
-      history,
+    await client.query(`UPDATE users SET badge_id = NULL WHERE id = $1`, [input.userId]);
+    await recordReleasedBadge(
+      client,
       input.userId,
-    ]);
+      oldBadge,
+      found.rows[0].badge_event_key as string,
+    );
     await voidBadgePasses(client, input.userId);
     const voided = await client.query(
       `SELECT id FROM wallet_passes
-       WHERE user_id = $1 AND purpose = 'badge' AND status = 'voided'`,
+       WHERE user_id = $1 AND purpose = 'badge' AND status = 'voided'
+         AND event_key = current_edition()`,
       [input.userId],
     );
     voidedPassIds = voided.rows.map((row: { id: number }) => row.id);

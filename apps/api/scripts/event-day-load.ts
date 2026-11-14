@@ -280,7 +280,7 @@ async function prepareFixture(options: Options): Promise<Fixture> {
          CROSS JOIN roles r
         WHERE users.id = ANY($1::int[])
           AND r.name = 'Participant' AND r.is_seeded = true AND r.deleted_at IS NULL
-       ON CONFLICT (user_id, role_id) DO NOTHING`,
+       ON CONFLICT (user_id, role_id, event_key) DO NOTHING`,
       [participantIds],
     );
     await client.query(
@@ -351,7 +351,7 @@ async function prepareFixture(options: Options): Promise<Fixture> {
        SELECT id, 'event-day-ticket-' || id
          FROM users
         WHERE id = ANY($1::int[])
-       ON CONFLICT (user_id) DO NOTHING`,
+       ON CONFLICT (user_id, event_key) DO NOTHING`,
       [[...operators, ...judges]],
     );
 
@@ -389,7 +389,7 @@ async function prepareFixture(options: Options): Promise<Fixture> {
          CROSS JOIN roles r
         WHERE users.id = ANY($1::int[])
           AND r.name = 'Sponsor' AND r.is_seeded = true AND r.deleted_at IS NULL
-       ON CONFLICT (user_id, role_id) DO NOTHING`,
+       ON CONFLICT (user_id, role_id, event_key) DO NOTHING`,
       [sponsors],
     );
     const challengeIds: number[] = [];

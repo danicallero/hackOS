@@ -2,6 +2,7 @@ import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
+import { withClosedEditionWrites } from "../../lib/edition.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import type { HelpTopic } from "./helpers.js";
 
@@ -52,9 +53,10 @@ export async function searchTopics(
   if (availableWhere) {
     conditions.push(
       `EXISTS (SELECT 1 FROM helper_topics ht
-                 JOIN helper_profiles hp ON hp.user_id = ht.user_id
+                 JOIN helper_profiles hp ON hp.user_id = ht.user_id AND hp.event_key = ht.event_key
                  JOIN users u ON u.id = hp.user_id
-                WHERE ht.topic_id = help_topics.id AND ${availableWhere})`,
+                WHERE ht.topic_id = help_topics.id AND hp.event_key = current_edition()
+                  AND ${availableWhere})`,
     );
   }
   if (term) {
@@ -151,6 +153,9 @@ export async function mergeTopic(
 ): Promise<HelpTopic> {
   if (sourceId === targetId) throw new BadRequestError("Choose a different topic to merge into");
   return withTransaction(async (client) => {
+    // The catalogue is global: a merge re-points rows of every edition,
+    // including closed ones.
+    await withClosedEditionWrites(client, async () => {});
     const { rows } = await client.query<{ id: number; name: string }>(
       "SELECT id, name FROM help_topics WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE",
       [[sourceId, targetId]],
@@ -159,8 +164,8 @@ export async function mergeTopic(
     const target = rows.find((r) => Number(r.id) === targetId);
     if (!source || !target) throw new NotFoundError("Topic not found");
     await client.query(
-      `INSERT INTO helper_topics (user_id, topic_id)
-       SELECT user_id, $2 FROM helper_topics WHERE topic_id = $1
+      `INSERT INTO helper_topics (user_id, event_key, topic_id)
+       SELECT user_id, event_key, $2 FROM helper_topics WHERE topic_id = $1
        ON CONFLICT DO NOTHING`,
       [sourceId, targetId],
     );

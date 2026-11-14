@@ -1,6 +1,12 @@
-import { ALL_CAPABILITIES, CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
+import {
+  ALL_CAPABILITIES,
+  CAPABILITIES,
+  type Capability,
+  closedEditionCapabilities,
+} from "@hackos/shared/capabilities";
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { pool, type Queryable } from "../db/pool.js";
+import { GLOBAL_ADMIN_SQL } from "./edition.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "./errors.js";
 import { isSyntheticOperator } from "./fixture-subject-scope.js";
 import { liveUserSql } from "./sql-predicates.js";
@@ -23,17 +29,32 @@ export interface AuthorizationContext {
   readonly actorIsSyntheticOperator: Promise<boolean>;
 }
 
+/**
+ * Capabilities come from the user's roles in the scoped edition
+ * (`current_edition()`: the X-Edition header or the current edition) plus
+ * protected global roles (system:superadmin). In a closed edition the edition
+ * roles keep only their read capabilities; a global superadmin keeps all.
+ */
 function resolveCapabilities(userId: number | null, db: Queryable): Promise<ReadonlySet<string>> {
   if (userId == null) return Promise.resolve(new Set<string>());
   return db
-    .query(
-      `SELECT uec.capability
+    .query<{ capabilities: string[]; edition_status: string | null; global_admin: boolean }>(
+      `SELECT ARRAY(SELECT uec.capability FROM user_effective_capabilities uec
+                     WHERE uec.user_id = u.id) AS capabilities,
+              (SELECT status FROM editions WHERE event_key = current_edition()) AS edition_status,
+              ${GLOBAL_ADMIN_SQL} AS global_admin
          FROM users u
-         JOIN user_effective_capabilities uec ON uec.user_id = u.id
         WHERE u.id = $1 AND ${liveUserSql("u")}`,
       [userId],
     )
-    .then((result) => new Set(result.rows.map((r: { capability: string }) => r.capability)));
+    .then((result) => {
+      const row = result.rows[0];
+      if (!row) return new Set<string>();
+      if (row.edition_status === "closed" && !row.global_admin) {
+        return closedEditionCapabilities(row.capabilities);
+      }
+      return new Set(row.capabilities);
+    });
 }
 
 function resolveSyntheticOperator(userId: number | null, db: Queryable): Promise<boolean> {

@@ -1,6 +1,7 @@
 import { Image } from "expo-image";
 import { getCurrentSessionCookie } from "./api";
 import type { DiaryEntry } from "./diary";
+import { editionHeaders } from "./edition";
 import { API_URL } from "./env";
 import type { MessageKey } from "./i18n";
 
@@ -71,7 +72,11 @@ export function apiImageSource(path: string): {
   if (!path.startsWith("/")) return { uri: path };
   const url = apiAssetUrl(path);
   const cookie = getCurrentSessionCookie();
-  return { uri: url, headers: { Cookie: cookie }, cacheKey: `${sessionTag(cookie)}:${url}` };
+  return {
+    uri: url,
+    headers: { Cookie: cookie, ...editionHeaders() },
+    cacheKey: `${sessionTag(cookie)}:${url}`,
+  };
 }
 
 function blobToDataUri(blob: Blob): Promise<string> {
@@ -96,7 +101,7 @@ export function loadApiImage(path: string): Promise<string> {
   const key = `${cookie}\n${url}`;
   const cached = photoCache.get(key);
   if (cached) return cached;
-  const request = fetch(url, { headers: { Cookie: cookie } })
+  const request = fetch(url, { headers: { Cookie: cookie, ...editionHeaders() } })
     .then((response) => {
       if (!response.ok) throw new Error(`Photo request failed (${response.status})`);
       return response.blob();

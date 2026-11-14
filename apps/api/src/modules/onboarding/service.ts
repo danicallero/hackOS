@@ -8,6 +8,7 @@ import {
 } from "@hackos/shared/onboarding";
 import { pool, type Queryable } from "../../db/pool.js";
 import { createAuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
+import { currentEventKey } from "../event/context.js";
 import { attendanceKind } from "../identity/attendance.js";
 import { offeredRsvps } from "../rsvps/service.js";
 
@@ -17,10 +18,13 @@ export async function readOnboarding(db: Queryable = pool, userId: number) {
     onboarding_revision: number;
     onboarding_config: OnboardingConfig;
   }>("SELECT event_key,onboarding_revision,onboarding_config FROM event_config WHERE id=1");
-  const event = configs[0] ?? {
-    event_key: "default",
+  // The viewed edition: `event_config` holds the current edition's live
+  // settings, the step states below are per edition.
+  const event = {
     onboarding_revision: 1,
-    onboarding_config: {},
+    onboarding_config: {} as OnboardingConfig,
+    ...configs[0],
+    event_key: await currentEventKey(db),
   };
   const kind = await attendanceKind(db, userId);
   const eligible = await userHasCapability(

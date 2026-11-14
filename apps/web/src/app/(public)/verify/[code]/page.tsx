@@ -31,6 +31,7 @@ export default function VerifyCertificatePage() {
   const [state, setState] = useState<State>({ kind: "loading" });
   const [sha256, setSha256] = useState<string | null>(null);
   const [superseded, setSuperseded] = useState(false);
+  const [editionName, setEditionName] = useState<string | null>(null);
   const [showHash, setShowHash] = useState(false);
   const endpoint = `/api/public/certificates/${encodeURIComponent(code)}`;
 
@@ -41,9 +42,11 @@ export default function VerifyCertificatePage() {
         status: "valid" | "revoked";
         sha256: string | null;
         supersededAt: string | null;
+        edition?: { eventKey: string; name: string };
       }>(endpoint)
       .then((data) => {
         if (cancelled) return;
+        setEditionName(data.edition?.name ?? null);
         setSha256(data.sha256);
         setSuperseded(data.supersededAt !== null);
         setState({ kind: data.status });
@@ -84,6 +87,7 @@ export default function VerifyCertificatePage() {
                     SHA-256
                     <CaretDownIcon className={showHash ? "rotate-180" : undefined} />
                   </Button>
+                  {editionName && <span className="font-medium">{editionName}</span>}
                   {superseded && <span role="status">{t("certificateNewerVersion")}</span>}
                   <div className="ml-auto flex flex-wrap items-center gap-2">
                     <IconButton asChild variant="outline" label={t("certificateDownload")}>

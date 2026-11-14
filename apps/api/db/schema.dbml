@@ -94,6 +94,7 @@ Table activities {
   created_at "timestamp with time zone" [not null, default: `now()`]
   description text
   description_i18n jsonb
+  event_key text [not null, default: `current_edition()`]
   id integer [pk, increment, not null]
   name text [not null]
   name_i18n jsonb
@@ -118,7 +119,7 @@ Table activity_rsvp_settings {
   closes_at "timestamp with time zone"
   description_i18n jsonb
   enabled boolean [not null, default: `false`]
-  event_key text [not null]
+  event_key text [not null, default: `current_edition()`]
   kinds "text[]" [not null, default: `'{}'::text[]`]
   name_i18n jsonb
   options jsonb [not null, default: `'[]'::jsonb`]
@@ -135,7 +136,7 @@ Table activity_rsvps {
   activity_id integer [not null]
   attending boolean
   created_at "timestamp with time zone" [not null, default: `now()`]
-  event_key text [not null]
+  event_key text [not null, default: `current_edition()`]
   option_key text
   updated_at "timestamp with time zone" [not null, default: `now()`]
   user_id integer [not null]
@@ -169,6 +170,7 @@ Table announcements {
   body text [not null]
   channels "text[]" [not null, default: `'{in_app,email,push}'::text[]`]
   created_at "timestamp with time zone" [not null, default: `now()`]
+  event_key text [not null, default: `current_edition()`]
   expires_at "timestamp with time zone"
   fanned_out_at "timestamp with time zone"
   id integer [pk, increment, not null]
@@ -179,6 +181,16 @@ Table announcements {
   screen_placement text [not null, default: `'none'::text`]
   title text [not null]
   translations jsonb [not null, default: `'{}'::jsonb`]
+}
+
+Table anonymous_participant_editions {
+  anonymous_participant_id uuid [not null]
+  event_key text [not null]
+  guaranteed_presence_minutes integer [not null, default: `0`]
+
+  indexes {
+  (anonymous_participant_id, event_key) [pk]
+  }
 }
 
 Table anonymous_participant_fields {
@@ -282,7 +294,7 @@ Table applications {
   created_at "timestamp with time zone" [not null, default: `now()`]
   current_form_version integer [not null, default: `1`]
   description text
-  event_key text [not null, default: `'default'::text`]
+  event_key text [not null, default: `current_edition()`]
   id integer [pk, increment, not null]
   name text [not null]
   open_at "timestamp with time zone"
@@ -313,6 +325,7 @@ Table attempt_review_versions {
 Table attendance_certificates {
   activity_name text [not null, default: `''::text`]
   code text [unique, not null]
+  event_key text [not null, default: `current_edition()`]
   id integer [pk, increment, not null]
   issued_at "timestamp with time zone" [not null, default: `now()`]
   issued_by integer
@@ -357,6 +370,17 @@ Table audit_log {
   user_agent text
 }
 
+Table badge_id_history {
+  badge_id text [not null]
+  event_key text [not null, default: `current_edition()`]
+  released_at "timestamp with time zone" [not null, default: `now()`]
+  user_id integer [not null]
+
+  indexes {
+  (user_id, badge_id, event_key) [pk]
+  }
+}
+
 Table capability_grant_quarantine {
   capability text [not null]
   group_id integer [not null]
@@ -371,8 +395,13 @@ Table certificate_approvals {
   approved_at "timestamp with time zone" [not null, default: `now()`]
   approved_by integer
   certified_hours "numeric(5,2)" [not null]
+  event_key text [not null, default: `current_edition()`]
   reason text [not null]
-  user_id integer [pk, not null]
+  user_id integer [not null]
+
+  indexes {
+  (user_id, event_key) [pk]
+  }
 
   Note: '#1083 manual attendance awards: certified hours feed certificates and university exports; raw presence signals remain unchanged. Cleared on account removal (H54).'
 }
@@ -443,6 +472,7 @@ Table challenges {
   criteria_i18n jsonb
   description text [not null, default: `''::text`]
   description_i18n jsonb
+  event_key text [not null, default: `current_edition()`]
   id integer [pk, increment, not null]
   is_test_account boolean [not null, default: `false`, note: 'Synthetic review-fixture queue marker; ordinary event operations exclude marked rows.']
   judging_panel_criteria jsonb
@@ -464,6 +494,7 @@ Table check_in_logs {
   badge_id text
   check_in_method text [not null, default: `'manual'::text`]
   checked_in_at "timestamp with time zone" [not null, default: `now()`]
+  event_key text [not null, default: `current_edition()`]
   id integer [pk, increment, not null]
   notes text
   staff_id integer
@@ -505,6 +536,7 @@ Table data_subject_requests {
 Table diary_entries {
   created_at "timestamp with time zone" [not null, default: `now()`]
   enterprise_id integer
+  event_key text [not null, default: `current_edition()`]
   id integer [pk, increment, not null]
   note text [note: '#935: private note visible only to owner_id.']
   owner_id integer [not null]
@@ -513,6 +545,26 @@ Table diary_entries {
   updated_at "timestamp with time zone" [not null, default: `now()`]
 
   Note: '#935 private event diary: people and sponsor stands an attendee saved. Cards are projected live; only the owner\'s favourite flag and note are stored.'
+}
+
+Table edition_participation {
+  event_key text
+  source text
+  user_id integer
+
+  Note: 'Read-only database view.'
+}
+
+Table editions {
+  closed_at "timestamp with time zone"
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  ends_at "timestamp with time zone"
+  event_key text [pk, not null]
+  name text [not null]
+  settings_snapshot jsonb
+  starts_at "timestamp with time zone"
+  status text [not null, default: `'draft'::text`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
 }
 
 Table email_verification_tokens {
@@ -574,16 +626,21 @@ Table enterprises {
   created_at "timestamp with time zone" [not null, default: `now()`]
   description text
   director_id integer
+  event_key text [not null, default: `current_edition()`]
   id integer [pk, increment, not null]
   kind text [not null, default: `'sponsor'::text`, note: 'H45: label for the optional public ?kind= filter; does not affect ordering.']
   logo_negative_url text
   logo_url text
-  name text [unique, not null]
+  name text [not null]
   position integer [note: 'H45: manual order within one priority; NULL sorts by creation order after positioned rows.']
   priority integer
   stand_scannable boolean [not null, default: `false`, note: '#935: attendees can collect this sponsor by scanning its stand tags. Staff-controlled.']
   visibility text [not null, default: `'hidden'::text`]
   website text
+
+  indexes {
+  (event_key, name) [unique]
+  }
 }
 
 Table event_attendance_kinds {
@@ -750,6 +807,7 @@ Table help_requests {
   claimed_by integer
   created_at "timestamp with time zone" [not null, default: `now()`]
   description text [not null]
+  event_key text [not null, default: `current_edition()`]
   id integer [pk, increment, not null]
   location text [not null]
   meeting_location text
@@ -778,6 +836,7 @@ Table help_topics {
 
 Table helpdesk_open_windows {
   ends_at "timestamp with time zone" [not null]
+  event_key text [not null, default: `current_edition()`]
   id integer [pk, increment, not null]
   starts_at "timestamp with time zone" [not null]
 
@@ -786,6 +845,7 @@ Table helpdesk_open_windows {
 
 Table helper_availability {
   ends_at "timestamp with time zone" [not null]
+  event_key text [not null, default: `current_edition()`]
   id integer [pk, increment, not null]
   starts_at "timestamp with time zone" [not null]
   user_id integer [not null]
@@ -795,10 +855,11 @@ Table helper_availability {
 
 Table helper_profile_challenges {
   challenge_id integer [not null]
+  event_key text [not null, default: `current_edition()`]
   user_id integer [not null]
 
   indexes {
-  (user_id, challenge_id) [pk]
+  (user_id, event_key, challenge_id) [pk]
   }
 
   Note: 'DELTA(H65) challenges a helper is alerted about and sees; no rows means every request. Open to any eligible helper.'
@@ -806,20 +867,26 @@ Table helper_profile_challenges {
 
 Table helper_profiles {
   created_at "timestamp with time zone" [not null, default: `now()`]
+  event_key text [not null, default: `current_edition()`]
   published boolean [not null, default: `false`]
   published_at "timestamp with time zone"
   updated_at "timestamp with time zone" [not null, default: `now()`]
-  user_id integer [pk, not null]
+  user_id integer [not null]
+
+  indexes {
+  (user_id, event_key) [pk]
+  }
 
   Note: 'H61 explicit help desk publication. Identity and bio are projected from users/user_public_profiles, never copied.'
 }
 
 Table helper_topics {
+  event_key text [not null, default: `current_edition()`]
   topic_id integer [not null]
   user_id integer [not null]
 
   indexes {
-  (user_id, topic_id) [pk]
+  (user_id, event_key, topic_id) [pk]
   }
 }
 
@@ -970,7 +1037,7 @@ Table meal_scan_batches {
 
 Table mentor_profiles {
   created_at "timestamp with time zone" [not null, default: `now()`]
-  event_key text [not null]
+  event_key text [not null, default: `current_edition()`]
   published boolean [not null, default: `false`]
   published_at "timestamp with time zone"
   updated_at "timestamp with time zone" [not null, default: `now()`]
@@ -1018,7 +1085,7 @@ Table onboarding_step_states {
   config_revision integer [not null]
   decided_at "timestamp with time zone" [not null, default: `now()`]
   deferred_until "timestamp with time zone"
-  event_key text [not null]
+  event_key text [not null, default: `current_edition()`]
   status text [not null]
   step text [not null]
   updated_at "timestamp with time zone" [not null, default: `now()`]
@@ -1107,6 +1174,7 @@ Table queue_entries {
   challenge_id integer [not null]
   completed_at "timestamp with time zone"
   created_at "timestamp with time zone" [not null, default: `now()`]
+  event_key text [not null, default: `current_edition()`]
   id integer [pk, increment, not null]
   position integer
   precalled_at "timestamp with time zone"
@@ -1135,6 +1203,7 @@ Table queue_groups {
   created_by integer
   display_name text [not null]
   enterprise_id integer [not null]
+  event_key text [not null, default: `current_edition()`]
   id integer [pk, increment, not null]
   judging_panel_criteria jsonb [note: 'Merged judging form for a shared queue (H46): the de-duplicated union of the member challenges\' judging_panel_criteria, admin-reviewed. NULL = resolve the member challenge\'s own criteria (every 1:1 group).']
   updated_at "timestamp with time zone" [not null, default: `now()`]
@@ -1169,6 +1238,7 @@ Table repos {
   description text [not null, default: `''::text`]
   draft_revision integer [not null, default: `0`]
   eligibility_override boolean
+  event_key text [not null, default: `current_edition()`]
   github_url text
   id integer [pk, increment, not null]
   is_test_account boolean [not null, default: `false`, note: 'Synthetic review-fixture project marker; ordinary event operations exclude marked rows.']
@@ -1291,6 +1361,7 @@ Table room_queue_state {
 
 Table rooms {
   created_at "timestamp with time zone" [not null, default: `now()`]
+  event_key text [not null, default: `current_edition()`]
   id integer [pk, increment, not null]
   location text
   name text [not null]
@@ -1299,15 +1370,25 @@ Table rooms {
 }
 
 Table scanner_revoked_badges {
-  credential_digest text [pk, not null, note: 'HMAC-SHA256 of a retired badge credential under the deployment secret.']
+  credential_digest text [not null, note: 'HMAC-SHA256 of a retired badge credential under the deployment secret.']
+  event_key text [not null, default: `current_edition()`]
   revoked_at "timestamp with time zone" [not null, default: `clock_timestamp()`]
+
+  indexes {
+  (credential_digest, event_key) [pk]
+  }
 
   Note: 'H54 unlinked keyed-digest denylist for permanently retired badge credentials; raw badges are never retained.'
 }
 
 Table scanner_revoked_tickets {
-  credential_digest text [pk, not null, note: 'HMAC-SHA256 of a retired ticket credential under the deployment secret.']
+  credential_digest text [not null, note: 'HMAC-SHA256 of a retired ticket credential under the deployment secret.']
+  event_key text [not null, default: `current_edition()`]
   revoked_at "timestamp with time zone" [not null, default: `clock_timestamp()`]
+
+  indexes {
+  (credential_digest, event_key) [pk]
+  }
 
   Note: 'H54 unlinked keyed-digest denylist for permanently retired ticket credentials; raw tokens are never retained.'
 }
@@ -1319,6 +1400,7 @@ Table schedule {
   description text
   description_i18n jsonb
   ends_at "timestamp with time zone" [not null]
+  event_key text [not null, default: `current_edition()`]
   id integer [pk, increment, not null]
   live_activity_audience boolean [not null, default: `false`]
   location text
@@ -1429,12 +1511,18 @@ Table submissions {
 }
 
 Table tickets {
+  event_key text [not null, default: `current_edition()`]
   issued_at "timestamp with time zone" [not null, default: `now()`]
   token text [unique, not null]
-  user_id integer [pk, not null]
+  user_id integer [not null]
+
+  indexes {
+  (user_id, event_key) [pk]
+  }
 }
 
 Table time_logs {
+  event_key text [not null, default: `current_edition()`]
   id integer [pk, increment, not null]
   kind text [not null]
   notes text
@@ -1546,25 +1634,24 @@ Table user_public_profiles {
 }
 
 Table user_role_event_evidence {
-  assigned_at "timestamp with time zone" [not null, default: `now()`]
-  event_key text [not null]
-  role_id integer [not null]
-  user_id integer [not null]
+  assigned_at "timestamp with time zone"
+  event_key text
+  role_id integer
+  user_id integer
 
-  indexes {
-  (user_id, role_id, event_key) [pk]
-  }
+  Note: 'Read-only database view.'
 }
 
 Table user_roles {
   assigned_at "timestamp with time zone" [not null, default: `now()`]
   assigned_by integer
+  event_key text [default: `current_edition()`]
   role_id integer [not null]
   source text [not null, default: `'manual'::text`]
   user_id integer [not null]
 
   indexes {
-  (user_id, role_id) [pk]
+  (user_id, role_id, event_key) [unique]
   }
 }
 
@@ -1572,8 +1659,8 @@ Table users {
   account_state text [not null, default: `'active'::text`, note: 'H54 lifecycle gate: identity-bearing writers are rejected after removal_pending commits.']
   anonymized_at "timestamp with time zone"
   badge_assigned_at "timestamp with time zone" [note: 'H23/H54 current physical badge assignment boundary for stale offline scan rejection.']
+  badge_event_key text
   badge_id text [unique]
-  badge_id_history "text[]" [not null, default: `'{}'::text[]`]
   created_at "timestamp with time zone" [not null, default: `now()`]
   dietary_confirmed_at "timestamp with time zone" [note: '#933: last explicit dietary answer (an empty answer counts). NULL drives the dietary pending profile task.']
   dietary_data_state text [not null, default: `'not_provided'::text`]
@@ -1675,6 +1762,7 @@ Table wallet_pass_devices {
 Table wallet_passes {
   authentication_token text [not null]
   created_at "timestamp with time zone" [not null, default: `now()`]
+  event_key text [not null, default: `current_edition()`]
   google_object_id text
   google_object_type text [note: 'H28: Google Wallet resource type. Existing GenericObject rows are retained as legacy; new tickets use event_ticket and badges use generic.']
   id integer [pk, increment, not null]
@@ -1708,18 +1796,24 @@ Table wallet_settings {
 
 Ref: account_removal_pin_challenges.user_id > users.id
 Ref: accounts.user_id > users.id
+Ref: activities.event_key > editions.event_key
 Ref: activities.schedule_id > schedule.id
 Ref: activity_logs.activity_id > activities.id
 Ref: activity_logs.logged_by > users.id
 Ref: activity_logs.user_id > users.id
 Ref: activity_rsvp_settings.activity_id > activities.id
+Ref: activity_rsvp_settings.event_key > editions.event_key
 Ref: activity_rsvps.activity_id > activities.id
+Ref: activity_rsvps.event_key > editions.event_key
 Ref: activity_rsvps.user_id > users.id
 Ref: announcement_reads.announcement_id > announcements.id
 Ref: announcement_reads.user_id > users.id
 Ref: announcement_recipients.announcement_id > announcements.id
 Ref: announcement_recipients.user_id > users.id
 Ref: announcements.author_id > users.id
+Ref: announcements.event_key > editions.event_key
+Ref: anonymous_participant_editions.anonymous_participant_id > anonymous_participants.id
+Ref: anonymous_participant_editions.event_key > editions.event_key
 Ref: anonymous_participant_fields.anonymous_participant_id > anonymous_participants.id
 Ref: anonymous_participant_fields.application_id > applications.id
 Ref: applicant_reviews.author_id > users.id
@@ -1736,16 +1830,21 @@ Ref: application_responses.confirmation_token_id > email_verification_tokens.id
 Ref: application_responses.referrer_application_id > application_responses.id
 Ref: application_responses.referrer_user_id > users.id
 Ref: application_responses.user_id > users.id
+Ref: applications.event_key > editions.event_key
 Ref: attempt_review.attempt_id > queue_entries.id
 Ref: attempt_review_versions.attempt_id > queue_entries.id
 Ref: attempt_review_versions.author_id > users.id
+Ref: attendance_certificates.event_key > editions.event_key
 Ref: attendance_certificates.issued_by > users.id
 Ref: attendance_certificates.revoked_by > users.id
 Ref: attendance_certificates.type_id > certificate_types.id
 Ref: attendance_certificates.user_id > users.id
 Ref: audit_log.actor_id > users.id
 Ref: audit_log.initiated_by > users.id
+Ref: badge_id_history.event_key > editions.event_key
+Ref: badge_id_history.user_id > users.id
 Ref: certificate_approvals.approved_by > users.id
+Ref: certificate_approvals.event_key > editions.event_key
 Ref: certificate_approvals.user_id > users.id
 Ref: challenge_versions.challenge_id > challenges.id
 Ref: challenge_versions.editor_id > users.id
@@ -1753,6 +1852,8 @@ Ref: challenge_winners.challenge_id > challenges.id
 Ref: challenge_winners.repo_id > repos.id
 Ref: challenge_winners.set_by > users.id
 Ref: challenges.author > sponsors.id
+Ref: challenges.event_key > editions.event_key
+Ref: check_in_logs.event_key > editions.event_key
 Ref: check_in_logs.staff_id > users.id
 Ref: check_in_logs.user_id > users.id
 Ref: content_reports.repo_id > repos.id
@@ -1762,6 +1863,7 @@ Ref: content_reports.target_user_id > users.id
 Ref: data_subject_requests.requested_by > users.id
 Ref: data_subject_requests.subject_user_id > users.id
 Ref: diary_entries.enterprise_id > enterprises.id
+Ref: diary_entries.event_key > editions.event_key
 Ref: diary_entries.owner_id > users.id
 Ref: diary_entries.target_user_id > users.id
 Ref: email_verification_tokens.enterprise_id > enterprises.id
@@ -1774,6 +1876,8 @@ Ref: enterprise_judges.added_by > users.id
 Ref: enterprise_judges.enterprise_id > enterprises.id
 Ref: enterprise_judges.user_id > users.id
 Ref: enterprises.director_id > users.id
+Ref: enterprises.event_key > editions.event_key
+Ref: event_config.event_key > editions.event_key
 Ref: event_email_reminders.created_by > users.id
 Ref: food_intolerances.proposed_by > users.id
 Ref: form_libraries.application_id > applications.id
@@ -1790,12 +1894,21 @@ Ref: help_request_topics.request_id > help_requests.id
 Ref: help_request_topics.topic_id > help_topics.id
 Ref: help_requests.challenge_id > challenges.id
 Ref: help_requests.claimed_by > users.id
+Ref: help_requests.event_key > editions.event_key
 Ref: help_requests.requester_id > users.id
 Ref: help_topics.proposed_by > users.id
+Ref: helpdesk_open_windows.event_key > editions.event_key
+Ref: helper_availability.event_key > editions.event_key
+Ref: helper_availability.event_key > helper_profiles.event_key
 Ref: helper_availability.user_id > helper_profiles.user_id
 Ref: helper_profile_challenges.challenge_id > challenges.id
+Ref: helper_profile_challenges.event_key > editions.event_key
+Ref: helper_profile_challenges.event_key > helper_profiles.event_key
 Ref: helper_profile_challenges.user_id > helper_profiles.user_id
+Ref: helper_profiles.event_key > editions.event_key
 Ref: helper_profiles.user_id > users.id
+Ref: helper_topics.event_key > editions.event_key
+Ref: helper_topics.event_key > helper_profiles.event_key
 Ref: helper_topics.topic_id > help_topics.id
 Ref: helper_topics.user_id > helper_profiles.user_id
 Ref: judging_field_leases.judge_id > users.id
@@ -1813,9 +1926,11 @@ Ref: meal_scan_batch_items.activity_id > activities.id
 Ref: meal_scan_batch_items.batch_id > meal_scan_batches.id
 Ref: meal_scan_batches.activity_id > activities.id
 Ref: meal_scan_batches.submitted_by > users.id
+Ref: mentor_profiles.event_key > editions.event_key
 Ref: mentor_profiles.user_id > users.id
 Ref: notification_outbox.user_id > users.id
 Ref: notification_preferences.user_id > users.id
+Ref: onboarding_step_states.event_key > editions.event_key
 Ref: onboarding_step_states.user_id > users.id
 Ref: project_challenges.challenge_id > challenges.id
 Ref: project_challenges.repo_id > repos.id
@@ -1831,14 +1946,17 @@ Ref: project_submission_versions.repo_id > repos.id
 Ref: push_tokens.user_id > users.id
 Ref: queue_entries.assigned_room_id > rooms.id
 Ref: queue_entries.challenge_id > challenges.id
+Ref: queue_entries.event_key > editions.event_key
 Ref: queue_entries.repo_id > repos.id
 Ref: queue_group_challenges.challenge_id > challenges.id
 Ref: queue_group_challenges.queue_group_id > queue_groups.id
 Ref: queue_groups.created_by > users.id
 Ref: queue_groups.enterprise_id > enterprises.id
+Ref: queue_groups.event_key > editions.event_key
 Ref: queue_history.actor_id > users.id
 Ref: queue_history.queue_entry_id > queue_entries.id
 Ref: repos.created_by > users.id
+Ref: repos.event_key > editions.event_key
 Ref: review_fixture_accounts.user_id > users.id
 Ref: review_fixture_queues.challenge_id > challenges.id
 Ref: review_fixture_queues.enterprise_id > enterprises.id
@@ -1859,6 +1977,10 @@ Ref: room_queue_groups.assigned_by > users.id
 Ref: room_queue_groups.queue_group_id > queue_groups.id
 Ref: room_queue_groups.room_id > rooms.id
 Ref: room_queue_state.room_id > rooms.id
+Ref: rooms.event_key > editions.event_key
+Ref: scanner_revoked_badges.event_key > editions.event_key
+Ref: scanner_revoked_tickets.event_key > editions.event_key
+Ref: schedule.event_key > editions.event_key
 Ref: schedule_enterprises.enterprise_id > enterprises.id
 Ref: schedule_enterprises.schedule_id > schedule.id
 Ref: schedule_owners.assigned_by > users.id
@@ -1874,7 +1996,9 @@ Ref: statistics_scope_panel_role_access.role_id > roles.id
 Ref: submissions.invited_by > users.id
 Ref: submissions.repo_id > repos.id
 Ref: submissions.user_id > users.id
+Ref: tickets.event_key > editions.event_key
 Ref: tickets.user_id > users.id
+Ref: time_logs.event_key > editions.event_key
 Ref: time_logs.scanned_by > users.id
 Ref: time_logs.user_id > users.id
 Ref: universities.proposed_by > users.id
@@ -1887,14 +2011,15 @@ Ref: user_invite_link_redemptions.user_id > users.id
 Ref: user_invite_links.created_by > users.id
 Ref: user_invite_links.enterprise_id > enterprises.id
 Ref: user_public_profiles.user_id > users.id
-Ref: user_role_event_evidence.role_id > roles.id
-Ref: user_role_event_evidence.user_id > users.id
 Ref: user_roles.assigned_by > users.id
+Ref: user_roles.event_key > editions.event_key
 Ref: user_roles.role_id > roles.id
 Ref: user_roles.user_id > users.id
+Ref: users.badge_event_key > editions.event_key
 Ref: wallet_access_tokens.user_id > users.id
 Ref: wallet_operation_passes.operation_id > wallet_operations.id
 Ref: wallet_operation_passes.pass_id > wallet_passes.id
 Ref: wallet_operations.actor_id > users.id
 Ref: wallet_pass_devices.pass_id > wallet_passes.id
+Ref: wallet_passes.event_key > editions.event_key
 Ref: wallet_passes.user_id > users.id

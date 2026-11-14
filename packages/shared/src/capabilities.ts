@@ -148,3 +148,70 @@ export const CAPABILITY_DESCRIPTIONS: Record<Capability, string> = {
   "audit:read": "Read the audit log",
   "exports:run": "Run data exports",
 };
+
+/**
+ * Read/write classification for closed editions (docs/multi-edition-plan.md
+ * §3, H8). A closed edition is read-only: people keep the screens of the role
+ * they had, so every capability that gates something to *look at* stays
+ * (`read`), while capabilities that only perform operational actions (scan,
+ * send, invite, override) are dropped (`write`). Mutations are blocked
+ * separately by the edition write guard, so a `read` capability that also
+ * covers edits still cannot change a closed edition. Exhaustive on purpose: a
+ * new capability must be classified here.
+ */
+export const CAPABILITY_ACCESS: Record<Capability, "read" | "write"> = {
+  "*": "write",
+  "users:read": "read",
+  "users:write": "read",
+  "permissions:manage": "read",
+  "invites:manage": "write",
+  "applications:manage": "read",
+  "applications:review": "read",
+  "applications:decide": "read",
+  "applications:confirm-override": "write",
+  "applications:edit-response": "write",
+  "statistics:manage": "read",
+  "projects:read": "read",
+  "projects:edit": "read",
+  "accredit:scan": "write",
+  "presence:scan": "write",
+  "activity:scan": "write",
+  "logistics:stats": "read",
+  "intolerances:manage": "write",
+  "meal-plans:export": "read",
+  "meal-plans:manage": "write",
+  "queue:status": "read",
+  "queue:operate": "read",
+  "queue:admin": "read",
+  "judge:panel": "read",
+  "judging:export": "read",
+  "sponsors:manage": "read",
+  "challenges:manage": "write",
+  "schedule:read": "read",
+  "schedule:manage": "read",
+  "announcements:manage": "read",
+  "tv:control": "write",
+  "event:manage": "read",
+  "venue:manage": "read",
+  "wallet:manage": "read",
+  "presence:manage": "read",
+  "helpdesk:offer": "read",
+  "helpdesk:request": "read",
+  "helpdesk:coverage": "read",
+  "helpdesk:manage": "write",
+  "notifications:send": "write",
+  "audit:read": "read",
+  "exports:run": "read",
+};
+
+/** What a role keeps in a closed edition; `*` expands to every read capability. */
+export function closedEditionCapabilities(granted: Iterable<string>): Set<string> {
+  const held = new Set(granted);
+  const wildcard = held.has(CAPABILITIES.ADMIN_ALL);
+  return new Set(
+    ALL_CAPABILITIES.filter(
+      (capability) =>
+        CAPABILITY_ACCESS[capability] === "read" && (wildcard || held.has(capability)),
+    ),
+  );
+}

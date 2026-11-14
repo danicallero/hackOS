@@ -126,5 +126,6 @@
   "apiError_capacity_full": "El formulario está completo.",
   "apiError_already_sent": "La decisión ya se había enviado.",
   "apiError_response_status_changed": "Su estado ya no permite esta acción.",
-  "apiError_response_not_found": "La solicitud o su cuenta ya no existe."
+  "apiError_response_not_found": "La solicitud o su cuenta ya no existe.",
+  "apiError_edition_closed": "Esta edición está cerrada y es de solo lectura."
 }

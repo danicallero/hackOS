@@ -9,6 +9,7 @@ import { EmptyState, FloatingGlassButton } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { getCurrentSessionCookie } from "@/lib/api";
 import { apiAssetUrl } from "@/lib/directory";
+import { editionHeaders } from "@/lib/edition";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } from "@/theme/dynamic-type";
@@ -78,14 +79,17 @@ export function FileViewer({
       const destination = new File(Paths.cache, cacheFileName(fileName));
       if (destination.exists) destination.delete();
       const file = await File.downloadFileAsync(url, destination, {
-        headers: { Cookie: cookie },
+        headers: { Cookie: cookie, ...editionHeaders() },
         idempotent: true,
       });
       if (id === request.current) setState({ status: "ready", uri: file.uri });
     } catch {
       // The download error does not carry the status; ask the route itself
       // whether the file is gone (404) or the request just failed.
-      const status = await fetch(url, { method: "HEAD", headers: { Cookie: cookie } }).then(
+      const status = await fetch(url, {
+        method: "HEAD",
+        headers: { Cookie: cookie, ...editionHeaders() },
+      }).then(
         (response) => response.status,
         () => 0,
       );

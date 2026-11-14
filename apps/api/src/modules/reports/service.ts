@@ -151,6 +151,11 @@ export async function listReports(
        LEFT JOIN users target ON target.id = r.target_user_id
       WHERE reporter.is_test_account = $1
         AND ($2::text = 'all' OR r.status = $2)
+        AND (r.repo_id IS NOT NULL AND repo.event_key = current_edition()
+          OR r.target_user_id IS NOT NULL AND EXISTS (
+               SELECT 1 FROM diary_entries d
+                WHERE d.owner_id = r.reporter_id AND d.target_user_id = r.target_user_id
+                  AND d.event_key = current_edition()))
         AND ((r.repo_id IS NOT NULL AND 'project' = ANY($3::text[]))
           OR (r.target_user_id IS NOT NULL AND 'profile' = ANY($3::text[])))
       ORDER BY (r.status = 'open') DESC, r.created_at DESC, r.id DESC

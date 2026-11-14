@@ -186,14 +186,17 @@ export async function revokeApplicationGrantedRoles(
      WHERE user_id = $1
        AND role_id = ANY($2::int[])
        AND source = 'application_confirmed'
+       AND event_key = (SELECT a.event_key FROM applications a WHERE a.id = $3)
        AND NOT EXISTS (
          SELECT 1
            FROM application_responses other_response
+           JOIN applications other_app ON other_app.id = other_response.application_id
            JOIN application_grants_roles other_grant
              ON other_grant.application_id = other_response.application_id
           WHERE other_response.user_id = $1
             AND other_response.status = 'confirmed'
             AND other_response.application_id <> $3
+            AND other_app.event_key = user_roles.event_key
             AND other_grant.role_id = user_roles.role_id
        )
      RETURNING role_id`,

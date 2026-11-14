@@ -434,7 +434,7 @@ function genericObject(objectId: string, purpose: Purpose, content: GooglePassCo
 async function passContent(userId: number, purpose: Purpose): Promise<GooglePassContent> {
   const { rows } = await pool.query(
     `SELECT u.name, u.surname, u.badge_id, un.name AS university, u.email, u.language, t.token
-    FROM users u LEFT JOIN tickets t ON t.user_id=u.id LEFT JOIN universities un ON un.id=${userUniversityIdSql("u.id")} WHERE u.id=$1 AND u.account_state='active' AND u.anonymized_at IS NULL`,
+    FROM users u LEFT JOIN tickets t ON t.user_id=u.id AND t.event_key=current_edition() LEFT JOIN universities un ON un.id=${userUniversityIdSql("u.id")} WHERE u.id=$1 AND u.account_state='active' AND u.anonymized_at IS NULL`,
     [userId],
   );
   const user = rows[0];
