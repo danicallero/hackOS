@@ -20,7 +20,7 @@ export function registerAuditRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Query audit log",
         description:
-          "Filtered H53 audit trail. Includes executor type, verified actor, initiating user for automatic work, changed field names, safe operational snapshots and server-generated request correlation. Badge IDs and email/reference identifiers remain visible as operational evidence; private notes, answers and authentication secrets are minimized. Known automatic actions use System for executor and source, including legacy entries. actorId/actorQuery match actors and initiators; actorQuery ignores case and accents. requestId groups related actions.",
+          "Filtered H53 audit trail. Includes executor type, verified actor, initiating user for automatic work, changed field names, safe operational snapshots and server-generated request correlation. Badge IDs and email/reference identifiers remain visible as operational evidence; private notes, answers and authentication secrets are minimized. Known automatic actions use System for executor and source, including legacy entries. actorId/actorQuery match actors and initiators; actorQuery ignores case and accents. requestId groups related actions. entity_label carries the current name of catalogue subjects (university, degree, enterprise, challenge, role, room, application, activity, active user), or null when the subject has no name or no longer exists.",
         querystring: auditQuerySchema,
       },
     },
@@ -55,7 +55,7 @@ export function registerAuditRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Get one audit log entry",
         description:
-          "Single privacy-minimized H53 audit entry, including changed_fields, actor_kind, initiated_by, initiator_name, request_id and last_edited_at when known. Historical missing context remains unknown.",
+          "Single privacy-minimized H53 audit entry, including changed_fields, actor_kind, initiated_by, initiator_name, request_id, entity_label and last_edited_at when known. Historical missing context remains unknown.",
         params: auditIdParamsSchema,
       },
     },

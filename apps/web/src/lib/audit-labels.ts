@@ -45,8 +45,13 @@ export function getAuditEntityLabel(entityType: string, t: Translate): string {
   return key ? t(key as Parameters<Translate>[0]) : humanizeAction(entityType);
 }
 
-export function entityRef(entityType: string, entityId: string, t: Translate) {
-  return `${getAuditEntityLabel(entityType, t)} #${entityId}`;
+/** H53: "University · UDC" when the subject has a name, "University #12" otherwise. */
+export function entityRef(
+  row: Pick<AuditRow, "entity_type" | "entity_id" | "entity_label">,
+  t: Translate,
+) {
+  const type = getAuditEntityLabel(row.entity_type, t);
+  return row.entity_label ? `${type} · ${row.entity_label}` : `${type} #${row.entity_id}`;
 }
 
 export function getAuditEntityHref(entityType: string, id: string): string | null {
@@ -77,11 +82,11 @@ export function getAuditActorLabel(row: AuditRow, t: Translate): string {
  * for the long tail of actions that don't have curated copy.
  */
 export function getAuditSummary(
-  row: Pick<AuditRow, "action" | "entity_type" | "entity_id" | "after">,
+  row: Pick<AuditRow, "action" | "entity_type" | "entity_id" | "entity_label" | "after">,
   actorLabel: string,
   t: Translate,
 ): string {
-  const entity = entityRef(row.entity_type, row.entity_id, t);
+  const entity = entityRef(row, t);
   switch (row.action) {
     case "review_scored":
       return t("auditSummaryReviewEdited", { actor: actorLabel, entity });

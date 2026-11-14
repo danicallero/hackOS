@@ -11,6 +11,26 @@ import { likeContains } from "../../lib/like.js";
  * large.
  */
 
+/**
+ * H53: the current display name of a catalogue entity, resolved at read time
+ * so the trail shows "University · UDC" instead of "University #12". Most
+ * subjects never record their name in the payload; a deleted one falls back
+ * to its id.
+ */
+const ENTITY_LABEL_SQL = `CASE al.entity_type
+    WHEN 'university' THEN (SELECT name FROM universities WHERE id::text = al.entity_id)
+    WHEN 'university_degree' THEN (SELECT name FROM university_degrees WHERE id::text = al.entity_id)
+    WHEN 'enterprise' THEN (SELECT name FROM enterprises WHERE id::text = al.entity_id)
+    WHEN 'challenge' THEN (SELECT title FROM challenges WHERE id::text = al.entity_id)
+    WHEN 'role' THEN (SELECT name FROM roles WHERE id::text = al.entity_id)
+    WHEN 'room' THEN (SELECT name FROM rooms WHERE id::text = al.entity_id)
+    WHEN 'application' THEN (SELECT name FROM applications WHERE id::text = al.entity_id)
+    WHEN 'activity' THEN (SELECT name FROM activities WHERE id::text = al.entity_id)
+    WHEN 'presence_activity' THEN (SELECT name FROM activities WHERE id::text = al.entity_id)
+    WHEN 'user' THEN (SELECT NULLIF(concat_ws(' ', name, surname), '') FROM users
+      WHERE id::text = al.entity_id AND account_state = 'active' AND anonymized_at IS NULL)
+  END AS entity_label`;
+
 export interface AuditFilters {
   requestId?: string;
   entityType?: string;
@@ -71,7 +91,7 @@ export async function queryAuditLog(
   const limitParamIdx = params.length + 1;
   const offsetParamIdx = params.length + 2;
   const { rows } = await db.query(
-    `SELECT al.*, u.name AS actor_name, u.surname AS actor_surname, u.email AS actor_email, NULLIF(concat_ws(' ', i.name, i.surname), '') AS initiator_name
+    `SELECT al.*, u.name AS actor_name, u.surname AS actor_surname, u.email AS actor_email, NULLIF(concat_ws(' ', i.name, i.surname), '') AS initiator_name, ${ENTITY_LABEL_SQL}
      ${from}
      ${where}
      ORDER BY al.id DESC
@@ -124,7 +144,7 @@ async function restoreWalletBroadcasts(db: Queryable, rows: Record<string, unkno
 /** Single audit_log row by id, same shape as the list query, for the detail route. */
 export async function queryAuditLogById(db: Queryable, id: number): Promise<unknown | null> {
   const { rows } = await db.query(
-    `SELECT al.*, u.name AS actor_name, u.surname AS actor_surname, u.email AS actor_email, NULLIF(concat_ws(' ', i.name, i.surname), '') AS initiator_name
+    `SELECT al.*, u.name AS actor_name, u.surname AS actor_surname, u.email AS actor_email, NULLIF(concat_ws(' ', i.name, i.surname), '') AS initiator_name, ${ENTITY_LABEL_SQL}
      FROM audit_log al
      LEFT JOIN users u ON u.id = al.actor_id
        AND u.account_state = 'active' AND u.anonymized_at IS NULL

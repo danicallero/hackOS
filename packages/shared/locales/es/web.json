@@ -2003,8 +2003,6 @@
   "colActor": "Actor",
   "systemActor": "Sistema",
   "entityTypeLabel": "Tipo de entidad",
-  "entityIdLabel": "ID de entidad",
-  "actorUserIdLabel": "Autor",
   "fromLabel": "Desde",
   "toLabel": "Hasta",
   "clearFilters": "Borrar filtros",
@@ -2015,8 +2013,6 @@
   "userAgentLabel": "Agente de usuario",
   "beforeLabel": "Antes",
   "afterLabel": "Después",
-  "allActionsPlaceholder": "Todas las acciones",
-  "allEntityTypesPlaceholder": "Todos los tipos de entidad",
   "backToAuditLog": "Volver al registro de auditoría",
   "auditEntryNotFound": "Entrada de auditoría no encontrada",
   "auditContextTitle": "Contexto",
@@ -4355,5 +4351,13 @@
   "editionMadeCurrent": "Edición actual cambiada",
   "editionClosedDone": "Edición cerrada",
   "editionReopenedDone": "Edición reabierta",
-  "couldNotUpdateEdition": "No se pudo actualizar la edición."
+  "couldNotUpdateEdition": "No se pudo actualizar la edición.",
+  "auditPeriodLabel": "Fecha",
+  "auditPeriodLastHour": "Última hora",
+  "auditPeriodLast24Hours": "Últimas 24 horas",
+  "auditPeriodLast7Days": "Últimos 7 días",
+  "auditPeriodLast30Days": "Últimos 30 días",
+  "auditSearchActor": "Buscar por autor",
+  "auditEntityHistory": "Historial",
+  "auditViewEntityHistory": "Ver todas las acciones sobre esta entidad"
 }
