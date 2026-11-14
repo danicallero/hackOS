@@ -12,6 +12,7 @@ import {
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { likeContains } from "../../lib/like.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
+import { requireApplication } from "./forms.js";
 import {
   batchDecideSchema,
   batchIdsSchema,
@@ -82,7 +83,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List a form's responses",
         description:
-          "Staff read of every response to a form (H13), with optional status and name/email search filters, each response's aggregate review score, and the caller's own review. Managers may reveal all reviews.",
+          "Staff read of every response to a form (H13), with optional status and case- and accent-insensitive name/email search filters, each response's aggregate review score, and the caller's own review. Managers may reveal all reviews.",
         params: idParamSchema,
         querystring: listResponsesQuerySchema,
       },
@@ -92,6 +93,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
         getRequestAuthorizationContext(req),
         CAPABILITIES.APPLICATIONS_MANAGE,
       );
+      await requireApplication(pool, req.params.id);
       const params: unknown[] = [req.params.id];
       let reviewFilter = "ar.author_id IS NOT NULL";
       if (!canViewAllReviews) {
@@ -105,7 +107,9 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       }
       if (req.query.search) {
         params.push(likeContains(req.query.search));
-        filters.push(`(u.name ILIKE $${params.length} OR u.email ILIKE $${params.length})`);
+        filters.push(
+          `(unaccent(u.name) ILIKE unaccent($${params.length}) OR unaccent(u.email) ILIKE unaccent($${params.length}))`,
+        );
       }
       const { rows } = await pool.query(
         `SELECT r.id, r.user_id, NULLIF(concat_ws(' ', u.name, u.surname), '') AS name,
@@ -267,12 +271,12 @@ export function registerReviewRoutes(app: FastifyInstance): void {
   r.post(
     "/api/responses/:responseId/resend-decision",
     {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      preHandler: [requireCapability(CAPABILITIES.APPLICATIONS_DECIDE), idempotencyGuard],
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: {
         summary: "Resend a decision",
         description:
-          "Re-sends the decision email for a response already at accepted, rejected, or expired (H15) — an expired one returns to accepted, giving a second chance.",
+          "Re-sends the decision email for a response already at accepted, rejected, or expired (H15) — an expired one returns to accepted, giving a second chance, if the form has capacity. Each resend issues a new confirmation link and invalidates the previous one; an Idempotency-Key replays the first result instead of emailing again.",
         params: responseIdParamSchema,
       },
     },
@@ -473,15 +477,16 @@ export function registerReviewRoutes(app: FastifyInstance): void {
   r.post(
     "/api/responses/batch/resend-decision",
     {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      preHandler: [requireCapability(CAPABILITIES.APPLICATIONS_DECIDE), idempotencyGuard],
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: {
         summary: "Batch re-send already-sent decisions",
         description:
           "Explicitly re-sends the decision email for each response id, for responses " +
           "already at accepted, rejected, or expired (an expired one returns to accepted — " +
-          "a second chance). Distinct from batch send-decision, which only sends never-sent " +
-          "internal decisions and never resends.",
+          "a second chance, if the form has capacity). Distinct from batch send-decision, which only " +
+          "sends never-sent internal decisions and never resends. An Idempotency-Key replays the " +
+          "completed batch without emailing again. Each skipped id carries a stable `code`.",
         body: batchIdsSchema,
       },
     },

@@ -3,17 +3,17 @@
 import { useRef, useState } from "react";
 import { api, apiUpload } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { compressPhoto, PICKABLE_PHOTO_TYPES, UnsupportedPhotoError } from "@/lib/compress-image";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
-
-const PHOTO_TYPES = ["image/png", "image/jpeg", "image/webp"];
-const PHOTO_MAX_BYTES = 2 * 1024 * 1024;
 
 /**
  * Upload and removal of an account photo (#934) against `endpoint`: the
  * caller's own `/api/me/photo`, or `/api/users/:id/photo` for user staff (H8).
  * The hidden file input is driven through `inputRef`; `onChanged` reloads
- * whatever shows the photo once the API has stored or cleared it.
+ * whatever shows the photo once the API has stored or cleared it. The photo
+ * is compressed in the browser to the 5 MB cap first; only formats it cannot
+ * read as an image are refused.
  */
 export function usePhotoUpload(endpoint: string, onChanged: () => unknown) {
   const { t } = useLocale();
@@ -28,19 +28,20 @@ export function usePhotoUpload(endpoint: string, onChanged: () => unknown) {
 
   async function upload(file: File) {
     setError(null);
-    if (!PHOTO_TYPES.includes(file.type) || file.size > PHOTO_MAX_BYTES) {
-      fail(t("photoFileHint"), t("toastUploadPhoto"));
-      return;
-    }
     setPending("upload");
     try {
       const body = new FormData();
-      body.append("file", file);
+      body.append("file", await compressPhoto(file));
       await apiUpload(endpoint, body);
       await onChanged();
       toast.success(t("photoUpdated"), { compactTitle: t("toastUploadPhoto") });
     } catch (err) {
-      fail(apiErrorText(err, t, t("couldNotUploadPhoto")), t("toastUploadPhoto"));
+      fail(
+        err instanceof UnsupportedPhotoError
+          ? t("photoFileHint")
+          : apiErrorText(err, t, t("couldNotUploadPhoto")),
+        t("toastUploadPhoto"),
+      );
     } finally {
       setPending(null);
       if (inputRef.current) inputRef.current.value = "";
@@ -64,7 +65,7 @@ export function usePhotoUpload(endpoint: string, onChanged: () => unknown) {
   const input = {
     ref: inputRef,
     type: "file" as const,
-    accept: PHOTO_TYPES.join(","),
+    accept: PICKABLE_PHOTO_TYPES.join(","),
     className: "sr-only",
     tabIndex: -1,
     "aria-hidden": true as const,

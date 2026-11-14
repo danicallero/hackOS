@@ -1,4 +1,4 @@
-import { ALL_CAPABILITIES, CAPABILITIES } from "@hackos/shared/capabilities";
+import { ALL_CAPABILITIES, CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import type { MessageKey, Translate } from "@/lib/i18n";
 import { normalizeSearchText } from "./search-text";
 
@@ -28,54 +28,54 @@ export function prettifyCapability(cap: string, t: Translate): string {
  * i18n machinery, so the web UI keeps its own es/gl/en translations of the
  * same content under these keys (see `packages/shared/locales/*\/web.json`).
  */
-const CAPABILITY_DESCRIPTION_KEYS: Partial<Record<string, MessageKey>> = {
+const CAPABILITY_DESCRIPTION_KEYS: Record<Capability, MessageKey> = {
   [CAPABILITIES.HELPDESK_OFFER]: "capabilityDescriptionHelpdeskOffer",
   [CAPABILITIES.HELPDESK_REQUEST]: "capabilityDescriptionHelpdeskRequest",
   [CAPABILITIES.HELPDESK_COVERAGE]: "capabilityDescriptionHelpdeskCoverage",
   [CAPABILITIES.HELPDESK_MANAGE]: "capabilityDescriptionHelpdeskManage",
-  "*": "capabilityDescriptionAdminAll",
-  "users:read": "capabilityDescriptionUsersRead",
-  "users:write": "capabilityDescriptionUsersWrite",
-  "permissions:manage": "capabilityDescriptionPermissionsManage",
-  "invites:manage": "capabilityDescriptionInvitesManage",
-  "applications:manage": "capabilityDescriptionApplicationsManage",
-  "applications:review": "capabilityDescriptionApplicationsReview",
-  "applications:decide": "capabilityDescriptionApplicationsDecide",
-  "applications:confirm-override": "capabilityDescriptionApplicationsConfirmOverride",
-  "applications:edit-response": "capabilityDescriptionApplicationsEditResponse",
-  "statistics:manage": "capabilityDescriptionStatisticsManage",
-  "projects:read": "capabilityDescriptionProjectsRead",
-  "projects:edit": "capabilityDescriptionProjectsEdit",
-  "accredit:scan": "capabilityDescriptionAccreditScan",
-  "presence:scan": "capabilityDescriptionPresenceScan",
-  "activity:scan": "capabilityDescriptionActivityScan",
-  "logistics:stats": "capabilityDescriptionLogisticsStats",
-  "intolerances:manage": "capabilityDescriptionIntolerancesManage",
-  "meal-plans:export": "capabilityDescriptionMealPlansExport",
-  "meal-plans:manage": "capabilityDescriptionMealPlansManage",
-  "queue:status": "capabilityDescriptionQueueStatus",
-  "queue:operate": "capabilityDescriptionQueueOperate",
-  "queue:admin": "capabilityDescriptionQueueAdmin",
-  "judge:panel": "capabilityDescriptionJudgePanel",
-  "judging:export": "capabilityDescriptionJudgingExport",
-  "sponsors:manage": "capabilityDescriptionSponsorsManage",
-  "challenges:manage": "capabilityDescriptionChallengesManage",
-  "schedule:read": "capabilityDescriptionScheduleRead",
-  "schedule:manage": "capabilityDescriptionScheduleManage",
-  "announcements:manage": "capabilityDescriptionAnnouncementsManage",
-  "tv:control": "capabilityDescriptionTvControl",
-  "event:manage": "capabilityDescriptionEventManage",
-  "venue:manage": "capabilityDescriptionVenueManage",
-  "wallet:manage": "capabilityDescriptionWalletManage",
-  "presence:manage": "capabilityDescriptionPresenceManage",
-  "notifications:send": "capabilityDescriptionNotificationsSend",
-  "audit:read": "capabilityDescriptionAuditRead",
-  "exports:run": "capabilityDescriptionExportsRun",
+  [CAPABILITIES.ADMIN_ALL]: "capabilityDescriptionAdminAll",
+  [CAPABILITIES.USERS_READ]: "capabilityDescriptionUsersRead",
+  [CAPABILITIES.USERS_WRITE]: "capabilityDescriptionUsersWrite",
+  [CAPABILITIES.PERMISSIONS_MANAGE]: "capabilityDescriptionPermissionsManage",
+  [CAPABILITIES.INVITES_MANAGE]: "capabilityDescriptionInvitesManage",
+  [CAPABILITIES.APPLICATIONS_MANAGE]: "capabilityDescriptionApplicationsManage",
+  [CAPABILITIES.APPLICATIONS_REVIEW]: "capabilityDescriptionApplicationsReview",
+  [CAPABILITIES.APPLICATIONS_DECIDE]: "capabilityDescriptionApplicationsDecide",
+  [CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE]: "capabilityDescriptionApplicationsConfirmOverride",
+  [CAPABILITIES.APPLICATIONS_EDIT_RESPONSE]: "capabilityDescriptionApplicationsEditResponse",
+  [CAPABILITIES.STATISTICS_MANAGE]: "capabilityDescriptionStatisticsManage",
+  [CAPABILITIES.PROJECTS_READ]: "capabilityDescriptionProjectsRead",
+  [CAPABILITIES.PROJECTS_EDIT]: "capabilityDescriptionProjectsEdit",
+  [CAPABILITIES.ACCREDIT_SCAN]: "capabilityDescriptionAccreditScan",
+  [CAPABILITIES.PRESENCE_SCAN]: "capabilityDescriptionPresenceScan",
+  [CAPABILITIES.ACTIVITY_SCAN]: "capabilityDescriptionActivityScan",
+  [CAPABILITIES.LOGISTICS_STATS]: "capabilityDescriptionLogisticsStats",
+  [CAPABILITIES.INTOLERANCES_MANAGE]: "capabilityDescriptionIntolerancesManage",
+  [CAPABILITIES.MEAL_PLANS_EXPORT]: "capabilityDescriptionMealPlansExport",
+  [CAPABILITIES.MEAL_PLANS_MANAGE]: "capabilityDescriptionMealPlansManage",
+  [CAPABILITIES.QUEUE_STATUS]: "capabilityDescriptionQueueStatus",
+  [CAPABILITIES.QUEUE_OPERATE]: "capabilityDescriptionQueueOperate",
+  [CAPABILITIES.QUEUE_ADMIN]: "capabilityDescriptionQueueAdmin",
+  [CAPABILITIES.JUDGE_PANEL]: "capabilityDescriptionJudgePanel",
+  [CAPABILITIES.JUDGING_EXPORT]: "capabilityDescriptionJudgingExport",
+  [CAPABILITIES.SPONSORS_MANAGE]: "capabilityDescriptionSponsorsManage",
+  [CAPABILITIES.CHALLENGES_MANAGE]: "capabilityDescriptionChallengesManage",
+  [CAPABILITIES.SCHEDULE_READ]: "capabilityDescriptionScheduleRead",
+  [CAPABILITIES.SCHEDULE_MANAGE]: "capabilityDescriptionScheduleManage",
+  [CAPABILITIES.ANNOUNCEMENTS_MANAGE]: "capabilityDescriptionAnnouncementsManage",
+  [CAPABILITIES.TV_CONTROL]: "capabilityDescriptionTvControl",
+  [CAPABILITIES.EVENT_MANAGE]: "capabilityDescriptionEventManage",
+  [CAPABILITIES.VENUE_MANAGE]: "capabilityDescriptionVenueManage",
+  [CAPABILITIES.WALLET_MANAGE]: "capabilityDescriptionWalletManage",
+  [CAPABILITIES.PRESENCE_MANAGE]: "capabilityDescriptionPresenceManage",
+  [CAPABILITIES.NOTIFICATIONS_SEND]: "capabilityDescriptionNotificationsSend",
+  [CAPABILITIES.AUDIT_READ]: "capabilityDescriptionAuditRead",
+  [CAPABILITIES.EXPORTS_RUN]: "capabilityDescriptionExportsRun",
 };
 
 /** Short inline description of what a capability grants, or "" if none is defined. */
 export function capabilityDescription(cap: string, t: Translate): string {
-  const key = CAPABILITY_DESCRIPTION_KEYS[cap];
+  const key = (CAPABILITY_DESCRIPTION_KEYS as Partial<Record<string, MessageKey>>)[cap];
   return key ? t(key) : "";
 }
 

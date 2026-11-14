@@ -67,6 +67,7 @@ test.beforeEach(async ({ page }) => {
         requireSponsorDietary: false,
         requireStaffShirtSize: false,
         requireStaffDietary: false,
+        passFrontFields: [],
         passBackFields: [{ label: "Schedule", value: "https://example.com/schedule" }],
         passFieldLabels: {},
         passFieldVisibility: {},

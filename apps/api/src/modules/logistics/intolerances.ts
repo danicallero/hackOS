@@ -45,9 +45,11 @@ export function registerIntoleranceRoutes(app: FastifyInstance): void {
     kind: "public",
     anonymousCategory: "public-content",
   } as const satisfies RouteAccessPolicy;
+  // The catalogue is global: edits never touch an edition's rows.
   const manageAccess = {
     kind: "capability",
     capability: CAPABILITIES.INTOLERANCES_MANAGE,
+    edition: "global",
   } as const satisfies RouteAccessPolicy;
 
   // Public: the picker's option list.

@@ -573,7 +573,7 @@ async function seedEnterprises(): Promise<void> {
     `SELECT u.id, u.email FROM users u
      JOIN user_roles ur ON ur.user_id = u.id
      JOIN roles r ON r.id = ur.role_id
-     WHERE r.name = 'mock:sponsor' AND u.email LIKE '%@example.com'
+     WHERE r.name = 'mock:sponsor' AND ur.event_key = current_edition() AND u.email LIKE '%@example.com'
      ORDER BY u.email`,
   );
   if (sponsorUsers.rows.length === 0) {
@@ -589,7 +589,7 @@ async function seedEnterprises(): Promise<void> {
     const enterprise = await client.query(
       `INSERT INTO enterprises (name, website, priority, director_id)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT (name) DO UPDATE SET priority = EXCLUDED.priority, website = EXCLUDED.website
+       ON CONFLICT (event_key, name) DO UPDATE SET priority = EXCLUDED.priority, website = EXCLUDED.website
        RETURNING id`,
       [company.name, company.website, i + 1, repUser.id],
     );
@@ -1002,7 +1002,7 @@ async function seedTickets(): Promise<void> {
     const token = `seed-ticket-${row.user_id}-${Math.random().toString(36).slice(2, 10)}`;
     const inserted = await client.query(
       `INSERT INTO tickets (user_id, token) VALUES ($1, $2)
-       ON CONFLICT (user_id) DO NOTHING
+       ON CONFLICT (user_id, event_key) DO NOTHING
        RETURNING user_id`,
       [row.user_id, token],
     );

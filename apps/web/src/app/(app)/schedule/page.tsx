@@ -112,7 +112,6 @@ export default function SchedulePage() {
     (id: ColumnId, width: number) => {
       setTableConfig({ ...tableConfig, widths: { ...tableConfig.widths, [id]: width } });
       setLiveWidths((prev) => {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { [id]: _removed, ...rest } = prev;
         return rest;
       });
@@ -563,6 +562,7 @@ export default function SchedulePage() {
           title={t("editScheduleItem")}
           initial={scheduleItemToForm(editingItem, language)}
           initialTranslations={scheduleItemToTranslations(editingItem, language)}
+          initialSpeakers={editingItem.speakers}
           scheduleId={editingItem.id}
           onSubmit={async (values) => {
             const updated = await logisticsApi.updateSchedule(
@@ -587,6 +587,7 @@ export default function SchedulePage() {
           }}
           title={t("duplicateScheduleItem")}
           initial={scheduleDuplicateForm(duplicatingItem, language, t)}
+          initialSpeakers={duplicatingItem.speakers}
           onSubmit={async (values, pendingOwners, rsvp) => {
             const created = await logisticsApi.createSchedule({
               ...cleanScheduleForm(values),

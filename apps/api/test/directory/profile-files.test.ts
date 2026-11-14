@@ -625,7 +625,7 @@ describe("account photo (#934)", () => {
       (await upload(url, me, Buffer.from("GIF89a...."), "a.gif", "image/gif")).statusCode,
     ).toBe(400);
     expect((await upload(url, me, PDF, "a.png", "image/png")).statusCode).toBe(400);
-    const oversize = Buffer.concat([PNG, Buffer.alloc(2 * 1024 * 1024)]);
+    const oversize = Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]);
     expect((await upload(url, me, oversize, "a.png", "image/png")).statusCode).toBe(400);
     expect((await upload(url, me, Buffer.alloc(0), "a.png", "image/png")).statusCode).toBe(400);
     const patch = await app.inject({

@@ -8,7 +8,7 @@ export async function attendanceKind(
 ): Promise<AttendanceKind | null> {
   const { rows } = await db.query<{ kind: AttendanceKind | null }>(
     `SELECT kind FROM event_attendance_kinds WHERE user_id = $1
-       AND event_key = (SELECT event_key FROM event_config WHERE id = 1)`,
+       AND event_key = current_edition()`,
     [userId],
   );
   return rows[0]?.kind ?? null;

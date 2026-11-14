@@ -51,9 +51,9 @@ export async function readMentorProfile(db: Queryable, userId: number): Promise<
     `SELECT t.id, t.name AS label
        FROM helper_topics ht
        JOIN help_topics t ON t.id = ht.topic_id
-      WHERE ht.user_id = $1
+      WHERE ht.user_id = $1 AND ht.event_key = $2
       ORDER BY lower(t.name), t.id`,
-    [userId],
+    [userId, eventKey],
   );
   return {
     eligible: head[0].eligible,
@@ -146,7 +146,7 @@ export async function readPublishedMentor(
               SELECT array_agg(t.name ORDER BY lower(t.name), t.id)
                 FROM helper_topics ht
                 JOIN help_topics t ON t.id = ht.topic_id
-               WHERE ht.user_id = m.user_id), '{}') AS expertise
+               WHERE ht.user_id = m.user_id AND ht.event_key = m.event_key), '{}') AS expertise
        FROM mentor_profiles m JOIN users u ON u.id = m.user_id
       WHERE m.user_id = $1 AND m.event_key = $2 AND m.published
         AND u.is_test_account = false AND ${MENTOR_ELIGIBLE_SQL}`,

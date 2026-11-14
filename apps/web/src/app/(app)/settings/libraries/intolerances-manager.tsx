@@ -39,6 +39,7 @@ import { useLibraryList } from "@/hooks/use-library-list";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { pickText, useLocale } from "@/lib/i18n";
+import { normalizeSearchText } from "@/lib/search-text";
 import { toast } from "@/lib/toast";
 import type { Intolerance } from "@/lib/types";
 import { LibraryToolbar } from "./library-toolbar";
@@ -82,6 +83,15 @@ const EMPTY: Values = {
   label: { en: "", es: "", gl: "" },
   description: { en: "", es: "", gl: "" },
 };
+
+export function filterIntolerancesBySearch(entries: Intolerance[], search: string): Intolerance[] {
+  const query = normalizeSearchText(search);
+  return entries.filter((row) =>
+    normalizeSearchText(`${pickText(row.label, "es")} ${row.label.en} ${row.label.gl}`).includes(
+      query,
+    ),
+  );
+}
 
 export function IntolerancesManager() {
   const { t } = useLocale();
@@ -193,10 +203,8 @@ export function IntolerancesManager() {
     },
   ];
 
-  const query = search.trim().toLowerCase();
-  const filteredEntries = entries.filter((row) =>
-    `${pickText(row.label, "es")} ${row.label.en} ${row.label.gl}`.toLowerCase().includes(query),
-  );
+  const query = normalizeSearchText(search);
+  const filteredEntries = filterIntolerancesBySearch(entries, search);
 
   return (
     <div className="space-y-4">

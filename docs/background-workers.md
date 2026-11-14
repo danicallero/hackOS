@@ -40,17 +40,17 @@ queue no matter how many times scheduling runs (idempotent scheduling).
 | --- | --- | --- | --- |
 | `notifications-outbox` | `notifications/dispatcher.ts` | **5 s** | `notification_outbox` rows that are `queued AND next_attempt_at <= now()` → renders + sends via the channel adapter |
 | `announcements-publisher` | `notifications/announcements-publisher.ts` | **15 s** | announcements whose `publish_at` has passed → reveals their configured screen placement and, when selected, fans out inbox/email/push through each recipient's preferences exactly once |
-| `applications-expirer` | `applications/expirer.ts` | **60 s** | accepted responses whose confirmation window elapsed → `expired` (`expireDueConfirmations`), then scoped wallet tokens dead for over a day (`purgeExpiredWalletAccessTokens`, issue #369), then expired `idempotency_keys` rows in 1000-row batches (`purgeExpiredIdempotencyKeys`, issue #994; window in [idempotency-matrix](idempotency-matrix.md#retention)) |
-| `queue-pump` | `queue/pump.ts` | repeatable | discovers the rooms that can take a call (not paused, below their waiting-area cap, a waiting team in the queue they serve), tops each up (`fillRoom` → one transactional `callNextForRoom` per slot) and emits pre-call warnings through one locked claim transaction per queue group |
-| `presence-event-end-closer` | `logistics/presence-closer.ts` | **60 s** | once `event_config.event_ends_at` passes, force-closes every still-open door session with an audited `out` at that instant (`scanned_by NULL` = system actor), and finalizes pending account removals after that valid event-end exit or after the latest accrued H24 certainty window expires. An `out` outside the certainty window credits no hours; it restores the in/out invariant while the expiry path preserves only already-guaranteed minutes. |
+| `applications-expirer` | `applications/expirer.ts` | **60 s** | accepted responses whose confirmation window elapsed → `expired` (`expireDueConfirmations`, re-exported by `applications/service.ts` from `applications/expirations.ts`; skipped while the current edition is closed), then scoped wallet tokens dead for over a day (`purgeExpiredWalletAccessTokens`, issue #369), then expired `idempotency_keys` rows in 1000-row batches (`purgeExpiredIdempotencyKeys`, issue #994; window in [idempotency-matrix](idempotency-matrix.md#retention)); both purges run regardless of edition status |
+| `queue-pump` | `queue/pump.ts` | repeatable; no-op while the current edition is closed | discovers the rooms that can take a call (not paused, below their waiting-area cap, a waiting team in the queue they serve), tops each up (`fillRoom` → one transactional `callNextForRoom` in `queue/transitions.ts` per slot) and emits pre-call warnings through one locked claim transaction per queue group |
+| `presence-event-end-closer` | `logistics/presence-closer.ts` | **60 s**; no-op while the current edition is closed | once `event_config.event_ends_at` passes, force-closes every still-open door session with an audited `out` at that instant (`scanned_by NULL` = system actor), and finalizes pending account removals after that valid event-end exit or after the latest accrued H24 certainty window expires. An `out` outside the certainty window credits no hours; it restores the in/out invariant while the expiry path preserves only already-guaranteed minutes. |
 | `event-email-reminders` | `event/reminders.ts` | **15 s** | claims the pending pre-event email schedule, fans out to active real event-access holders, then records its queued recipient count; expired events are skipped |
 | `lifecycle-reminders` | `notifications/lifecycle-reminders.ts` | **10 min** | up to 200 unverified accounts and 200 stale draft applications per tick, each claimed `FOR UPDATE SKIP LOCKED`: queues the next of three escalating reminder emails five days after sign-up / last draft edit / previous reminder, and advances the counter in the same transaction (see [notifications](notifications.md#lifecycle-reminders-h1-h12-h52)) |
 | `schedule-reminders` | `notifications/schedule-reminders.ts` | **15 s** | finds opted-in recipients for activities starting within the reminder lead time (event setting, default 15 min; the job is a no-op while the event switches reminders off, both under Event settings → Notifications) and records `reminded_at` after processing each due item, even when no channel is currently enabled |
-| `live-activities` | `live-activities/worker.ts` | **20 s** (+ a debounced early run 2 s after a queue change or call, a judging-window, schedule, event-timing or Live Activity settings edit; see [latency](./live-activities.md#latency)) | diffs each enabled device's desired Live Activities (organizer-configured kinds: H38 queue during the judging window, H25/H26 scannable activities for `activity:scan` holders, H59 opted-in schedule items for their audience, the H19 submission deadline, the H22 accreditation desk; ranked by kind priority and cut to `maxConcurrent` per device) against `live_activity_sessions` and sends APNs Live Activity / Android data pushes: start, update on change (counters throttled to 30 s; queue changes, phase changes and rescheduling immediate), end; iOS activities replaced before ActivityKit's 8-hour limit; one tick at a time via an advisory lock, every send behind an atomic row claim. See [Live Activities](./live-activities.md) |
+| `live-activities` | `live-activities/worker.ts` | **20 s** (+ a debounced early run 2 s after a queue change or call, a judging-window, schedule, event-timing or Live Activity settings edit; see [latency](./live-activities.md#latency)); a no-op once the current edition is closed | diffs each enabled device's desired Live Activities (organizer-configured kinds: H38 queue during the judging window, H25/H26 scannable activities for `activity:scan` holders, H59 opted-in schedule items for their audience, the H19 submission deadline, the H22 accreditation desk; ranked by kind priority and cut to `maxConcurrent` per device) against `live_activity_sessions` and sends APNs Live Activity / Android data pushes: start, update on change (counters throttled to 30 s; queue changes, phase changes and rescheduling immediate), end; iOS activities replaced before ActivityKit's 8-hour limit; one tick at a time via an advisory lock, every send behind an atomic row claim. See [Live Activities](./live-activities.md) |
 | `scheduled-visibility-publisher` | `challenges/visibility-publisher.ts` | **15 s** | reveals challenge visibility whose scheduled time has passed; the same tick calls `publishDueWinners()` (`challenges/winner-publication.ts`) to reveal winners whose `winners_publish_at` has passed (SQL clock, one transaction and one public `DATA_CHANGED` per reveal, H46/#1010) |
-| `schedule-visibility-publisher` | `logistics/schedule-publisher.ts` | **15 s** | reveals audience-tagged schedule items whose publish time has passed |
+| `schedule-visibility-publisher` | `logistics/schedule-publisher.ts` | **15 s** | reveals audience-tagged schedule items whose publish time has passed; no-op while the current edition is closed |
 
-| `logistics.wallet-operations` | `logistics/wallet-operations.ts` | **15 s** | claims durable manual Wallet alert/refresh deliveries one at a time, with leases, provider isolation and five per-pass attempts; see [Wallet architecture](./event-config-wallet.md) |
+| `logistics.wallet-operations` | `logistics/wallet-operations.ts` | **15 s** | claims durable manual Wallet alert/refresh deliveries one at a time, with leases, provider isolation and five per-pass attempts; no-op while the current edition is closed; see [Wallet architecture](./event-config-wallet.md) |
 
 Repeatable jobs use a fixed `jobId`, so scheduling the same tick more than once
 does not create duplicate schedulers.
@@ -64,7 +64,7 @@ best-effort and rely on that source record or a later domain sync.
 
 | Queue | Producer | Work |
 | --- | --- | --- |
-| `account-removal-retries` | `identity/removal.ts` | retries provider/storage cleanup and H54 finalization; the pending account row remains the operator recovery record |
+| `account-removal-retries` | `identity/preparation.ts` → `identity/worker.ts` | queues provider/storage cleanup retries and processes H54 finalization; the pending account row remains the operator recovery record |
 | `data-subject-requests` | `exports/requests.service.ts` | builds an export or executes an administrator-requested removal for one DSR row |
 | `logistics.meal-scans` | `logistics/offline-meals.ts` | processes one persisted offline meal-scan batch, keyed by `(device_id, client_scan_id)` |
 | `logistics.wallet-sync` | `logistics/wallet-sync.ts` | sends Apple push updates, refreshes Google event classes, or expires Google objects; completes fan-out before surfacing failures, with five attempts and exponential backoff starting at 5 s |
@@ -95,6 +95,18 @@ enqueueAuthEmail()/notify()                 dispatchOutboxOnce():
 `payload.recipient` overrides `users.email` in the email adapter
 (`channels/email.ts`), which lets invitation messages reach an address before
 it belongs to a user row.
+
+## Worker replacement during a deploy (#1327)
+
+A deploy starts the new `worker` container beside the old one; BullMQ hands
+each job to exactly one of them, so both versions briefly share the queues.
+The old worker then receives SIGTERM: it stops taking jobs and waits for its
+active ones (`stopQueues()`), bounded by Compose's `stop_grace_period: 60s`.
+A job cut off past that is marked stalled when its lock expires and runs
+again, so processors keep their effects idempotent (transactions with
+`SELECT … FOR UPDATE`, outbox claims). Repeatable jobs keep their fixed
+`jobId`, so both versions register the same schedule instead of two.
+Job payloads must stay readable by the release before and after the change.
 
 ## Queue structure, retries, concurrency & the dead-letter model
 
@@ -219,13 +231,8 @@ account, project-link, or content-management payloads over SSE.
 
 ## Multiplexed realtime transport (#892)
 
-Authenticated web/native readers share `/api/realtime/stream` with independently
-authorized logical scopes, per-topic cursors and scoped authoritative recovery.
-TV retains one public payload-free stream for all rendered domains. Legacy
-endpoints remain available for installed clients. Physical connection budgets
-and gauges count the shared response once; logical attachments and access-check
-load remain separate. See [realtime transport](./realtime-transport.md) for the
-scope/authorization table, lifecycle, revocation, metrics and 600-client results.
+Realtime delivery is not worker-driven. The multiplexed stream, its scopes and
+recovery are in [realtime transport](./realtime-transport.md).
 
 
 ## Shared track timing and ETA (H32/H38/H39)

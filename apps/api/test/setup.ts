@@ -11,3 +11,25 @@ process.env.WORKERS_INLINE = "false";
 
 // Isolate concurrent test publishers from dev/load and other shards (#897).
 process.env.SSE_NAMESPACE = `test-${process.pid}`;
+
+const concurrentPgClientQueryWarning =
+  "Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0.";
+
+function failOnConcurrentPgClientQueryWarning(warning: Error): void {
+  if (
+    warning.name === "DeprecationWarning" &&
+    warning.message.startsWith(concurrentPgClientQueryWarning)
+  ) {
+    throw warning;
+  }
+}
+
+// Vitest may evaluate setup files more than once in a worker; install one
+// listener so this specific pg deprecation fails the owning test.
+if (
+  !process
+    .listeners("warning")
+    .some((listener) => listener.name === "failOnConcurrentPgClientQueryWarning")
+) {
+  process.on("warning", failOnConcurrentPgClientQueryWarning);
+}

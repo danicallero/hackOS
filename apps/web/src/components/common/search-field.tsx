@@ -51,7 +51,7 @@ export function SearchField({
         value={value}
         onChange={(event) => onValueChange(event.target.value)}
         placeholder={placeholder ?? label}
-        className="pr-9 pl-9"
+        className="pr-9 pl-9 [&::-webkit-search-cancel-button]:appearance-none"
         {...{ [SEARCH_SHORTCUT_ATTR]: "" }}
         aria-keyshortcuts={ariaKeyShortcuts(SHORTCUTS.focusSearch, false)}
       />

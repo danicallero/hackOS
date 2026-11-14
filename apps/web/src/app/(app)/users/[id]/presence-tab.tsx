@@ -94,7 +94,6 @@ export function PresenceSection({ userId }: { userId: number }) {
   }, [userId, canRead, t]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 

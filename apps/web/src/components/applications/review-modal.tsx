@@ -307,7 +307,7 @@ export function ReviewModal({
   useEffect(() => {
     const savedSide = window.localStorage.getItem(FILE_VIEWER_SIDE_STORAGE_KEY);
     if (savedSide === "left" || savedSide === "right") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate a persisted UI preference after client mount
+      // Restore the persisted viewer side after client mount.
       setFileViewerSide(savedSide);
     }
   }, []);

@@ -62,9 +62,10 @@ siguiente especifica cada variable individualmente.
 | `ANDROID_APP_CERT_SHA256` | configuración | no | Huellas SHA-256 (separadas por comas, formato `AA:BB:…`) de los certificados de firma de la app Android (subida y firma de Play). `web` las publica en `/.well-known/assetlinks.json` para abrir enlaces de etiquetas de empresa y compartir credenciales con `com.hackudc.os`; debug solo abre enlaces (#935). Vacía: el fichero no lista apps y el enlace abre la web. Huella de Play y activación: `deploy/README.md` § App links. |
 | `CORS_ORIGINS` | configuración | sí | Lista separada por comas; debe incluir `https://${WEB_DOMAIN}`. |
 | `PUBLISH_BIND_ADDRESS` | configuración | no | Dirección de publicación HTTP; `0.0.0.0` para el proxy de otro LXC y `127.0.0.1` si comparte host. |
-| `API_PUBLISH_PORT`, `WEB_PUBLISH_PORT` | configuración | no | Puertos del host para API y web; por defecto `3000` y `3001`. |
+| `API_PUBLISH_PORT`, `WEB_PUBLISH_PORT`, `WORKER_METRICS_PUBLISH_PORT` | configuración | no | Puertos del host para API, web y métricas del worker; por defecto `3000`, `3001` y `9464`. Los publica el servicio `proxy`, no las réplicas (#1327). |
+| `PROXY_TRUSTED_PROXIES` | configuración | no | Rangos (CIDR separados por espacios) desde los que `proxy` acepta `X-Forwarded-For`; por defecto `private_ranges`. Debe incluir la IP del proxy TLS externo, o todas las peticiones compartirían su IP en rate limits y auditoría. |
 | `EDGE_NETWORK_NAME` | configuration | no | Existing Docker network used by a host-level tunnel/proxy when the optional shared ingress profile is enabled; defaults to the Compose-owned `hackos-edge`. |
-| `EDGE_NETWORK_EXTERNAL` | configuration | no | Set to `true` only when `EDGE_NETWORK_NAME` already exists. `api`, `web`, and `minio` join it using their stable service aliases; PostgreSQL and Valkey remain private. |
+| `EDGE_NETWORK_EXTERNAL` | configuration | no | Set to `true` only when `EDGE_NETWORK_NAME` already exists. `proxy` joins it with the aliases `api` and `web`, and `minio` with its service name; the replicas, PostgreSQL and Valkey remain private. |
 | `HACKOS_DATA_DIR` | configuración | no | Ruta absoluta al volumen persistente; por defecto `/mnt/data`, con `postgres/` y `minio/` debajo. |
 | `POSTGRES_USER`, `POSTGRES_DB` | configuración | sí | Identidad y base inicial de PostgreSQL; no son secretos. |
 | `MINIO_ROOT_USER`, `S3_ACCESS_KEY` | configuración | sí | Identificador administrativo de MinIO y nombre de la cuenta de aplicación; sus contraseñas pertenecen al fichero de secretos. |
@@ -204,6 +205,7 @@ Además de las variables de las dependencias anteriores, `api` recibe:
 | Base del proceso | `NODE_ENV=production`, `WORKERS_INLINE=false`, `LOG_LEVEL` |
 | Pool PostgreSQL | `DB_POOL_MAX`, `DB_IDLE_TIMEOUT_MS`, `DB_CONNECTION_TIMEOUT_MS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` |
 | SSE | `SSE_MAX_CONNECTIONS_GLOBAL`, `SSE_MAX_CONNECTIONS_PER_TOPIC`, `SSE_MAX_CONNECTIONS_PER_CLIENT`, `SSE_WRITE_TIMEOUT_MS` |
+| Drenaje al desplegar (#1327) | `SHUTDOWN_DRAIN_TIMEOUT_MS` (por defecto `20000`: plazo para terminar peticiones en curso antes de cerrar todas las conexiones), `SSE_DRAIN_SPREAD_MS` (por defecto `5000`: ventana en la que se reparten los cierres de SSE). Su suma debe quedar por debajo del `stop_grace_period` de `api` (30 s). |
 | Scanners | `RATE_LIMIT_SCAN_MAX`, `RATE_LIMIT_SCAN_WINDOW_SECONDS`, `RATE_LIMIT_MEAL_BATCH_MAX`, `RATE_LIMIT_MEAL_BATCH_WINDOW_SECONDS`, `RATE_LIMIT_SNAPSHOT_MAX`, `RATE_LIMIT_SNAPSHOT_WINDOW_SECONDS` |
 | Push | `LOG_EXPO_PUSH_TICKETS`, `LOG_EXPO_PUSH_TOKENS`, `LOG_EXPO_PUSH_UNSAFE_DEBUG` |
 | Traducción | `TRANSLATE_PROVIDER`, `GOOGLE_TRANSLATE_API_KEY`, `LIBRETRANSLATE_URL`, `LIBRETRANSLATE_API_KEY` |

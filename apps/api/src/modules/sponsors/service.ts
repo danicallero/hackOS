@@ -1,7 +1,9 @@
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { TRIGGER_EVENTS } from "@hackos/shared/role-grant-triggers";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit, auditMany } from "../../lib/audit.js";
+import { type AuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { isUniqueViolation } from "../../lib/db-errors.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import {
@@ -9,10 +11,12 @@ import {
   assertFixtureEnterpriseScopes,
 } from "../../lib/fixture-queue-scope.js";
 import { assertFixtureSubjectScope, isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
+import { photoUrl } from "../../lib/profile-files.js";
 import { broadcast } from "../../lib/sse.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
 import { applyRoleGrantRule } from "../identity/role-grants.js";
 import { broadcastForActiveUser } from "../logistics/active-broadcast.js";
+import { type CallerScheduleAudience, listScheduleForAudiences } from "../logistics/schedule.js";
 import { reconcileTicketAccess } from "../logistics/tickets.js";
 import { enqueueWalletSync } from "../logistics/wallet-sync.js";
 import type {
@@ -23,7 +27,7 @@ import type {
 } from "./schemas.js";
 
 const COLUMNS = `id, name, website, logo_url,
-  COALESCE(logo_negative_url, logo_url) AS logo_negative_url, description, priority, kind, position,
+  COALESCE(logo_negative_url, logo_url) AS logo_negative_url, description, description_i18n, priority, kind, position,
   visibility, available_from, director_id, stand_scannable, created_at`;
 
 const COLUMN_FOR: Record<string, string> = {
@@ -32,6 +36,7 @@ const COLUMN_FOR: Record<string, string> = {
   logoUrl: "logo_url",
   logoNegativeUrl: "logo_negative_url",
   description: "description",
+  descriptionI18n: "description_i18n",
   priority: "priority",
   kind: "kind",
   visibility: "visibility",
@@ -97,17 +102,161 @@ async function publishTicketAccess(
   await enqueueWalletSync(access.voidedPassIds);
 }
 
+const DESCRIPTION_ORDER = ["en", "es", "gl"] as const;
+
+/** Non-empty translations of a stored `description_i18n` (H44). */
+export function descriptionTranslations(i18n: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (i18n && typeof i18n === "object" && !Array.isArray(i18n)) {
+    for (const [lang, value] of Object.entries(i18n as Record<string, unknown>)) {
+      if (typeof value === "string" && value.trim()) out[lang] = value;
+    }
+  }
+  return out;
+}
+
+/**
+ * H44: a per-language description is stored trimmed (null once every language
+ * is empty) and `description` mirrors its first non-empty translation, so
+ * clients that read only `description` keep showing something.
+ */
+function withDescriptionMirror<
+  T extends { description?: string | null; descriptionI18n?: unknown },
+>(input: T): Omit<T, "descriptionI18n"> & { descriptionI18n?: string | null } {
+  const { descriptionI18n, ...rest } = input;
+  if (descriptionI18n === undefined) return rest;
+  if (descriptionI18n === null) return { ...rest, descriptionI18n: null };
+  const trimmed = Object.fromEntries(
+    DESCRIPTION_ORDER.map((lang) => [
+      lang,
+      String((descriptionI18n as Record<string, unknown>)[lang] ?? "").trim(),
+    ]),
+  );
+  const first = DESCRIPTION_ORDER.map((lang) => trimmed[lang]).find(Boolean) ?? null;
+  return {
+    ...rest,
+    description: first,
+    descriptionI18n: first ? JSON.stringify(trimmed) : null,
+  };
+}
+
 export async function getEnterprise(id: number) {
-  const { rows } = await pool.query(`SELECT ${COLUMNS} FROM enterprises WHERE id = $1`, [id]);
+  const { rows } = await pool.query(
+    `SELECT ${COLUMNS} FROM enterprises WHERE id = $1 AND event_key = current_edition()`,
+    [id],
+  );
   if (!rows[0]) throw new NotFoundError("Enterprise not found", { id });
   return rows[0];
+}
+
+const SUMMARY_MAX = 240;
+
+/**
+ * A company's page (H44, H45): what signed-in attendees see when they open it.
+ * Sponsor administrators (SPONSORS_MANAGE) see any enterprise; everyone else only a visible one, 404 otherwise so a hidden company
+ * cannot be probed. Holding some unrelated capability (a scanner volunteer) does
+ * not reveal hidden companies, hidden challenges (those need SPONSORS_MANAGE or
+ * CHALLENGES_MANAGE) or draft schedule items (those need SCHEDULE_READ or
+ * SCHEDULE_MANAGE). Challenges count once revealed (H45), the
+ * activities are the caller's own schedule feed (audiences, H59) narrowed to the
+ * ones linked to the company or spoken at by one of its members. A person's
+ * photo is linked only while they share it on their public profile (#934).
+ * The company is addressed by its own id, whichever edition it belongs to
+ * (shared links keep working, docs/multi-edition-plan.md §4).
+ */
+export async function getEnterpriseProfile(
+  enterpriseId: number,
+  viewerId: number,
+  caller: CallerScheduleAudience,
+  context: AuthorizationContext,
+) {
+  const [canManage, canManageChallenges, canReadSchedule] = await Promise.all([
+    userHasCapability(context, CAPABILITIES.SPONSORS_MANAGE),
+    userHasCapability(context, CAPABILITIES.CHALLENGES_MANAGE),
+    userHasCapability(context, CAPABILITIES.SCHEDULE_READ),
+  ]);
+  const seesHiddenChallenges = canManage || canManageChallenges;
+  // `caller.isStaff` means "holds any capability" (H59 feed); here it only
+  // widens the schedule when the capability is a schedule one.
+  const scheduleCaller: CallerScheduleAudience =
+    caller.isStaff &&
+    !canReadSchedule &&
+    !(await userHasCapability(context, CAPABILITIES.SCHEDULE_MANAGE))
+      ? { isStaff: false, audiences: new Set(["participant"]) }
+      : caller;
+  const { rows } = await pool.query(
+    `SELECT e.id, e.name, e.website, e.logo_url,
+            COALESCE(e.logo_negative_url, e.logo_url) AS logo_negative_url, e.description,
+            e.description_i18n
+       FROM enterprises e
+      WHERE e.id = $1
+        AND ($2::boolean OR (e.visibility = 'visible' AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))`,
+    [enterpriseId, canManage],
+  );
+  const enterprise = rows[0];
+  if (!enterprise) throw new NotFoundError("Enterprise not found", { id: enterpriseId });
+  if (canManage) await assertEnterpriseScope(pool, viewerId, enterpriseId);
+
+  const [{ rows: people }, { rows: challengeRows }, activities] = await Promise.all([
+    pool.query(
+      `SELECT u.id AS user_id, btrim(u.name || ' ' || COALESCE(u.surname, '')) AS name,
+              u.name AS first_name, NULLIF(btrim(u.surname), '') AS surname,
+              CASE WHEN p.directory_visible AND p.show_photo
+                        AND u.is_test_account = false
+                        AND EXISTS (SELECT 1 FROM user_event_access a WHERE a.user_id = u.id)
+                   THEN u.photo_key END AS photo_key
+         FROM sponsors sp
+         JOIN users u ON u.id = sp.user_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
+         LEFT JOIN user_public_profiles p ON p.user_id = u.id
+        WHERE sp.enterprise_id = $1
+        ORDER BY sp.id`,
+      [enterpriseId],
+    ),
+    pool.query(
+      `SELECT c.id, c.title, c.description
+         FROM challenges c
+         JOIN sponsors sp ON sp.id = c.author
+        WHERE sp.enterprise_id = $1
+          AND ($2::boolean OR (c.visibility = 'visible' AND c.is_test_account = false))
+        ORDER BY c.title, c.id`,
+      [enterpriseId, seesHiddenChallenges],
+    ),
+    listScheduleForAudiences(scheduleCaller, { enterpriseId }),
+  ]);
+  return {
+    id: Number(enterprise.id),
+    name: String(enterprise.name),
+    logoUrl: (enterprise.logo_url as string | null) ?? null,
+    logoNegativeUrl: (enterprise.logo_negative_url as string | null) ?? null,
+    website: (enterprise.website as string | null) ?? null,
+    description: (enterprise.description as string | null) ?? null,
+    descriptionTranslations: descriptionTranslations(enterprise.description_i18n),
+    representatives: people.map((row: Record<string, unknown>) => ({
+      userId: Number(row.user_id),
+      name: String(row.name),
+      firstName: String(row.first_name),
+      surname: (row.surname as string | null) ?? null,
+      avatarUrl: photoUrl(Number(row.user_id), (row.photo_key as string | null) ?? null),
+    })),
+    challenges: challengeRows.map((row: Record<string, unknown>) => {
+      const summary = ((row.description as string | null) ?? "").trim();
+      return {
+        id: Number(row.id),
+        title: String(row.title),
+        summary: summary === "" ? null : summary.slice(0, SUMMARY_MAX),
+      };
+    }),
+    activities,
+  };
 }
 
 export async function listEnterprises(actorId: number) {
   const syntheticOperator = await isSyntheticOperator(pool, actorId);
   const { rows } = await pool.query(
     `SELECT ${COLUMNS} FROM enterprises e
-      WHERE (($1::boolean AND ${ENTERPRISE_HAS_SYNTHETIC} AND NOT ${ENTERPRISE_HAS_REAL})
+      WHERE e.event_key = current_edition()
+        AND (($1::boolean AND ${ENTERPRISE_HAS_SYNTHETIC} AND NOT ${ENTERPRISE_HAS_REAL})
          OR (NOT $1::boolean AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))
       ORDER BY name`,
     [syntheticOperator],
@@ -121,7 +270,9 @@ export async function myEnterprise(userId: number) {
   const { rows } = await pool.query(
     `SELECT ${COLUMNS}
        FROM enterprises e
-      WHERE id = (SELECT enterprise_id FROM sponsors WHERE user_id = $1 ORDER BY id LIMIT 1)
+      WHERE id = (SELECT s.enterprise_id FROM sponsors s
+                    JOIN enterprises se ON se.id = s.enterprise_id AND se.event_key = current_edition()
+                   WHERE s.user_id = $1 ORDER BY s.id LIMIT 1)
         AND (($2::boolean AND ${ENTERPRISE_HAS_SYNTHETIC} AND NOT ${ENTERPRISE_HAS_REAL})
           OR (NOT $2::boolean AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))`,
     [userId, syntheticOperator],
@@ -130,7 +281,8 @@ export async function myEnterprise(userId: number) {
   return rows[0];
 }
 
-export async function createEnterprise(input: CreateEnterpriseBody, actorId: number | null) {
+export async function createEnterprise(body: CreateEnterpriseBody, actorId: number | null) {
+  const input = withDescriptionMirror(body);
   if (actorId != null && (await isSyntheticOperator(pool, actorId))) {
     throw new ForbiddenError("Synthetic operators cannot create real sponsor enterprises.", {
       code: "review_fixture_scope",
@@ -140,8 +292,9 @@ export async function createEnterprise(input: CreateEnterpriseBody, actorId: num
     return await withTransaction(async (client) => {
       const { rows } = await client.query(
         `INSERT INTO enterprises
-           (name, website, logo_url, logo_negative_url, description, priority, kind, visibility, available_from)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           (name, website, logo_url, logo_negative_url, description, description_i18n, priority,
+            kind, visibility, available_from)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING ${COLUMNS}`,
         [
           input.name,
@@ -149,6 +302,7 @@ export async function createEnterprise(input: CreateEnterpriseBody, actorId: num
           input.logoUrl ?? null,
           input.logoNegativeUrl ?? null,
           input.description ?? null,
+          input.descriptionI18n ?? null,
           input.priority ?? null,
           input.kind,
           input.visibility,
@@ -165,6 +319,7 @@ export async function createEnterprise(input: CreateEnterpriseBody, actorId: num
       return rows[0];
     });
   } catch (err) {
+    // enterprises_edition_name_key: the name is unique per edition (H43, H44).
     if (isUniqueViolation(err))
       throw new ConflictError("An enterprise with that name already exists", { name: input.name });
     throw err;
@@ -173,9 +328,10 @@ export async function createEnterprise(input: CreateEnterpriseBody, actorId: num
 
 export async function updateEnterprise(
   id: number,
-  patch: UpdateEnterpriseBody,
+  body: UpdateEnterpriseBody,
   actorId: number | null,
 ) {
+  const patch = withDescriptionMirror(body);
   const sets: string[] = [];
   const values: unknown[] = [];
   let i = 1;
@@ -191,7 +347,8 @@ export async function updateEnterprise(
   try {
     return await withTransaction(async (client) => {
       const { rows } = await client.query(
-        `UPDATE enterprises SET ${sets.join(", ")} WHERE id = $${i} RETURNING ${COLUMNS}`,
+        `UPDATE enterprises SET ${sets.join(", ")}
+          WHERE id = $${i} AND event_key = current_edition() RETURNING ${COLUMNS}`,
         values,
       );
       if (!rows[0]) throw new NotFoundError("Enterprise not found", { id });
@@ -200,7 +357,7 @@ export async function updateEnterprise(
         entityType: "enterprise",
         entityId: id,
         action: "updated",
-        after: { fields: Object.keys(patch) },
+        after: { fields: Object.keys(body) },
       });
       return rows[0];
     });
@@ -225,7 +382,7 @@ export async function setEnterprisesVisibility(
   if (ids.length === 0) return { updated: [] as number[] };
   return withTransaction(async (client) => {
     const existing = await client.query<{ id: number }>(
-      `SELECT id FROM enterprises WHERE id = ANY($1::int[])`,
+      `SELECT id FROM enterprises WHERE id = ANY($1::int[]) AND event_key = current_edition()`,
       [ids],
     );
     await assertEnterpriseScopes(
@@ -237,7 +394,7 @@ export async function setEnterprisesVisibility(
     const { rows } = await client.query(
       `UPDATE enterprises
           SET visibility = $2
-        WHERE id = ANY($1::int[])
+        WHERE id = ANY($1::int[]) AND event_key = current_edition()
         RETURNING id`,
       [ids, visibility],
     );
@@ -268,7 +425,8 @@ export async function reorderEnterprises(
 ) {
   return withTransaction(async (client) => {
     const { rows } = await client.query<{ id: number; priority: number | null }>(
-      `SELECT id, priority FROM enterprises WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE`,
+      `SELECT id, priority FROM enterprises
+        WHERE id = ANY($1::int[]) AND event_key = current_edition() ORDER BY id FOR UPDATE`,
       [ids],
     );
     if (rows.length !== new Set(ids).size) throw new NotFoundError("Enterprise not found", { ids });
@@ -304,11 +462,12 @@ export async function setEnterpriseLogo(
   variant: "default" | "negative",
   actorId: number | null,
 ) {
-  const column = variant === "negative" ? "logo_negative_url" : "logo_url";
+  const sets = variant === "negative" ? "logo_negative_url = $1" : "logo_url = $1";
   return withTransaction(async (client) => {
     await assertEnterpriseScope(client, actorId, id);
     const { rows } = await client.query(
-      `UPDATE enterprises SET ${column} = $1 WHERE id = $2 RETURNING ${COLUMNS}`,
+      `UPDATE enterprises SET ${sets}
+        WHERE id = $2 AND event_key = current_edition() RETURNING ${COLUMNS}`,
       [logoUrl, id],
     );
     if (!rows[0]) throw new NotFoundError("Enterprise not found", { id });
@@ -373,6 +532,7 @@ export async function listUserEnterprises(userId: number, actorId: number | null
   const { rows } = await pool.query(
     `SELECT ${COLUMNS} FROM enterprises e
       WHERE id IN (SELECT enterprise_id FROM sponsors WHERE user_id = $1)
+        AND e.event_key = current_edition()
         ${markerFilter}
       ORDER BY name`,
     params,
@@ -454,6 +614,7 @@ export async function removeEnterpriseMember(
   actorId: number | null,
 ): Promise<void> {
   await assertEnterpriseScope(pool, actorId, enterpriseId);
+  await getEnterprise(enterpriseId); // 404 for another edition's enterprise
   if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const ticketAccess = await withTransaction(async (client) => {
     await lockRoleGraph(client);
@@ -477,7 +638,8 @@ export async function removeEnterpriseMember(
     // H8: only revoke the Sponsor role once no enterprise affiliation remains
     // — a rep linked to several enterprises keeps sponsor access via any one.
     const { rows: remaining } = await client.query(
-      `SELECT 1 FROM sponsors WHERE user_id = $1 LIMIT 1`,
+      `SELECT 1 FROM sponsors s JOIN enterprises e ON e.id = s.enterprise_id
+        WHERE s.user_id = $1 AND e.event_key = current_edition() LIMIT 1`,
       [userId],
     );
     if (remaining.length === 0) {
@@ -626,6 +788,7 @@ export async function removeEnterpriseJudge(
   actorId: number | null,
 ): Promise<void> {
   await assertEnterpriseScope(pool, actorId, enterpriseId);
+  await getEnterprise(enterpriseId); // 404 for another edition's enterprise
   if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const ticketAccess = await withTransaction(async (client) => {
     await lockRoleGraph(client);
@@ -708,6 +871,7 @@ export async function listPublicSponsors(
             COALESCE(e.priority, 9999) AS priority, e.kind
       FROM enterprises e
       WHERE e.visibility = 'visible'
+        AND e.event_key = current_edition()
         AND ($1::text IS NULL OR e.kind = $1)
         AND NOT ${ENTERPRISE_HAS_SYNTHETIC}
       ORDER BY priority ASC, e.position ASC NULLS LAST, e.id ASC`,
@@ -735,6 +899,8 @@ export async function revealDueEnterprises(client: Queryable = pool): Promise<nu
         SET visibility = 'visible',
             available_from = NULL
       WHERE visibility = 'hidden'
+        AND event_key = current_edition()
+        AND event_key NOT IN (SELECT event_key FROM editions WHERE status = 'closed')
         AND available_from IS NOT NULL
         AND available_from <= now()
       RETURNING id`,

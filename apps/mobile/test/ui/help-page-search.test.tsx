@@ -156,6 +156,28 @@ describe("help desk search surface", () => {
     expect(list.props.keyboardDismissMode).toBe("on-drag");
   });
 
+  it("iOS sheets expose the scroll view directly for native detent sizing (H64)", async () => {
+    setOs("ios");
+    mockGlass = true;
+    await render(
+      <HelpPage title="Request help" form onClose={jest.fn()}>
+        <Text>body</Text>
+      </HelpPage>,
+    );
+    expect(screen.toJSON()).toMatchObject({ type: "RCTScrollView" });
+    expect(scrollOf(screen.getByText("body")).props.contentInsetAdjustmentBehavior).toBe("never");
+  });
+
+  it("Android sheets retain a full-height page container", async () => {
+    setOs("android");
+    await render(
+      <HelpPage title="Request help" form onClose={jest.fn()}>
+        <Text>body</Text>
+      </HelpPage>,
+    );
+    expect(screen.toJSON()).toMatchObject({ type: "View", props: { style: { flex: 1 } } });
+  });
+
   it("a form page keeps the keyboard inset and interactive dismissal", async () => {
     setOs("ios");
     await render(

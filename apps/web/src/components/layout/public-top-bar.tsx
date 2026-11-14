@@ -54,7 +54,7 @@ export function PublicTopBar({
     <header
       ref={header}
       className={cn(
-        "bg-background/90 sticky top-0 z-40 shrink-0 border-b backdrop-blur supports-[backdrop-filter]:bg-background/80",
+        "bg-background/55 sticky top-0 z-40 shrink-0 border-b border-border/40 backdrop-blur-xl supports-[backdrop-filter]:bg-background/45",
         className,
       )}
     >

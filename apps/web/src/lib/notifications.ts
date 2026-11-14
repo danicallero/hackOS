@@ -90,6 +90,8 @@ export interface AuditRow {
   actor_email: string | null;
   entity_type: string;
   entity_id: string;
+  /** Current name of a catalogue subject (university, enterprise, …), when it has one. */
+  entity_label?: string | null;
   action: string;
   source: string | null;
   before: unknown;

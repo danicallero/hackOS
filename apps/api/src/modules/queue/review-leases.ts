@@ -26,9 +26,10 @@ export function textReviewFields(criteria: Question[] | null): Set<string> {
 }
 
 async function assertLeaseField(client: Queryable, entryId: number, field: string): Promise<void> {
-  const entry = await client.query(`SELECT challenge_id FROM queue_entries WHERE id = $1`, [
-    entryId,
-  ]);
+  const entry = await client.query(
+    `SELECT challenge_id FROM queue_entries WHERE id = $1 AND event_key = current_edition()`,
+    [entryId],
+  );
   if (!entry.rowCount) throw new NotFoundError("Queue entry not found", { entryId });
   const panel = await resolveChallengePanel(client, Number(entry.rows[0].challenge_id));
   const criteria = panel.every(

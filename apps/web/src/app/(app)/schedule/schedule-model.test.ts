@@ -433,6 +433,22 @@ describe("filterScheduleItems", () => {
     ).toEqual([2]);
   });
 
+  it("matches accented names regardless of case and query spacing", () => {
+    const items = [item({ id: 1, title: "José Núñez" }), item({ id: 2, title: "A Coruña" })];
+    expect(
+      filterScheduleItems(items, {
+        ...noFilter,
+        query: "  JOSE   nunez ",
+        kindFilter: new Set(),
+      }).map((entry) => entry.id),
+    ).toEqual([1]);
+    expect(
+      filterScheduleItems(items, { ...noFilter, query: "coruna", kindFilter: new Set() }).map(
+        (entry) => entry.id,
+      ),
+    ).toEqual([2]);
+  });
+
   it("staff-only items match only when staffOnlyFilter is set, ignoring audienceFilter", () => {
     const staffOnly = item({ id: 1, audiences: [] });
     expect(

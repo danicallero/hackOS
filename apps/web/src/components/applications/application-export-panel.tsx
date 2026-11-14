@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { api, apiDownload, parseExportFailures } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { type I18nText, type MessageKey, pickText, useLocale } from "@/lib/i18n";
+import { normalizeSearchText } from "@/lib/search-text";
 import { toast } from "@/lib/toast";
 
 const EXPORT_STATUSES = [
@@ -76,6 +77,12 @@ interface FieldOption {
   selection: FieldSelection;
 }
 
+interface FieldGroup {
+  key: string;
+  label: string;
+  options: FieldOption[];
+}
+
 interface MissingFileReport {
   total: number;
   items: Array<{ email: string; responseId: number; fieldKey: string }>;
@@ -95,6 +102,17 @@ function allFieldIds(catalog: ExportCatalog): string[] {
       ),
     ),
   ];
+}
+
+export function filterFieldGroupsBySearch(groups: FieldGroup[], search: string): FieldGroup[] {
+  const query = normalizeSearchText(search);
+  if (!query) return groups;
+  return groups.map((group) => ({
+    ...group,
+    options: group.options.filter((option) =>
+      normalizeSearchText(`${group.label} ${option.label} ${option.description}`).includes(query),
+    ),
+  }));
 }
 
 export function ApplicationExportPanel({
@@ -222,16 +240,10 @@ export function ApplicationExportPanel({
     [catalog, fieldOptions, t],
   );
 
-  const filteredGroups = useMemo(() => {
-    const query = fieldSearch.trim().toLocaleLowerCase();
-    if (!query) return fieldGroups;
-    return fieldGroups.map((group) => ({
-      ...group,
-      options: group.options.filter((option) =>
-        `${group.label} ${option.label} ${option.description}`.toLocaleLowerCase().includes(query),
-      ),
-    }));
-  }, [fieldGroups, fieldSearch]);
+  const filteredGroups = useMemo(
+    () => filterFieldGroupsBySearch(fieldGroups, fieldSearch),
+    [fieldGroups, fieldSearch],
+  );
 
   const toggleStatus = (status: ExportStatus, checked: boolean) => {
     setSelectedStatuses((current) =>

@@ -51,6 +51,7 @@ function buildModes(
     { value: "sponsors", label: t("sponsors"), detail: t("modeSponsorsDetail") },
     { value: "wifi", label: t("modeWifi"), detail: t("modeWifiDetail") },
     { value: "github", label: t("modeGithub"), detail: t("modeGithubDetail") },
+    { value: "connections", label: t("modeConnections"), detail: t("modeConnectionsDetail") },
   ];
 }
 
@@ -96,7 +97,6 @@ export default function TvControlPage() {
   }, [t]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (canControl) void load();
   }, [canControl, load]);
 

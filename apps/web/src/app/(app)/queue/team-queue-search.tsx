@@ -32,12 +32,15 @@ import {
   type RepoChallenge,
   type RoomView,
 } from "@/lib/queue";
+import { normalizeSearchText } from "@/lib/search-text";
 import { showErrorToast, toast } from "@/lib/toast";
 
 type TeamCandidate = { repoId: number; repoName: string };
 
-function foldAccents(value: string): string {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+export function filterTeamCandidates(candidates: TeamCandidate[], query: string): TeamCandidate[] {
+  const needle = normalizeSearchText(query);
+  if (!needle) return [];
+  return candidates.filter((candidate) => normalizeSearchText(candidate.repoName).includes(needle));
 }
 
 function entriesForRoom(room: RoomView): QueueEntry[] {
@@ -107,13 +110,7 @@ export function TeamQueueSearch({
     return [...byRepo.values()].sort((a, b) => a.repoName.localeCompare(b.repoName));
   }, [rooms, t]);
 
-  const matchingTeams = useMemo(() => {
-    const needle = foldAccents(query.trim().toLocaleLowerCase());
-    if (!needle) return [];
-    return candidates.filter((candidate) =>
-      foldAccents(candidate.repoName.toLocaleLowerCase()).includes(needle),
-    );
-  }, [candidates, query]);
+  const matchingTeams = useMemo(() => filterTeamCandidates(candidates, query), [candidates, query]);
 
   const loadMemberships = useCallback(
     async (repoId: number) => {

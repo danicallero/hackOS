@@ -16,8 +16,19 @@ const session = vi.hoisted(() => ({
   refresh: vi.fn(),
 }));
 
+const editionState = vi.hoisted(() => ({
+  editions: [] as { eventKey: string; name: string; isCurrent: boolean }[],
+  viewed: null as string | null,
+}));
+
+vi.mock("@/hooks/use-editions", () => ({
+  useEditions: () => ({ editions: editionState.editions, current: "e-2026" }),
+  useViewedEditionKey: () => editionState.viewed,
+}));
 vi.mock("@/lib/session", () => ({ useSessionContext: () => session }));
 vi.mock("@/lib/env", () => ({ API_URL: "https://api.example" }));
+const refreshRoute = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: refreshRoute }) }));
 vi.mock("@/lib/auth-client", () => ({ signOut: vi.fn() }));
 vi.mock("@/lib/i18n", () => ({
   languageName: (language: string) => language,
@@ -39,6 +50,7 @@ vi.mock("@/components/ui/avatar", () => ({
   ),
 }));
 
+import { getViewedEdition, resetViewedEdition } from "@/lib/viewed-edition";
 import { UserMenu } from "./user-menu";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -103,5 +115,52 @@ describe("UserMenu account photo (#934)", () => {
     expect(menu?.querySelector("img")?.getAttribute("src")).toBe(
       "https://api.example/api/users/7/photo?v=abc",
     );
+  });
+});
+
+describe("UserMenu edition selector", () => {
+  const two = [
+    { eventKey: "e-2026", name: "Edition 2026", isCurrent: true },
+    { eventKey: "e-2025", name: "Edition 2025", isCurrent: false },
+  ];
+
+  afterEach(() => {
+    editionState.editions = [];
+    editionState.viewed = null;
+    resetViewedEdition();
+  });
+
+  it("is hidden while there is a single edition", async () => {
+    editionState.editions = [two[0]];
+    await act(async () => root.render(<UserMenu />));
+    const user = userEvent.setup();
+    await act(async () => user.click(trigger()));
+    expect(document.querySelector('[role="menu"]')?.textContent).not.toContain("edition");
+  });
+
+  it("lists editions newest first with the current one marked, and switching to an older one views it", async () => {
+    editionState.editions = two;
+    await act(async () => root.render(<UserMenu />));
+    const user = userEvent.setup();
+    await act(async () => user.click(trigger()));
+    const sub = [...document.querySelectorAll('[role="menuitem"]')].find(
+      (item) => item.textContent?.trim() === "edition",
+    ) as HTMLElement;
+    await act(async () => user.click(sub));
+
+    const items = [...document.querySelectorAll('[role="menuitemradio"]')];
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Edition 2026editionCurrent",
+      "Edition 2025",
+    ]);
+    expect(items[0].getAttribute("aria-checked")).toBe("true");
+
+    await act(async () => {
+      (items[1] as HTMLElement).focus();
+      await user.keyboard("{Enter}");
+    });
+    expect(getViewedEdition()).toBe("e-2025");
+    expect(document.cookie).toContain("hackos-edition=e-2025");
+    expect(refreshRoute).toHaveBeenCalled();
   });
 });

@@ -248,3 +248,15 @@ By default only people with event access may open a request (403 otherwise).
 value, `event_config.helpdesk_event_access_only`, migration `0804`); `false` lets
 any account holding `helpdesk:request` ask. The switch is at the top of
 Help desk › Hours and is audited with the opening windows.
+
+## Editions
+
+Help desk data is per edition (`docs/multi-edition-plan.md`). Helper profiles are
+keyed `(user_id, event_key)`: a helper published in 2027 is not listed in 2028
+until they publish again, and their topics, challenge limits and availability
+live in that edition's profile. Helper browsing, coverage, open windows, the
+request lists, the helper inbox and routing all use `current_edition()` (the
+viewed edition). The topic catalogue is global, so topic proposals and manager
+edits are allowed in any edition and a merge re-points rows of every edition.
+Writes in a closed edition answer 409 `edition_closed`; the opening-hours
+schedule is a current-edition setting.

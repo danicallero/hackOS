@@ -1,5 +1,6 @@
 import { config } from "../../config.js";
 import { type Queryable, withTransaction } from "../../db/pool.js";
+import { isScopedEditionClosed } from "../../lib/edition.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { createVerificationReminderLink } from "../identity/auth.js";
 import { enqueueAuthEmail } from "../identity/outbox.js";
@@ -95,6 +96,7 @@ async function remindDraftApplications(db: Queryable): Promise<number> {
        JOIN applications a ON a.id = r.application_id
        JOIN users u ON u.id = r.user_id
       WHERE r.status = 'draft'
+        AND a.event_key = current_edition()
         AND r.draft_reminders_sent < $1
         AND COALESCE(r.draft_reminded_at, r.updated_at) <= now() - make_interval(days => $2)
         AND u.email_verified
@@ -142,7 +144,8 @@ export async function runLifecycleRemindersOnce(): Promise<{
 }> {
   return withTransaction(async (client) => ({
     unverified: await remindUnverifiedAccounts(client),
-    drafts: await remindDraftApplications(client),
+    // Draft nudges belong to the current edition; skip them once it is closed.
+    drafts: (await isScopedEditionClosed(client)) ? 0 : await remindDraftApplications(client),
   }));
 }
 

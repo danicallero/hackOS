@@ -1,6 +1,7 @@
 import { config } from "../../config.js";
 import { withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
+import { isScopedEditionClosed } from "../../lib/edition.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { emitScheduleChanged, revealDueScheduleItems } from "./schedule.js";
 
@@ -17,6 +18,8 @@ const QUEUE_NAME = "schedule-visibility-publisher";
 
 export async function runScheduleVisibilityPublisherOnce(): Promise<{ published: number[] }> {
   const published = await withTransaction(async (client) => {
+    // A closed edition is read-only: nothing is revealed in it (multi-edition plan §3).
+    if (await isScopedEditionClosed(client)) return [];
     const ids = await revealDueScheduleItems(client);
     for (const id of ids) {
       await audit(client, {

@@ -73,7 +73,7 @@ export async function createReport(reporterId: number, input: NewReport) {
   const findOpen = async (db: Queryable) => {
     const { rows } = await db.query<{ id: number }>(
       `SELECT id FROM content_reports
-        WHERE reporter_id = $1 AND status = 'open'
+        WHERE reporter_id = $1 AND status = 'open' AND event_key = current_edition()
           AND repo_id IS NOT DISTINCT FROM $2 AND target_user_id IS NOT DISTINCT FROM $3`,
       [reporterId, projectId, targetUserId],
     );
@@ -96,7 +96,7 @@ export async function createReport(reporterId: number, input: NewReport) {
       if (existing) return { id: existing.id, status: "open" as const };
       const { rows: open } = await client.query<{ count: number }>(
         `SELECT count(*)::int AS count FROM content_reports
-        WHERE reporter_id = $1 AND status = 'open'`,
+        WHERE reporter_id = $1 AND status = 'open' AND event_key = current_edition()`,
         [reporterId],
       );
       if ((open[0]?.count ?? 0) >= MAX_OPEN_REPORTS) {
@@ -151,6 +151,7 @@ export async function listReports(
        LEFT JOIN users target ON target.id = r.target_user_id
       WHERE reporter.is_test_account = $1
         AND ($2::text = 'all' OR r.status = $2)
+        AND r.event_key = current_edition()
         AND ((r.repo_id IS NOT NULL AND 'project' = ANY($3::text[]))
           OR (r.target_user_id IS NOT NULL AND 'profile' = ANY($3::text[])))
       ORDER BY (r.status = 'open') DESC, r.created_at DESC, r.id DESC
@@ -192,7 +193,7 @@ export async function resolveReport(
     }>(
       `SELECT r.status, r.repo_id, r.target_user_id, reporter.is_test_account AS reporter_test
          FROM content_reports r JOIN users reporter ON reporter.id = r.reporter_id
-        WHERE r.id = $1 FOR UPDATE OF r`,
+        WHERE r.id = $1 AND r.event_key = current_edition() FOR UPDATE OF r`,
       [reportId],
     );
     const report = rows[0];

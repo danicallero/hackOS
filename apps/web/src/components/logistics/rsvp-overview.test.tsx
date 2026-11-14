@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { act, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -117,6 +118,42 @@ describe("RsvpOverview", () => {
     ) as HTMLButtonElement;
     await act(async () => filter.click());
     expect(container.textContent).toContain("Bea Nada");
+  });
+});
+
+describe("DietaryOverview search", () => {
+  it("finds attendees without case or accent sensitivity", async () => {
+    mocks.get.mockResolvedValue({
+      people: 2,
+      withRestrictions: 0,
+      withNotes: 0,
+      byIntolerance: [],
+      entries: [
+        {
+          userId: 1,
+          name: "José",
+          surname: "Núñez",
+          kind: "participant",
+          enterprise: null,
+          intolerances: [],
+          notes: null,
+        },
+        {
+          userId: 2,
+          name: "Ana",
+          surname: "Other",
+          kind: "participant",
+          enterprise: null,
+          intolerances: [],
+          notes: null,
+        },
+      ],
+    });
+    await mount(<DietaryOverview />);
+    const search = container.querySelector<HTMLInputElement>('input[type="search"]')!;
+    await act(async () => userEvent.setup().type(search, "JOSE nunez"));
+    expect(container.textContent).toContain("José Núñez");
+    expect(container.textContent).not.toContain("Ana Other");
   });
 });
 

@@ -283,7 +283,7 @@ export async function announcementAuditSnapshot(db: Queryable, announcement: Ann
   // H53: read content and targeting under the same row lock; a stale caller
   // snapshot must never inherit another version's broader audience.
   const { rows } = await db.query<Announcement>(
-    "SELECT * FROM announcements WHERE id = $1 FOR UPDATE",
+    "SELECT * FROM announcements WHERE id = $1 AND event_key = current_edition() FOR UPDATE",
     [announcement.id],
   );
   const current = rows[0];
@@ -357,7 +357,7 @@ export async function listAnnouncementRecipientCandidates(
        FROM users
       WHERE account_state = 'active' AND anonymized_at IS NULL
         AND is_test_account = $3
-        AND (email ILIKE $1 OR unaccent(name) ILIKE unaccent($1) OR unaccent(surname) ILIKE unaccent($1))
+        AND (unaccent(email) ILIKE unaccent($1) OR unaccent(name) ILIKE unaccent($1) OR unaccent(surname) ILIKE unaccent($1))
       ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
       LIMIT $2`,
     [filter, limit, fixtureMarker],
@@ -478,7 +478,7 @@ export async function updateAnnouncement(
      SET title = $2, body = $3, translations = $4::jsonb, notify_users = $5,
          screen_placement = $6, publish_at = $7, expires_at = $8,
          role_ids = $9, intolerance_ids = $10, channels = $11
-     WHERE id = $1
+     WHERE id = $1 AND event_key = current_edition()
      RETURNING *`,
     [
       id,
@@ -508,7 +508,10 @@ export async function deleteAnnouncement(
   actorId?: number,
 ): Promise<Announcement> {
   if (actorId != null) await getAnnouncement(db, id, actorId);
-  const { rows } = await db.query(`DELETE FROM announcements WHERE id = $1 RETURNING *`, [id]);
+  const { rows } = await db.query(
+    `DELETE FROM announcements WHERE id = $1 AND event_key = current_edition() RETURNING *`,
+    [id],
+  );
   if (!rows[0]) throw new NotFoundError("Announcement not found");
   return rows[0];
 }
@@ -525,7 +528,7 @@ export async function getAnnouncement(
   const { rows } = await db.query(
     `SELECT a.* FROM announcements a
        LEFT JOIN users author ON author.id = a.author_id
-      WHERE a.id = $1${markerClause}`,
+      WHERE a.id = $1 AND a.event_key = current_edition()${markerClause}`,
     params,
   );
   if (!rows[0]) throw new NotFoundError("Announcement not found");
@@ -537,12 +540,13 @@ export async function listAnnouncementsAdmin(
   actorId?: number,
 ): Promise<Announcement[]> {
   const fixtureMarkerSql = announcementFixtureMarkerSql();
-  const markerClause = actorId == null ? "" : ` WHERE ${fixtureMarkerSql} = $1`;
+  const markerClause = actorId == null ? "" : ` AND ${fixtureMarkerSql} = $1`;
   const params = actorId == null ? [] : [await isSyntheticOperator(db, actorId)];
+  // Scoped to the viewed edition (multi-edition plan).
   const { rows } = await db.query(
     `SELECT a.* FROM announcements a
        LEFT JOIN users author ON author.id = a.author_id
-      ${markerClause}
+      WHERE a.event_key = current_edition()${markerClause}
       ORDER BY a.created_at DESC`,
     params,
   );
@@ -555,7 +559,8 @@ export async function listAnnouncementsPublic(db: Queryable): Promise<PublicAnno
   const { rows } = await db.query(
     `SELECT a.id, a.title, a.body, a.translations, a.publish_at, a.expires_at, a.screen_placement FROM announcements a
      LEFT JOIN users author ON author.id = a.author_id
-     WHERE NOT ${fixtureMarkerSql}
+     WHERE a.event_key = current_edition()
+       AND NOT ${fixtureMarkerSql}
        AND (a.publish_at IS NULL OR a.publish_at <= now())
        AND (a.expires_at IS NULL OR a.expires_at > now())
      ORDER BY a.publish_at DESC NULLS LAST, a.created_at DESC`,
@@ -631,12 +636,14 @@ async function resolveRecipients(
     `SELECT DISTINCT u.id, u.language
      FROM users u
      LEFT JOIN user_roles ur ON ur.user_id = u.id
+       AND (ur.event_key IS NULL
+            OR ur.event_key = (SELECT an.event_key FROM announcements an WHERE an.id = $4))
      LEFT JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
      WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
        AND u.is_test_account = $3
        AND ($1::int[] = '{}'::int[] OR r.id = ANY($1::int[]))
        AND ($2::int[] = '{}'::int[] OR u.food_intolerances && $2::int[])`,
-    [announcement.role_ids, announcement.intolerance_ids, fixtureMarker],
+    [announcement.role_ids, announcement.intolerance_ids, fixtureMarker, announcement.id],
   );
   return rows as Array<{ id: number; language: string | null }>;
 }
@@ -720,6 +727,15 @@ function isCurrentlyVisible(a: Pick<Announcement, "publish_at" | "expires_at">):
 export async function fanOutIfVisibleNow(db: Queryable, announcement: Announcement): Promise<void> {
   if (!announcement.notify_users) return;
   if (announcement.fanned_out_at) return;
+  // H8: an announcement authored while viewing another open edition is not
+  // pushed to people now; only the active edition's announcements fan out
+  // (the publisher poll covers it if that edition becomes active later).
+  const { rows } = await db.query<{ is_active: boolean }>(
+    `SELECT event_key = COALESCE((SELECT event_key FROM event_config WHERE id = 1), 'default') AS is_active
+       FROM announcements WHERE id = $1`,
+    [announcement.id],
+  );
+  if (rows[0]?.is_active !== true) return;
   if (isCurrentlyVisible(announcement)) {
     await fanOutAnnouncement(db, announcement);
   }

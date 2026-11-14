@@ -8,6 +8,24 @@ type SheetModalProps = Omit<ComponentProps<typeof Modal>, "presentationStyle" | 
 /** Gap between the status bar and the sheet's top edge (UIKit shows the page behind). */
 const TOP_GAP = space.sm;
 
+/** The drag handle that signals a bottom card can be pulled down: 36 x 5 pt, 5 pt from the top. */
+export function SheetGrabber() {
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        alignSelf: "center",
+        backgroundColor: colors.tertiaryLabel,
+        borderRadius: radius.full,
+        height: 5,
+        position: "absolute",
+        top: 5,
+        width: 36,
+      }}
+    />
+  );
+}
+
 /**
  * The app's one page sheet (H55, H59). iOS presents UIKit's `pageSheet`;
  * Android, where `pageSheet` is a plain full-screen window, draws the same
@@ -21,6 +39,7 @@ export function SheetModal({ children, onRequestClose, ...rest }: SheetModalProp
     return (
       <Modal onRequestClose={onRequestClose} presentationStyle="pageSheet" {...rest}>
         {children}
+        <SheetGrabber />
       </Modal>
     );
   }
@@ -53,18 +72,7 @@ export function SheetModal({ children, onRequestClose, ...rest }: SheetModalProp
           }}
         >
           {children}
-          <View
-            pointerEvents="none"
-            style={{
-              alignSelf: "center",
-              backgroundColor: colors.tertiaryLabel,
-              borderRadius: radius.full,
-              height: 5,
-              position: "absolute",
-              top: space.xs,
-              width: 36,
-            }}
-          />
+          <SheetGrabber />
         </View>
       </View>
     </Modal>

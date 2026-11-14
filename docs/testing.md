@@ -65,6 +65,31 @@ Paths starting `api/test/` are relative to `apps/`. Match expected behavior to
 the assertions and production code when extending this map; do not use story
 mentions, test counts or mock call counts as a replacement for domain outcomes.
 
+## Running API tests locally
+
+API tests use real Postgres and Valkey. The runner discovers every
+`apps/api/test/**/*.test.ts` and checks that each belongs to exactly one of four
+shards before starting Vitest with explicit include lists. Unknown test directories
+fail this check; add them to `apps/api/scripts/test-integration.mjs`. Root-level
+suites belong to the fourth shard. The measured domain allocation is defined
+in that script. Each shard resets and migrates its own
+`hackos_test_shard_N` database and runs files serially, then drops its database.
+The runner creates/reuses a separate `${S3_BUCKET:-hackos}-shard-N` bucket for
+each shard locally and in CI, checking storage before launching the suites.
+It waits for every shard to finish before reporting aggregate failures.
+Use `pnpm --filter @hackos/api test:serial test/<file>.test.ts` for focused runs.
+For isolated local services, set `TEST_DATABASE_URL`, both `TEST_VALKEY_URL` and
+`VALKEY_URL`, the `S3_*` variables, and `SMTP_HOST`/`SMTP_PORT`. Set
+`TEST_MAILPIT_URL` to that SMTP server's Mailpit HTTP origin (default
+`http://localhost:8025`): email tests clear that inbox, so never point it at a
+shared instance. Keep unrelated dev-server variables such as `WEB_URL` unset
+when running tests that assert the default local origins.
+The full runner assigns each shard a separate Valkey logical database, starting
+at the database in `TEST_VALKEY_URL` (otherwise `VALKEY_URL`, default 0). The
+base index must leave room for four databases within 0–15. Standalone serial
+suites retain their domain defaults unless overridden. Concurrent full runs
+need distinct database names, bucket prefixes and Valkey database ranges.
+
 ## Audit fixes and runtime policy
 
 - The story-ID guard excludes only the generated Expo native project roots;

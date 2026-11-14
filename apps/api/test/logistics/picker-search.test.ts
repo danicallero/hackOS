@@ -10,6 +10,7 @@ for (const [path, capability, key] of [
   ["/api/schedule/owner-candidates", CAPABILITIES.SCHEDULE_MANAGE, "users"],
   ["/api/announcements/recipient-candidates", CAPABILITIES.ANNOUNCEMENTS_MANAGE, "users"],
   ["/api/certificates/recipients", CAPABILITIES.PRESENCE_MANAGE, "items"],
+  ["/api/users", CAPABILITIES.USERS_READ, "users"],
 ] as const) {
   it(`${path} ignores accents in account names without changing access (H8)`, async () => {
     const app = await getApp();
@@ -35,6 +36,28 @@ for (const [path, capability, key] of [
       headers: asUser(manager),
     });
     expect(missing.json()[key]).toEqual([]);
+  });
+
+  it(`${path} finds José with unaccented and uppercase queries`, async () => {
+    const app = await getApp();
+    const manager = await createUserWithCapabilities([capability]);
+    const upper = await createUser({ name: "José", email: "jose-upper@example.test" });
+    const lower = await createUser({ name: "josé", email: "jose-lower@example.test" });
+
+    for (const [q, id, name] of [
+      ["jose", upper, "José"],
+      ["JOSE", lower, "josé"],
+    ] as const) {
+      const response = await app.inject({
+        method: "GET",
+        url: `${path}?q=${encodeURIComponent(q)}`,
+        headers: asUser(manager),
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()[key]).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id, name })]),
+      );
+    }
   });
 }
 

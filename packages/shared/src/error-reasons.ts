@@ -95,6 +95,14 @@ export const ERROR_REASONS = {
   AVAILABILITY_OVERLAP: "availability_overlap",
   /** 400: an availability interval is empty or longer than 24 hours (H62). */
   AVAILABILITY_INVALID: "availability_invalid",
+  /** 409: the form is full; the response cannot be accepted (H11, H14). */
+  CAPACITY_FULL: "capacity_full",
+  /** 409: the decision was already sent to the applicant (H14). */
+  ALREADY_SENT: "already_sent",
+  /** 409: the response's status no longer allows this decision action (H14). */
+  RESPONSE_STATUS_CHANGED: "response_status_changed",
+  /** 404: the response, or its applicant's account, no longer exists (H14). */
+  RESPONSE_NOT_FOUND: "response_not_found",
 } as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[keyof typeof ERROR_REASONS];

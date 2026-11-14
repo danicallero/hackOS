@@ -201,6 +201,7 @@ export async function listManageableQueueGroups(
   if (await isSyntheticOperator(pool, userId)) return [];
   const { rows } = await pool.query(
     `${GROUP_SUMMARY_SQL}
+      AND qg.event_key = current_edition()
       AND ($1::boolean
          OR EXISTS (SELECT 1 FROM sponsors s
                      WHERE s.enterprise_id = qg.enterprise_id AND s.user_id = $2)

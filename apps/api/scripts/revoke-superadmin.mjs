@@ -55,6 +55,7 @@ const message = await withClientTransaction(async (client) => {
          LEFT JOIN role_capabilities rc ON rc.role_id = r.id AND rc.capability = '*'
         WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
           AND r.deleted_at IS NULL
+          AND (ur.event_key IS NULL OR ur.event_key = current_edition())
           AND ur.user_id <> $1
      ), resolved AS (
        SELECT DISTINCT ON (user_id) user_id, state

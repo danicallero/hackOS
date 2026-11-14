@@ -46,18 +46,29 @@ Each domain is a directory under `apps/api/src/modules/<domain>/` exporting
 
 ```
 registerModules(app)
-├─ applications   (WS-A2 · H11-H15, H27)
-├─ challenges     (WS-G  · H44)
-├─ event          (WS-G  · H45, H47)
-├─ exports        (WS-F  · H54, H56)
-├─ form-libraries (H11/H16 question-owned catalogues)
-├─ identity       (WS-A1 · H1-H10)
+├─ applications    (H11-H15, H27)
+├─ certificates    (#1083 attendance certificates)
+├─ challenges      (H44)
+├─ diary           (#935)
+├─ directory       (#934)
+├─ event           (H45, H47)
+├─ exports         (H54, H56)
+├─ form-libraries  (H11/H16 question-owned catalogues)
+├─ github          (GitHub App repo linking, activity ranking)
+├─ helpdesk        (H61-H67)
+├─ identity        (H1-H10)
 ├─ live-activities (#966 · H38, H25, H26, H59, H19, H22)
-├─ logistics      (WS-C  · H22-H27)
-├─ notifications  (WS-F  · H50-H53)
-├─ projects       (WS-B1 · H16-H17)
-├─ queue          (WS-B2 · H29-H42)
-└─ sponsors       (WS-G  · H43-H45, H58)
+├─ logistics       (H22-H28, H59)
+├─ notifications   (H50-H53)
+├─ onboarding      (edition onboarding)
+├─ projects        (H16-H21, H60)
+├─ queue           (H29-H42)
+├─ realtime        (#892 multiplexed stream)
+├─ reports         (H18 content reports)
+├─ rsvps           (per-activity RSVPs)
+├─ sponsors        (H43-H45, H58)
+├─ statistics      (H27)
+└─ telemetry       (#544 browser refetch observations)
 ```
 
 A module owns routes, its own DB access (no cross-module raw SQL — call the
@@ -65,6 +76,10 @@ other module's exported function instead), and, if it does background work, a
 `registerWorker(name, processor)` call at import time (`lib/queues.ts`).
 
 ## Modules
+
+### editions (multi-edition · H8, H53)
+
+The edition catalogue and lifecycle: `GET /api/me/editions` (editions the caller may view; clients show a selector only when there is more than one), `GET/POST /api/editions`, `PATCH /api/editions/:eventKey` and `POST /api/editions/:eventKey/activate|close|reopen` (event:manage, audited, idempotent). Closing stops submissions (drafts become `not_submitted`), cancels pending queue entries and open/claimed help requests, ends judging sessions and help windows, and notifies nobody. See [multi-edition plan](./multi-edition-plan.md) and [Edition scope](#edition-scope-multi-edition) below.
 
 ### onboarding (HackUDC 2027 onboarding)
 
@@ -211,8 +226,11 @@ review and confirmation. The decision-maker can optionally allow that one
 response to resubmit after the form window closes and auto-accept that next
 submission with a fresh confirmation email. Form deletion removes its responses, reviews,
 versions, grants and confirmation tokens transactionally; anonymous-retention
-records remain a deliberate deletion boundary. The confirmation-window expirer (`applications/expirer.ts`)
-is a background tick, not a request path.
+records remain a deliberate deletion boundary. The confirmation-window expirer worker is registered in `applications/expirer.ts`;
+its transition implementation lives in `applications/expirations.ts`, not a
+request path. The public `applications/service.ts` entry point re-exports the
+split form, submission, review, decision, confirmation, response-read and
+expirer services; shared transition locks live in `applications/internal.ts`.
 
 Acceptance email links carry their bearer token in a URL fragment so the web
 server, referrer and request logs do not receive it. Landing pages do not act on
@@ -264,7 +282,7 @@ duplicate degree rows transactionally: every answer using the source catalogue
 ID moves to the retained ID before the duplicate is deleted, and the audited
 result reports the number of updated answers (#846).
 
-### projects (H16–H17, H21)
+### projects (H16–H21, H60)
 A "project" is a `repos` row; "team" is the set of `submissions (repo_id,
 user_id)` rows (`invited`/`active`/`declined`) — there is no `teams` table.
 Challenge intent is stored in `project_challenges`; submitted answers are
@@ -359,7 +377,7 @@ the caller's own delivery plumbing, so they follow the push-token posture
 (authenticated, no capability, no audit row). See
 [Live Activities](./live-activities.md).
 
-### logistics (H22–H27, H59)
+### logistics (H22–H28, H59)
 Accreditation (badge issuance, rotation, revocation), presence (door in/out
 with certainty-window derivation and conflict detection), meal/activity
 scanning, the pre-event schedule, cross-station people search, and Apple/Google
@@ -436,6 +454,34 @@ listing plus bulk-management concerns and is what the web "Manage Schedule"
 table uses. A linked sponsor rep instead only sees *live* items explicitly
 tagged `sponsor`, with owners/contactNote but never the (staff-internal)
 notes/visibility. One feed, not three parallel endpoints.
+
+**Speakers and companies (H44, H48; no dedicated story).** `schedule_speakers`
+(ordered by `position`, users) and `schedule_enterprises` (companies, no speaker
+needed) hang off an item (migration `0709`). Every schedule item shape —
+`GET /api/schedule`, `GET /api/public/activities` and the write responses —
+carries `speakers: {userId, name, firstName, surname, avatarUrl, enterprises: {id, name}[]}[]`
+and `enterprises: {id, name, logoUrl}[]`. `firstName`/`surname` are the account's separate name parts (initials on avatars without a photo); `avatarUrl` is set only while the
+person shares their photo on their public profile; a speaker's `enterprises` lists every company they belong to (a person can have several `sponsors` rows), oldest membership first, once each; both it and the item's
+`enterprises` leave out hidden companies for anyone who is not staff. `POST` and
+`PATCH /api/schedule` accept `speakerUserIds` (order = position) and
+`enterpriseIds` with replace-all semantics (omitted keeps the list on `PATCH`,
+`[]` clears it); an unknown or inactive id answers 400 and nothing is saved. The
+write is audited in the same transaction with the ids before and after.
+`GET /api/enterprises/:id/profile` (any signed-in user; sponsors module) is the
+company page: details (`description` is the fallback text, `descriptionTranslations` the per-language
+versions edited through `descriptionI18n` on `POST`/`PATCH /api/enterprises`, which mirror the first non-empty
+translation, en → es → gl, into `description`), `representatives` (the company's `sponsors` members, with `firstName`/`surname` like speakers),
+revealed `challenges` (`summary` = start of the description) and `activities` —
+the caller's own audience-filtered schedule feed narrowed to items linked to the
+company or spoken at by one of its members, once each, by start time. A hidden
+company answers 404 unless the caller holds `sponsors:manage` (hidden challenges also need
+`challenges:manage`, draft schedule items `schedule:read`/`schedule:manage`; an unrelated
+capability reveals nothing extra). The page is addressed by the company's own id, whichever
+edition it belongs to; the by-id management routes (`/api/enterprises/:id` and its
+members, judges, stand tags and stand-scannable sub-routes, bulk visibility and reorder)
+act on the viewed edition only and answer 404 (batch visibility skips) for another one. A person's public profile card
+(`/api/directory/:userId`, `/api/users/:id/public-profile` preview) lists the
+participant-visible items they speak at and their visible company ([directory](./directory.md)).
 
 The Manage Schedule table's optional "Live Activity" column reads the listing's
 `liveActivityAudience` (#966), and its "Export CSV" action (any
@@ -534,6 +580,41 @@ fields are grouped by profile, response metadata and individual form. Each group
 can be selected or cleared at once and expanded to adjust individual fields;
 search reveals matching fields and group selection affects only those matches.
 
+### certificates (#1083)
+Attendance certificates issued by the organisation and verifiable by public
+code. Full detail: [`certificates.md`](./certificates.md).
+
+### form-libraries
+Question-owned catalogues (universities, degrees, knowledge topics) with
+participant proposals and `users:write` curation. Full detail: [`form-libraries.md`](./form-libraries.md).
+
+### github
+GitHub App repo linking for projects (private repos included), the webhook
+that records commit/PR activity, and the TV ranking. Full detail:
+[`github-activity.md`](./github-activity.md).
+
+### realtime (#892)
+The multiplexed `/api/realtime/stream` and its per-scope access checks. Full
+detail: [`realtime-transport.md`](./realtime-transport.md).
+
+### reports (H18)
+Attendee reports of projects and public profiles, and the organiser inbox that
+closes them. Full detail: [`content-reports.md`](./content-reports.md).
+
+### rsvps
+Per-activity RSVPs: organizer settings, attendee answers, staff corrections
+and logistics headcounts. The meal-plan routes under identity and logistics
+are facades over this module. Full detail:
+[`catering-rsvp.md`](./catering-rsvp.md).
+
+### statistics (H27)
+Generic dashboard scopes, server-side aggregation, panel ACLs and safe exports.
+Full detail: [`statistics-dashboard.md`](./statistics-dashboard.md).
+
+### telemetry (#544)
+Accepts browser refetch-storm observations and exposes them as Prometheus
+counters (H38, H41-H42). No database state.
+
 ## Cross-cutting conventions
 
 These apply uniformly across every module above; a route or PR that doesn't
@@ -547,7 +628,7 @@ role — they guard with `requireCapability(CAPABILITIES.X)` /
 `requireAnyCapability(...)` from `lib/capabilities.ts`. A "role" (participant,
 judge, sponsor, staff…) is always *derived* from capabilities and
 relationships for display purposes only; it is never the permission source
-(`plan/07` invariant 13). This is also why the mobile app's tabs and the web
+(`plan/07` invariant 10). This is also why the mobile app's tabs and the web
 app's workspaces can change for a user the instant their capabilities change,
 with no reinstall or redeploy (H55).
 
@@ -585,6 +666,43 @@ never the access check — the server-side policy is; and `public` is an
 explicit, audited allowlist entry, never a default a route falls into by
 omission.
 
+### Edition scope (multi-edition)
+
+One installation hosts several editions ([plan](./multi-edition-plan.md)).
+People, profiles, preferences, roles' definitions and catalogues are global;
+event data carries `event_key` (directly, or through its parent row).
+
+- **Viewed edition.** Clients send `X-Edition: <event_key>`; without it the
+  API acts on the current edition (`event_config.event_key`). The auth hook
+  (`lib/edition.ts`) validates the header: the current edition is always
+  allowed (a person without a role there is an applicant); another edition
+  requires participation in it (`edition_participation`) or the global
+  superadmin; drafts are superadmin-only; anonymous callers may read published
+  editions' public content. `db/pool.ts` then scopes that request's statements
+  with the `hackos.edition` setting, which the SQL function
+  `current_edition()` reads. Edition columns default to it; list and
+  by-person queries filter on it; resource-by-id routes derive the edition from
+  the row. `sharedCache` keys include the viewed edition.
+- **Capabilities** come from the viewed edition's `user_roles` plus protected
+  global roles (`event_key IS NULL`, `system:superadmin`). In a closed edition
+  only capabilities classified `read` in `CAPABILITY_ACCESS`
+  (`packages/shared/src/capabilities.ts`) survive.
+- **Closed editions are read-only.** One shared pre-handler rejects every
+  mutation of a closed viewed edition with `409 edition_closed`, unless the
+  route policy declares `edition: "global"` (account, profile, preferences,
+  devices, catalogues, the edition lifecycle) or the caller is the global
+  superadmin. Routes writing the current edition's singleton settings declare
+  `edition: "current"` and are rejected while another edition is viewed; so are
+  mutations of the global role catalogue (role create/update/position/
+  capabilities/delete/restore/reset and grant rules), whose authority must come
+  from the current edition. Application, response and decision routes resolve
+  rows only in the viewed edition (another edition's id is a 404). A
+  participant's own after-event record (self-issued attendance certificates)
+  declares `edition: "self-service"` and still writes a closed edition. A
+  trigger on every edition table (SQLSTATE `HKE01`) is the in-transaction
+  backstop; erasure and the closing transaction itself use
+  `withClosedEditionWrites`.
+
 ### Primary-email verification boundary (H1–H3)
 
 The Better Auth sign-in policy intentionally allows an unverified account to
@@ -614,6 +732,7 @@ return silent success or swallow a failure. The global error handler
 | `ForbiddenError` | 403 | `forbidden` |
 | `NotFoundError` | 404 | `not_found` |
 | `ConflictError` | 409 | `conflict` — capacity full, a double transition, a stale badge, an already-used token |
+| `EditionClosedError` | 409 | `edition_closed` — a write into a closed (read-only) edition |
 | `TooManyRequestsError` | 429 | `too_many_requests` — carries `retryAfterSeconds` |
 | `ServiceUnavailableError` | 503 | `service_unavailable` — a dependent provider/credential isn't configured (e.g. unset Wallet signing keys) |
 
@@ -813,7 +932,7 @@ clients refetch finds the cache already empty and the first refetch repopulates 
 | `gallery` | `GET /api/public/projects` (the viewer's own projects are read live) | `projects`, `directory`, `public-content` | 30 s |
 | `content` | `GET /api/public/activities` (keyed by audience set), `/api/announcements/public`, `/api/public/event` | `content` | 15 s |
 | `public-content` | `GET /api/public/sponsors`, `/api/public/challenges`, `/api/tv/winners` (published winners, after the per-viewer gallery check) | `sponsors`, `public-content`, `public-tv` | 15 s |
-| `tv` | `GET /api/tv/rooms`, `/api/tv/mode` (2 s), `/api/tv/config` (15 s) | `queue`, `tv`, `public-tv`, `content` | 2–15 s |
+| `tv` | `GET /api/tv/rooms`, `/api/tv/mode` (2 s), `/api/tv/config` (15 s), `/api/tv/connections` (15 s, connections graph, #934/#935; company nodes carry the public sponsor `logoUrl`/`logoNegativeUrl`) | `queue`, `tv`, `public-tv`, `content` | 2–15 s |
 
 The live queue is never delayed by the cache: every queue event invalidates `tv`
 immediately (the TTL is only a backstop), per-user queue reads (`/api/queue/me`)

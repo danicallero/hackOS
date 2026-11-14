@@ -75,7 +75,7 @@ export async function repositoryAccessForUser(
          FROM enterprise_judges ej
          JOIN sponsors author ON author.enterprise_id = ej.enterprise_id
          JOIN challenges c ON c.author = author.id
-        WHERE ej.user_id = $1 AND c.is_test_account = $2`,
+        WHERE ej.user_id = $1 AND c.is_test_account = $2 AND c.event_key = current_edition()`,
       [userId, fixtureMarker],
     ),
     pool.query(
@@ -83,7 +83,7 @@ export async function repositoryAccessForUser(
          FROM challenges c
          JOIN sponsors author ON author.id = c.author
          JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
-        WHERE mine.user_id = $1 AND c.is_test_account = $2`,
+        WHERE mine.user_id = $1 AND c.is_test_account = $2 AND c.event_key = current_edition()`,
       [userId, fixtureMarker],
     ),
   ]);
@@ -96,8 +96,11 @@ export async function repositoryAccessForUser(
     // A declared judge/sponsor relation grants a valid empty project list;
     // an unrelated authenticated account must still receive a 403.
     const relationship = await pool.query(
-      `SELECT 1 FROM sponsors WHERE user_id = $1
-       UNION ALL SELECT 1 FROM enterprise_judges WHERE user_id = $1
+      `SELECT 1 FROM sponsors s JOIN enterprises e ON e.id = s.enterprise_id
+        WHERE s.user_id = $1 AND e.event_key = current_edition()
+       UNION ALL
+       SELECT 1 FROM enterprise_judges ej JOIN enterprises e ON e.id = ej.enterprise_id
+        WHERE ej.user_id = $1 AND e.event_key = current_edition()
        LIMIT 1`,
       [userId],
     );

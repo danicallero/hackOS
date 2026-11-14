@@ -15,6 +15,7 @@ export function registerUnverifiedRemovalRoutes(app: FastifyInstance): void {
       kind: "token",
       policy: "unverified-account-removal",
       emailVerification: "none",
+      edition: "global",
     } satisfies RouteAccessPolicy,
   };
   const tokenSchema = z.string().min(20).max(128);

@@ -12,7 +12,12 @@ import { syncFieldLibraries, validateLibraryAnswers } from "../form-libraries/se
 import { hasEventAccess } from "../identity/role.js";
 import { assertQueueRepoScope } from "../queue/fixture-scope.js";
 import { repositoryAccessForUser, repositoryIdsForScope } from "./access.js";
-import { assertProjectWindow, canViewProject, projectPhase } from "./policy.js";
+import {
+  assertProjectWindow,
+  assertRepoEditionWritable,
+  canViewProject,
+  projectPhase,
+} from "./policy.js";
 
 /** File answers are one key; photo-list answers (H16) are several. */
 function responseFileKeys(value: unknown): string[] {
@@ -35,6 +40,8 @@ export async function nativeEditable(
   const result = await db.query(`SELECT * FROM repos WHERE id=$1 FOR UPDATE`, [id]);
   const project = result.rows[0];
   if (!project) throw new NotFoundError("Project not found");
+  // Plan §3: a closed edition's project is read-only, whatever this request's edition.
+  await assertRepoEditionWritable(db, id);
   await nativeMember(db, userId, id);
   if (project.lock_reason === "organizer_lock")
     throw new ConflictError("Project is locked; request edits");
@@ -106,6 +113,7 @@ export async function saveNativeDraft(
       ? (await db.query(`SELECT * FROM repos WHERE id=$1 FOR UPDATE`, [id])).rows[0]
       : await nativeEditable(db, userId, id);
     if (!before) throw new NotFoundError("Project not found");
+    if (staff) await assertRepoEditionWritable(db, id);
     if (staff) await assertQueueRepoScope(db, userId, id);
     if (before.draft_revision !== revision)
       throw new ConflictError("A newer project draft exists", { revision: before.draft_revision });
@@ -149,7 +157,7 @@ export async function createNativeDraft(
     const selected = input.challengeIds ?? [];
     if (selected.length) {
       const visible = await db.query(
-        `SELECT c.id FROM challenges c JOIN users u ON u.id=$2 WHERE c.id=ANY($1::int[]) AND c.visibility='visible' AND c.is_test_account=u.is_test_account`,
+        `SELECT c.id FROM challenges c JOIN users u ON u.id=$2 WHERE c.id=ANY($1::int[]) AND c.visibility='visible' AND c.is_test_account=u.is_test_account AND c.event_key=current_edition()`,
         [selected, userId],
       );
       if (new Set(visible.rows.map((row) => row.id)).size !== new Set(selected).size)
@@ -165,7 +173,7 @@ export async function createNativeDraft(
       userId,
     ]);
     await db.query(
-      `INSERT INTO project_challenges(repo_id,challenge_id) SELECT $1,id FROM challenges WHERE (id=ANY($2::int[]) OR mandatory) AND is_test_account=(SELECT is_test_account FROM repos WHERE id=$1) ON CONFLICT DO NOTHING`,
+      `INSERT INTO project_challenges(repo_id,challenge_id) SELECT $1,id FROM challenges WHERE (id=ANY($2::int[]) OR mandatory) AND event_key=current_edition() AND is_test_account=(SELECT is_test_account FROM repos WHERE id=$1) ON CONFLICT DO NOTHING`,
       [id, input.challengeIds ?? []],
     );
     await audit(db, {
@@ -310,9 +318,9 @@ export async function nativeProjects(
   }
   const [projects, members, challenges, files, phase, currentForm, winnerRows] = await Promise.all([
     pool.query(
-      `SELECT r.id,r.name,r.description,r.github_url AS "githubUrl",r.demo_url AS "demoUrl",r.submission_status AS "submissionStatus",r.presentation_timing_preference AS "presentationTimingPreference",r.responses,r.lock_reason AS "lockReason",r.submitted_at AS "submittedAt",r.draft_revision AS revision,v.snapshot,v.form_version_id AS "snapshotFormVersion",f.template AS "snapshotTemplate",f.sections AS "snapshotSections",
+      `SELECT r.id,r.name,r.description,r.github_url AS "githubUrl",r.demo_url AS "demoUrl",r.submission_status AS "submissionStatus",r.presentation_timing_preference AS "presentationTimingPreference",r.responses,r.lock_reason AS "lockReason",r.submitted_at AS "submittedAt",r.draft_revision AS revision,r.event_key AS "eventKey",ed.name AS "editionName",ed.status AS "editionStatus",v.snapshot,v.form_version_id AS "snapshotFormVersion",f.template AS "snapshotTemplate",f.sections AS "snapshotSections",
  EXISTS(SELECT 1 FROM submissions s WHERE s.repo_id=r.id AND s.user_id=$2 AND s.status='active') AS member
- FROM repos r LEFT JOIN LATERAL(SELECT * FROM project_submission_versions v WHERE v.repo_id=r.id ORDER BY v.id DESC LIMIT 1) v ON true LEFT JOIN project_form_versions f ON f.id=v.form_version_id WHERE r.id=ANY($1::int[])`,
+ FROM repos r JOIN editions ed ON ed.event_key=r.event_key LEFT JOIN LATERAL(SELECT * FROM project_submission_versions v WHERE v.repo_id=r.id ORDER BY v.id DESC LIMIT 1) v ON true LEFT JOIN project_form_versions f ON f.id=v.form_version_id WHERE r.id=ANY($1::int[])`,
       [ids, userId],
     ),
     pool.query(
@@ -340,12 +348,17 @@ export async function nativeProjects(
       snapshotFormVersion,
       snapshotTemplate,
       snapshotSections,
+      eventKey,
+      editionName,
+      editionStatus,
       ...project
     } = row;
+    const editionOpen = editionStatus !== "closed";
     const member = ownMember || staff;
     const privateView = member && !gallery;
     const reopened = Boolean(project.submittedAt && project.submissionStatus === "draft");
     const participantCanEdit =
+      editionOpen &&
       project.lockReason !== "organizer_lock" &&
       project.submissionStatus !== "submitted" &&
       (phase.editing || reopened);
@@ -382,6 +395,8 @@ export async function nativeProjects(
     const answer = descriptionField ? responses?.[descriptionField.key] : undefined;
     return {
       ...project,
+      // The project's own edition: a shared link keeps pointing at it (plan §4).
+      edition: { eventKey, name: editionName },
       isMember: ownMember,
       canInspect: inspectable.has(id),
       ...content,
@@ -394,10 +409,14 @@ export async function nativeProjects(
       sections: form?.sections ?? [],
       canEdit: ownMember && participantCanEdit,
       canSubmit:
-        ownMember && project.lockReason !== "organizer_lock" && (phase.submitting || reopened),
+        ownMember &&
+        editionOpen &&
+        project.lockReason !== "organizer_lock" &&
+        (phase.submitting || reopened),
       canInvite: ownMember && participantCanEdit,
       canWithdraw:
         ownMember &&
+        editionOpen &&
         project.submissionStatus === "submitted" &&
         project.lockReason !== "organizer_lock" &&
         phase.submitting,
@@ -516,7 +535,7 @@ export async function projectEstimates(challengeIds: number[] | "all", fixtureMa
  (SELECT count(DISTINCT r.id)::int FROM repos r JOIN project_challenges pc ON pc.repo_id=r.id WHERE pc.challenge_id=c.id AND r.is_test_account=$2) AS "expectedCount",
  (SELECT count(DISTINCT r.id)::int FROM repos r JOIN project_challenges pc ON pc.repo_id=r.id WHERE pc.challenge_id=c.id AND r.submission_status='submitted' AND r.is_test_account=$2) AS "projectCount",
  (SELECT count(DISTINCT s.user_id)::int FROM project_challenges pc JOIN submissions s ON s.repo_id=pc.repo_id AND s.status='active' JOIN repos r ON r.id=pc.repo_id WHERE pc.challenge_id=c.id AND r.is_test_account=$2) AS "memberCount"
- FROM challenges c WHERE c.is_test_account=$2 AND ($1::int[] IS NULL OR c.id=ANY($1)) ORDER BY c.id`,
+ FROM challenges c WHERE c.is_test_account=$2 AND c.event_key=current_edition() AND ($1::int[] IS NULL OR c.id=ANY($1)) ORDER BY c.id`,
     [challengeIds === "all" ? null : challengeIds, fixtureMarker],
   );
   return rows;

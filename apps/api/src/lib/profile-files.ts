@@ -16,7 +16,7 @@ export function profilePrefix(userId: number): string {
   return `profiles/${userId}/`;
 }
 
-export const PHOTO_MAX_BYTES = 2 * 1024 * 1024;
+export const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 export const CV_MAX_BYTES = 5 * 1024 * 1024;
 
 const PHOTO_TYPES = {

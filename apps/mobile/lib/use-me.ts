@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import { ApiError, apiFetch, getCurrentSessionCookie } from "./api";
 import { clearPersistedPhotos } from "./directory";
+import { getViewedEdition } from "./edition";
 import {
   clearCachedValue,
   clearCachedValues,
@@ -176,7 +177,8 @@ export function useMe(enabled = true) {
         setOffline(false);
         setStaleSince(null);
         const generationAtWrite = cacheGeneration.current;
-        if (cacheKey) {
+        // The offline profile is the current edition's: scanners rely on it.
+        if (cacheKey && getViewedEdition() === null) {
           void writeCachedValue(cacheKey, data).then(() => {
             // A successful response may finish its async storage write after a
             // sign-out/401 cleanup. Do not let that late write resurrect the

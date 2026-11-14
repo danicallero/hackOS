@@ -312,6 +312,13 @@ pushed above the tabs from either diary placement (direct tab or Others), the
 same way `app/schedule/[id].tsx` sits above Schedule; its back action falls
 back to `/` when there is nothing to pop.
 
+A company (H44) is the root-level `app/companies/[id].tsx`
+(`components/company-profile-screen.tsx`), pushed from a challenge's company
+row, a schedule item's companies or speaker subtitle, and a person's company
+row; the transparent native header gets the company name on scroll. Its
+representatives open `people/[id]`, its challenges `projects/challenge`, its
+activities `schedule/[id]`.
+
 The direct surface is one continuous scrub surface: on touch-down the Liquid
 Glass selection lens follows the finger in real time, including across several
 tabs. On release, the tab whose cell contains the final finger coordinate is
@@ -409,9 +416,9 @@ despite a working API.
   `sponsors:manage` and only their own enterprises' for a sponsor rep.
 
 Event settings (`/settings/event`) is a list of the sections the caller's
-capabilities allow, grouped as General (event, venue), Dates and deadlines
+capabilities allow, grouped as General (event, editions, venue), Dates and deadlines
 (event and hacking dates, project deadlines and visibility, judging window,
-presence), Forms (project form), Access (invites, wallet) and Notifications, never a second sidebar (#932): `?tab=event|venue|schedule|projects|judging|presence|projectForm|invites|wallet|notifications|liveActivities|danger`
+presence), Forms (project form), Access (invites, wallet) and Notifications, never a second sidebar (#932): `?tab=event|editions|venue|schedule|projects|judging|presence|projectForm|invites|wallet|notifications|liveActivities|danger`
 opens one section with a back link (page header context slot) to the list. A
 lone visible section opens directly only when no `?tab=` is requested; a
 `?tab=` the caller cannot manage shows the list. The URL is the only state, so
@@ -421,6 +428,8 @@ unload — asks for confirmation (`useUnsavedChangesGuard`; browser Back is
 guarded only here, via the opt-in `guardBrowserBack`: a sentinel history entry
 is pushed once while dirty and consumed by the popstate confirm. Other users of
 the hook, e.g. the profile and application builder, guard links and unload only).
+
+Editions (`/settings/event?tab=editions`, `event:manage`) lists the installation's editions with Make current, Close (confirmed, with its consequences) and Reopen, and creates draft editions. The edition selector lives in the account menu and shows only when more than one edition exists; a closed edition shows a non-dismissable read-only notice in the shell.
 
 Judging hours are in Event settings (`/settings/event?tab=judging`) and retain
 the `queue:admin` gate. `/queue/settings` preserves saved links by directing

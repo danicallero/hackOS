@@ -4,11 +4,12 @@
 
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
+import { useServerResource } from "@/hooks/use-server-resource";
 import { apiErrorText } from "@/lib/api-error-text";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { type RepoWithExtras, userProjects } from "@/lib/projects";
@@ -72,31 +73,16 @@ function ProjectLink({ href, label }: { href: string; label: string }) {
 
 export function ProjectsTab({ userId }: { userId: number }) {
   const { t } = useLocale();
-  const [projects, setProjects] = useState<RepoWithExtras[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const resource = useServerResource(["user", userId, "projects"], (signal) =>
+    userProjects(userId, signal),
+  );
+  const projects = resource.data?.projects ?? [];
+  const error = resource.error
+    ? apiErrorText(resource.error, t, t("couldNotLoadUserProjects"))
+    : "";
   const projectColumns = useMemo(() => buildProjectColumns(t), [t]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const data = await userProjects(userId);
-      setProjects(data.projects);
-    } catch (err) {
-      setProjects([]);
-      setError(apiErrorText(err, t, t("couldNotLoadUserProjects")));
-    } finally {
-      setLoading(false);
-    }
-  }, [userId, t]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
-
-  if (loading) {
+  if (resource.loading) {
     return (
       <div className="flex items-center justify-center py-12">
         <Spinner className="size-6" />
@@ -110,7 +96,7 @@ export function ProjectsTab({ userId }: { userId: number }) {
         title={t("projectsCouldNotLoad")}
         description={error}
         action={
-          <Button variant="outline" onClick={() => void load()}>
+          <Button variant="outline" onClick={resource.reload}>
             {t("tryAgain")}
           </Button>
         }

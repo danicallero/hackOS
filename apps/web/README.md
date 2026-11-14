@@ -75,6 +75,13 @@ icons use the library's regular weight without React context. `components.json`
 also selects `phosphor`, so new shadcn primitives follow the same convention.
 See the [web icon standard](../../docs/DESIGN.md#web-icon-standard) for details.
 
+## Search
+
+Every web text search uses `normalizeSearchText` from `src/lib/search-text.ts`
+on both the query and the text being matched. Server-side substring searches use
+parameterized SQL in the form `unaccent(column) ILIKE unaccent($n)` (with
+`likeContains` for the bound pattern), so case and accents do not affect results.
+
 ## Browser server state
 
 `lib/server-state.ts` is the small shared policy for authenticated read models,
@@ -86,6 +93,10 @@ sign-out, like an identity change, drops every old entry and ignores a late
 old-cookie profile response; `useLiveQuery` retains its bounded one-trailing-
 refetch behavior for SSE bursts. The cache is only a browser deduplication
 layer: API reads remain the authoritative Postgres projection.
+
+### Viewed edition
+
+`lib/viewed-edition.ts` holds the edition this tab views (`null` = the current edition), in memory only, so every load and sign-in starts in the latest active edition. `lib/api.ts` sends `X-Edition` on JSON, upload and download requests only for a non-current edition and never shares an in-flight GET across a switch. `setViewedEdition` drops every cached read (`invalidateAllServerState`) and `SessionProvider` refetches `/api/me`, so capabilities and navigation follow the edition. `hooks/use-editions.ts` reads `/api/me/editions`; the account-menu selector and the closed-edition shell notice (`EditionNotice`) build on it. Realtime streams cannot carry the header and stay user-scoped.
 
 ### One read pattern (#1003)
 
@@ -102,6 +113,13 @@ read goes to the API. Do not add module-level
 caches or `useEffect` + `api.get` reads, and never turn a failed read into an
 empty or hard-coded list: expose `error` and render `ContextualError` with a
 retry.
+
+`useServerResource` returns `data`, `error`, `loading` and a stable `reload`
+callback (plus `mutate` for a mutation response). It only applies a result to
+the mounted resource key, so a late response cannot replace a newer parameter's
+data or update an unmounted component. `reload()` invalidates the exact key;
+when there is no data it returns to the loading state, while an existing result
+stays visible during refresh. Use it for one-resource reads with a complete key.
 A page that owns its own loader (form state it must not clobber, optimistic
 local rows) keeps a `load()` callback and adds `useLiveReload(scope, events,
 load)`, which calls it once per debounced burst of events; there is no nonce to
@@ -808,8 +826,11 @@ sponsors; schedule, applications and gallery remain in their own destinations.
 Challenge records also retain the authenticated Home shell and navigation. `/gallery` and its records choose the same shell for signed-in viewers
 and public chrome for anonymous visitors.
 
-Home sponsors use the shared `SponsorGrid`: ascending enterprise priority, theme-aware
-logos and external website links in new tabs. The calendar toolbar combines search,
+Home and landing sponsors use the shared `SponsorGrid`: ascending enterprise priority,
+theme-aware logos; a logo opens the company page (`/companies/:id`) for signed-in
+viewers and the external website in a new tab for anonymous visitors. `SponsorLogo`
+draws artwork that runs into its own edges (no built-in margin, `useLogoBleed`) at
+82% so it never touches its tile; text-sized inline marks pass `inset={false}`. The calendar toolbar combines search,
 categorical FilterMenu, previous/next date arrows and day/week controls in one desktop
 row. Its internal viewport fills the remaining window height; all timed activities
 (including long sessions) retain their real duration and category metadata.
@@ -827,6 +848,28 @@ The web audience filter mirrors mobile: empty audiences mean staff-only, and a s
 projection keeps that filter available even before staff-only activities are scheduled.
 
 Schedule filters retain the unfiltered day/hour grid and only remove event blocks.
+
+### Speakers and companies on activities (H44, H48)
+
+`components/public/schedule-links.tsx` is the one renderer: `SpeakerStack`
+(overlapping avatars, `+N` overflow, so 1, 3 or ~15 speakers take one line),
+`CompanyMarks` (small logos), `ScheduleLinks` (compact, for rows and blocks)
+and `ScheduleLinksDetail` (full lists; rows link to `/people/:id` and
+`/companies/:id` only for signed-in viewers, both reads need a session). The
+staff editor (`schedule-links-fields.tsx`) keeps speakers as an ordered,
+height-bounded list with drag handle, move up/down and remove. The timetable
+marks the live activity (red "Now") and the next one, offers a day strip, a
+company filter, search over speaker and company names, and opens
+`/timetable?activity=ID` (read once on mount, never written back). The company
+page (`/companies/:id`, `components/sponsors/company-profile.tsx`) reads
+`GET /api/enterprises/:id/profile`; its hero tint is computed in the browser
+from the logo shown (`useCompanyLogoColor` in `lib/company.ts`: the negative logo in
+dark mode, falling back to the positive logo's colour when the negative is white or
+mono; cached per URL, neutral when the canvas is tainted). The description is the
+viewer's language from `descriptionTranslations`, else `description`
+(`companyDescription`); the enterprise editor edits it with `MultilingualInput`. `/people/:userId` lists the person's companies and talks;
+the CV stays scan-only. Tolerates both the legacy single-company and the
+`enterprises[]` API shapes (`speakerCompanies`, `personCompanies`).
 Short blocks use compact padding and line heights so title, category and time fit
 inside their actual duration; filtering does not collapse the calendar to a single hour.
 

@@ -61,12 +61,13 @@ export async function coverageReport(opts: {
             ${presentSql("u.id")} AS present,
             COALESCE((SELECT jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name))
                         FROM helper_topics ht JOIN help_topics t ON t.id = ht.topic_id
-                       WHERE ht.user_id = u.id), '[]'::jsonb) AS topics,
+                       WHERE ht.user_id = u.id AND ht.event_key = current_edition()), '[]'::jsonb) AS topics,
             COALESCE((SELECT jsonb_agg(jsonb_build_object('s', ha.starts_at, 'e', ha.ends_at))
-                        FROM helper_availability ha WHERE ha.user_id = u.id), '[]'::jsonb) AS intervals
+                        FROM helper_availability ha
+                       WHERE ha.user_id = u.id AND ha.event_key = current_edition()), '[]'::jsonb) AS intervals
        FROM helper_profiles hp
        JOIN users u ON u.id = hp.user_id
-      WHERE ${LISTED_HELPER_WHERE}`,
+      WHERE hp.event_key = current_edition() AND ${LISTED_HELPER_WHERE}`,
   );
   const { rows: meta } = await pool.query<{
     now: Date;
@@ -164,7 +165,7 @@ export async function coverageReport(opts: {
        FROM help_requests hr
        JOIN help_request_topics rt ON rt.request_id = hr.id
        JOIN help_topics t ON t.id = rt.topic_id
-      WHERE hr.status = 'open'
+      WHERE hr.status = 'open' AND hr.event_key = current_edition()
       ORDER BY t.name, t.id`,
   );
   const covered = new Set([...nowTopics.values()].filter((t) => t.available > 0).map((t) => t.id));

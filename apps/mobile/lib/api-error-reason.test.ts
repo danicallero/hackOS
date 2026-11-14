@@ -43,3 +43,10 @@ describe("api error copy", () => {
     expect(scanFailureText(SCAN_REPLAY_EXPIRED, tGl as never)).toBe("scanReplayExpired");
   });
 });
+
+describe("closed edition", () => {
+  it("maps edition_closed to its localized copy", () => {
+    const err = new ApiError("English", 409, "edition_closed");
+    expect(apiErrorText(err, tGl as never, "fb")).toBe("editionClosedError");
+  });
+});

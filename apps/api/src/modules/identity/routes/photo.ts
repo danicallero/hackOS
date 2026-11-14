@@ -33,7 +33,11 @@ import {
 } from "../../../lib/profile-files.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { putObject } from "../../../lib/storage.js";
-import { photoPublishedInDirectory, savedByReader } from "../../directory/service.js";
+import {
+  photoPublishedInDirectory,
+  photoPublishedOnPublicSurface,
+  savedByReader,
+} from "../../directory/service.js";
 import { helperPhotoShown, mayOpenHelper, mayOpenRequester } from "../../helpdesk/helpers.js";
 import { SCANNER_ROSTER_CAPABILITIES } from "../../logistics/scanner-sync.js";
 import { hasEventAccess } from "../role.js";
@@ -74,6 +78,9 @@ async function canSeePhoto(req: FastifyRequest, subjectId: number): Promise<bool
   ) {
     return true;
   }
+  // H44, H48: a speaker's or company representative's shared photo, on the
+  // schedule and company pages every signed-in user can open.
+  if (await photoPublishedOnPublicSurface(pool, subjectId)) return true;
   // H63: a published helper's card photo, for anyone who may browse helpers.
   if ((await mayOpenHelper(req, pool, subjectId)) && (await helperPhotoShown(pool, subjectId))) {
     return true;
@@ -192,7 +199,11 @@ async function staffChange(req: FastifyRequest, subjectId: number): Promise<Phot
   };
 }
 
-const usersWriter = routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_WRITE });
+const usersWriter = routeAccess({
+  kind: "capability",
+  capability: CAPABILITIES.USERS_WRITE,
+  edition: "global",
+});
 
 export function registerPhotoRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -200,12 +211,12 @@ export function registerPhotoRoutes(app: FastifyInstance): void {
   r.post(
     "/api/me/photo",
     {
-      config: routeAccess({ kind: "authenticated" }),
+      config: routeAccess({ kind: "authenticated", edition: "global" }),
       preHandler: [requireAuth, idempotencyGuard],
       schema: {
         summary: "Upload my photo",
         description:
-          "Multipart upload of the caller's account photo: PNG, JPEG or WebP (identified from the bytes, not the declared type), up to 2 MB. Stored privately under the caller's profile prefix and served only through GET /api/users/:id/photo; the previous photo object is deleted. Returns the new `image` route. Audited without the file. Accounts being removed (H54) are refused (#934).",
+          "Multipart upload of the caller's account photo: PNG, JPEG or WebP (identified from the bytes, not the declared type), up to 5 MB; clients compress larger photos before uploading. Stored privately under the caller's profile prefix and served only through GET /api/users/:id/photo; the previous photo object is deleted. Returns the new `image` route. Audited without the file. Accounts being removed (H54) are refused (#934).",
         response: { 200: photoResponse },
       },
     },
@@ -215,7 +226,7 @@ export function registerPhotoRoutes(app: FastifyInstance): void {
   r.delete(
     "/api/me/photo",
     {
-      config: routeAccess({ kind: "authenticated" }),
+      config: routeAccess({ kind: "authenticated", edition: "global" }),
       preHandler: [requireAuth, idempotencyGuard],
       schema: {
         summary: "Remove my photo",
@@ -236,7 +247,7 @@ export function registerPhotoRoutes(app: FastifyInstance): void {
         params: photoParams,
         summary: "Upload a person's photo",
         description:
-          "Staff replace someone's account photo from user management, with the same rules as POST /api/me/photo: PNG, JPEG or WebP identified from the bytes, up to 2 MB, stored privately under that person's profile prefix; the previous object is deleted. Returns the new `image` route. Audited as an admin change without the file. 404 for an unknown or out-of-scope account; accounts being removed (H54) answer 409 (#934, H8).",
+          "Staff replace someone's account photo from user management, with the same rules as POST /api/me/photo: PNG, JPEG or WebP identified from the bytes, up to 5 MB, stored privately under that person's profile prefix; the previous object is deleted. Returns the new `image` route. Audited as an admin change without the file. 404 for an unknown or out-of-scope account; accounts being removed (H54) answer 409 (#934, H8).",
         response: { 200: photoResponse },
       },
     },

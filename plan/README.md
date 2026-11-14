@@ -10,7 +10,7 @@ Este directorio deja listo el arranque de desarrollo en otro repositorio/directo
 ## Qué contiene este paquete
 
 1. `01-contexto-y-principios.md`: límites del sistema y decisiones base.
-2. `02-backlog-trazable.md`: backlog por historias (H1..H55), con alcance MVP/post-MVP.
+2. `02-backlog-trazable.md`: backlog por historias (H1..H67), con alcance MVP/post-MVP.
 3. `03-roadmap-desarrollo.md`: orden de implementación por fases y criterios de salida.
 4. `04-workstreams-paralelizables.md`: división en carriles para trabajo en paralelo.
 5. `05-plantillas-de-ejecucion.md`: prompts y Definition of Done para ejecutar.

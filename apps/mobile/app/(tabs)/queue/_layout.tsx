@@ -1,6 +1,6 @@
 import { Stack } from "expo-router/stack";
 import { useLocale } from "@/lib/i18n";
-import { useTabStackScreenOptions } from "@/lib/navigation";
+import { sheetPresentation, useTabStackScreenOptions } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
 
 /**
@@ -28,7 +28,7 @@ export default function QueueLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen
         name="new"
-        options={{ ...header, presentation: "modal", title: t("projectNewTitle") }}
+        options={{ ...header, ...sheetPresentation, title: t("projectNewTitle") }}
       />
       <Stack.Screen
         name="invites"

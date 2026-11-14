@@ -322,6 +322,55 @@ export const scheduleAudience = z.union([
   z.string().regex(/^role:[1-9][0-9]{0,8}$/),
 ]);
 
+/** A speaker on a schedule item, with every company they belong to that is visible to the caller. */
+export const scheduleSpeakerSchema = z.object({
+  userId: z.number().int(),
+  name: z.string(),
+  firstName: z.string(),
+  surname: z.string().nullable(),
+  avatarUrl: z.string().nullable(),
+  enterprises: z.array(z.object({ id: z.number().int(), name: z.string() })),
+});
+
+/** A company linked to a schedule item; hidden companies are left out for anyone but staff. */
+export const scheduleEnterpriseSchema = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  logoUrl: z.string().nullable(),
+});
+
+/** The audience-aware schedule item (public feed and company profile). */
+export const publicActivitySchema = z.object({
+  id: z.number().int(),
+  title: z.string(),
+  description: z.string().nullable(),
+  location: z.string().nullable(),
+  type: z.string().nullable(),
+  startsAt: z.string(),
+  endsAt: z.string(),
+  publishAt: z.string().nullable(),
+  audiences: z.array(z.string()),
+  contactNote: z.string().nullable().optional(),
+  owners: z
+    .array(
+      z.object({
+        id: z.number().int(),
+        userId: z.number().int().nullable(),
+        name: z.string().nullable(),
+        surname: z.string().nullable(),
+        freeTextName: z.string().nullable(),
+      }),
+    )
+    .optional(),
+  notes: z.string().nullable().optional(),
+  visibility: z.enum(["shown", "hidden"]).optional(),
+  speakers: z.array(scheduleSpeakerSchema),
+  enterprises: z.array(scheduleEnterpriseSchema),
+  primaryLanguage: languageSchema,
+  titleI18n: z.partialRecord(languageSchema, z.string()),
+  descriptionI18n: z.partialRecord(languageSchema, z.string().nullable()),
+});
+
 export const scheduleBody = z.object({
   title: z.string().min(1).max(300),
   description: z.string().max(4000).nullable().optional(),
@@ -354,6 +403,20 @@ export const scheduleBody = z.object({
     .describe(
       "Opt-in (#966): the item's audience gets an attendee Live Activity (countdown from " +
         "the event's Live Activity lead time before the start, then 'now, ends in'). Defaults to false.",
+    ),
+  speakerUserIds: z
+    .array(z.number().int().positive())
+    .max(50)
+    .optional()
+    .describe(
+      "Speakers (user ids), in display order. Replaces the whole list; omitted keeps it on edit.",
+    ),
+  enterpriseIds: z
+    .array(z.number().int().positive())
+    .max(50)
+    .optional()
+    .describe(
+      "Companies linked to the item, with or without a speaker. Replaces the whole list; omitted keeps it on edit.",
     ),
   rsvp: z
     .object({

@@ -18,7 +18,16 @@ import { apiErrorText } from "@/lib/api-error-text";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import type { NativeProject } from "@/lib/native-projects";
+import { normalizeSearchText } from "@/lib/search-text";
 import { useSessionContext } from "@/lib/session";
+
+export function filterProjectsByName<T extends { name: string }>(
+  projects: T[],
+  query: string,
+): T[] {
+  const needle = normalizeSearchText(query);
+  return projects.filter((project) => normalizeSearchText(project.name).includes(needle));
+}
 
 export default function ProjectsPage() {
   const { t } = useLocale();
@@ -117,9 +126,7 @@ export default function ProjectsPage() {
       />
       <DataTable
         columns={columns}
-        data={projects.filter((project) =>
-          project.name.toLowerCase().includes(search.toLowerCase()),
-        )}
+        data={filterProjectsByName(projects, search)}
         getRowId={(project) => String(project.id)}
         loading={resource.loading}
         error={

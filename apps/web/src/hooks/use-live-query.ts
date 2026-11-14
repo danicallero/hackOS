@@ -208,17 +208,17 @@ export function useLiveQuery<T>(
     staleAttemptsRef.current = 0;
     if (staleTimerRef.current) clearTimeout(staleTimerRef.current);
     staleTimerRef.current = null;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- a new key must not inherit the previous key's stale flag
+    // A new key must not inherit the previous key's stale flag.
     setStale(false);
     if (!enabled) return;
     const settled = peekServerState<T>(resourceKey);
     if (settled !== undefined) {
       dataRef.current = settled;
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- adopt the cached read model of a new key before revalidating it
+      // Adopt the cached read model of a new key before revalidating it.
       setData(settled);
       setLoading(false);
     } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset loading on refetch; no lazier pattern for this state reset
+      // Reset loading before the cold read.
       setLoading(true);
     }
     const cancel = refetch();

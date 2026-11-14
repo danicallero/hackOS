@@ -41,6 +41,7 @@ export function SponsorMark({
       logoNegativeUrl={sponsor.logoNegativeUrl}
       alt={sponsor.name}
       className={cn(className, isSquare && "scale-75")}
+      inset={false}
       onError={() => setFailed(true)}
       onLoad={(event) => {
         const { naturalHeight, naturalWidth } = event.currentTarget;

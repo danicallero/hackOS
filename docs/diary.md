@@ -1,6 +1,6 @@
 # Event diary (#935)
 
-A private diary of the people and sponsor stands an attendee met during the
+A private diary (except the connection graph noted under Privacy rules) of the people and sponsor stands an attendee met during the
 event. People enter it only dynamically, by scanning their badge (NFC tag or
 badge QR) or ticket QR; sponsors are saved by scanning a tag or printed QR at
 their stand. There is no browsable people directory and no way to save a
@@ -18,6 +18,18 @@ live in `apps/api/src/modules/sponsors/stands.ts` (printable QR SVGs in
 `apps/api/test/sponsors/stands-admin.test.ts`.
 
 ## Privacy rules
+
+**Documented exception to "private diary" (#934, #935).** The diary list, notes
+and favourites stay private. But the *existence* of a connection (not who saved
+whom, when, or any note) feeds the public TV connections graph: a person pair
+is an edge while either side keeps the entry, so removing a contact leaves the
+line while the other person keeps theirs. Sponsor/company scans show up as
+company connections. Only people whose networking profile is shared appear, with
+their name, and a line to a person who is not sharing is never drawn
+([`directory.md`](./directory.md)); there is no separate switch. The diary UI says so when removing a contact (web
+`diaryRemoveBody`, mobile remove alert). The public display can be
+photographed or copied. Organizer privacy review is required before launch.
+
 
 - **Only public cards.** A saved person is shown with exactly the
   `DirectoryEntry` projection from `directory/service.ts`
@@ -339,3 +351,7 @@ pending or anonymized owner or target. The personal export bundle includes
 the subject's own entries as `diary` (saved people by user id, sponsors by id
 and name, favourite, note, timestamps). Entries that other attendees hold
 about the subject are those attendees' private data and are not exported.
+
+## Editions
+
+Diary entries are per edition (unique owner/target/edition, enterprise entries inherit the enterprise's edition). Updating or removing an entry by id acts on the viewed edition only (404 otherwise). Lists, the sponsor collection and scanned ticket tokens use the viewed edition; a stand code of a closed edition answers 409 `edition_closed`. Directory cards show projects, challenges and helper topics of the viewed edition only.

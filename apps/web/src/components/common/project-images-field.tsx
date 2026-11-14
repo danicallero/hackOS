@@ -17,6 +17,12 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { apiUpload } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import {
+  compressPhoto,
+  PHOTO_MAX_BYTES,
+  PICKABLE_PHOTO_TYPES,
+  UnsupportedPhotoError,
+} from "@/lib/compress-image";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 
@@ -70,17 +76,25 @@ export function ProjectImagesField({
     const keys = [...value];
     try {
       for (const file of [...list].slice(0, MAX_IMAGES_PER_FIELD - keys.length)) {
-        if (file.size > maxSizeMb * 1024 * 1024)
-          throw new Error(t("fileTooLarge", { maxMb: maxSizeMb }));
         const body = new FormData();
-        body.append("file", file);
+        // Shrunk on device to the field's cap instead of refused.
+        body.append(
+          "file",
+          await compressPhoto(file, {
+            maxBytes: Math.min(maxSizeMb * 1024 * 1024, PHOTO_MAX_BYTES),
+          }),
+        );
         const result = await apiUpload<ProjectImageFile>(uploadPath, body);
         setUploaded((current) => [...current, result]);
         keys.push(result.objectKey);
         onChange([...keys]);
       }
     } catch (cause) {
-      setError(apiErrorText(cause, t, t("uploadFailed")));
+      setError(
+        cause instanceof UnsupportedPhotoError
+          ? t("photoFileHint")
+          : apiErrorText(cause, t, t("uploadFailed")),
+      );
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -205,7 +219,7 @@ export function ProjectImagesField({
       <input
         ref={inputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp"
+        accept={PICKABLE_PHOTO_TYPES.join(",")}
         multiple
         className="sr-only"
         tabIndex={-1}

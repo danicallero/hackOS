@@ -28,6 +28,7 @@ import { useLiveQuery } from "@/hooks/use-live-query";
 import { ApiError, api, apiUpload } from "@/lib/api";
 import { apiErrorText, errorText } from "@/lib/api-error-text";
 import {
+  asI18n,
   type Challenge,
   challengeNextAction,
   challengeState,
@@ -41,6 +42,7 @@ import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { UserList } from "@/lib/types";
 import {
+  descriptionPayload,
   type EnterpriseFormValues,
   EnterpriseKindPriorityFields,
   EnterpriseLogoUrlFields,
@@ -57,7 +59,7 @@ function toFormValues(e: Enterprise): EnterpriseFormValues {
     website: e.website ?? "",
     logoUrl: e.logo_url ?? "",
     logoNegativeUrl: e.logo_negative_url === e.logo_url ? "" : (e.logo_negative_url ?? ""),
-    description: e.description ?? "",
+    description: asI18n(e.description_i18n, e.description ?? ""),
     priority: e.priority != null ? String(e.priority) : "",
     kind: e.kind,
     visibility: e.visibility,
@@ -446,7 +448,7 @@ export function EditCard({
         website: values.website || null,
         logoUrl: values.logoUrl || null,
         logoNegativeUrl: values.logoNegativeUrl || null,
-        description: values.description || null,
+        ...descriptionPayload(values.description),
       };
       // Admins may edit the full reveal/identity surface. Sponsor reps submit
       // only OWNER_EDITABLE_KEYS enforced by the API.

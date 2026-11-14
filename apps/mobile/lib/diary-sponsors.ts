@@ -13,6 +13,8 @@ export interface SponsorCollectionItem {
   logoUrl: string | null;
   logoNegativeUrl: string | null;
   description: string | null;
+  /** H44: per-language description (companyDescription picks the viewer's). */
+  descriptionTranslations?: Record<string, string>;
   website: string | null;
   challenges: { id: number; name: string }[];
   /** null until this attendee scans the company's stand. */
@@ -40,22 +42,4 @@ export function companyMonogram(name: string): string {
       ? [words[0], words[1]].map((word) => Array.from(word)[0])
       : Array.from(name).slice(0, 2);
   return letters.join("").toUpperCase();
-}
-
-/**
- * Apply a PATCH response (or a removal, `entry: null`) to one company without
- * reordering the album under the attendee's finger. Counts follow the change.
- */
-export function withCompanyEntry(
-  collection: SponsorCollection,
-  enterpriseId: number,
-  entry: SponsorCollectionEntry | null,
-): SponsorCollection {
-  let collectedDelta = 0;
-  const items = collection.items.map((item) => {
-    if (item.enterpriseId !== enterpriseId) return item;
-    collectedDelta = Number(entry !== null) - Number(item.entry !== null);
-    return { ...item, entry };
-  });
-  return { ...collection, items, collected: collection.collected + collectedDelta };
 }

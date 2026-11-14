@@ -36,6 +36,7 @@ import {
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { useLocale } from "@/lib/i18n";
+import { normalizeSearchText } from "@/lib/search-text";
 import { cn } from "@/lib/utils";
 
 export interface Column<T> {
@@ -303,10 +304,8 @@ export function DataTable<T>({
 
   const filtered = useMemo(() => {
     if (!searchable || !query.trim()) return data;
-    // Collapse run-on spacing ("Ana   Perez") so it still matches the
-    // single-space-joined haystack `searchable` builds from row fields.
-    const q = query.trim().replace(/\s+/g, " ").toLowerCase();
-    return data.filter((row) => searchable(row).toLowerCase().includes(q));
+    const q = normalizeSearchText(query);
+    return data.filter((row) => normalizeSearchText(searchable(row)).includes(q));
   }, [data, searchable, query]);
 
   const sorted = useMemo(() => {

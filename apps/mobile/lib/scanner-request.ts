@@ -1,12 +1,16 @@
 import { type ApiFetchInit, apiFetch } from "./api";
 
-/** H22–H26: an unresponsive transport must eventually yield to the local queue. */
+/**
+ * H22–H26: an unresponsive transport must eventually yield to the local queue.
+ * Always the current edition: a closed edition cannot be scanned, so replays
+ * and syncs never carry the viewed-edition header.
+ */
 export async function scannerFetch<T>(path: string, init?: ApiFetchInit): Promise<T> {
   const controller = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      apiFetch<T>(path, { ...init, signal: controller.signal }),
+      apiFetch<T>(path, { ...init, signal: controller.signal, currentEdition: true }),
       new Promise<never>((_, reject) => {
         timeout = setTimeout(() => {
           reject(new TypeError("Scanner request timed out"));

@@ -233,14 +233,17 @@ describe("H28 Apple Wallet PassKit", () => {
     await setUserUniversity(uid, university.rows[0].id);
     await pool.query(
       `INSERT INTO event_config
-          (id, name, tagline, hacking_starts_at, venue_name, venue_latitude, venue_longitude, pass_back_fields)
+          (id, name, tagline, hacking_starts_at, venue_name, venue_latitude, venue_longitude,
+           pass_back_fields, pass_front_fields)
        VALUES (1, 'hackUDC', 'Build something great', '2026-02-27T16:30:00+01:00',
                'Facultade de Informática, UDC', 43.3332, -8.4115,
-               '[{"label":"Schedule","value":"https://example.com/schedule"}]'::jsonb)
+               '[{"label":"Schedule","value":"https://example.com/schedule"}]'::jsonb,
+               '[{"label":"Table","value":"B12"}]'::jsonb)
        ON CONFLICT (id) DO UPDATE SET
          name = EXCLUDED.name, tagline = EXCLUDED.tagline, hacking_starts_at = EXCLUDED.hacking_starts_at,
          venue_name = EXCLUDED.venue_name, venue_latitude = EXCLUDED.venue_latitude,
-         venue_longitude = EXCLUDED.venue_longitude, pass_back_fields = EXCLUDED.pass_back_fields`,
+         venue_longitude = EXCLUDED.venue_longitude, pass_back_fields = EXCLUDED.pass_back_fields,
+         pass_front_fields = EXCLUDED.pass_front_fields`,
     );
     await issueTicket(uid, "ticket-wallet-fields");
 
@@ -287,6 +290,12 @@ describe("H28 Apple Wallet PassKit", () => {
       key: "email",
       label: "Email",
       value: "ada@test.local",
+    });
+    // Custom front rows follow the auto-filled holder fields.
+    expect(pass.eventTicket.auxiliaryFields.at(-1)).toEqual({
+      key: "front-0",
+      label: "Table",
+      value: "B12",
     });
     expect(pass.eventTicket.backFields).toContainEqual({
       key: "event",
@@ -865,6 +874,31 @@ describe("H28 Google Wallet", () => {
       JSON.parse(patchCall![1]!.body as string).classTemplateInfo.cardTemplateOverride
         .cardRowTemplateInfos,
     ).toHaveLength(3);
+
+    // Custom front rows ride on each object and are templated after the
+    // holder fields; overflow past the card's three rows stays in details.
+    await pool.query(
+      `UPDATE event_config SET pass_front_fields='[{"label":"Table","value":"B12"}]'::jsonb WHERE id=1`,
+    );
+    await processWalletSync({ data: { passIds: [pass.rows[0].id], action: "refresh" } } as never);
+    const frontClass = JSON.parse(
+      fetchMock.mock.calls
+        .filter(([url, init]) => url.includes("/eventTicketClass/") && init?.method === "PATCH")
+        .at(-1)![1]!.body as string,
+    );
+    expect(JSON.stringify(frontClass.classTemplateInfo.detailsTemplateOverride)).toContain(
+      "object.textModulesData['front_0']",
+    );
+    const frontObject = JSON.parse(
+      fetchMock.mock.calls
+        .filter(([url, init]) => url.includes("/eventTicketObject/") && init?.method === "PATCH")
+        .at(-1)![1]!.body as string,
+    );
+    expect(frontObject.textModulesData).toContainEqual({
+      id: "front_0",
+      header: "Table",
+      body: "B12",
+    });
 
     // PATCH must explicitly clear fields removed in the editor; omission
     // would leave a stale venue/date/image on already saved Google passes.

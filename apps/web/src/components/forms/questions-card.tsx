@@ -204,7 +204,6 @@ export function QuestionsCard({
   // Re-seed if the form reloads (e.g. after a metadata save).
   useEffect(() => {
     if (saveState !== "saved") return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- resyncing local editable state to the just-saved server snapshot
     const seededFields = withIds(form.template);
     originalFieldsRef.current = new Map(
       seededFields.map((field) => [field._id, { key: field.key, kind: field.kind }]),

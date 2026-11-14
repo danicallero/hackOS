@@ -89,6 +89,7 @@ describe("EventSettingsPage", () => {
     await render();
     expect(links()).toEqual([
       "/settings/event?tab=event",
+      "/settings/event?tab=editions",
       "/settings/event?tab=onboarding",
       "/settings/event?tab=schedule",
       "/settings/event?tab=projects",
@@ -110,7 +111,7 @@ describe("EventSettingsPage", () => {
     search = "tab=venue";
     await render();
     expect(container.querySelector("[data-testid=venue-form]")).toBeNull();
-    expect(links()).toHaveLength(7);
+    expect(links()).toHaveLength(8);
     expect(replace).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
   });

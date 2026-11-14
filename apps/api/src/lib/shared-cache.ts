@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { requestEditionOverride } from "./edition.js";
 import { valkey } from "./valkey.js";
 
 /**
@@ -36,6 +37,9 @@ export async function sharedCache<T>(
   ttlSeconds: number,
   compute: () => Promise<T>,
 ): Promise<T> {
+  // A non-current edition is part of every cached read's identity.
+  const edition = requestEditionOverride();
+  if (edition) key = `${key}@edition:${edition}`;
   let fullKey: string;
   try {
     const version = (await valkey.get(versionKey(namespace))) ?? "0";

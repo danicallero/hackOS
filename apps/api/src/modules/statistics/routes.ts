@@ -118,7 +118,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
     "/api/statistics/query",
     {
       preHandler: requireAuth,
-      config: routeAccess({ kind: "authenticated" }),
+      config: routeAccess({ kind: "authenticated", edition: "global" }),
       schema: {
         summary: "Query authorized statistics panels",
         description:
@@ -239,7 +239,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
     "/api/statistics/access",
     {
       preHandler: [requireAuth, idempotencyGuard],
-      config: routeAccess({ kind: "authenticated" }),
+      config: routeAccess({ kind: "authenticated", edition: "current" }),
       schema: {
         description:
           "Sets whether a role sees one panel of one scope. Needs `statistics:manage` and authority over the target role's position; audited as `access_changed`.",
@@ -315,7 +315,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
     "/api/statistics/access/:roleId",
     {
       preHandler: [requireAuth, idempotencyGuard],
-      config: routeAccess({ kind: "authenticated" }),
+      config: routeAccess({ kind: "authenticated", edition: "current" }),
       schema: {
         summary: "Remove a role's generic statistics overrides",
         description:

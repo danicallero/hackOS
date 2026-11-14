@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
-import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
+import { domainScope, EVENTS, REALTIME_SCOPES, SSE_TOPICS } from "@hackos/shared/events";
 import {
   createContext,
   useCallback,
@@ -19,6 +19,7 @@ import { setServerStateIdentity } from "./server-state";
 import { registerSignOutListener } from "./sign-out-events";
 import { setSseIdentity } from "./sse-broker";
 import type { Me } from "./types";
+import { getViewedEdition, resetViewedEdition, subscribeViewedEdition } from "./viewed-edition";
 
 type SessionStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -57,6 +58,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     inFlight.current = null;
     setSseIdentity(null, API_URL);
     setServerStateIdentity(null);
+    resetViewedEdition();
     setEventTimeZone(null);
     meRef.current = null;
     setMe(null);
@@ -70,7 +72,23 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     const request = (async () => {
       const currentRequest = ++requestId.current;
       try {
-        const data = await api.get<Me>("/api/me");
+        let data: Me;
+        try {
+          data = await api.get<Me>("/api/me");
+        } catch (err) {
+          // A remembered edition that can no longer be viewed answers 403/404;
+          // fall back to the current edition once instead of bouncing to login.
+          if (
+            err instanceof ApiError &&
+            (err.status === 403 || err.status === 404) &&
+            getViewedEdition() !== null
+          ) {
+            resetViewedEdition();
+            data = await api.get<Me>("/api/me");
+          } else {
+            throw err;
+          }
+        }
         if (currentRequest !== requestId.current) return;
         setSseIdentity(data.id, API_URL);
         setServerStateIdentity(data.id);
@@ -84,6 +102,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         if (err instanceof ApiError && err.status === 401) {
           setSseIdentity(null, API_URL);
           setServerStateIdentity(null);
+          resetViewedEdition();
           meRef.current = null;
           setMe(null);
           setStatus("unauthenticated");
@@ -126,13 +145,23 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
-  // Fetch current session from server on mount; setState is sync, but this is external-system fetch.
+  // Fetch the current session from the server on mount.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
 
   useEffect(() => registerSignOutListener(clear), [clear]);
+
+  // Capabilities, roles and navigation follow the viewed edition: a read still
+  // in flight belongs to the previous one and is superseded.
+  useEffect(
+    () =>
+      subscribeViewedEdition(() => {
+        inFlight.current = null;
+        void refresh();
+      }),
+    [refresh],
+  );
 
   // The authenticated shell already holds the personal stream for queue and
   // inbox updates. Session changes are addressed to that same user topic,
@@ -144,6 +173,15 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       EVENTS.USER_QUEUE_CHANGED,
       EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
     ],
+    onEvent: scheduleRefresh,
+    onResync: scheduleRefresh,
+    enabled: status === "authenticated",
+  });
+
+  // Closing, reopening or activating an edition changes read-only state and
+  // capabilities for everyone viewing it (identity domain topic).
+  useEventSource(domainScope(SSE_TOPICS.IDENTITY), {
+    events: [EVENTS.EDITION_CHANGED],
     onEvent: scheduleRefresh,
     onResync: scheduleRefresh,
     enabled: status === "authenticated",

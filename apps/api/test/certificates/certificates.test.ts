@@ -128,6 +128,30 @@ describe("self-service issue", () => {
     expect(rows[0].n).toBe(1);
   });
 
+  it("still issues to the participant after the edition closed, while staff edits stay frozen", async () => {
+    await presence(person, 12);
+    await pool.query(
+      "UPDATE editions SET status = 'closed', closed_at = now() WHERE event_key = current_edition()",
+    );
+    const own = await issue(person);
+    expect(own.statusCode).toBe(200);
+    expect(own.json().source).toBe("self");
+    const byStaff = await app.inject({
+      method: "POST",
+      url: "/api/certificates",
+      headers: asUser(staff),
+      payload: {
+        userId: person,
+        variant: "hours",
+        locale: "en",
+        overrideReason: "Late request",
+        certifiedHours: 30,
+      },
+    });
+    expect(byStaff.statusCode).toBe(409);
+    expect(byStaff.json().error.code).toBe("edition_closed");
+  });
+
   it("refuses below the threshold and when certificates are off, with a reason", async () => {
     await presence(person, 3);
     const below = await issue(person);

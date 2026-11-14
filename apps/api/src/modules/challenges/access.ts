@@ -194,8 +194,11 @@ export const requireChallengeListAccess: preHandlerHookHandler = async (request)
   if (!activeCount) throw new UnauthorizedError("This account is closed or being removed");
   if (await isChallengeAdmin(getRequestAuthorizationContext(request))) return;
   const relationship = await pool.query(
-    `SELECT 1 FROM sponsors WHERE user_id = $1
-     UNION ALL SELECT 1 FROM enterprise_judges WHERE user_id = $1
+    `SELECT 1 FROM sponsors s JOIN enterprises e ON e.id = s.enterprise_id
+      WHERE s.user_id = $1 AND e.event_key = current_edition()
+     UNION ALL
+     SELECT 1 FROM enterprise_judges ej JOIN enterprises e ON e.id = ej.enterprise_id
+      WHERE ej.user_id = $1 AND e.event_key = current_edition()
      LIMIT 1`,
     [request.userId],
   );

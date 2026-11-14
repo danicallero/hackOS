@@ -147,7 +147,7 @@ async function main(): Promise<void> {
       `INSERT INTO tickets (user_id, token)
        SELECT $1::integer, 'superadmin-ticket-' || $1::integer || '-' || md5(random()::text || clock_timestamp()::text)
         WHERE EXISTS (SELECT 1 FROM user_event_access WHERE user_id = $1::integer)
-       ON CONFLICT (user_id) DO NOTHING`,
+       ON CONFLICT (user_id, event_key) DO NOTHING`,
       [userId],
     );
 

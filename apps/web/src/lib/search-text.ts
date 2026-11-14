@@ -4,5 +4,6 @@ export function normalizeSearchText(text: string): string {
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase()
-    .trim();
+    .trim()
+    .replace(/\s+/g, " ");
 }

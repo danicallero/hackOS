@@ -28,7 +28,7 @@ export function registerPushTokenRoutes(app: FastifyInstance): void {
   api.post(
     "/api/me/push-tokens",
     {
-      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      ...routeAccess({ kind: "authenticated", emailVerification: "none", edition: "global" }),
       preHandler: requireAuth,
       schema: {
         summary: "Register an Expo push token",
@@ -78,7 +78,7 @@ export function registerPushTokenRoutes(app: FastifyInstance): void {
   api.post(
     "/api/me/push-tokens/unregister",
     {
-      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      ...routeAccess({ kind: "authenticated", emailVerification: "none", edition: "global" }),
       preHandler: requireAuth,
       schema: {
         summary: "Unregister an Expo push token",

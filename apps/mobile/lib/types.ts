@@ -1,3 +1,4 @@
+import type { EditionStatus } from "@hackos/shared/editions";
 /** Subset of GET /api/me's response (apps/api/src/modules/identity/routes/profile.ts) this app reads. */
 export interface Me {
   id: number;
@@ -54,6 +55,8 @@ export interface Me {
   pendingRsvps?: boolean;
   /** H51: first-run prompt to choose notification channels (people with event access). */
   notificationOnboardingRequired?: boolean;
+  /** The edition this profile was read in (multi-edition); absent on older servers. */
+  edition?: { eventKey: string; name: string; status: EditionStatus; isCurrent: boolean };
 }
 
 export type ProfileTask = "dietary" | "meal_plan" | "rsvp";

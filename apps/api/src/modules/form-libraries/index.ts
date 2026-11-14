@@ -57,7 +57,7 @@ export function registerFormLibrariesModule(app: FastifyInstance) {
     "/api/form-libraries/:id/proposals",
     {
       preHandler: [requireAuth, idempotencyGuard],
-      ...routeAccessOption({ kind: "authenticated" }),
+      ...routeAccessOption({ kind: "authenticated", edition: "global" }),
       schema: {
         params,
         body: z.object({ name }),
@@ -96,7 +96,11 @@ export function registerFormLibrariesModule(app: FastifyInstance) {
     "/api/profile/libraries/:id/manage",
     {
       preHandler: [requireCapability(CAPABILITIES.USERS_WRITE), idempotencyGuard],
-      ...routeAccessOption({ kind: "capability", capability: CAPABILITIES.USERS_WRITE }),
+      ...routeAccessOption({
+        kind: "capability",
+        capability: CAPABILITIES.USERS_WRITE,
+        edition: "global",
+      }),
       schema: {
         params,
         body,
@@ -170,7 +174,7 @@ export function registerFormLibrariesModule(app: FastifyInstance) {
         : "/api/applications/:applicationId/libraries/:id/manage",
       {
         preHandler: [requireCapability(capability), idempotencyGuard],
-        ...routeAccessOption({ kind: "capability", capability }),
+        ...routeAccessOption({ kind: "capability", capability, edition: "global" }),
         schema: {
           params: project
             ? params

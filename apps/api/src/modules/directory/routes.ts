@@ -95,7 +95,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         body: ownPublicProfileBody,
         summary: "Update my public profile",
         description:
-          "Replaces the caller's public profile settings. A submitted `github` link is dropped: that link is the linked GitHub account, shown only while `showGithub` is true and the account remains linked. `showGithub` may be omitted to keep its stored value; older clients may omit it. `completeOnboarding: true` records completion, including an explicit hidden-profile choice, without implying consent to sharing. Text is trimmed and empty text clears the field; headline ≤80, locationNote ≤60 and bio ≤500 characters, no control characters (the bio keeps line breaks). `socials` is up to 6 distinct {kind, url} links (kind: linkedin, github, x, instagram, website, other); URLs must be https (a bare host gets https://) and are stored normalized. `shareCv` needs an uploaded or application CV (400 otherwise). `bio`, `socials`, and `shareCv` may be omitted to keep their stored values. consentedAt is stamped on each hidden→visible transition. Audited with the changed field names only, never text or links; repeating the stored settings writes nothing and wakes no client; 403 without event access. Accounts being removed (H54) are refused (#934, #935).",
+          "Replaces the caller's public profile settings. A submitted `github` link is dropped: that link is the linked GitHub account, shown only while `showGithub` is true and the account remains linked. `showGithub` may be omitted to keep its stored value; older clients may omit it. `completeOnboarding: true` records completion, including an explicit hidden-profile choice, without implying consent to sharing. Text is trimmed and empty text clears the field; headline ≤80, locationNote ≤60 and bio ≤500 characters, no control characters (the bio keeps line breaks). `socials` is up to 6 distinct {kind, url} links (kind: linkedin, github, x, instagram, website, other); URLs must be https (a bare host gets https://) and are stored normalized. `shareCv` needs an uploaded or application CV (400 otherwise). `bio`, `socials` and `shareCv` may be omitted to keep their stored values. While `directoryVisible` is true, the person's display name and connections appear on the public TV connections graph (#934). consentedAt is stamped on each hidden→visible transition. Audited with the changed field names only, never text or links; repeating the stored settings writes nothing and wakes no client; 403 without event access. Accounts being removed (H54) are refused (#934, #935).",
       },
     },
     async (req) => {
@@ -111,9 +111,9 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
       preHandler: requireAuth,
       schema: {
         params: userParams,
-        summary: "Read a saved person's public profile",
+        summary: "Read a person's public profile",
         description:
-          "Returns one opted-in person: name, photo route (when shown), headline, bio, location note, social links, CV route (when shared), every project and work group with their challenges (`projects`, when `showProject`; `project` is the first one, deprecated). Only attendees who saved this person in their diary (by scanning their badge or ticket) may read it. A missing or hidden profile, and a person the caller has not saved, all answer 404, so visibility cannot be probed (#934, #935).",
+          "Returns one opted-in person: name, photo route (when shown), headline, bio, location note, social links, CV route (when shared and the caller saved the person; `cvUrl` is null for a speaker or representative opened without a scan), every project and work group with their challenges (`projects`, when `showProject`; `project` is the first one, deprecated). Also returns the shown talks they speak at (`activities`) and every visible company they represent (`enterprises`, oldest membership first; a person can belong to several). Attendees may read it when they saved this person in their diary (by scanning their badge or ticket), or when the person is opted in and speaks at a shown, published, participant-audience schedule item or represents a visible company (H44, H48). A missing or hidden profile, and anyone else the caller has not saved, all answer 404, so visibility cannot be probed (#934, #935).",
       },
     },
     async (req) => getDirectoryEntry(req.userId as number, req.params.userId),
@@ -163,7 +163,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         body: publicProfileBody,
         summary: "Edit a person's public profile",
         description:
-          "User-management moderation: replaces someone's public profile settings with the same body and validation as PUT /api/me/public-profile. Staff may stop sharing (`directoryVisible: false`) but never start it: turning sharing on for a hidden profile answers 409 `profile_consent_required`. Audited as `public_profile.updated` with source `admin` and the changed field names only; repeating the stored settings writes nothing. 404 for an unknown or out-of-scope account; accounts being removed (H54) answer 409 (#935, H8, H53).",
+          "User-management moderation: replaces someone's public profile settings with the same body and validation as PUT /api/me/public-profile. Staff may stop sharing (`directoryVisible: false`), which also removes the person from the public TV graph, but never start it: turning it on answers 409 `profile_consent_required`. Audited as `public_profile.updated` with source `admin` and the changed field names only; repeating the stored settings writes nothing. 404 for an unknown or out-of-scope account; accounts being removed (H54) answer 409 (#935, H8, H53).",
       },
     },
     async (req) => {
@@ -295,7 +295,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         params: userParams,
         summary: "Download a shared CV",
         description:
-          "Streams the CV of an opted-in person who shares it: their application CV when there is one, otherwise their upload. A hidden profile, an unshared CV and a missing CV all answer 404. Readable by attendees who saved this person (the access check runs on every request and the reader must also have event access, #935), and by help desk readers (`helpdesk:request`, `helpdesk:offer` or `helpdesk:coverage`) when the person has a published helper profile and shares their CV, without a badge scan (H61, H63), and by the requester and team members of a request that helper claimed (H64, H66), and by the helpers a help request reached or claimed, for the requester's CV while their public profile and CV are shared (H64, H66).",
+          "Streams the CV of an opted-in person who shares it: their application CV when there is one, otherwise their upload. A hidden profile, an unshared CV and a missing CV all answer 404. Readable only by attendees who saved this person (a speaker or company representative opened without a scan answers 404; the access check runs on every request and the reader must also have event access, #935), and by help desk readers (`helpdesk:request`, `helpdesk:offer` or `helpdesk:coverage`) when the person has a published helper profile and shares their CV, without a badge scan (H61, H63), and by the requester and team members of a request that helper claimed (H64, H66), and by the helpers a help request reached or claimed, for the requester's CV while their public profile and CV are shared (H64, H66).",
       },
     },
     async (req, reply) => {

@@ -1,6 +1,7 @@
 import { config } from "../../config.js";
 import { type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
+import { isScopedEditionClosed } from "../../lib/edition.js";
 import { BadRequestError } from "../../lib/errors.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 
@@ -68,6 +69,8 @@ export async function saveEventReminder(
 /** H52: claim and fan out atomically; concurrent ticks cannot enqueue twice. */
 export async function runEventRemindersOnce(): Promise<number> {
   return withTransaction(async (client) => {
+    // Workers ignore a closed edition (multi-edition plan).
+    if (await isScopedEditionClosed(client)) return 0;
     const { rows } = await client.query(
       "SELECT id FROM event_email_reminders WHERE status = 'scheduled' AND scheduled_at <= now() FOR UPDATE SKIP LOCKED",
     );

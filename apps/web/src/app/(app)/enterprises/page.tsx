@@ -181,7 +181,6 @@ export default function EnterprisesPage() {
   useEffect(() => {
     if (!isSponsorOnly) return;
     sponsorAlive.current = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reading the representative's own enterprise is an external-system sync
     loadOwnEnterprise();
     return () => {
       sponsorAlive.current = false;

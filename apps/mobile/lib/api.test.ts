@@ -8,11 +8,13 @@ jest.mock("./env", () => ({
 
 import { type ApiError, apiFetch } from "./api";
 import { authClient } from "./auth-client";
+import { resetViewedEdition, selectViewedEdition } from "./edition";
 
 const mockFetch = authClient.$fetch as jest.Mock;
 
 describe("apiFetch", () => {
   beforeEach(() => mockFetch.mockReset());
+  afterEach(() => resetViewedEdition());
 
   it("targets application routes at the API origin, outside Better Auth's mount", async () => {
     mockFetch.mockResolvedValue({ data: { status: "ok" }, error: null });
@@ -120,5 +122,31 @@ describe("apiFetch", () => {
       "https://api.hackudc.com/api/me",
       expect.objectContaining({ retry: undefined }),
     );
+  });
+
+  it("sends X-Edition only for a non-current selection", async () => {
+    mockFetch.mockResolvedValue({ data: {}, error: null });
+
+    await apiFetch("/api/me");
+    expect(mockFetch.mock.calls[0]![1].headers["x-edition"]).toBeUndefined();
+
+    selectViewedEdition("hackudc-2025");
+    await apiFetch("/api/me");
+    expect(mockFetch.mock.calls[1]![1].headers["x-edition"]).toBe("hackudc-2025");
+
+    resetViewedEdition();
+    await apiFetch("/api/me");
+    expect(mockFetch.mock.calls[2]![1].headers["x-edition"]).toBeUndefined();
+  });
+
+  it("omits X-Edition for current-edition requests such as scanner sync", async () => {
+    mockFetch.mockResolvedValue({ data: {}, error: null });
+    selectViewedEdition("hackudc-2025");
+
+    await apiFetch("/api/scanner/snapshot", { currentEdition: true });
+
+    const call = mockFetch.mock.calls[0]![1];
+    expect(call.headers["x-edition"]).toBeUndefined();
+    expect(call).not.toHaveProperty("currentEdition");
   });
 });

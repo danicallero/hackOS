@@ -61,6 +61,20 @@ describe("enterprise management (H43-H45)", () => {
     expect(mine.json().id).toBe(entId);
   });
 
+  it("lets schedule managers list enterprises for the company picker (H48)", async () => {
+    const a = await getApp();
+    const editor = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const plain = await createUser();
+    expect(
+      (await a.inject({ method: "GET", url: "/api/enterprises", headers: asUser(editor) }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await a.inject({ method: "GET", url: "/api/enterprises", headers: asUser(plain) }))
+        .statusCode,
+    ).toBe(403);
+  });
+
   it("requires an exact enterprise relationship and preserves wildcard access", async () => {
     const a = await getApp();
     const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
@@ -575,5 +589,85 @@ describe("enterprise membership (M4)", () => {
     expect(
       publicSponsors.json().items.map((row: { enterpriseId: number }) => row.enterpriseId),
     ).not.toContain(enterpriseId);
+  });
+});
+
+describe("per-language company description (H44)", () => {
+  it("stores translations, mirrors the fallback and serves them on the company page", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+    const created = await a.inject({
+      method: "POST",
+      url: "/api/enterprises",
+      headers: asUser(admin),
+      payload: {
+        name: "Polyglot",
+        visibility: "visible",
+        descriptionI18n: { en: " We build ", es: "Construimos", gl: "" },
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = created.json().id;
+    expect(created.json().description).toBe("We build");
+    expect(created.json().description_i18n).toEqual({ en: "We build", es: "Construimos", gl: "" });
+
+    // A sponsor representative may edit the translations; English empty falls back to Spanish.
+    const owner = await createUser();
+    await linkSponsor(owner, id);
+    const patched = await a.inject({
+      method: "PATCH",
+      url: `/api/enterprises/${id}`,
+      headers: asUser(owner),
+      payload: { descriptionI18n: { en: "", es: "Hacemos cosas", gl: "Facemos cousas" } },
+    });
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json().description).toBe("Hacemos cosas");
+
+    const page = await a.inject({
+      method: "GET",
+      url: `/api/enterprises/${id}/profile`,
+      headers: asUser(await createUser()),
+    });
+    expect(page.statusCode).toBe(200);
+    expect(page.json()).toMatchObject({
+      description: "Hacemos cosas",
+      descriptionTranslations: { es: "Hacemos cosas", gl: "Facemos cousas" },
+    });
+    expect(page.json().descriptionTranslations).not.toHaveProperty("en");
+
+    // All languages empty clears both the translations and the fallback text.
+    const cleared = await a.inject({
+      method: "PATCH",
+      url: `/api/enterprises/${id}`,
+      headers: asUser(owner),
+      payload: { descriptionI18n: { en: " ", es: "", gl: "" } },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json()).toMatchObject({ description: null, description_i18n: null });
+  });
+
+  it("rejects a translation map missing a language", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/enterprises",
+      headers: asUser(admin),
+      payload: { name: "Half", descriptionI18n: { en: "Hi", es: "Hola" } },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("keeps a plain description readable as the fallback with no translations", async () => {
+    const a = await getApp();
+    const { rows } = await pool.query(
+      `INSERT INTO enterprises (name, visibility, description) VALUES ('Legacy', 'visible', 'Old text') RETURNING id`,
+    );
+    const page = await a.inject({
+      method: "GET",
+      url: `/api/enterprises/${rows[0].id}/profile`,
+      headers: asUser(await createUser()),
+    });
+    expect(page.json()).toMatchObject({ description: "Old text", descriptionTranslations: {} });
   });
 });

@@ -195,7 +195,6 @@ export default function MyApplicationDetailPage() {
   }, [id, me, setFieldErrors]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetching application data from API (external-system sync)
     load();
   }, [load]);
 

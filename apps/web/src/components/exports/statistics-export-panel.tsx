@@ -49,7 +49,6 @@ export function StatisticsExportPanel({ trigger }: { trigger?: ReactNode }) {
   }, [t]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- statistics scopes are an external API source.
     void load();
   }, [load]);
 

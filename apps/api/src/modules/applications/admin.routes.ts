@@ -7,6 +7,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
+import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { currentEventKey } from "../event/context.js";
 import { syncFieldLibraries } from "../form-libraries/service.js";
@@ -156,7 +157,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const { rows } = await pool.query(
-        `SELECT ${COLUMNS} FROM applications WHERE event_key=COALESCE((SELECT event_key FROM event_config WHERE id=1),'default')`,
+        `SELECT ${COLUMNS} FROM applications WHERE event_key = current_edition()`,
       );
       const invited = req.userId ? await isInvitedParticipant(pool, req.userId) : false;
       // One lookup for every closed form instead of one per form.
@@ -193,7 +194,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const { rows } = await pool.query(
-        `SELECT ${COLUMNS} FROM applications WHERE id = $1 AND event_key=COALESCE((SELECT event_key FROM event_config WHERE id=1),'default')`,
+        `SELECT ${COLUMNS} FROM applications WHERE id = $1 AND event_key = current_edition()`,
         [req.params.id],
       );
       const found = rows[0];
@@ -224,7 +225,9 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       },
     },
     async () => {
-      const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications ORDER BY id`);
+      const { rows } = await pool.query(
+        `SELECT ${COLUMNS} FROM applications WHERE event_key = current_edition() ORDER BY id`,
+      );
       return { applications: rows };
     },
   );
@@ -256,7 +259,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   r.post(
     "/api/applications",
     {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_MANAGE),
+      preHandler: [requireCapability(CAPABILITIES.APPLICATIONS_MANAGE), idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.APPLICATIONS_MANAGE }),
       schema: {
         summary: "Create an application form",
@@ -336,7 +339,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   r.patch(
     "/api/applications/:id",
     {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_MANAGE),
+      preHandler: [requireCapability(CAPABILITIES.APPLICATIONS_MANAGE), idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.APPLICATIONS_MANAGE }),
       schema: {
         summary: "Update an application form",
@@ -350,7 +353,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       const b = req.body;
       return withTransaction(async (client) => {
         const { rows: currentRows } = await client.query(
-          `SELECT ${COLUMNS} FROM applications WHERE id = $1 FOR UPDATE`,
+          `SELECT ${COLUMNS} FROM applications WHERE id = $1 AND event_key = current_edition() FOR UPDATE`,
           [req.params.id],
         );
         const current = currentRows[0];
@@ -571,7 +574,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       await withTransaction(async (client) => {
         const { rows: appRows } = await client.query(
-          `SELECT id FROM applications WHERE id = $1 FOR UPDATE`,
+          `SELECT id FROM applications WHERE id = $1 AND event_key = current_edition() FOR UPDATE`,
           [req.params.id],
         );
         if (!appRows[0]) throw new NotFoundError("Application not found");

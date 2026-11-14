@@ -165,6 +165,7 @@ export async function queueGroupQueue(queueGroupId: number, fixtureMarker = fals
          FROM queue_groups qg
          JOIN enterprises e ON e.id = qg.enterprise_id
         WHERE qg.id = $1
+          AND qg.event_key = current_edition()
           AND NOT EXISTS (
             SELECT 1
               FROM queue_group_challenges hidden_qgc
@@ -315,9 +316,10 @@ export async function roomView(roomId: number, opts: { includeCrossRoomSkips?: b
 export async function roomViews(roomIds: number[], opts: { includeCrossRoomSkips?: boolean } = {}) {
   const ids = [...new Set(roomIds)];
   if (ids.length === 0) return [];
-  const { rows: roomRows } = await pool.query(`SELECT * FROM rooms WHERE id = ANY($1::int[])`, [
-    ids,
-  ]);
+  const { rows: roomRows } = await pool.query(
+    `SELECT * FROM rooms WHERE id = ANY($1::int[]) AND event_key = current_edition()`,
+    [ids],
+  );
   const roomById = new Map<number, Record<string, unknown>>(
     roomRows.map((row) => [Number(row.id), row]),
   );
@@ -521,6 +523,7 @@ async function crossRoomSkipReasons(
        JOIN queue_entries bqe ON bqe.repo_id = s2.repo_id
                               AND bqe.status IN ('called', 'in_room', 'presenting')
                               AND bqe.id <> qe.id
+                              AND bqe.event_key = qe.event_key
        JOIN rooms br ON br.id = bqe.assigned_room_id
        JOIN repos brepo ON brepo.id = bqe.repo_id
       ORDER BY p.room_id, qe.id, bqe.id`,
@@ -570,7 +573,11 @@ async function crossRoomSkipReasons(
 
 /** H46 read surface: current room -> enterprise pool, serving queue_group, and the judges that follow. */
 export async function roomAssignments(roomId: number) {
-  const room = (await pool.query(`SELECT * FROM rooms WHERE id = $1`, [roomId])).rows[0];
+  const room = (
+    await pool.query(`SELECT * FROM rooms WHERE id = $1 AND event_key = current_edition()`, [
+      roomId,
+    ])
+  ).rows[0];
   if (!room) throw new NotFoundError("Room not found", { roomId });
 
   const enterprise =
@@ -668,7 +675,9 @@ export async function publicRoomViews() {
   // Public TV is the real-venue projection. Synthetic and mixed room graphs
   // are omitted entirely rather than appearing as empty room shells after
   // `roomView` filters their queue contents.
-  const { rows: rooms } = await pool.query<{ id: number }>(`SELECT id FROM rooms ORDER BY id ASC`);
+  const { rows: rooms } = await pool.query<{ id: number }>(
+    `SELECT id FROM rooms WHERE event_key = current_edition() ORDER BY id ASC`,
+  );
   const markers = await queueRoomFixtureMarkers(
     pool,
     rooms.map((room) => Number(room.id)),
@@ -770,6 +779,7 @@ WITH viewer AS (
      JOIN repos sr ON sr.id = s.repo_id
      CROSS JOIN viewer v
     WHERE s.user_id = $1 AND s.status = 'active'
+      AND sr.event_key = current_edition()
       AND su.account_state = 'active' AND su.anonymized_at IS NULL
       AND su.is_test_account = v.is_test_account
       AND sr.is_test_account = v.is_test_account
@@ -788,6 +798,7 @@ WITH viewer AS (
      JOIN queue_groups group_qg ON group_qg.id = qgc.queue_group_id
      LEFT JOIN enterprise_markers em ON em.enterprise_id = group_qg.enterprise_id
      CROSS JOIN viewer v
+    WHERE group_qg.event_key = current_edition()
     GROUP BY qgc.queue_group_id, v.is_test_account
    HAVING bool_and(group_challenge.is_test_account = v.is_test_account)
       AND COUNT(em.marker) > 0
@@ -842,6 +853,7 @@ WITH viewer AS (
      FROM rooms r
      LEFT JOIN room_graphs rg ON rg.room_id = r.id
      LEFT JOIN room_markers rm ON rm.room_id = r.id
+    WHERE r.event_key = current_edition()
     GROUP BY r.id
  ), visible_rooms AS (
    SELECT rs.room_id
@@ -1095,8 +1107,8 @@ export async function roomPace(
   fixtureMarker = false,
   startingEntryId?: number,
 ) {
-  // Independent reads run concurrently (a pooled `db` serves them on separate
-  // connections; a transaction client still queues them in order).
+  // Independent reads run concurrently because all current callers use the
+  // pool, which assigns each query its own client.
   const [roomState, settingsRes, primaryRes] = await Promise.all([
     db.query(`SELECT 1 FROM room_queue_state WHERE room_id = $1`, [roomId]),
     db.query(`SELECT * FROM queue_settings WHERE id = 1`),
@@ -1400,6 +1412,12 @@ export async function repoChallenges(repoId: number) {
 export async function entryHistory(entryId: number, actorId?: number) {
   const fixtureMarker =
     actorId == null ? false : await assertQueueEntryScope(pool, actorId, entryId);
+  // An entry of another edition answers 404, like one that does not exist.
+  const inEdition = await pool.query(
+    `SELECT 1 FROM queue_entries WHERE id = $1 AND event_key = current_edition()`,
+    [entryId],
+  );
+  if (inEdition.rowCount === 0) throw new NotFoundError("Queue entry not found", { entryId });
   const { rows } = await pool.query(
     `SELECT h.*, u.name AS actor_name, u.surname AS actor_surname
        FROM queue_history h

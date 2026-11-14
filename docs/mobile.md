@@ -39,6 +39,8 @@ there. Device coverage drives accreditation, meals, and recordable activities
 through stable IDs from `@hackos/shared/ui-test-ids`; ordinary CI remains on
 the hardware-free native screen suite.
 
+**Sheet grabber.** Every sheet that can be pulled down shows the iOS drag handle. Router sheets use `sheetPresentation` (`lib/navigation.ts`): a one-detent iOS `formSheet` with `sheetGrabberVisible`, kept as tall as the former page sheet; an opaque `headerStyle` would paint over the grabber, so sheet headers stay transparent. `SheetModal` (`components/app-sheet.tsx`) draws the same `SheetGrabber` (36 x 5 pt, tertiary label) on iOS and Android. Full-screen and zoom-presented pages have none.
+
 Read/loading/error/refresh coverage by route and embedded sheet is recorded in
 [Mobile surface states](./mobile-surface-states.md).
 
@@ -62,6 +64,7 @@ Read/loading/error/refresh coverage by route and embedded sheet is recorded in
 - [Other infrastructure](#other-infrastructure)
 - [UI testing](#ui-testing)
 - [Scanner state transitions](#scanner-state-transitions)
+- [Editions](#editions)
 
 ## Story index
 
@@ -280,7 +283,7 @@ distributed to other Expo Router apps without importing hackOS code.
   a photo exists, Remove photo (`components/profile-photo-menu.tsx`, one hook
   `lib/use-profile-photo.ts`). The picker crops square (`allowsEditing`), then
   `lib/profile-photo.ts` re-crops the centre square, downsizes to 1024 px and
-  re-encodes as JPEG at 0.8, far under the API's 2 MB cap, and posts it as
+  re-encodes as JPEG at 0.8, far under the API's 5 MB cap, and posts it as
   multipart `file` to `POST /api/me/photo` (removal is `DELETE`), each attempt
   under its own `Idempotency-Key`. The avatar shows a spinner meanwhile and
   `/api/me` is refetched afterwards: the API answers a new `?v=` route, which is
@@ -689,9 +692,8 @@ per H18. Challenge rows on the project page and editor open the challenge brief
 company (logo, name, website), description, public evaluation criteria and
 prizes from `GET /api/public/challenges`, plus a Projects row to the filtered
 gallery only once the gallery answers with projects for it (it is 403 before
-publication). A company's challenges in the diary open the same brief as a
-sheet stacked over the company sheet. Each project on a profile opens its page;
-the server decides who may read it. The challenge filter is the native filter menu (multi-select, kept open while choosing; the glass toolbar button is the only filter control) so it scales past a dozen challenges.
+publication). A company's challenges open the same brief from the company page. Each project on a profile opens its page;
+the server decides who may read it. Company pages (`companies/[id]`) and person profiles open from a logo or avatar with the iOS zoom transition (`Link.AppleZoom` in `avatar-row.tsx` and the company rows; the profile's own logo/avatar is the `Link.AppleZoomTarget`): swipe from the edge or pull down to zoom back, and there is no grabber because they are pushed screens, not sheets. Their native bar stays transparent with no blur or title until the large name has scrolled under it. The challenge filter is the native filter menu (multi-select, kept open while choosing; the glass toolbar button is the only filter control) so it scales past a dozen challenges.
 
 Several projects list as one grouped row section (name, draft/submitted,
 chevron); the editor lists the chosen challenges (mandatory ones with a lock) and an
@@ -757,8 +759,11 @@ they are not device screenshots or proof of native toolbar behavior.
   rendered by the same `components/profile-card.tsx` the diary's person screen
   uses), under an always-visible "Share my profile" switch. In the preview that
   switch saves on its own (optimistic, rolled back with a localized error if the
-  PUT fails); a card that is not shared yet is drawn at half opacity and the
-  sheet starts in edit mode. The header follows the other form sheets
+  PUT fails). Its footer discloses (#934, #935) that while the profile is shared
+  the person's name and connections (people and companies) appear on public
+  event screens, which can be photographed or copied, and that turning off
+  sharing removes them; there is no separate switch. A card that is not shared
+  yet is drawn at half opacity and the sheet starts in edit mode. The header follows the other form sheets
   (native header/toolbars on iOS Liquid Glass, safe-area-inset floating controls
   elsewhere): X closes, pencil enters edit mode; while editing, X
   discards the changes (back to the preview) and the checkmark saves. On foldable
@@ -1164,6 +1169,8 @@ reached the server is queued on the device (`lib/diary-pending.ts`, one entry
 per code, cleared with the account's other caches), "Waiting for connection: n"
 shows above the scan button, and the queue is sent on reconnect, on focus and
 on launch; a code the server answers (accepted or refused) leaves the queue.
+Removing a person asks for confirmation with a body saying the other person
+keeps the contact and the connection can stay on public event screens while they do.
 
 The diary uses the system header, laid out like Activities. On iOS 26
 (`isRealLiquidGlassAvailable`) it is the transparent native bar: the list
@@ -1201,15 +1208,55 @@ glyph) only marks a saved person and drives the Favourites filter; the row menu
 holds Note (500 characters; `components/diary-note-editor.tsx` is a native
 page sheet with circular Cancel and Save and a field above the keyboard, the
 same editor for people and stands) and an explicit "Remove from diary" with
-confirmation. Un-starring never removes anyone. Search filters saved cards
+confirmation. Un-starring never removes anyone. A speaker or company
+representative opened from the schedule or a company page without a scan has
+no diary entry, so their profile shows no star, note, remove action or CV row
+(the API sends no `cvUrl` and the CV route answers 404 until the scan). Search filters saved cards
 locally by name, headline, project, challenges, location and the owner's note,
 ignoring accents and case; cards never carry an email, so contact details are
 not searchable. Rows (`components/diary-person-row.tsx`) are one full-width
-pressable that opens the profile; the trailing star and menu are separate
+pressable that opens the profile, with the avatar zooming into it on iOS; the trailing star and menu are separate
 siblings so they never also open it. A profile hidden after it was saved keeps
 only the menu (no star). The diary's header owns the status-bar area on both
 platforms; the profile keeps an Android status-bar scrim, so scrolled content
 never slides behind the clock.
+
+**Company screen (H44, H45, H59).** `app/companies/[id].tsx`
+(`components/company-profile-screen.tsx`) reads `GET /api/enterprises/:id/profile`
+and follows Apple Music's artist page: a tinted gradient hero (CSS
+`experimental_backgroundImage`; `heroTint` in `lib/hero-tint.ts` tints it with the colour of the logo shown (`useCompanyLogoTint`: the negative logo in dark mode, falling back to the positive logo's colour when the negative is white or mono and has none), computed on the device by `lib/image-tint.ts` (Skia draws the logo at 24x24, `pickDominantColor` ignores transparent and near-white/black pixels and favours saturated buckets; nothing is stored server-side), darkened in dark mode,
+neutral grey when null, and picks the white or black foreground for the name by
+luminance), the logo in a rounded
+card with a soft shadow (the negative logo in dark mode when present; artwork
+that runs into its own edges is drawn at 84% so it never touches the card,
+`useImageBleed`/`logoTouchesEdge`), the name, the description (in the reader's
+language from `descriptionTranslations`, else `description`) clamped to four lines with "More", the website, then
+Representatives (`AvatarRow`, as Podcasts' Hosts & Guests; opens
+`people/[id]`), Challenges (opens `projects/challenge`, only those already
+public) and Activities (opens `schedule/[id]`). Empty sections are omitted; a
+hidden or missing company shows "Company not available". iOS uses the
+transparent native header and the name joins the bar after 150 pt of scroll;
+Android and cold links float a glass back button.
+
+**Image tint (H44, H48).** `lib/image-tint.ts` keeps an in-memory colour per
+image URL. `PersonAvatar` calls `prefetchImageTint(uri)` for every logo and
+photo a list renders, so the tint is computed before the page opens: in-flight
+work is deduplicated, at most two decodes run at once, each after interactions.
+The page's `useImageTint` reads the cache synchronously, so a prefetched hero
+is already tinted; an uncached one shows the neutral hero and fades the tint in.
+Colours are not persisted, so a photo hidden later leaves no trace after a
+restart. The same decode also records whether the artwork reaches its own
+edges (`useImageBleed`); the company album's round medallions shrink such a
+logo from 74% to 62% so the circle does not cut its corners.
+
+**Speakers and companies on activities.** The schedule detail adds Speakers
+(avatar, name, companies as a truncated subtitle joined with " · "; opens `people/[id]`; without a photo the avatar shows the first letters of first name and surname on the account avatar's blue, via `UserAvatar`, as do the company's Representatives) and Companies (logo,
+name; opens `companies/[id]`) rows between the description and Information,
+from the item's optional `speakers` and `enterprises`. A person's profile
+shows every company they belong to (`enterprises`, one row each, opening its
+company screen with the same zoom) and Talks (`activities`) when the API sends
+them, tints its hero from the photo's dominant colour (same `useImageTint` and
+`heroTint`; no photo or no usable colour keeps the plain background), and a challenge's company row opens the company screen.
 
 `app/people/[id].tsx` (`components/person-profile-screen.tsx`) is a saved
 person's full profile from `GET /api/directory/:userId` (the only directory
@@ -1444,12 +1491,12 @@ rebuilt development client and store build.
 **Companies** is a sticker album (`components/company-album.tsx`) from
 `GET /api/me/diary/sponsors`: a progress ring with collected / total, then a
 three-column grid in the API's order (sponsor priority, then name, as the public logo grid; collected and uncollected interleaved). Collected companies are full-colour logos on a white disc
-and open a company sheet (logo, collected date, Favourite / Note (or Edit
-note) / Web, the
-description, challenges, note and "Remove from collection"); companies still to
-find (every revealed scannable one, even before its tags are generated) are dashed slots with a silhouette of the logo, a lock and their name
-only (never opened; the sheet and its description, challenges and website
-exist only once collected).
+and zoom (`Link.AppleZoom` on the disc, `AppleZoomTarget` on the company page's logo card) into
+the company page. When the reader has scanned that stand, the page also shows
+a "Collected <date>" line, Favourite / Note (or Edit note), the note and "Remove from collection" (same
+`PATCH`/`DELETE` below, read from `GET /api/me/diary/sponsors`); without a scan they are absent. Companies in the album that are not collected yet are the same disc with the logo desaturated and faded (`Desaturate`, a saturation blend overlay: RN's `filter` has no grayscale on iOS), on the page too with a neutral hero and "Visit their booth to collect it"; they open the page like collected ones, while companies outside the album (not scannable) keep the normal full-colour look. The album lists
+every revealed scannable company, even before its tags are generated. The zoom source is a plain
+untransformed view (the scan celebration animates inside it), so open and dismiss zoom work.
 Stand favourites and notes use the same `PATCH`/`DELETE /api/me/diary/:entryId`.
 
 Scanning follows R008: the primary "Scan with NFC" control opens the existing
@@ -1506,6 +1553,10 @@ Skia canvas, travel, ring or particles and only the success haptic. It announces
 labels the overlay with it. The API reports `created` only as the status code
 (201 vs 200), which `apiFetch` does not expose, so "new" is decided against the
 loaded diary entries. Not verified on a device.
+
+Scanning a stand (QR, NFC or a `/s/<code>` link) plays `components/company-celebration.tsx` instead:
+the logo springs in over a wash of its own colour (`useImageTint`) with pulsing rings and a rising
+haptic beat (about 3 s), and the company page opens underneath as it fades. Tap to skip.
 
 `apiFetch` returns API timestamps as `Date` objects (Better Auth's client JSON
 parser revives ISO strings), so diary ordering goes through `timestampOf`
@@ -1731,6 +1782,12 @@ company), topics and a scheduled / inside-the-venue line, the same native header
 search as People, and Schedule's persistent `FilterMenu` beside it (Role and
 Knowledge multi-selects over the loaded list, `filterHelpers` in
 `lib/help-desk.ts`). The root's first row opens it with "N available".
+
+The Request help sheet (H64) keeps its `ScrollView` directly under the native
+screen on iOS, matching New project. A flex wrapper between a `formSheet` and
+its scroll view can clip the form when native detent sizing settles. The
+transparent header still uses measured top padding, and keyboard insets remain
+enabled. Ordinary help pages and Android modals retain the full-height wrapper.
 
 **Requests (H64–H66).** New request (sheet, Close / Send), always for the person sending it: details and location in one
 group, Knowledge topics and Challenge rows in another, and a "Prefer a sponsor"
@@ -2993,3 +3050,15 @@ adds a local `rsvp` task for it. `pendingProfileTasks` keeps its existing
 for an unknown task. The same server offer calculation
 drives web onboarding. Dietary and RSVP changes share the sheet's Save; a
 successful dietary save is retained when retrying a failed RSVP save.
+
+
+## Editions
+
+One installation hosts one edition per year (`docs/multi-edition-plan.md`). The app views one edition at a time; the contract lives in `@hackos/shared/editions`.
+
+- **Viewed edition** (`lib/edition.ts`): in-memory only, `null` means the current edition. It resets on every cold start, on sign-in (`signIn.email`) and on sign-out, never persisted. `apiFetch`, the realtime stream, photo and file downloads send `X-Edition` only while a non-current edition is selected.
+- **Scanners are always current.** `scannerFetch` (live scans, offline replay, snapshot sync) passes `currentEdition: true`, so `apiFetch` never adds the header: a closed edition cannot be scanned. Closed editions also drop the scanner capabilities server-side, so those tabs disappear by capability.
+- **Switching** (`switchEdition` in `lib/me-context.tsx`): checks `GET /api/me/editions` against the new edition, clears the user's cached reads, refetches `/api/me` (tabs and capabilities follow) and bumps an epoch that remounts the authenticated tree. A failure restores the previous edition. The offline profile is only cached while viewing the current edition.
+- **Selector**: a labelled `Edition` row in Account's Profile section using the same native menu as Language; shown only when `shouldShowEditionSelector` (more than one edition).
+- **Read-only notice**: `EditionClosedNotice` at the top of Account while `me.edition.status` is `closed`. `edition_closed` errors map to `editionClosedError` in `apiErrorCopy`.
+- **Project detail** shows an `Edition` row when the project payload carries `edition` and more than one edition exists. The app has no certificates screen yet, so nothing to group there.

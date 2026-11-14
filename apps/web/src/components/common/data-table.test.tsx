@@ -337,6 +337,31 @@ describe("DataTable accessibility and interactions", () => {
     expect(container.textContent).not.toContain("No results");
   });
 
+  it("filters searchable rows without case or accent sensitivity", () => {
+    render(
+      <DataTable
+        columns={columns}
+        data={[
+          { id: "1", name: "José Núñez" },
+          { id: "2", name: "A Coruña" },
+          { id: "3", name: "Other" },
+        ]}
+        getRowId={(row) => row.id}
+        searchable={(row) => row.name}
+      />,
+    );
+
+    const input = container.querySelector<HTMLInputElement>('input[type="search"]');
+    act(() => {
+      if (!input) return;
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(input, "JOSE nunez");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("José Núñez");
+    expect(container.textContent).not.toContain("A Coruña");
+  });
+
   it("supports externally filtered zero states and their clear action", () => {
     const clear = vi.fn();
     render(

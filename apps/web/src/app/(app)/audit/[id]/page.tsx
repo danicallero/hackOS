@@ -107,10 +107,10 @@ export default function AuditEntryPage() {
             <dd className="wrap-break-word">
               {entityHref ? (
                 <Link href={entityHref} className="hover:underline">
-                  {entityRef(row.entity_type, row.entity_id, t)}
+                  {entityRef(row, t)}
                 </Link>
               ) : (
-                entityRef(row.entity_type, row.entity_id, t)
+                entityRef(row, t)
               )}
             </dd>
           </div>
@@ -136,6 +136,17 @@ export default function AuditEntryPage() {
               </dd>
             </div>
           )}
+          <div className="sm:col-span-2">
+            <dt className="text-muted-foreground text-xs">{t("auditEntityHistory")}</dt>
+            <dd>
+              <Link
+                href={`/audit?entityType=${encodeURIComponent(row.entity_type)}&entityId=${encodeURIComponent(row.entity_id)}`}
+                className="hover:underline"
+              >
+                {t("auditViewEntityHistory")}
+              </Link>
+            </dd>
+          </div>
           {row.request_id && (
             <div className="sm:col-span-2">
               <dt className="text-muted-foreground text-xs">{t("auditRelatedActions")}</dt>

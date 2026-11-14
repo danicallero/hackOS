@@ -5,6 +5,7 @@ const mockLoad = jest.fn();
 const mockNotificationLoad = jest.fn();
 const mockFetchAdminSchedule = jest.fn();
 const mockStackScreen = jest.fn();
+const mockAvatarRows: { key: string; subtitle?: string | null }[][] = [];
 const mockRouter = {
   back: jest.fn(),
   canGoBack: jest.fn(() => true),
@@ -44,6 +45,12 @@ jest.mock("expo-router/stack", () => ({
       mockStackScreen(props);
       return null;
     },
+  },
+}));
+jest.mock("@/components/avatar-row", () => ({
+  AvatarRow: ({ items }: { items: { key: string; subtitle?: string | null }[] }) => {
+    mockAvatarRows.push(items);
+    return null;
   },
 }));
 jest.mock("@/components/glass-view", () => ({
@@ -150,6 +157,39 @@ describe("schedule detail staff fields (H59)", () => {
     mockSchedule = [mockActivity];
     mockFetchAdminSchedule.mockResolvedValue([]);
     jest.clearAllMocks();
+  });
+
+  it("shows a speaker's companies joined with a dot (H48)", async () => {
+    mockSchedule = [
+      {
+        ...mockActivity,
+        speakers: [
+          {
+            userId: 5,
+            name: "Ana Souto",
+            firstName: "Ana",
+            surname: "Souto",
+            avatarUrl: null,
+            enterprises: [
+              { id: 1, name: "Acme" },
+              { id: 2, name: "Globex" },
+            ],
+          },
+          {
+            userId: 6,
+            name: "Bo",
+            firstName: "Bo",
+            surname: null,
+            avatarUrl: null,
+            enterprises: [],
+          },
+        ],
+      },
+    ];
+    mockAvatarRows.length = 0;
+    await renderMobile(<ScheduleDetailScreen />);
+    await screen.findByText("Information");
+    expect(mockAvatarRows.at(-1)?.map((item) => item.subtitle)).toEqual(["Acme · Globex", null]);
   });
 
   it("keeps the activity name in the native iOS navigation title", async () => {

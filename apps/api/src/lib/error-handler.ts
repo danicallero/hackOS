@@ -1,10 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { dbTimeoutsTotal, isTimeoutError } from "./db-errors.js";
+import { editionClosedFromDatabase } from "./edition.js";
 import { AppError } from "./errors.js";
 
 /** Map AppError, validation and unexpected failures to the `{ error: { code, message } }` envelope. */
 export function registerErrorHandler(app: FastifyInstance): void {
-  app.setErrorHandler((err, req, reply) => {
+  app.setErrorHandler((rawErr, req, reply) => {
+    // The edition write guard trigger (migration 1001) is a business error.
+    const err = editionClosedFromDatabase(rawErr) ?? rawErr;
     if (err instanceof AppError) {
       if (err.statusCode === 429 && "retryAfterSeconds" in err && err.retryAfterSeconds) {
         reply.header("retry-after", String(err.retryAfterSeconds));

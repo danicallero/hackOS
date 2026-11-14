@@ -76,13 +76,15 @@ describe("ProfilePhoto (#934)", () => {
     expect(session.refresh).toHaveBeenCalled();
   });
 
-  it("refuses unsupported or oversize files before uploading", async () => {
+  it("offers image formats only and refuses others before uploading", async () => {
     await act(async () => root.render(<ProfilePhoto />));
     const user = userEvent.setup({ applyAccept: false });
     const input = container.querySelector("input[type=file]") as HTMLInputElement;
+    expect(input.accept).toBe("image/jpeg,image/png,image/webp,image/heic,image/heif,image/avif");
     await act(async () => user.upload(input, new File(["gif"], "a.gif", { type: "image/gif" })));
-    const big = new File([new Uint8Array(2 * 1024 * 1024 + 1)], "a.png", { type: "image/png" });
-    await act(async () => user.upload(input, big));
+    await act(async () =>
+      user.upload(input, new File(["%PDF"], "a.pdf", { type: "application/pdf" })),
+    );
     expect(apiUpload).not.toHaveBeenCalled();
     expect(container.querySelector("[role=alert]")?.textContent).toBe("photoFileHint");
   });

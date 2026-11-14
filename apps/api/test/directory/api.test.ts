@@ -327,6 +327,8 @@ describe("saved profile reads (#934, #935)", () => {
       project: { kind: "project", id: expect.any(Number), name: "Neural Beans" },
       challenges: [{ id: challenge, name: "Green AI" }],
       helpTopics: [],
+      activities: [],
+      enterprises: [],
     });
     const body = res.body;
     for (const forbidden of [
@@ -466,6 +468,131 @@ describe("saved profile reads (#934, #935)", () => {
     await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [noAccess, role]);
     await save(me, noAccess);
     expect((await card(me, noAccess)).statusCode).toBe(403);
+  });
+});
+
+describe("speakers and company representatives (H44, H48)", () => {
+  async function speakerOf(userId: number) {
+    const { rows } = await pool.query(
+      `INSERT INTO schedule (title, starts_at, ends_at, visibility, audiences)
+       VALUES ('Talk', now() + interval '1 hour', now() + interval '2 hours', 'shown', '{participant}')
+       RETURNING id`,
+    );
+    await pool.query(`INSERT INTO schedule_speakers (schedule_id, user_id) VALUES ($1, $2)`, [
+      rows[0].id,
+      userId,
+    ]);
+  }
+  async function repOf(userId: number) {
+    const { rows } = await pool.query(
+      `INSERT INTO enterprises (name, visibility) VALUES ('Acme', 'visible') RETURNING id`,
+    );
+    await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+      rows[0].id,
+      userId,
+    ]);
+  }
+
+  it("lets any attendee read an opted-in speaker without a scan", async () => {
+    const ada = await person("Ada", "Lovelace");
+    await putProfile(ada, { ...VISIBLE, headline: "Compilers" });
+    await speakerOf(ada);
+    const res = await card(ada);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().headline).toBe("Compilers");
+    expect(res.json().activities).toHaveLength(1);
+  });
+
+  it("lets any attendee read an opted-in company representative without a scan", async () => {
+    const rep = await person("Rae", "Rep");
+    await putProfile(rep, VISIBLE);
+    await repOf(rep);
+    const res = await card(rep);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().enterprises).toMatchObject([{ name: "Acme" }]);
+  });
+
+  it("lists every visible company of a representative once, hiding hidden ones", async () => {
+    const rep = await person("Rae", "Rep");
+    await putProfile(rep, VISIBLE);
+    const ids: number[] = [];
+    for (const [name, visibility] of [
+      ["Beta", "visible"],
+      ["Alpha", "visible"],
+      ["Secret", "hidden"],
+    ]) {
+      const { rows } = await pool.query(
+        `INSERT INTO enterprises (name, visibility) VALUES ($1, $2) RETURNING id`,
+        [name, visibility],
+      );
+      ids.push(rows[0].id);
+      await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+        rows[0].id,
+        rep,
+      ]);
+    }
+    // A second membership row for the same company must not duplicate it.
+    await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+      ids[0],
+      rep,
+    ]);
+    const res = await card(rep);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().enterprises).toEqual([
+      { id: ids[0], name: "Beta", logoUrl: null },
+      { id: ids[1], name: "Alpha", logoUrl: null },
+    ]);
+  });
+
+  it("exposes no CV without a scan, and both with one", async () => {
+    const ada = await person("Ada", "Lovelace");
+    const cvKey = `profiles/${ada}/cv/${"b".repeat(32)}.pdf`;
+    await putProfile(ada, VISIBLE);
+    await pool.query(
+      `UPDATE user_public_profiles SET cv_key = $2, cv_filename = 'ada.pdf', cv_uploaded_at = now(), share_cv = true WHERE user_id = $1`,
+      [ada, cvKey],
+    );
+    const { putObject } = await import("../../src/lib/storage.js");
+    await putObject(cvKey, Buffer.from("%PDF-1.7\n%%EOF\n"), "application/pdf");
+    await speakerOf(ada);
+    const unscanned = await card(ada);
+    expect(unscanned.statusCode).toBe(200);
+    expect(unscanned.json().cvUrl).toBeNull();
+    const cv = await app.inject({
+      method: "GET",
+      url: `/api/directory/${ada}/cv`,
+      headers: asUser(reader),
+    });
+    expect(cv.statusCode).toBe(404);
+    await save(ada);
+    expect((await card(ada)).json().cvUrl).toBe(`/api/directory/${ada}/cv`);
+    const scanned = await app.inject({
+      method: "GET",
+      url: `/api/directory/${ada}/cv`,
+      headers: asUser(reader),
+    });
+    expect(scanned.statusCode).toBe(200);
+  });
+
+  it("keeps opted-out speakers and representatives unreadable", async () => {
+    const speaker = await person("Out", "Speaker");
+    await putProfile(speaker, { ...VISIBLE, directoryVisible: false });
+    await speakerOf(speaker);
+    const rep = await person("Out", "Rep");
+    await repOf(rep);
+    expect((await card(speaker)).statusCode).toBe(404);
+    expect((await card(rep)).statusCode).toBe(404);
+  });
+
+  it("keeps unrelated and unpublished-talk people unreadable", async () => {
+    const other = await person("Un", "Related");
+    await putProfile(other, VISIBLE);
+    expect((await card(other)).statusCode).toBe(404);
+    const hiddenTalk = await person("Hidden", "Talk");
+    await putProfile(hiddenTalk, VISIBLE);
+    await speakerOf(hiddenTalk);
+    await pool.query(`UPDATE schedule SET visibility = 'hidden'`);
+    expect((await card(hiddenTalk)).statusCode).toBe(404);
   });
 });
 

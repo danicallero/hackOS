@@ -183,7 +183,7 @@ authoritative answer.
   instead. Migration `0808` backfills every pre-cutover
   `manual_attendee_roles` row onto the equivalent `user_roles` grant.
   `hasEventAccess` still reads `manual_attendee_roles` too, defensively,
-  since the table isn't dropped; `removal.ts`'s existing cleanup of it is
+  since the table isn't dropped; `identity/scrub.ts`'s existing cleanup of it is
   unaffected.
 - **Anonymization now collapses the departing identity's own roles to
   visible-only** (H8/H53, resolved a gap flagged in an earlier round of this
@@ -244,7 +244,7 @@ The previous round above already stopped `identity/role.ts` READING
 `mentorOrParticipantType`). This round finishes the retirement: the column
 stops being a user-facing, API-settable field at all, and the one remaining
 place that actually branched on its VALUE — not just displayed it —
-`applications/service.ts`'s early-ticket-issuance special case — is re-keyed
+the application's decision and delivery paths (`applications/decisions.ts` and `applications/decision-delivery.ts`) — is re-keyed
 off the form's real role grants.
 
 - **The bug class this closes**: nothing stopped a form from being created
@@ -276,14 +276,14 @@ off the form's real role grants.
   immediately, because a mentor's decision itself is the ticket-issuing
   transition — they attend without the separate spot-confirmation step every
   other applicant goes through (see the code comment at both call sites in
-  `sendOne`/`reAccept`, `applications/service.ts`). This was previously keyed
+  `sendOne` in `applications/decision-delivery.ts` / `reAccept` in `applications/decisions.ts`). This was previously keyed
   off `app.type === "mentor"`; it now calls `formGrantsMentorRole(client,
   applicationId)`, which checks whether the form's `grants_role_ids` include
   a role whose `badge_category = 'mentor'` — the same durable, editable-
   name-proof identifier `roles.badge_category` already provides for every
   other mentor/participant classification in this codebase. Note this does
   **not** move the Mentor role's own grant earlier: role-granting is still
-  uniformly confirm-time only (`doConfirm` in `service.ts`), for every form
+  uniformly confirm-time only (`doConfirm` in `applications/confirmations.ts`), for every form
   regardless of what it grants — a mentor gets an early ticket but is not
   granted the Mentor `user_roles` row until they actually confirm, exactly
   as before this change. Whether that decoupling (ticket now, role later)
@@ -336,7 +336,7 @@ label is simply the NAME of their highest-position visible role. Concretely:
   snapshot `role`, `logistics/stats.ts`'s `accreditationCountsByRole`/
   `scannerRoleStats`, `/api/me` and `/api/users`'s `role` field (renamed
   `visibleRoleName`, dropped from `/api/users` list response in favor of the
-  same field name), `applications/service.ts`'s `granted_badge_category`
+  same field name), `applications/response-details.ts`'s `granted_badge_category`
   (renamed `granted_role_name` everywhere it appears: `admin.routes.ts`,
   `applications/stats.ts`, `logistics/tickets.ts`'s `grantedRoleName`,
   `exports/csv.ts`/`exports/bundle.ts`) — now reads the role's `name` directly.
@@ -345,7 +345,7 @@ label is simply the NAME of their highest-position visible role. Concretely:
   (`identity/role.ts`'s `ATTENDEE_ROLE_NAMES = { mentor: "Mentor", participant:
   "Participant" }`) instead of `badge_category = 'mentor'/'participant'`:
   `assignAttendeeRole`, `hasEventAccess`, `mentorOrParticipantType`,
-  `applications/service.ts`'s `formGrantsMentorRole`, and the announcements
+  the former application-service `formGrantsMentorRole` helper, and the announcements
   audience resolver (`notifications/announcements-service.ts`) all match on
   name now. **Known tradeoff, accepted deliberately**: an admin who renames
   the seeded Mentor or Participant role breaks this matching until the
@@ -499,7 +499,7 @@ globally or scoped to one enterprise) with **no further code changes**.
   new ones, `judge.enterprise_assigned`/`judge.enterprise_removed`, fired from
   `sponsors/service.ts`'s `addEnterpriseJudge`/`removeEnterpriseJudge` — the
   genuine "this person is now a judge for this company" assignment action.
-  `identity/removal.ts`'s anonymization cleanup and `queue/reset.ts`'s event
+  `identity/scrub.ts`'s anonymization cleanup and `queue/reset.ts`'s event
   reset also delete `enterprise_judges` rows, but deliberately do **not**
   fire this trigger: both are destructive housekeeping on an unrelated
   lifecycle (account removal, event reset), not a "judge assigned/removed"
@@ -873,7 +873,7 @@ Participant role" from "does this invite bypass the closed-application-window
 check" — they used to be conflated by a single kind picker, but are
 independent in practice: most participant invites don't pre-assign any role
 at all (the application form's `grants_role_ids` does that at confirm time),
-while the bypass (`applications/service.ts`'s `isInvitedParticipant`, keyed
+while the bypass (`applications/forms.ts`'s `isInvitedParticipant`, keyed
 on `email_verification_tokens.kind = 'participant'`) is about application-
 form *access*, not role membership. Roles can now be pre-assigned on any
 invite kind, composing freely (e.g. a sponsor rep who should also hold a

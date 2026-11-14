@@ -1,7 +1,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { Queryable } from "../../db/pool.js";
 import { createAuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
-import { ForbiddenError } from "../../lib/errors.js";
+import { EditionClosedError, ForbiddenError } from "../../lib/errors.js";
 import { getEventTimezone } from "../event/service.js";
 import { hasEventAccess } from "../identity/role.js";
 import { repositoryAccessForUser, repositoryIdsForScope } from "./access.js";
@@ -40,6 +40,41 @@ export async function projectPhase(db: Queryable) {
   );
 }
 
+/**
+ * Plan §8.2: the gallery rules in event_config (opening, audience, draft
+ * visibility) describe the CURRENT edition. A closed edition that is no longer
+ * current is an archive: its submitted projects are public for everyone.
+ * `eventKey` defaults to the edition this request is scoped to.
+ */
+export async function isArchivedEdition(db: Queryable, eventKey?: string): Promise<boolean> {
+  const { rows } = await db.query<{ archived: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM editions e
+        WHERE e.event_key = COALESCE($1::text, current_edition())
+          AND e.status = 'closed'
+          AND e.event_key <> COALESCE((SELECT event_key FROM event_config WHERE id = 1), 'default')
+     ) AS archived`,
+    [eventKey ?? null],
+  );
+  return rows[0]?.archived === true;
+}
+
+/**
+ * Closed-edition write guard for by-id project mutations: the project's own
+ * edition decides, not the viewed one (the database trigger is the backstop,
+ * but earlier phase checks would otherwise answer with a different error).
+ * Superadmin writes (`hackos.edition_write_override`) pass.
+ */
+export async function assertRepoEditionWritable(db: Queryable, repoId: number): Promise<void> {
+  const { rows } = await db.query<{ event_key: string }>(
+    `SELECT r.event_key FROM repos r JOIN editions e ON e.event_key = r.event_key
+      WHERE r.id = $1 AND e.status = 'closed'
+        AND COALESCE(current_setting('hackos.edition_write_override', true), '') <> 'on'`,
+    [repoId],
+  );
+  if (rows[0]) throw new EditionClosedError(rows[0].event_key);
+}
+
 export async function projectViewer(db: Queryable, userId: number | null) {
   if (userId === null) return { userId, staff: false, attendee: false, fixtureMarker: false };
   const { rows } = await db.query(
@@ -73,10 +108,11 @@ async function galleryAccess(
    * gallery whatever the real event's gallery phase is. Published winners are
    * real data and never take this bypass.
    */
-  { fixtureBypass = false }: { fixtureBypass?: boolean } = {},
+  { fixtureBypass = false, eventKey }: { fixtureBypass?: boolean; eventKey?: string } = {},
 ): Promise<
   { allowed: true } | { allowed: false; reason: "closed" | "audience"; opensAt: string | null }
 > {
+  if (await isArchivedEdition(db, eventKey)) return { allowed: true };
   const phase = await projectPhase(db);
   const viewer = await projectViewer(db, userId);
   if (viewer.staff) return { allowed: true };
@@ -94,8 +130,12 @@ async function galleryAccess(
   return { allowed: true };
 }
 
-export async function canViewGallery(db: Queryable, userId: number | null): Promise<boolean> {
-  return (await galleryAccess(db, userId)).allowed;
+export async function canViewGallery(
+  db: Queryable,
+  userId: number | null,
+  eventKey?: string,
+): Promise<boolean> {
+  return (await galleryAccess(db, userId, { eventKey })).allowed;
 }
 
 /** H18: a refused gallery read says whether it is not open yet (and when) or not for this audience. */
@@ -122,7 +162,7 @@ export async function canViewProject(
 ): Promise<boolean> {
   const viewer = await projectViewer(db, userId);
   const { rows } = await db.query(
-    `SELECT r.submission_status,
+    `SELECT r.submission_status, r.event_key,
     EXISTS(SELECT 1 FROM submissions s WHERE s.repo_id=r.id AND s.user_id=$2
       AND s.status='active') AS member FROM repos r WHERE r.id=$1 AND r.is_test_account=$3`,
     [projectId, viewer.userId, viewer.fixtureMarker],
@@ -142,9 +182,13 @@ export async function canViewProject(
     }
   }
   const phase = await projectPhase(db);
+  // The project's own edition decides, so a shared link works from any viewed edition.
   if (project.submission_status === "submitted") {
-    return (await galleryAccess(db, userId, { fixtureBypass: true })).allowed;
+    return (await galleryAccess(db, userId, { fixtureBypass: true, eventKey: project.event_key }))
+      .allowed;
   }
+  // Drafts of an archived edition are never public (the close moved them to not_submitted).
+  if (await isArchivedEdition(db, project.event_key)) return false;
   return (
     phase.draftsOpen &&
     (phase.draftVisibility === "public" ||

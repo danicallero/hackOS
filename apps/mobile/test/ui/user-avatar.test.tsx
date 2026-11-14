@@ -56,4 +56,10 @@ describe("UserAvatar (#934)", () => {
     expect(avatarInitials("  ")).toBe("?");
     expect(avatarInitials("Ñandú")).toBe("ÑA");
   });
+
+  it("uses the given name and surname when both are known", () => {
+    expect(avatarInitials("Laura", "Domínguez Ruiz")).toBe("LD");
+    expect(avatarInitials("María José", "del Río")).toBe("MD");
+    expect(avatarInitials("Laura", null)).toBe("LA");
+  });
 });

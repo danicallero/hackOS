@@ -1,3 +1,4 @@
+import { EDITION_HEADER } from "@hackos/shared/editions";
 import commonEn from "@hackos/shared/locales/en/common.json";
 import en from "@hackos/shared/locales/en/web.json";
 import commonEs from "@hackos/shared/locales/es/common.json";
@@ -10,9 +11,11 @@ import { API_URL } from "@/lib/env";
 import type { MessageKey, Translate } from "@/lib/i18n";
 import { isLanguage, LANGUAGE_PREFERENCE_KEY } from "@/lib/locale";
 import type { NativeProject } from "@/lib/native-projects";
+import { VIEWED_EDITION_COOKIE } from "@/lib/viewed-edition";
 
 export async function galleryContext() {
   const jar = await cookies();
+  const edition = jar.get(VIEWED_EDITION_COOKIE)?.value || null;
   const preference = jar.get(LANGUAGE_PREFERENCE_KEY)?.value;
   const language = isLanguage(preference) ? preference : "es";
   const copy = { en, es, gl }[language];
@@ -27,7 +30,11 @@ export async function galleryContext() {
     options: {
       cache: "no-store" as const,
       credentials: "include" as const,
-      headers: { cookie: jar.toString() },
+      headers: {
+        cookie: jar.toString(),
+        // The viewed edition (docs/multi-edition-plan.md), mirrored by the client store.
+        ...(edition ? { [EDITION_HEADER]: edition } : {}),
+      },
     },
   };
 }

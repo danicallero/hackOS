@@ -9,6 +9,7 @@ import { formatEventDate, formatHoursMinutes } from "@/lib/datetime";
 import { getEventTimeZone } from "@/lib/event-time";
 import type { Translate } from "@/lib/i18n";
 import type { PublicScheduleItem } from "@/lib/logistics";
+import { normalizeSearchText } from "@/lib/search-text";
 import type { Tone } from "@/lib/tones";
 import type { Language } from "@/lib/types";
 
@@ -441,10 +442,10 @@ export function filterScheduleItems(
     kindFilter: ReadonlySet<ActivityKind>;
   },
 ): PublicScheduleItem[] {
-  const q = query.trim().toLowerCase();
+  const q = normalizeSearchText(query);
   let list = q
     ? items.filter((item) =>
-        `${item.title} ${item.location ?? ""} ${ownerNames(item)}`.toLowerCase().includes(q),
+        normalizeSearchText(`${item.title} ${item.location ?? ""} ${ownerNames(item)}`).includes(q),
       )
     : items;
   if (audienceFilter.size > 0 || staffOnlyFilter) {

@@ -1,5 +1,7 @@
 "use client";
 
+import { shouldShowEditionSelector } from "@hackos/shared/editions";
+import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { MonitorIcon } from "@phosphor-icons/react/dist/csr/Monitor";
 import { MoonIcon } from "@phosphor-icons/react/dist/csr/Moon";
 import { SignOutIcon } from "@phosphor-icons/react/dist/csr/SignOut";
@@ -7,6 +9,7 @@ import { SunIcon } from "@phosphor-icons/react/dist/csr/Sun";
 import { TranslateIcon } from "@phosphor-icons/react/dist/csr/Translate";
 import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { UserAvatar } from "@/components/common/user-avatar";
 import { Button } from "@/components/ui/button";
@@ -24,18 +27,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSidebar } from "@/components/ui/sidebar";
+import { useEditions, useViewedEditionKey } from "@/hooks/use-editions";
 import { signOut } from "@/lib/auth-client";
 import { languageName, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import type { Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { setViewedEdition } from "@/lib/viewed-edition";
 
 /** Avatar dropdown: identity summary + sign out (H4). */
 export function UserMenu({ className }: { className?: string }) {
+  const router = useRouter();
   const { me, refresh } = useSessionContext();
   const { language, setLanguage, t } = useLocale();
   const { setTheme, theme } = useTheme();
   const { state: sidebarState } = useSidebar();
+  const { editions, current: currentKey } = useEditions();
+  const viewedKey = useViewedEditionKey();
   if (!me) return null;
   const displayName = [me.name, me.surname].filter(Boolean).join(" ") || me.email;
 
@@ -118,6 +126,34 @@ export function UserMenu({ className }: { className?: string }) {
             </DropdownMenuRadioGroup>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        {shouldShowEditionSelector(editions) && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <CalendarDotsIcon aria-hidden="true" className="size-4" /> {t("edition")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuRadioGroup
+                value={viewedKey ?? currentKey ?? ""}
+                onValueChange={(value) => {
+                  setViewedEdition(value === currentKey ? null : value);
+                  // Server-rendered pages (the gallery) read the edition cookie.
+                  router.refresh();
+                }}
+              >
+                {editions.map((edition) => (
+                  <DropdownMenuRadioItem key={edition.eventKey} value={edition.eventKey}>
+                    {edition.name}
+                    {edition.isCurrent && (
+                      <span className="text-muted-foreground ml-auto pl-3 text-xs">
+                        {t("editionCurrent")}
+                      </span>
+                    )}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
         {sidebarState === "collapsed" && (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>

@@ -145,7 +145,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List judging rooms",
         description:
-          "Lists the rooms visible to the caller, including their operational status, the queue (group) they serve and the enterprise room pool they belong to when assigned.",
+          "Lists the rooms of the viewed edition visible to the caller, including their operational status, the queue (group) they serve and the enterprise room pool they belong to when assigned.",
       },
     },
     async (req) => {
@@ -161,6 +161,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
              LEFT JOIN room_queue_state rqs ON rqs.room_id = rooms.id
              LEFT JOIN room_enterprises re ON re.room_id = rooms.id
              LEFT JOIN enterprises e ON e.id = re.enterprise_id
+            WHERE rooms.event_key = current_edition()
             ORDER BY rooms.id ASC`,
         );
         return rows;
@@ -176,7 +177,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
            LEFT JOIN room_queue_state rqs ON rqs.room_id = rooms.id
            LEFT JOIN room_enterprises re ON re.room_id = rooms.id
            LEFT JOIN enterprises e ON e.id = re.enterprise_id
-          WHERE rooms.id = ANY($1)
+          WHERE rooms.id = ANY($1) AND rooms.event_key = current_edition()
           ORDER BY rooms.id ASC`,
         [roomIds],
       );
@@ -205,8 +206,11 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      const room = (await pool.query(`SELECT * FROM rooms WHERE id = $1`, [req.params.roomId]))
-        .rows[0];
+      const room = (
+        await pool.query(`SELECT * FROM rooms WHERE id = $1 AND event_key = current_edition()`, [
+          req.params.roomId,
+        ])
+      ).rows[0];
       if (!room) throw new NotFoundError("Room not found");
       const state = (
         await pool.query(`SELECT * FROM room_queue_state WHERE room_id = $1`, [req.params.roomId])
@@ -233,7 +237,10 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       const userId = actor(req.userId);
       return withTransaction(async (client) => {
         const existing = (
-          await client.query(`SELECT * FROM rooms WHERE id = $1 FOR UPDATE`, [req.params.roomId])
+          await client.query(
+            `SELECT * FROM rooms WHERE id = $1 AND event_key = current_edition() FOR UPDATE`,
+            [req.params.roomId],
+          )
         ).rows[0];
         if (!existing) throw new NotFoundError("Room not found");
         await assertFixtureQueueScope(client, userId, "room", req.params.roomId);
@@ -278,8 +285,12 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
             [servingSnapshot.map((row) => row.queue_group_id)],
           );
         }
-        const room = (await client.query(`SELECT * FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]))
-          .rows[0];
+        const room = (
+          await client.query(
+            `SELECT * FROM rooms WHERE id = $1 AND event_key = current_edition() FOR UPDATE`,
+            [roomId],
+          )
+        ).rows[0];
         if (!room) throw new NotFoundError("Room not found", { roomId });
         await assertFixtureQueueScope(client, userId, "room", roomId);
         const { rows } = await client.query(
@@ -302,7 +313,9 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
         ).rows[0];
         const beforeTopology = await captureQueueTopology(client, [serving?.queue_group_id]);
         await client.query(`DELETE FROM room_queue_groups WHERE room_id = $1`, [roomId]);
-        await client.query(`DELETE FROM rooms WHERE id = $1`, [roomId]);
+        await client.query(`DELETE FROM rooms WHERE id = $1 AND event_key = current_edition()`, [
+          roomId,
+        ]);
         await audit(client, {
           actorId: userId,
           entityType: "room",
@@ -374,8 +387,12 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       const userId = actor(req.userId);
 
       const result = await withTransaction(async (client) => {
-        const roomExists = (await client.query(`SELECT id FROM rooms WHERE id = $1`, [roomId]))
-          .rows[0];
+        const roomExists = (
+          await client.query(
+            `SELECT id FROM rooms WHERE id = $1 AND event_key = current_edition()`,
+            [roomId],
+          )
+        ).rows[0];
         if (!roomExists) throw new NotFoundError("Room not found", { roomId });
         const enterprise = (
           await client.query(`SELECT id FROM enterprises WHERE id = $1 FOR UPDATE`, [enterpriseId])
@@ -418,8 +435,12 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
           [enterpriseId],
         );
 
-        const room = (await client.query(`SELECT id FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]))
-          .rows[0];
+        const room = (
+          await client.query(
+            `SELECT id FROM rooms WHERE id = $1 AND event_key = current_edition() FOR UPDATE`,
+            [roomId],
+          )
+        ).rows[0];
         if (!room) throw new NotFoundError("Room not found", { roomId });
         await assertFixtureRoomEnterpriseScope(client, userId, roomId, enterpriseId);
 
@@ -536,8 +557,12 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
             [groupIdsToLock],
           );
         }
-        const room = (await client.query(`SELECT id FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]))
-          .rows[0];
+        const room = (
+          await client.query(
+            `SELECT id FROM rooms WHERE id = $1 AND event_key = current_edition() FOR UPDATE`,
+            [roomId],
+          )
+        ).rows[0];
         if (!room) throw new NotFoundError("Room not found", { roomId });
         await assertFixtureQueueScope(client, userId, "room", roomId);
         const beforePool = (
@@ -602,7 +627,10 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       const userId = actor(req.userId);
       return withTransaction(async (client) => {
         const room = (
-          await client.query(`SELECT id FROM rooms WHERE id = $1 FOR UPDATE`, [req.params.roomId])
+          await client.query(
+            `SELECT id FROM rooms WHERE id = $1 AND event_key = current_edition() FOR UPDATE`,
+            [req.params.roomId],
+          )
         ).rows[0];
         if (!room) throw new NotFoundError("Room not found");
         await assertFixtureQueueScope(client, userId, "room", req.params.roomId);
@@ -716,7 +744,13 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     "/api/queue/settings",
     {
       preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN),
-      config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
+      config: {
+        routeAccessPolicy: {
+          kind: "capability",
+          capability: CAPABILITIES.QUEUE_ADMIN,
+          edition: "current",
+        },
+      },
       schema: {
         summary: "Update queue settings",
         description:

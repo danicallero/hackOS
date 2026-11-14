@@ -9,13 +9,9 @@ import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  type CityValue,
-  formatCityValue,
-  normalizeCityText,
-  searchCities,
-} from "@/lib/city-search";
+import { type CityValue, formatCityValue, searchCities } from "@/lib/city-search";
 import { useLocale } from "@/lib/i18n";
+import { normalizeSearchText } from "@/lib/search-text";
 
 type Props = {
   value: CityValue;
@@ -60,7 +56,13 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
   }, [label]);
 
   const search = query.trim();
-  const dirty = normalizeCityText(query) !== normalizeCityText(label);
+  const dirty =
+    normalizeSearchText(query)
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim() !==
+    normalizeSearchText(label)
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim();
 
   useEffect(() => {
     setOptions([]);
@@ -92,9 +94,21 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
     const typed = parseTyped(search);
     const exact = options.find(
       (city) =>
-        normalizeCityText(city.city) === normalizeCityText(typed.city) &&
+        normalizeSearchText(city.city)
+          .replace(/[^\p{L}\p{N}]+/gu, " ")
+          .trim() ===
+          normalizeSearchText(typed.city)
+            .replace(/[^\p{L}\p{N}]+/gu, " ")
+            .trim() &&
         (!typed.province ||
-          normalizeCityText(formatLocation(city)).includes(normalizeCityText(typed.province))),
+          normalizeSearchText(formatLocation(city))
+            .replace(/[^\p{L}\p{N}]+/gu, " ")
+            .trim()
+            .includes(
+              normalizeSearchText(typed.province)
+                .replace(/[^\p{L}\p{N}]+/gu, " ")
+                .trim(),
+            )),
     );
     if (exact) {
       selectCity(exact);

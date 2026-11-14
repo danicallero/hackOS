@@ -78,7 +78,6 @@ export default function ReviewDetailPage() {
   }, [entryId, t]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch pattern: load wraps setState for review detail queries
     void load();
   }, [load]);
 

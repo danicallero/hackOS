@@ -80,7 +80,7 @@ export async function getAttemptReview(entryId: number) {
        FROM queue_entries qe
        JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
        JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
-      WHERE qe.id = $1`,
+      WHERE qe.id = $1 AND qe.event_key = current_edition()`,
     [entryId],
   );
   if (entryRes.rowCount === 0) throw new NotFoundError("Queue entry not found", { entryId });
@@ -116,7 +116,7 @@ export async function upsertAttemptReview(
          FROM queue_entries qe
          JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
          JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
-        WHERE qe.id = $1
+        WHERE qe.id = $1 AND qe.event_key = current_edition()
         FOR UPDATE OF qe`,
       [entryId],
     );
@@ -292,7 +292,7 @@ export async function listAttemptReviewVersions(entryId: number) {
   const { rows } = await pool.query(
     `SELECT v.*, u.name, u.surname
        FROM attempt_review_versions v
-       JOIN queue_entries qe ON qe.id = v.attempt_id
+       JOIN queue_entries qe ON qe.id = v.attempt_id AND qe.event_key = current_edition()
        JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
        JOIN users u ON u.id = v.author_id
           AND u.account_state = 'active' AND u.anonymized_at IS NULL
@@ -349,7 +349,7 @@ export async function listActiveJudgingSessions(entryId: number) {
   const { rows } = await pool.query(
     `SELECT js.*, u.name, u.surname
        FROM judging_session js
-       JOIN queue_entries qe ON qe.id = js.queue_entry_id
+       JOIN queue_entries qe ON qe.id = js.queue_entry_id AND qe.event_key = current_edition()
        JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
        JOIN users u ON u.id = js.judge_id
           AND u.account_state = 'active' AND u.anonymized_at IS NULL
@@ -389,6 +389,7 @@ export async function searchChallengeQueue(challengeId: number, q: string, fixtu
            JOIN queue_entries bqe ON bqe.repo_id = s2.repo_id
                                   AND bqe.status IN ('called', 'in_room', 'presenting')
                                   AND bqe.id <> qe.id
+                                  AND bqe.event_key = qe.event_key
            JOIN challenges bchallenge
              ON bchallenge.id = bqe.challenge_id AND bchallenge.is_test_account = $4
            JOIN rooms br ON br.id = bqe.assigned_room_id

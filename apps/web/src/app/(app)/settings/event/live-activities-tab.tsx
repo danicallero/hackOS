@@ -183,7 +183,6 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
   }, [t]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetching the settings is an external-system sync on mount.
     void load();
   }, [load]);
 

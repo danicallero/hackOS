@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import type { RsvpKind } from "@/lib/rsvp";
+import { normalizeSearchText } from "@/lib/search-text";
 
 interface DietaryOverviewData {
   people: number;
@@ -51,20 +52,20 @@ export function DietaryOverview() {
   const [query, setQuery] = useState("");
 
   const shown = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase();
+    const needle = normalizeSearchText(query);
     return (data.data?.entries ?? []).filter((entry) => {
       if (intolerance !== null && !entry.intolerances.some((i) => i.id === intolerance))
         return false;
       if (!needle) return true;
-      const haystack = [
-        entry.name,
-        entry.surname,
-        entry.enterprise,
-        entry.notes,
-        ...entry.intolerances.map((i) => label(i.label, language)),
-      ]
-        .join(" ")
-        .toLocaleLowerCase();
+      const haystack = normalizeSearchText(
+        [
+          entry.name,
+          entry.surname,
+          entry.enterprise,
+          entry.notes,
+          ...entry.intolerances.map((i) => label(i.label, language)),
+        ].join(" "),
+      );
       return haystack.includes(needle);
     });
   }, [data.data, intolerance, query, language]);

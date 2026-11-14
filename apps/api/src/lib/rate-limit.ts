@@ -74,7 +74,6 @@ export async function consumeRateLimit(
   } catch (err) {
     storeErrors.inc({ bucket });
     if (!storeErrorLogged) {
-      // eslint-disable-next-line no-console
       console.error("[rate-limit] Valkey error, failing open", err);
       storeErrorLogged = true;
     }

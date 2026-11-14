@@ -5,6 +5,13 @@ export interface RequestContext {
   getActorId?: () => number | null;
   ip?: string;
   userAgent?: string;
+  /**
+   * Viewed edition from `X-Edition` when it is not the current edition
+   * (lib/edition.ts). `db/pool.ts` scopes this request's statements to it.
+   */
+  edition?: string;
+  /** Closed-edition writes allowed for this request (superadmin, close/reopen). */
+  editionWriteOverride?: boolean;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();

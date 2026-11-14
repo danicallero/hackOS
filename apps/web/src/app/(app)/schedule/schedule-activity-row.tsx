@@ -14,6 +14,7 @@ import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useCallback } from "react";
 import { IconButton } from "@/components/common/icon-button";
+import { ScheduleLinks } from "@/components/public/schedule-links";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { useAudienceRoles } from "@/hooks/use-audience-roles";
@@ -416,6 +417,7 @@ export function ActivityRow({
             {item.description && (
               <p className="text-muted-foreground line-clamp-1 text-sm">{item.description}</p>
             )}
+            <ScheduleLinks item={item} className="mt-1" />
           </button>
         );
       case "owners":

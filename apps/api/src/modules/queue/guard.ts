@@ -104,6 +104,7 @@ export async function findBusyMemberEntry(
          FROM candidate_members candidate
          JOIN repo_members active ON active.user_id = candidate.user_id
          JOIN queue_entries qe ON qe.repo_id = active.repo_id
+                              AND qe.event_key = current_edition()
        UNION
        SELECT qe.id, qe.assigned_room_id, qe.status
          FROM queue_entries qe
@@ -183,6 +184,7 @@ export async function findBusyMemberRepoIds(
             SELECT cand.repo_id
           ) blocking
           JOIN queue_entries qe ON qe.repo_id = blocking.blocking_repo_id
+                               AND qe.event_key = current_edition()
           JOIN repos active_repo ON active_repo.id = qe.repo_id
                                  AND ($3::boolean IS NULL OR active_repo.is_test_account = $3::boolean)
           JOIN challenges active_challenge ON active_challenge.id = qe.challenge_id

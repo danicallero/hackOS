@@ -292,6 +292,31 @@ export interface ScheduleOwner {
   assignedAt?: string;
 }
 
+export interface ScheduleSpeaker {
+  userId: number;
+  name: string;
+  avatarUrl: string | null;
+  /** A person may belong to several sponsors. */
+  enterprises?: { id: number; name: string }[];
+  /** Legacy single-company shape, tolerated until every API build sends `enterprises`. */
+  enterpriseId?: number | null;
+  enterpriseName?: string | null;
+}
+
+/** The companies a speaker represents, from either API shape. */
+export function speakerCompanies(speaker: ScheduleSpeaker): { id: number; name: string }[] {
+  if (speaker.enterprises) return speaker.enterprises;
+  return speaker.enterpriseId != null && speaker.enterpriseName
+    ? [{ id: speaker.enterpriseId, name: speaker.enterpriseName }]
+    : [];
+}
+
+export interface ScheduleEnterprise {
+  id: number;
+  name: string;
+  logoUrl: string | null;
+}
+
 export interface PublicScheduleItem {
   id: number;
   title: string;
@@ -313,6 +338,10 @@ export interface PublicScheduleItem {
   notes?: string | null;
   /** Only present on the audience-aware feed, when the caller shares a non-public audience. */
   owners?: ScheduleOwner[];
+  /** Users speaking at the activity, in display order. */
+  speakers?: ScheduleSpeaker[];
+  /** Companies linked to the activity (only visible ones for non-staff). */
+  enterprises?: ScheduleEnterprise[];
   /** Language `title`/`description` are authored in — every viewer resolves their own display text: preferred language, else English, else this. */
   primaryLanguage: Language;
   titleI18n: Partial<Record<Language, string>>;
@@ -349,6 +378,9 @@ export interface ScheduleInput {
   liveActivityAudience?: boolean;
   contactNote?: string | null;
   notes?: string | null;
+  /** Replace-all speakers (order = display order) and linked companies. */
+  speakerUserIds?: number[];
+  enterpriseIds?: number[];
   /** Language `title`/`description` are written in, when it isn't the editor's own (single-language entry). */
   titleLanguage?: Language;
   /** Create the item already asking attendance to these kinds. */

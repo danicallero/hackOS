@@ -1,7 +1,7 @@
 import type { Queryable } from "../../db/pool.js";
 import { ForbiddenError } from "../../lib/errors.js";
 import { currentEventKey } from "../event/context.js";
-import { CUTOFF_HOURS_SQL, hasPendingRsvps, offeredRsvps, submitRsvps } from "../rsvps/service.js";
+import { CUTOFF_HOURS_SQL, offeredRsvps, submitRsvps } from "../rsvps/service.js";
 import { attendanceKind } from "./attendance.js";
 
 /**
@@ -87,11 +87,6 @@ export async function getMealPlan(db: Queryable, userId: number): Promise<MealPl
     mealEntries(db, userId, kind),
   ]);
   return { ...header, meals };
-}
-
-/** True when the person still has an open (unlocked) offered meal with no answer. */
-export function hasPendingMealPlan(db: Queryable, userId: number): Promise<boolean> {
-  return hasPendingRsvps(db, userId, { mealsOnly: true });
 }
 
 /**

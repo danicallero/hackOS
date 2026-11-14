@@ -1,14 +1,14 @@
 import { File } from "expo-file-system";
-import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import { ImageManipulator } from "expo-image-manipulator";
 import { apiFetch } from "./api";
+import { savePhotoWithin } from "./compress-photo";
 import { createIdempotencyKey } from "./idempotency-key";
 
 /**
  * The account photo (#934), as POST/DELETE /api/me/photo: PNG, JPEG or WebP up
- * to 2 MB. The device always sends a square JPEG well under that cap.
+ * to 5 MB. The device always sends a square JPEG well under that cap.
  */
 export const PHOTO_EDGE = 1024;
-export const PHOTO_QUALITY = 0.8;
 export const PHOTO_FIELD_NAME = "file";
 
 export interface PickedPhoto {
@@ -27,9 +27,7 @@ export async function preparePhoto(picked: PickedPhoto): Promise<string> {
     height: side,
   });
   if (side > PHOTO_EDGE) context = context.resize({ width: PHOTO_EDGE });
-  const image = await context.renderAsync();
-  const saved = await image.saveAsync({ compress: PHOTO_QUALITY, format: SaveFormat.JPEG });
-  return saved.uri;
+  return savePhotoWithin(await context.renderAsync());
 }
 
 /** The API replaces the stored photo and answers its new `?v=` route. */

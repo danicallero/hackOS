@@ -28,6 +28,7 @@ export function registerResendVerificationRoutes(app: FastifyInstance): void {
         routeAccessPolicy: {
           kind: "token",
           policy: "email-verification-resend",
+          edition: "global",
         } satisfies RouteAccessPolicy,
       },
       schema: {

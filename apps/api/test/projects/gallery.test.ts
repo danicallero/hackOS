@@ -52,6 +52,49 @@ function get(path: string, user?: number) {
   return app.inject({ method: "GET", url: path, headers: user ? asUser(user) : {} });
 }
 describe("Gallery phase/consent/snapshot policy (#1008,#1009)", () => {
+  it("searches gallery project names without case or accent sensitivity (H18)", async () => {
+    await pool.query(`UPDATE repos SET name='José' WHERE id=$1`, [id]);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/api/me/projects/${id}/submit`,
+          headers: asUser(owner),
+        })
+      ).statusCode,
+    ).toBe(200);
+    const lowerId = (
+      await app.inject({
+        method: "POST",
+        url: "/api/me/projects",
+        headers: asUser(attendee),
+        payload: { name: "josé" },
+      })
+    ).json().id as number;
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/api/me/projects/${lowerId}/submit`,
+          headers: asUser(attendee),
+        })
+      ).statusCode,
+    ).toBe(200);
+    await pool.query(
+      `UPDATE event_config SET project_gallery_opens_at=now()-interval '1 second',project_gallery_audience='public'`,
+    );
+    await invalidateSharedCache("gallery");
+
+    for (const [search, matchingId] of [
+      ["jose", id],
+      ["JOSE", lowerId],
+    ] as const) {
+      const result = await get(`/api/public/projects?search=${search}`, outsider);
+      expect(result.statusCode).toBe(200);
+      expect(result.json().items.map((item: { id: number }) => item.id)).toContain(matchingId);
+    }
+  });
+
   it.each([
     "team_only",
     "attendees",

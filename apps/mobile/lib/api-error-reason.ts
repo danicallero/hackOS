@@ -1,3 +1,4 @@
+import { EDITION_CLOSED_CODE } from "@hackos/shared/editions";
 import { errorDetailsReason, errorReasonCopyKey } from "@hackos/shared/error-reasons";
 import { SCAN_REPLAY_EXPIRED, SCANNER_REPLAY_MAX_AGE_DAYS } from "@hackos/shared/idempotency";
 import commonEn from "@hackos/shared/locales/en/common.json";
@@ -22,6 +23,7 @@ export function apiErrorReason(err: unknown): string | null {
 export function apiErrorCopy(err: unknown, t: Translate): string | null {
   if (!(err instanceof ApiError)) return null;
   const reason = apiErrorReason(err);
+  if (reason === EDITION_CLOSED_CODE) return t("editionClosedError");
   if (reason) {
     const key = errorReasonCopyKey(reason);
     if (key in commonEn) return t(key as MessageKey);

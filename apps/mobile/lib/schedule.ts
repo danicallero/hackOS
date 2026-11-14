@@ -2,6 +2,7 @@ import { activityKind, toActivityKind } from "@hackos/shared/activity-kinds";
 import type { Language } from "@hackos/shared/locale";
 import type { SymbolViewProps } from "@/components/symbol";
 import { apiFetch } from "./api";
+import type { CompanyRef, ScheduleSpeaker } from "./company";
 import type { useLocale } from "./i18n";
 import { durationMinutes } from "./presence-timeline";
 
@@ -33,6 +34,10 @@ export interface ScheduleItem {
   primaryLanguage: Language;
   titleI18n: Partial<Record<Language, string>>;
   descriptionI18n: Partial<Record<Language, string | null>>;
+  /** Speakers (users), ordered; absent on a cached or older payload. */
+  speakers?: ScheduleSpeaker[];
+  /** Companies linked to the item, with or without a speaker. */
+  enterprises?: CompanyRef[];
 }
 
 /** Complete management record, present on `GET /api/schedule`. */

@@ -47,7 +47,7 @@ describe("logistics, event and notifications route policy ledger", () => {
     expect(declared).toContainEqual({
       method: "POST",
       url: "/api/me/notifications/:id/unread",
-      policy: { kind: "authenticated", emailVerification: "none" },
+      policy: { kind: "authenticated", emailVerification: "none", edition: "global" },
     });
     expect(declared).toContainEqual({
       method: "GET",
@@ -164,12 +164,12 @@ describe("logistics, event and notifications route policy ledger", () => {
     expect(declared).toContainEqual({
       method: "POST",
       url: "/api/public/universities/propose",
-      policy: { kind: "authenticated" },
+      policy: { kind: "authenticated", edition: "global" },
     });
     expect(declared).toContainEqual({
       method: "POST",
       url: "/api/universities/:id/normalize",
-      policy: { kind: "capability", capability: "intolerances:manage" },
+      policy: { kind: "capability", capability: "intolerances:manage", edition: "global" },
     });
     expect(declared).toContainEqual({
       method: "GET",
@@ -179,7 +179,7 @@ describe("logistics, event and notifications route policy ledger", () => {
     expect(declared).toContainEqual({
       method: "GET",
       url: "/api/wallet/apple/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier",
-      policy: { kind: "token", policy: "apple-passkit-web-service" },
+      policy: { kind: "token", policy: "apple-passkit-web-service", edition: "global" },
     });
     expect(declared).toContainEqual({
       method: "GET",

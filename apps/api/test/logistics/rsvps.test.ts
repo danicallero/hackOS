@@ -458,27 +458,51 @@ describe("event editions", () => {
     const meal = await activity({ kinds: ["sponsor"] });
     await putAnswers(sponsor, [{ activityId: meal, answer: "yes" }]);
 
+    await pool.query(
+      `INSERT INTO editions (event_key, name, status) VALUES ('next-edition', 'Next', 'active')
+       ON CONFLICT DO NOTHING`,
+    );
     await pool.query(`UPDATE event_config SET event_key = 'next-edition' WHERE id = 1`);
-    // No settings for the new key yet: nothing is offered, nothing is counted.
+    // Activities and their settings belong to their edition (multi-edition):
+    // the new edition starts with nothing offered, and the old answer stays as history.
+    expect(await getItems(sponsor)).toEqual([]);
+    expect(await stored(sponsor)).toEqual([
+      { activity_id: meal, event_key: "default", attending: true },
+    ]);
+
+    // An activity created in the new edition is offered only once the person has
+    // access in that edition: last edition's event access is no evidence for it.
+    const nextMeal = await activity({ kinds: ["sponsor"] });
+    const { rows: scoped } = await pool.query(
+      `SELECT event_key FROM activity_rsvp_settings WHERE activity_id = $1`,
+      [nextMeal],
+    );
+    expect(scoped).toEqual([{ event_key: "next-edition" }]);
     expect(await getItems(sponsor)).toEqual([]);
 
-    // Even with settings, last edition's event access is no evidence for the new one.
-    await pool.query(
-      `INSERT INTO activity_rsvp_settings (activity_id, event_key, enabled, kinds)
-       VALUES ($1, 'next-edition', true, ARRAY['sponsor'])`,
-      [meal],
+    // Access in the new edition makes the item offered, unanswered, and an
+    // answer is stored under the new event key next to the old one.
+    const { rows: enterprise } = await pool.query(
+      `INSERT INTO enterprises (name) VALUES ('Next edition sponsor') RETURNING id`,
     );
-    expect(await getItems(sponsor)).toEqual([]);
+    await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+      enterprise[0].id,
+      sponsor,
+    ]);
     await pool.query(
-      `INSERT INTO user_role_event_evidence (user_id, role_id, event_key)
+      `INSERT INTO user_roles (user_id, role_id, event_key)
        SELECT user_id, role_id, 'next-edition' FROM user_roles WHERE user_id = $1`,
       [sponsor],
     );
-    expect((await getItems(sponsor))[0]).toMatchObject({ answer: null });
-    expect((await putAnswers(sponsor, [{ activityId: meal, answer: "no" }])).statusCode).toBe(200);
+    expect(await getItems(sponsor)).toEqual([
+      expect.objectContaining({ activityId: nextMeal, answer: null }),
+    ]);
+    expect((await putAnswers(sponsor, [{ activityId: nextMeal, answer: "no" }])).statusCode).toBe(
+      200,
+    );
     expect(await stored(sponsor)).toEqual([
       { activity_id: meal, event_key: "default", attending: true },
-      { activity_id: meal, event_key: "next-edition", attending: false },
+      { activity_id: nextMeal, event_key: "next-edition", attending: false },
     ]);
   });
 });
@@ -559,6 +583,15 @@ describe("organizer settings", () => {
     const meal = await activity({ kinds: ["sponsor"] });
     const pool = await db();
     const { rows } = await pool.query(`SELECT schedule_id FROM activities WHERE id = $1`, [meal]);
+    await pool.query(
+      `INSERT INTO editions (event_key, name, status) VALUES ('next-edition', 'Next', 'active')
+       ON CONFLICT DO NOTHING`,
+    );
+    await pool.query(
+      `INSERT INTO user_roles (user_id, role_id, event_key)
+       SELECT user_id, role_id, 'next-edition' FROM user_roles WHERE user_id = $1`,
+      [organizer],
+    );
     await pool.query(`UPDATE event_config SET event_key = 'next-edition' WHERE id = 1`);
     const res = await app.inject({
       method: "GET",

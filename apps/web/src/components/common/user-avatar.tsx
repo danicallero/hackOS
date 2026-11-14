@@ -19,6 +19,7 @@ export function UserAvatar({
   name,
   image,
   className,
+  style,
   fallbackClassName,
   decorative = false,
   showInitials = false,
@@ -27,6 +28,7 @@ export function UserAvatar({
   name: string;
   image: string | null | undefined;
   className?: string;
+  style?: React.CSSProperties;
   fallbackClassName?: string;
   /** Next to a visible name the photo adds nothing for screen readers. */
   decorative?: boolean;
@@ -35,11 +37,11 @@ export function UserAvatar({
   presenceLabel?: string;
 }) {
   const avatar = (
-    <Avatar className={className} aria-hidden={decorative || undefined}>
+    <Avatar className={className} style={style} aria-hidden={decorative || undefined}>
       {image ? <AvatarImage src={apiAssetUrl(image)} alt={decorative ? "" : name} /> : null}
       <AvatarFallback
         className={cn(
-          showInitials ? "bg-primary/10 font-medium text-primary" : "bg-muted",
+          showInitials ? "bg-[#007aff] font-medium text-white dark:bg-[#0a84ff]" : "bg-muted",
           fallbackClassName,
         )}
       >

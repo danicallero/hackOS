@@ -47,7 +47,7 @@ export function registerTelemetryModule(app: FastifyInstance): void {
   typed.post(
     "/api/telemetry/refetch-storm",
     {
-      ...routeAccess({ kind: "public", anonymousCategory: "telemetry" }),
+      ...routeAccess({ kind: "public", anonymousCategory: "telemetry", edition: "global" }),
       schema: {
         summary: "Record a bounded browser refetch-storm observation",
         description:

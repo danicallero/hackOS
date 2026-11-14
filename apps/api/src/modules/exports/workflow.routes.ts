@@ -67,6 +67,8 @@ export function registerWorkflowRoutes(app: FastifyInstance): void {
         kind: "contextual",
         policy: "export-request-create",
         resource: { source: "body", field: "subjectUserId" },
+        // H54 requests cover every edition of the person's data.
+        edition: "global",
       }),
       schema: { body: createRequestBody, response: { 201: requestResponseSchema } },
     },

@@ -4,7 +4,12 @@ import { ZipArchive } from "archiver";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { requireAnyCapability, requireAuth, requireCapability } from "../../lib/capabilities.js";
+import {
+  getRequestAuthorizationContext,
+  requireAnyCapability,
+  requireAuth,
+  requireCapability,
+} from "../../lib/capabilities.js";
 import { sendCsv, toCsv } from "../../lib/csv.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { contentDisposition } from "../../lib/http-headers.js";
@@ -12,6 +17,7 @@ import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption as access } from "../../lib/route-policy.js";
 import { sharedCache } from "../../lib/shared-cache.js";
 import { putObject } from "../../lib/storage.js";
+import { callerScheduleAudiences } from "../logistics/schedule.js";
 import {
   enterpriseAccessFor,
   requireEnterpriseAccess,
@@ -25,6 +31,7 @@ import {
   CONTENT_TYPE_EXT,
   createEnterpriseBody,
   enterpriseIdParam,
+  enterpriseProfileResponse,
   judgeParams,
   memberParams,
   OWNER_EDITABLE_KEYS,
@@ -42,6 +49,7 @@ import {
   addEnterpriseMember,
   createEnterprise,
   getEnterprise,
+  getEnterpriseProfile,
   getSponsorFaq,
   listEnterpriseJudges,
   listEnterpriseMembers,
@@ -97,7 +105,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
         querystring: publicSponsorsQuery,
         summary: "List public sponsors",
         description:
-          "Returns every visible enterprise for the public event site, ordered by priority (1 first); enterprises sharing a priority keep their manual order, then creation order. `kind=sponsor` or `kind=collaborator` filters to one group (H45).",
+          "Returns every visible enterprise for the public event site, ordered by priority (1 first); enterprises sharing a priority keep their manual order, then creation order. `kind=sponsor` or `kind=collaborator` filters to one group. Scoped to the viewed edition (X-Edition) (H45).",
       },
     },
     async (req) => ({
@@ -112,13 +120,21 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     {
       ...access({
         kind: "capability",
-        anyOf: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN],
+        anyOf: [
+          CAPABILITIES.SPONSORS_MANAGE,
+          CAPABILITIES.QUEUE_ADMIN,
+          CAPABILITIES.SCHEDULE_MANAGE,
+        ],
       }),
-      preHandler: requireAnyCapability(CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN),
+      preHandler: requireAnyCapability(
+        CAPABILITIES.SPONSORS_MANAGE,
+        CAPABILITIES.QUEUE_ADMIN,
+        CAPABILITIES.SCHEDULE_MANAGE,
+      ),
       schema: {
         summary: "List enterprises",
         description:
-          "Lists all sponsor enterprises, for global sponsor administrators and the Rooms admin page's enterprise picker (H43, H46).",
+          "Lists the viewed edition's sponsor enterprises (enterprises belong to one edition; a name may repeat across editions), for global sponsor administrators, the Rooms admin page's enterprise picker (H43, H46) and the schedule editor's company picker (H48).",
       },
     },
     async (req) => ({
@@ -134,7 +150,8 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
       schema: {
         body: createEnterpriseBody,
         summary: "Create an enterprise",
-        description: "Creates a sponsor enterprise under global sponsor administration (H43).",
+        description:
+          "Creates a sponsor enterprise in the viewed edition under global sponsor administration. The name is unique per edition: a duplicate answers 409 (H43).",
       },
     },
     async (req, reply) => {
@@ -183,10 +200,33 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
       preHandler: requireAuth,
       schema: {
         summary: "Get my enterprise",
-        description: "Returns the caller's sponsor enterprise affiliation (H44).",
+        description:
+          "Returns the caller's sponsor enterprise affiliation in the viewed edition (H44).",
       },
     },
     async (req) => myEnterprise(actor(req.userId)),
+  );
+
+  r.get(
+    "/api/enterprises/:id/profile",
+    {
+      ...access({ kind: "authenticated" }),
+      preHandler: requireAuth,
+      schema: {
+        params: enterpriseIdParam,
+        summary: "Read a company's profile",
+        description:
+          "H44/H45 company page for signed-in users: name, logos, website and description (`description` is the fallback text, `descriptionTranslations` the per-language versions to prefer); `representatives` (the company's sponsor members, with `avatarUrl` only while they share their photo on their public profile); `challenges` (only revealed ones, with a `summary` cut from the description); and `activities`, the caller's own schedule feed (same audience and visibility rules as GET /api/public/activities, H59) narrowed to the items linked to the company plus those a member of the company speaks at, each once, by start time. A hidden or not-yet-revealed company answers 404 unless the caller holds sponsors:manage, who sees everything it has (hidden challenges also need challenges:manage, draft schedule items schedule:read or schedule:manage; any other capability reveals nothing extra).",
+        response: { 200: enterpriseProfileResponse },
+      },
+    },
+    async (req) =>
+      getEnterpriseProfile(
+        req.params.id,
+        actor(req.userId),
+        await callerScheduleAudiences(getRequestAuthorizationContext(req)),
+        getRequestAuthorizationContext(req),
+      ),
   );
 
   r.get(
@@ -216,7 +256,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
         body: updateEnterpriseBody,
         summary: "Update a scoped enterprise",
         description:
-          "Sponsor representatives may update their profile fields; global administrators may update all enterprise fields (H44).",
+          "Sponsor representatives may update their profile fields; global administrators may update all enterprise fields (H44). `descriptionI18n` ({en, es, gl}) sets the per-language description and overwrites `description` with its first non-empty translation (en, es, gl); all-empty clears both.",
       },
     },
     async (req) => {

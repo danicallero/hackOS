@@ -67,7 +67,6 @@ export function RoomFormPanel({
   const roomLocation = room?.location ?? "";
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setValues(
       mode === "edit" && roomId
         ? { name: roomName, location: roomLocation, enterpriseId: "" }

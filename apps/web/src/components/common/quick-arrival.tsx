@@ -3,13 +3,10 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { type MessageKey, useLocale } from "@/lib/i18n";
+import { normalizeSearchText } from "@/lib/search-text";
 
 const TARGET_SELECTOR = "h1,h2,h3,h4,legend,label,button,summary,[role=tab],p,span";
 const GIVE_UP_MS = 4000;
-
-function normalize(text: string | null | undefined): string {
-  return (text ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-}
 
 function isVisible(element: HTMLElement): boolean {
   if (getComputedStyle(element).visibility === "hidden") return false;
@@ -22,11 +19,15 @@ function isVisible(element: HTMLElement): boolean {
 
 /** The deepest visible element whose own text is exactly `text`. */
 export function findQuickTarget(root: ParentNode, text: string): HTMLElement | null {
-  const wanted = normalize(text);
+  const wanted = normalizeSearchText(text);
   if (!wanted) return null;
   for (const element of root.querySelectorAll<HTMLElement>(TARGET_SELECTOR)) {
-    if (normalize(element.textContent) !== wanted) continue;
-    if (Array.from(element.children).some((child) => normalize(child.textContent) === wanted)) {
+    if (normalizeSearchText(element.textContent ?? "") !== wanted) continue;
+    if (
+      Array.from(element.children).some(
+        (child) => normalizeSearchText(child.textContent ?? "") === wanted,
+      )
+    ) {
       continue;
     }
     if (isVisible(element)) return element;

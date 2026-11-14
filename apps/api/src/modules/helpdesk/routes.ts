@@ -69,8 +69,11 @@ import {
 
 const BROWSE = HELPDESK_BROWSE;
 
-const cap = (capability: (typeof CAPABILITIES)[keyof typeof CAPABILITIES]) => ({
-  routeAccessPolicy: { kind: "capability" as const, capability },
+const cap = (
+  capability: (typeof CAPABILITIES)[keyof typeof CAPABILITIES],
+  edition?: "current" | "global",
+) => ({
+  routeAccessPolicy: { kind: "capability" as const, capability, edition },
 });
 const browse = { routeAccessPolicy: { kind: "capability" as const, anyOf: BROWSE } };
 const authenticated = { routeAccessPolicy: { kind: "authenticated" as const } };
@@ -79,6 +82,14 @@ const helper = { routeAccessPolicy: { kind: "contextual" as const, policy: "help
 /** Browsers plus eligible helpers who do not hold the capability yet (accepted mentors). */
 const catalogue = {
   routeAccessPolicy: { kind: "contextual" as const, policy: "helpdesk-catalogue" },
+};
+/** The topic catalogue is global: proposing a topic is allowed in any edition. */
+const catalogueGlobal = {
+  routeAccessPolicy: {
+    kind: "contextual" as const,
+    policy: "helpdesk-catalogue",
+    edition: "global" as const,
+  },
 };
 /** Requesting side, eligible helpers or coverage readers; resolved per request. */
 const requestParty = {
@@ -151,7 +162,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
   r.post(
     "/api/helpdesk/topics",
     {
-      config: catalogue,
+      config: catalogueGlobal,
       preHandler: [requireTopicProposer, topicProposalLimit, idempotencyGuard],
       schema: {
         body: topicBody,
@@ -182,7 +193,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
   r.delete(
     "/api/helpdesk/topics/:id",
     {
-      config: cap(CAPABILITIES.HELPDESK_MANAGE),
+      config: cap(CAPABILITIES.HELPDESK_MANAGE, "global"),
       preHandler: [requireCapability(CAPABILITIES.HELPDESK_MANAGE), idempotencyGuard],
       schema: {
         params: idParams,
@@ -199,7 +210,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
   r.patch(
     "/api/helpdesk/topics/:id",
     {
-      config: cap(CAPABILITIES.HELPDESK_MANAGE),
+      config: cap(CAPABILITIES.HELPDESK_MANAGE, "global"),
       preHandler: [requireCapability(CAPABILITIES.HELPDESK_MANAGE), idempotencyGuard],
       schema: {
         params: idParams,
@@ -214,7 +225,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
   r.post(
     "/api/helpdesk/topics/:id/merge",
     {
-      config: cap(CAPABILITIES.HELPDESK_MANAGE),
+      config: cap(CAPABILITIES.HELPDESK_MANAGE, "global"),
       preHandler: [requireCapability(CAPABILITIES.HELPDESK_MANAGE), idempotencyGuard],
       schema: {
         params: idParams,
@@ -361,7 +372,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
   r.put(
     "/api/helpdesk/schedule",
     {
-      config: cap(CAPABILITIES.HELPDESK_MANAGE),
+      config: cap(CAPABILITIES.HELPDESK_MANAGE, "current"),
       preHandler: [requireCapability(CAPABILITIES.HELPDESK_MANAGE), idempotencyGuard],
       schema: {
         body: scheduleBody,

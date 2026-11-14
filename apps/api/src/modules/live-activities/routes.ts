@@ -65,7 +65,7 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
   api.put(
     "/api/me/live-activities/device",
     {
-      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      ...routeAccess({ kind: "authenticated", emailVerification: "none", edition: "global" }),
       preHandler: requireAuth,
       schema: {
         summary: "Register a device for Live Activities",
@@ -164,7 +164,7 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
   api.put(
     "/api/me/live-activities/sessions",
     {
-      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      ...routeAccess({ kind: "authenticated", emailVerification: "none", edition: "global" }),
       preHandler: requireAuth,
       schema: {
         summary: "Register a running Live Activity",
@@ -211,7 +211,7 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
   api.delete(
     "/api/me/live-activities/sessions",
     {
-      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      ...routeAccess({ kind: "authenticated", emailVerification: "none", edition: "global" }),
       preHandler: requireAuth,
       schema: {
         summary: "Dismiss a Live Activity",
@@ -253,7 +253,7 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
   api.post(
     "/api/me/live-activities/dismissals/reopen",
     {
-      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      ...routeAccess({ kind: "authenticated", emailVerification: "none", edition: "global" }),
       preHandler: requireAuth,
       schema: {
         summary: "Bring back dismissed Live Activities",
@@ -290,7 +290,7 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
   api.get(
     "/api/me/live-activities",
     {
-      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      ...routeAccess({ kind: "authenticated", emailVerification: "none", edition: "global" }),
       preHandler: requireAuth,
       schema: {
         summary: "My Live Activities",
@@ -341,7 +341,7 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
   api.get(
     "/api/me/live-activities/preferences",
     {
-      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      ...routeAccess({ kind: "authenticated", emailVerification: "none", edition: "global" }),
       preHandler: requireAuth,
       schema: {
         summary: "My Live Activity kinds",
@@ -364,7 +364,7 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
   api.put(
     "/api/me/live-activities/preferences",
     {
-      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      ...routeAccess({ kind: "authenticated", emailVerification: "none", edition: "global" }),
       preHandler: requireAuth,
       schema: {
         summary: "Change my Live Activity kinds or their order",
@@ -390,7 +390,11 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
   // Organizer configuration (#966; H8, H53): the event-settings capability
   // that owns event identity and timing also owns these event-wide surfaces.
   const settingsAccess = {
-    ...routeAccess({ kind: "capability", capability: CAPABILITIES.EVENT_MANAGE }),
+    ...routeAccess({
+      kind: "capability",
+      capability: CAPABILITIES.EVENT_MANAGE,
+      edition: "current",
+    }),
   };
 
   api.get(

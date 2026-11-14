@@ -56,11 +56,112 @@ screen cannot grant judging access.
 | `sponsors` | Event name and sponsor logo wall, without a redundant “Sponsors” wordmark |
 | `wifi` | Full-screen network name + password |
 | `github` | Top committers and pull-request authors, per person and per project team, from `GET /api/tv/github` (polled every 15 s); see [GitHub activity](./github-activity.md) |
+| `connections` | Networking graph of attendees and companies from `GET /api/tv/connections` (#934, #935); see [Connections graph view](#connections-graph-view) |
 
-Only the six modes above are valid in a Valkey selection. Migration 0404
+Only the seven modes above are valid in a Valkey selection. Migration 0404
 removes the retired timetable and its stored entries. A stale or malformed
 Valkey payload is discarded on read; it is never translated into a current
 mode. The countdown remains available as a block of the `live` composition.
+
+### Connections graph view
+
+`connections-view.tsx` (+ `connections-graph.tsx`, `connections-layout.ts`)
+renders the typed `TvConnectionsResponse` from `@hackos/shared/tv-connections`
+(#934, #935). Only people who share their networking profile are in the data, so
+every person node carries a name; the view still treats a missing label
+defensively. There is no stats row, legend or caption: the header and the graph
+are all there is. Display rules:
+
+- Plain SVG drawn by `connections-graph.tsx` (no chart library), styled after
+  org-roam-ui: flat dark canvas (always dark, whatever the theme), thin translucent
+  straight links (lower opacity on hubs), every person the same single flat colour (no glow), radius from
+  `personRadius(degree)` (power law `2.9*d^0.568` through a tanh soft cap at 34 px at 1000 px
+  height: leaf ~5.8 px diameter, 4 → 12.6, 10 → 20.8, 50 → 44.6, 120 → 58.4; fixed scale, never
+  normalised to the snapshot; no controls). Communities steer only the camera and dimming, never colour.
+- Companies are drawn *as* their logo (SVG `<image>`, no frame), always bigger
+  than any person, with no name label (their logo is the node). The negative logo is used on dark
+  canvases, the plain one on light; each URL is probed off-DOM, a failed variant
+  falls back to the other, and a company with no loadable logo is a neutral
+  disc with a ring and its initial, the same footprint as a logo. We never clip or
+  frame a logo: a rounded tile in the demo is part of the seeded SVG itself. The logos are the already-public sponsor URLs (`logoUrl`,
+  `logoNegativeUrl` on company nodes); the web app sets no CSP and `<image>` needs
+  no CORS since nothing reads pixels.
+- Sections: `detectSections` runs a deterministic label propagation over the
+  people over **person-person links only**: company links are ignored, because at a
+  sponsor-scan event every person links to most sponsors and they would merge all groups
+  into one (visit order comes from a hash of the id, never `Math.random`). A company's
+  home section, used for the camera, is only a tally of where its people sit. Communities of 3+ people become
+  sections, biggest first, at most 12. Graphs under 6 people, or with no 3-person
+  community, only show the overview.
+- Layout (`layoutGraph`, community-aware): `detectSections` communities (hub votes
+  diluted by degree so hubs do not merge groups) get anchors on an ellipse around the
+  centre, biggest first (`communityAnchors`); people gravitate to their anchor. Logos are
+  never the centre of gravity: each sits on a ring outside the community ring
+  (`COMPANY_RING`), at the angle of its dominant group (>= 60 % of its people) or, when its
+  people are spread over many groups, in an even slot between groups (`placeCompanyAngles`
+  keeps a minimum angular gap). Logos are seeded on their ring slot, pulled strongly to it,
+  repel lightly, and company links are very weak springs (stiffness 0.004 vs 0.6 inside a
+  group), so spokes never collapse people onto a logo; a final pass still guarantees every
+  logo clears every other node. Links inside a group are short and stiff, across groups
+  long and weak. Known nodes keep their previous positions and only relax. The view fits
+  the bounds with a ~6% margin (never less than a logo radius); logos draw on top of
+  people. Link opacity (`linkAlpha`) comes from the most connected person at either end:
+  hub bundles are faint, the overview is quiet, the focused section is at full strength.
+  Company links take a third argument, the company's degree: in the overview their alpha is
+  `min(0.03, 3 / companyDegree)` (~0.014 at 220 scans, so ~2000 spokes stay a faint haze), in
+  focus 0.4 (only where both ends are lit, i.e. the logos of the focused section), otherwise
+  0.006. Edges are `<line>`s that carry `stroke-opacity`, not CSS `opacity` (a group opacity
+  per line forces an offscreen layer each: ~1300 translucent lines took the overview from
+  ~20 ms to ~145 ms per frame in software GL), and the animation loop only rewrites edges whose
+  opacity or width actually change. At 500 people (332 visible, 885 person-person and 1314
+  person-company edges) the layout settles in ~0.1 s.
+- Camera loop (`buildSequence`): overview (6 s, calm, no names) →
+  section 1 … section 3 → overview → section 4 … The camera is one SVG transform
+  tweened per frame (1.6 s ease-in-out, zoom interpolated in log space) by one
+  rAF loop that writes the transform, the company counter-scale and every dim/focus
+  opacity and stroke width directly onto stable DOM nodes (React renders nothing per
+  frame, elements keep their keys; dimming eases instead of popping; labels fade out
+  300 ms before the move starts);
+  a data update is a transition on the same loop (`DATA_MS` 1 s, or the camera move's
+  length): content-equal snapshots are ignored (`snapshotSignature`), new nodes grow in
+  from their neighbours' centroid, removed nodes and edges stay mounted as ghosts while
+  they fade (`diffSnapshots`), survivors glide to their new positions, and updates that
+  land mid-transition are coalesced (`createCoalescer`) into one. The tour cursor
+  survives: a vanished section's slot resolves to whatever is there and the camera eases
+  there from where it is. Reduced motion applies updates at once;
+  `cameraFor` frames the section's own people (trimming the outer ~6 % of big
+  groups); a company joins the frame only if it already sits within 20 % of that
+  box, a far logo never drives the framing. In a section, people and logos that are
+  members and fully inside the frame are lit; everything else is drawn small (constant
+  screen size, logos at 40 %) at ~7 % opacity, and a node or logo the frame edge would
+  clip fades to nothing. A link is full strength (`linkAlpha` "focus") only when both
+  ends are lit; any other link is "dim" (2.5 %), so no long line crosses the screen.
+  All of it eases on the same rAF loop (opacity, scale, width).
+  A new node starts on the centroid of its on-screen neighbours, else on its own laid-out
+  spot (`spawnPoint`), and nothing is seeded before the box is measured (a zero-size world
+  is all origin: that made logos appear in the top-left corner on load). An update that
+  replaces nearly every id (the hourly id rotation) is a crossfade in place: new nodes
+  fade in at their final spot at full size, old ones fade out where they are. Names are placed only once the camera settles, by
+  `selectLabels` (only the section's top 9 people by degree, `TOP_LABELS`; ones that do not fit are dropped, never overlapped, in small plain text with no
+  stroke, halo or box; the overview names nobody; every node is an obstacle;
+  collision-free, inside the frame), and fade in. Nothing else is drawn on the canvas: no caption.
+- Motion: the loop pauses while the page is hidden; with
+  `prefers-reduced-motion` it still steps through sections but jumps without
+  animation. Nothing reacts to hover, focus or clicks, and there is no roam.
+- Layout is computed by our own deterministic force pass (`layoutGraph`); repulsion
+  and a collision radius scale with each node's drawn radius, so logos repel clearly
+  more than people and keep their distance from each other and from dots:
+  positions are seeded from the node id, kept by id across polls, new nodes start
+  next to their neighbours, and the simulation runs a bounded number of steps
+  then stops. Node ids rotate server-side, so a rotation re-seeds the layout once.
+  A poll retargets the camera from where it currently is, so it never resets
+  mid-transition.
+- Refresh: polled every 15–30 s with random spacing, plus the public TV stream's
+  `data.changed` (forwarded by `TvDisplay` as an `invalidation` counter, jittered
+  3 s, never more often than every 5 s). A failed poll keeps the last snapshot and
+  shows the reconnecting note; with no snapshot yet it shows an error state.
+- `truncated` shows a short note; an empty snapshot shows a friendly "no
+  connections yet" state.
 
 ### Winners
 
@@ -83,7 +184,9 @@ the deterministic winner.
   underlying manual selection continues unchanged.
 - `embedded` reserves layout space: below the reduced sponsor grid on `live`,
   as an announcement card in the room grid, and as a compact non-covering band
-  on schedule, sponsors, and Wi-Fi views.
+  on schedule, sponsors, and Wi-Fi views. On the `connections` graph, which
+  fills the whole screen, it is a popup card over the bottom-right corner of
+  the graph (same `EmbeddedAnnouncement` component, opaque plate).
 
 Deleting an announcement broadcasts a public-content invalidation so an
 indefinite message disappears from already-open screens immediately.
@@ -226,10 +329,59 @@ fewer than two (`bestSponsorColumns`).
 
 ## Multiplexed realtime transport (#892)
 
-Authenticated web/native readers share `/api/realtime/stream` with independently
-authorized logical scopes, per-topic cursors and scoped authoritative recovery.
-TV retains one public payload-free stream for all rendered domains. Legacy
-endpoints remain available for installed clients. Physical connection budgets
-and gauges count the shared response once; logical attachments and access-check
-load remain separate. See [realtime transport](./realtime-transport.md) for the
-scope/authorization table, lifecycle, revocation, metrics and 600-client results.
+TV keeps one public payload-free stream for every rendered domain. Details are
+in [realtime transport](./realtime-transport.md).
+
+<!-- BEGIN connections-graph-api (T3: API part only; the display is documented elsewhere in this file) -->
+## Connections graph API (#934, #935)
+
+Mode `connections` (`TV_CONNECTIONS_MODE`, shared contract
+`packages/shared/src/tv-connections.ts`) is accepted by `PATCH /api/tv/mode`
+and returned by `GET /api/tv/mode` like any other mode. Its data comes from
+the public, unauthenticated `GET /api/tv/connections` (`public:public-tv`),
+implemented in `apps/api/src/modules/queue/tv-connections.ts` and tested in
+`apps/api/test/queue/tv-connections.test.ts`.
+
+- **One aggregate SQL**, not `visibleDirectoryEntries`, scoped by
+  `current_edition()`. Eligibility is computed once (inlined `user_event_access`
+  logic in a MATERIALIZED CTE), diary entries of the edition are scanned once,
+  and pairs are deduped with LEAST/GREATEST. The query runs after
+  `SET LOCAL enable_nestloop = off` (same implicit transaction) because the
+  planner underestimates the CTEs and otherwise nested-loops the diary
+  (~800 ms vs ~4 ms at 500 attendees). `sharedCache` already single-flights
+  expiry (in-process promise plus Valkey lock). Cached in the shared cache for **15 s** for the current edition (an `X-Edition` header is ignored on this route, so a past edition's graph is never served);
+  that TTL is the stale-data bound for sharing changes, account removal and edition
+  switches (nothing else caches it). SSE stays payload-free and nothing is
+  broadcast per scan: screens refetch on their own poll or on the existing TV
+  invalidations.
+- **Who is a node.** People with event access (active, not removal-pending or
+  anonymized), not a test account, with `directory_visible` true (networking
+  profile shared; no profile row or sharing off means absent, with no anonymous
+  dot); companies of the active edition that are `visible` and
+  not synthetic. Only nodes with at least one edge are returned.
+- **Edges.** A person pair is one undirected edge while *either* side keeps
+  the diary entry (one-way, reciprocal and one-sided deletion converge on one
+  edge). A person–company edge exists only for a visible person. Both person
+  endpoints must be visible, so turning sharing off removes every incident edge,
+  and `degree` and `totals` count visible people only.
+- **Labels.** A person's `label` is always their display name (surname only if
+  `show_surname`, else initial); it is never null. Company label is its name.
+  No photos. Company nodes (only) also carry `logoUrl` and `logoNegativeUrl`
+  (`string | null`): the already-public sponsor logo fields, in the same form
+  as `/api/public/sponsors` and the sponsors TV mode
+  (`COALESCE(logo_negative_url, logo_url)` for the negative). Person nodes have
+  neither key.
+- **Node ids** are `base64url(HMAC-SHA256(key, kind:id))[0..22]`, where `key`
+  is derived from `BETTER_AUTH_SECRET` and the current UTC hour. Ids are stable
+  within the hour (layout continuity) and uncorrelatable across hours; raw user
+  or enterprise ids never appear. A snapshot cached across an hour boundary
+  keeps its ids for at most one TTL.
+- **Bound.** At most 2000 nodes and 30 000 edges (`TV_GRAPH_MAX_NODES`,
+  `TV_GRAPH_MAX_EDGES`; a 600-person graph with 40 scans each, 24 000 edges, is
+  under the cap, ~1.3 MB JSON before compression). Over the cap the lowest-degree
+  nodes, then the edges between the lowest-degree endpoints, are dropped
+  deterministically (degree, kind, internal id), nodes left without an edge are
+  omitted, and `truncated` is `true`. `totals` and each node's `degree` always
+  describe the full eligible graph.
+- **Never in the body:** user ids, emails, notes, stars, timestamps.
+<!-- END connections-graph-api -->

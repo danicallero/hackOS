@@ -30,6 +30,25 @@ export interface DirectoryEntry {
   cvUrl: string | null;
   projects: { kind: "project" | "workGroup"; id: number; name: string }[];
   challenges: { id: number; name: string }[];
+  /** H48: shown talks the person speaks at, by start time. */
+  activities?: {
+    id: number;
+    title: string;
+    startsAt: string;
+    endsAt: string;
+    location: string | null;
+  }[];
+  /** Companies the person represents (a person may belong to several). */
+  enterprises?: { id: number; name: string; logoUrl: string | null }[];
+  /** Legacy single-company shape, tolerated until every API build sends `enterprises`. */
+  enterprise?: { id: number; name: string; logoUrl: string | null } | null;
+  /** Representative colour of the photo, for the profile tint. */
+  photoColor?: string | null;
+}
+
+/** The companies a person represents, from either API shape. */
+export function personCompanies(entry: Pick<DirectoryEntry, "enterprises" | "enterprise">) {
+  return entry.enterprises ?? (entry.enterprise ? [entry.enterprise] : []);
 }
 
 export const SOCIAL_LABEL: Record<SocialKind, MessageKey> = {

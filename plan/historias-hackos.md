@@ -8,8 +8,8 @@ check-in app, and the judging queue system) that shared no data.
 
 - Architecture: API (Fastify + BullMQ), web (Next.js), mobile (React Native + Expo).
 - Auth: Better Auth (API); Expo plugin + `expo-secure-store` (mobile).
-- Files: S3/MinIO. Email: Resend/SMTP/Postal via BullMQ.
-- Queues/realtime: Valkey (BullMQ + SSE). TV: native SSE.
+- Files: S3/MinIO. Email: SMTP relay (Amazon SES in production) via a durable outbox dispatched by BullMQ.
+- Queues/realtime: Valkey (BullMQ + SSE fan-out), disposable; it never holds state the database lacks. TV: native SSE.
 - Apple/Google Wallet: native endpoints, update on state change.
 - **Source of truth: the hackOS database.** External imports only feed it.
 
@@ -285,8 +285,9 @@ teams should be called to the door while one presents.
 I want to call the next team from the queue so they start heading over while the
 current presentation finishes. The team gets a mobile notification ("go wait at
 room X"). There's a waiting quota per room and the system fills it automatically
-while the room is active; I can call beyond the quota if needed. Room state
-lives in Valkey for instant updates.
+while the room is active; I can call beyond the quota if needed. Room and
+queue state live in the database; every change is pushed to open screens
+instantly.
 
 **H30. Never two rooms at once**
 As the organization we want a hard guarantee that a team is never called if any
@@ -468,8 +469,10 @@ calling system doesn't work.
 As the organization we want all system emails (verification, recovery,
 decisions) to go out with our branding, in each person's language, and for a
 temporary provider failure not to lose any send: they stay in queue and retry
-automatically. The provider is chosen per database between Resend, SMTP or
-Postal, but sending always goes through BullMQ.
+automatically. Mail leaves through one SMTP relay fixed at deploy time by
+environment configuration, not editable at runtime; account emails and
+notification emails can use separate sender addresses. Sending always goes
+through the durable outbox and BullMQ.
 
 ---
 

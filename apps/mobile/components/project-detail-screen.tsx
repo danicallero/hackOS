@@ -1,7 +1,7 @@
 import { MAX_IMAGES_PER_FIELD, type TemplateField } from "@hackos/shared/forms";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
-import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import { ImageManipulator } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { HeaderHeightContext } from "expo-router/react-navigation";
@@ -15,6 +15,7 @@ import {
   useState,
 } from "react";
 import { ScrollView, Text, TextInput, View } from "react-native";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScrollViewMarker } from "react-native-screens/experimental";
 import { AppRefreshControl } from "@/components/app-refresh-control";
@@ -34,11 +35,16 @@ import { ProjectGithubLink, ProjectRepoRow } from "@/components/project-github";
 import { FieldRow, GlassButton, NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
+import { useColorScheme } from "@/components/useColorScheme";
 import { alert } from "@/lib/alert";
 import { ApiError, apiFetch } from "@/lib/api";
+import { compressPhotoFile, PHOTO_MAX_BYTES, savePhotoWithin } from "@/lib/compress-photo";
 import { formatEventTime } from "@/lib/event-time";
+import { heroTint, NO_PHOTO_TINT } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
+import { useImageTint } from "@/lib/image-tint";
+import { useEditionList } from "@/lib/me-context";
 import { safeBack } from "@/lib/navigation";
 import {
   type NativeProject,
@@ -190,6 +196,44 @@ function ScrollEdgeMarker({
   );
 }
 
+/**
+ * Hero wash of a project page (H18, H48): tinted from the colour of its first
+ * image, blue without images or a usable colour; an image whose colour is still
+ * loading keeps the plain background.
+ */
+function useProjectHero(files: ProjectFile[] | undefined) {
+  const dark = useColorScheme() === "dark";
+  const first = files?.find((file) => file.mimeType.startsWith("image/"));
+  const tint = useImageTint(first ? (first.thumbnailUrl ?? first.url) : null);
+  const hero = tint.settled ? heroTint(tint.color, dark, NO_PHOTO_TINT) : null;
+  return { hero, fromCache: tint.fromCache };
+}
+
+function ProjectHero({
+  hero,
+  fromCache,
+}: {
+  hero: ReturnType<typeof heroTint> | null;
+  fromCache: boolean;
+}) {
+  if (!hero) return null;
+  return (
+    <Animated.View
+      entering={fromCache ? undefined : FadeIn.duration(400)}
+      testID="project-hero"
+      pointerEvents="none"
+      style={{
+        experimental_backgroundImage: hero.gradient,
+        height: 620,
+        left: 0,
+        position: "absolute",
+        right: 0,
+        top: -300,
+      }}
+    />
+  );
+}
+
 /** H18/H60: display only server-approved photos and published winner fields. */
 export function ProjectReadView({
   project,
@@ -202,11 +246,13 @@ export function ProjectReadView({
   titleHeader?: boolean;
 }) {
   const { t } = useLocale();
+  const showEdition = useEditionList().length > 1;
   const readable = useParticipantLayout("list");
   const router = useRouter();
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<Error | null>(null);
+  const { hero, fromCache } = useProjectHero(project.files);
   return (
     <ScrollEdgeMarker hideEdges={titleHeader}>
       <ScrollView
@@ -236,6 +282,7 @@ export function ProjectReadView({
         }}
         style={{ backgroundColor: colors.background }}
       >
+        <ProjectHero hero={hero} fromCache={fromCache} />
         {refreshError ? (
           <RequestFeedback
             error={refreshError}
@@ -251,9 +298,17 @@ export function ProjectReadView({
           />
         ) : null}
         {titleHeader ? (
-          <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
+          <Text
+            accessibilityRole="header"
+            style={{ color: hero?.foreground ?? colors.label, ...SCREEN_TITLE }}
+          >
             {project.name}
           </Text>
+        ) : null}
+        {showEdition && project.edition ? (
+          <Section>
+            <InfoRow icon="calendar" label={t("projectEdition")} value={project.edition.name} />
+          </Section>
         ) : null}
         {project.winners?.length ? (
           <Section>
@@ -381,8 +436,8 @@ function AddRow({
 
 const PHOTO_EDGE = 2048;
 
-/** H16: system photo picker; every photo leaves the device as a bounded JPEG. */
-async function pickPhotos(limit: number) {
+/** H16: system photo picker; every photo leaves the device as a JPEG within the cap. */
+async function pickPhotos(limit: number, maxBytes: number) {
   const picked = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ["images"],
     allowsMultipleSelection: limit > 1,
@@ -398,21 +453,26 @@ async function pickPhotos(limit: number) {
       context = context.resize(
         asset.width >= asset.height ? { width: PHOTO_EDGE } : { height: PHOTO_EDGE },
       );
-    const image = await context.renderAsync();
-    const saved = await image.saveAsync({ compress: 0.8, format: SaveFormat.JPEG });
+    const uri = await savePhotoWithin(await context.renderAsync(), maxBytes);
     const base = (asset.fileName ?? `photo-${index + 1}`).replace(/\.[^.]+$/, "");
-    parts.push({ uri: saved.uri, name: `${base}.jpg` });
+    parts.push({ uri, name: `${base}.jpg` });
   }
   return parts;
 }
 
-async function pickDocument(field: TemplateField) {
+async function pickDocument(field: TemplateField, maxBytes: number) {
   const picked = await DocumentPicker.getDocumentAsync({
     type: field.allowed_file_types?.length ? field.allowed_file_types : "*/*",
     copyToCacheDirectory: true,
   });
-  if (picked.canceled || !picked.assets[0]) return [];
-  return [{ uri: picked.assets[0].uri, name: picked.assets[0].name }];
+  const asset = picked.canceled ? null : picked.assets[0];
+  if (!asset) return [];
+  // A photo picked as a file is shrunk like any other photo instead of refused.
+  if (asset.mimeType?.startsWith("image/") && (asset.size ?? 0) > maxBytes) {
+    const base = asset.name.replace(/\.[^.]+$/, "");
+    return [{ uri: await compressPhotoFile(asset.uri, maxBytes), name: `${base}.jpg` }];
+  }
+  return [{ uri: asset.uri, name: asset.name }];
 }
 
 export function ProjectEditor({
@@ -434,6 +494,7 @@ export function ProjectEditor({
   const [name, setName] = useState(project.name);
   const savedName = useRef(project.name);
   const [files, setFiles] = useState(project.files ?? []);
+  const { hero, fromCache } = useProjectHero(files);
   const saveName = useCallback(
     async (next: string) => {
       const trimmed = next.trim();
@@ -508,13 +569,16 @@ export function ProjectEditor({
     setError(null);
     try {
       const current = draft.responses[field.key];
+      const limit = Math.min((field.max_file_size_mb ?? 5) * 1024 * 1024, PHOTO_MAX_BYTES);
       const parts =
         field.kind === "images"
-          ? await pickPhotos(MAX_IMAGES_PER_FIELD - (Array.isArray(current) ? current.length : 0))
-          : await pickDocument(field);
+          ? await pickPhotos(
+              MAX_IMAGES_PER_FIELD - (Array.isArray(current) ? current.length : 0),
+              limit,
+            )
+          : await pickDocument(field, limit);
       if (!parts.length) return;
       setUploading(field.key);
-      const limit = (field.max_file_size_mb ?? 5) * 1024 * 1024;
       await trackProjectTask(
         project.id,
         (async () => {
@@ -585,6 +649,7 @@ export function ProjectEditor({
           paddingBottom: showSubmit ? 96 + insets.bottom : Math.max(32, insets.bottom + 16),
         }}
       >
+        <ProjectHero hero={hero} fromCache={fromCache} />
         <Section
           footer={deadline ? `${saveCaption} · ${t("projectDeadline")}: ${deadline}` : saveCaption}
         >

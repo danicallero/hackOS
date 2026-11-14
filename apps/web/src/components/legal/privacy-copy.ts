@@ -5,7 +5,7 @@ export const privacyCopy: Record<Language, LegalDocumentCopy> = {
   es: {
     title: "Política de privacidad",
     description: "Política de privacidad conjunta de HackUDC y su plataforma hackOS.",
-    updatedAt: "18 de octubre de 2026",
+    updatedAt: "15 de noviembre de 2026",
     body: `## 1. GPUL: responsable y ámbito
 
 Esta política cubre conjuntamente el tratamiento de datos de la inscripción y participación en HackUDC y el uso de su plataforma oficial hackOS, ambos gestionados por GPUL. Es una única política para el evento y la instancia de hackOS operada por GPUL.
@@ -41,6 +41,18 @@ La información que deba conservarse por una obligación legal o para atender re
 ### 3.3. Enlaces externos
 
 Algunos formularios o registros de proyectos pueden pedirte que proporciones enlaces a sitios web externos, como repositorios, demostraciones o portafolios. Esos sitios son independientes de hackOS y GPUL, tienen sus propias políticas de privacidad y no están operados, vinculados ni afiliados con GPUL. Cuando visites esos sitios o les envíes datos, se aplicarán sus propias políticas y condiciones.
+
+### 3.4. Pantalla pública de conexiones (TV)
+
+**Finalidad.** Durante el evento, las pantallas públicas de HackUDC pueden mostrar un grafo de las conexiones entre asistentes y con empresas, para animar el networking. Es distinto de tu perfil de networking, que solo ven quienes escanean tu acreditación, pero se activa con la misma decisión.
+
+**Qué se muestra.** Mientras compartes tu perfil de networking, apareces con tu nombre (con la inicial del apellido, o el apellido completo si lo has elegido) y con tus conexiones, tanto con personas como con empresas, siempre que tengas al menos una. Quien no comparte su perfil no aparece, ni como punto anónimo ni como conexión de otra persona. Nunca se muestran fotografías, notas, favoritos, horas de los escaneos ni identificadores de usuario. Escanear el stand de una empresa o patrocinador aparece como conexión con esa empresa. Existe una conexión entre dos personas mientras cualquiera de las dos conserve el contacto en su agenda.
+
+**Cómo dejar de aparecer.** Desactiva «Compartir mi perfil» en Mi perfil o en la app: desaparecen tu nombre y todas tus conexiones de la pantalla.
+
+**Conservación.** Solo se muestra información de la edición activa, con los datos de conexión que ya existen en las agendas del evento. Los cambios (dejar de compartir, perder el acceso al evento, cerrar la cuenta o quitar un contacto del que la otra persona tampoco conserva el suyo) se reflejan en la pantalla en la siguiente actualización.
+
+**Límites.** La pantalla y sus datos son públicos: cualquiera puede fotografiarlos, grabarlos o copiarlos, y una copia no se puede retirar. Si quitas un contacto, la otra persona lo conserva y la conexión sigue mostrándose mientras lo conserve.
 
 ## 4. Información común: finalidades, destinatarios y derechos
 
@@ -101,7 +113,7 @@ Para cualquier consulta sobre privacidad, escribe a [hackudc@gpul.org](mailto:ha
   gl: {
     title: "Política de privacidade",
     description: "Política de privacidade conxunta de HackUDC e a súa plataforma hackOS.",
-    updatedAt: "18 de outubro de 2026",
+    updatedAt: "15 de novembro de 2026",
     body: `## 1. GPUL: responsable e ámbito
 
 Esta política cobre conxuntamente o tratamento de datos da inscrición e participación en HackUDC e o uso da súa plataforma oficial hackOS, ambos xestionados por GPUL. É unha única política para o evento e a instancia de hackOS operada por GPUL.
@@ -137,6 +149,18 @@ A información que deba conservarse por unha obriga legal ou para atender respon
 ### 3.3. Ligazóns externas
 
 Algúns formularios ou rexistros de proxectos poden pedirche que proporciones ligazóns a sitios web externos, como repositorios, demostracións ou portafolios. Eses sitios son independentes de hackOS e GPUL, teñen as súas propias políticas de privacidade e non están operados, vinculados nin afiliados con GPUL. Cando visites eses sitios ou lles envíes datos, aplicaranse as súas propias políticas e condicións.
+
+### 3.4. Pantalla pública de conexións (TV)
+
+**Finalidade.** Durante o evento, as pantallas públicas de HackUDC poden amosar un grafo das conexións entre asistentes e con empresas, para animar o networking. É distinto do teu perfil de networking, que só ven quen escanea a túa acreditación, pero actívase coa mesma decisión.
+
+**Que se amosa.** Mentres compartes o teu perfil de networking, apareces co teu nome (coa inicial do apelido, ou o apelido completo se o escolliches) e coas túas conexións, tanto con persoas como con empresas, sempre que teñas alomenos unha. Quen non comparte o seu perfil non aparece, nin como punto anónimo nin como conexión doutra persoa. Nunca se amosan fotografías, notas, favoritos, horas dos escaneos nin identificadores de usuario. Escanear o stand dunha empresa ou patrocinador aparece como conexión con esa empresa. Existe unha conexión entre dúas persoas mentres calquera delas conserve o contacto na súa axenda.
+
+**Como deixar de aparecer.** Desactiva «Compartir o meu perfil» en O meu perfil ou na app: desaparecen o teu nome e todas as túas conexións da pantalla.
+
+**Conservación.** Só se amosa información da edición activa, cos datos de conexión que xa existen nas axendas do evento. Os cambios (deixar de compartir, perder o acceso ao evento, pechar a conta ou quitar un contacto do que a outra persoa tampouco conserva o seu) reflíctense na pantalla na seguinte actualización.
+
+**Límites.** A pantalla e os seus datos son públicos: calquera pode fotografalos, gravalos ou copialos, e unha copia non se pode retirar. Se quitas un contacto, a outra persoa consérvao e a conexión segue amosándose mentres o conserve.
 
 ## 4. Información común: finalidades, destinatarios e dereitos
 
@@ -197,7 +221,7 @@ Para calquera consulta sobre privacidade, escribe a [hackudc@gpul.org](mailto:ha
   en: {
     title: "Privacy policy",
     description: "Joint privacy policy for HackUDC and its hackOS platform.",
-    updatedAt: "October 18, 2026",
+    updatedAt: "November 15, 2026",
     body: `## 1. GPUL: controller and scope
 
 This policy jointly covers data processing for registration and participation in HackUDC and use of its official hackOS platform, both managed by GPUL. It is one policy for the event and the hackOS instance operated by GPUL.
@@ -233,6 +257,18 @@ Information that must be retained to meet a legal obligation or address liabilit
 ### 3.3. External links
 
 Some forms or project records may ask you to provide links to external websites, such as repositories, demos or portfolios. Those sites are independent of hackOS and GPUL, have their own privacy policies, and are not operated by, connected to or affiliated with GPUL. Their own policies and terms apply when you visit them or send them data.
+
+### 3.4. Public connections display (TV)
+
+**Purpose.** During the event, HackUDC's public screens may show a graph of the connections between attendees and with companies, to encourage networking. It is separate from your networking profile, which only people who scan your badge can see, but it follows the same choice.
+
+**What is shown.** While you share your networking profile, you appear with your name (with the surname initial, or the full surname if you chose that) and with your connections, to both people and companies, as long as you have at least one. People who do not share their profile do not appear, neither as an anonymous dot nor as another person's connection. Photos, notes, favourites, scan times and user identifiers are never shown. Scanning a company or sponsor stand appears as a connection to that company. A connection between two people exists while either of them keeps the contact in their diary.
+
+**How to stop appearing.** Turn off "Share my profile" in My profile or in the app: your name and all your connections disappear from the screen.
+
+**Retention.** Only information from the active edition is shown, built from the connection data that already exists in event diaries. Changes (stopping sharing, losing event access, closing your account, or removing a contact the other person has also removed) reach the screen at its next refresh.
+
+**Limits.** The screen and its data are public: anyone can photograph, record or copy them, and a copy cannot be withdrawn. If you remove a contact, the other person keeps it and the connection stays on screen while they do.
 
 ## 4. Common information: purposes, recipients and rights
 

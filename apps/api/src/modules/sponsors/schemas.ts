@@ -1,4 +1,6 @@
+import { i18nTextSchema } from "@hackos/shared/questions";
 import { z } from "zod";
+import { publicActivitySchema } from "../logistics/schemas.js";
 
 /** Schemas for enterprise (sponsor) management (H43-H45). */
 
@@ -18,6 +20,7 @@ export const createEnterpriseBody = z
     logoUrl: z.string().url().nullish(),
     logoNegativeUrl: z.string().url().nullish(),
     description: z.string().nullish(),
+    descriptionI18n: i18nTextSchema.nullish(), // per-language description; description mirrors it
     priority: z.number().int().positive().nullish(),
     kind: enterpriseKindEnum.default("sponsor"),
     visibility: visibilityEnum.default("hidden"),
@@ -27,7 +30,7 @@ export const createEnterpriseBody = z
 
 /**
  * Superset patch. Admins may set every field; owners are limited to their
- * profile (website/logoUrl/description) — enforced in the route by rejecting
+ * profile (website/logos/description and its translations) — enforced in the route by rejecting
  * the admin-only keys below.
  */
 export const updateEnterpriseBody = z
@@ -37,6 +40,7 @@ export const updateEnterpriseBody = z
     logoUrl: z.string().url().nullish(),
     logoNegativeUrl: z.string().url().nullish(),
     description: z.string().nullish(),
+    descriptionI18n: i18nTextSchema.nullish(), // per-language description; description mirrors it
     priority: z.number().int().positive().nullish(),
     kind: enterpriseKindEnum.optional(),
     visibility: visibilityEnum.optional(),
@@ -50,6 +54,7 @@ export const OWNER_EDITABLE_KEYS = [
   "logoUrl",
   "logoNegativeUrl",
   "description",
+  "descriptionI18n",
 ] as const;
 
 /** Admin bulk visibility flip from the enterprises list (H45). */
@@ -179,3 +184,28 @@ export const standTagParams = z.object({
 
 /** #935: staff turn an enterprise's stand scanning on or off. */
 export const standScannableBody = z.object({ scannable: z.boolean() }).strict();
+
+/** H44: a company's page for signed-in attendees (mobile company screen). */
+export const enterpriseProfileResponse = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  logoUrl: z.string().nullable(),
+  logoNegativeUrl: z.string().nullable(),
+  website: z.string().nullable(),
+  description: z.string().nullable(),
+  /** H44: per-language description (es/gl/en, non-empty only); empty when only `description` is set. */
+  descriptionTranslations: z.record(z.string(), z.string()),
+  representatives: z.array(
+    z.object({
+      userId: z.number().int(),
+      name: z.string(),
+      firstName: z.string(),
+      surname: z.string().nullable(),
+      avatarUrl: z.string().nullable(),
+    }),
+  ),
+  challenges: z.array(
+    z.object({ id: z.number().int(), title: z.string(), summary: z.string().nullable() }),
+  ),
+  activities: z.array(publicActivitySchema),
+});

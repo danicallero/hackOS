@@ -1,3 +1,4 @@
+import { type Href, Link } from "expo-router";
 import { Text, useWindowDimensions, View } from "react-native";
 import { MenuView } from "@/components/app-menu";
 import { FavouriteStar } from "@/components/favourite-star";
@@ -29,7 +30,7 @@ export function DiaryPersonRow({
   starred,
   busy,
   available = true,
-  onOpen,
+  href,
   onToggleStar,
   onEditNote,
   onRemove,
@@ -43,7 +44,8 @@ export function DiaryPersonRow({
   starred: boolean;
   busy: boolean;
   available?: boolean;
-  onOpen?: () => void;
+  /** The profile; on iOS the avatar zooms into it. */
+  href?: Href;
   onToggleStar?: () => void;
   onEditNote?: () => void;
   onRemove?: () => void;
@@ -55,7 +57,15 @@ export function DiaryPersonRow({
   const trailingWidth = onToggleStar ? TRAILING_WIDTH : MENU_ONLY_WIDTH;
   const body = (
     <>
-      <PersonAvatar size={48} name={available ? name : null} uri={photoUrl} />
+      {href ? (
+        <Link.AppleZoom>
+          <View>
+            <PersonAvatar size={48} name={available ? name : null} uri={photoUrl} />
+          </View>
+        </Link.AppleZoom>
+      ) : (
+        <PersonAvatar size={48} name={available ? name : null} uri={photoUrl} />
+      )}
       <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
         <Text
           numberOfLines={accessibilityText ? undefined : 1}
@@ -103,16 +113,17 @@ export function DiaryPersonRow({
 
   return (
     <View testID={testID} style={{ position: "relative" }}>
-      {onOpen ? (
-        <PressableFeedback
-          feedback="row"
-          accessibilityRole="button"
-          accessibilityLabel={[name, ...lines].join(", ")}
-          onPress={onOpen}
-          style={rowStyle}
-        >
-          {body}
-        </PressableFeedback>
+      {href ? (
+        <Link href={href} asChild>
+          <PressableFeedback
+            feedback="row"
+            accessibilityRole="button"
+            accessibilityLabel={[name, ...lines].join(", ")}
+            style={rowStyle}
+          >
+            {body}
+          </PressableFeedback>
+        </Link>
       ) : (
         <View accessible accessibilityLabel={name} style={rowStyle}>
           {body}

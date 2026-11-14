@@ -1,4 +1,4 @@
-# Backlog trazable a historias (H1..H60)
+# Backlog trazable a historias (H1..H67)
 
 Base única: `historias-hackos.md`.
 
@@ -7,17 +7,18 @@ Base única: `historias-hackos.md`.
 | Dominio | Historias | Prioridad | Notas |
 |---|---|---|---|
 | Identidad y permisos | H1-H10 | P0 | Fundacional para todo lo transaccional. H6 retirada. |
-| Inscripción | H11-H15 | P1 | Flujo completo de decisión y confirmación. |
+| Inscripción | H11-H15, H57 | P1 | Flujo completo de decisión y confirmación. H57: vistas de decisiones en solo lectura. |
 | Proyectos (envío propio de hackOS) | H16-H21 | P1 | Núcleo MVP para alimentar judging; sin importación externa. |
 | Ganadores | H60 | P2 | Publicación programada antes de la ceremonia de clausura. |
 | Acreditación/logística | H22-H28 | P1 | Operativa de evento + presencia + wallet. |
 | Colas y judging | H29-H40 | P0 | Bloque crítico e innegociable. |
 | TV | H41-H42 | P1 | Depende de estado de colas en tiempo real. |
-| Sponsors | H43-H46 | P2 | Depende de identidad + judging. |
-| Horario/contenido público | H47-H49 | P2 | Puede avanzar en paralelo a sponsors. |
+| Sponsors | H43-H46, H56, H58 | P2 | Depende de identidad + judging. H56: ficheros compartibles con consentimiento; H58: FAQ del portal. |
+| Horario/contenido público | H47-H49, H59 | P2 | Puede avanzar en paralelo a sponsors. H59: responsables y audiencias por actividad. |
 | Avisos/notificaciones | H50-H52 | P2 | Soporta operaciones y comunicación. |
 | Administración/auditoría | H53-H54 | P1 | Transversal desde el primer sprint. |
 | Móvil único | H55 | P2 | Sobre capacidades ya estables. |
+| Help desk | H61-H67 | P2 | Depende de perfil público, presencia (H24) y capacidades (H8). |
 
 ## Dependencias críticas entre historias
 

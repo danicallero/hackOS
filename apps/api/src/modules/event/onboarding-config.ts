@@ -62,7 +62,11 @@ const onboardingConfigSchema = z
 
 export function registerOnboardingConfigRoutes(app: FastifyInstance): void {
   const api = app.withTypeProvider<ZodTypeProvider>();
-  const access = routeAccess({ kind: "capability", capability: CAPABILITIES.EVENT_MANAGE });
+  const access = routeAccess({
+    kind: "capability",
+    capability: CAPABILITIES.EVENT_MANAGE,
+    edition: "current",
+  });
   api.get(
     "/api/event/onboarding",
     {

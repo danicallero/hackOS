@@ -157,6 +157,7 @@ export async function loadLiveActivityContext(
                  JOIN live_activity_kind_roles kr ON kr.role_id = r.id
                  JOIN live_activity_kind_settings ks ON ks.kind = kr.kind AND ks.enabled
                 WHERE ur.user_id = u.id
+                  AND (ur.event_key IS NULL OR ur.event_key = current_edition())
                   -- The user's own per-kind opt-out (preferences.ts).
                   AND NOT EXISTS (SELECT 1 FROM live_activity_kind_opt_outs o
                                    WHERE o.user_id = u.id AND o.kind = kr.kind)) AS kinds,

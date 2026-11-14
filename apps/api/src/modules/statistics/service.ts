@@ -70,6 +70,7 @@ async function statisticsPanelDecisionsByScope(
     `SELECT a.scope_key, a.panel_key, a.state, r.position
        FROM statistics_scope_panel_role_access a
        JOIN user_roles ur ON ur.role_id = a.role_id AND ur.user_id = $2
+        AND (ur.event_key IS NULL OR ur.event_key = current_edition())
        JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
       WHERE a.scope_key = ANY($1::text[]) AND a.state <> 'inherit'
       ORDER BY a.scope_key, a.panel_key, r.position DESC`,
@@ -114,7 +115,9 @@ export async function accessibleStatisticsScopes(
   const generalAccess = await userHasCapability(context, CAPABILITIES.LOGISTICS_STATS);
 
   const [applications, roles] = await Promise.all([
-    pool.query<ApplicationRow>(`SELECT * FROM applications ORDER BY id`),
+    pool.query<ApplicationRow>(
+      `SELECT * FROM applications WHERE event_key = current_edition() ORDER BY id`,
+    ),
     pool.query<{ id: number; name: string }>(
       `SELECT id, name FROM roles
       WHERE deleted_at IS NULL
@@ -416,6 +419,7 @@ async function aggregateUserDistribution(
          JOIN roles role ON role.id = ur.role_id AND role.deleted_at IS NULL
         WHERE cardinality($${roleIdsParameter}::int[]) > 0
           AND ur.role_id = ANY($${roleIdsParameter}::int[])
+          AND (ur.event_key IS NULL OR ur.event_key = current_edition())
           AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
      )`;
   const queryValues = [...applicationIds, roleIds];

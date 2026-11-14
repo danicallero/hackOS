@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
+import { normalizeSearchText } from "@/lib/search-text";
 import { toast } from "@/lib/toast";
 import type { RoleGrantRule } from "@/lib/types";
 import { ruleTriggerLabel } from "./helpers";
@@ -62,19 +63,17 @@ export function GrantRulesOverviewModal({
 
   useEffect(() => {
     if (open) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       load();
     }
   }, [open, load]);
 
   const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const needle = normalizeSearchText(query);
     if (!needle) return rules;
     return rules.filter((rule) =>
-      [rule.roleName, rule.enterpriseName ?? "", ruleTriggerLabel(rule, t)]
-        .join(" ")
-        .toLowerCase()
-        .includes(needle),
+      normalizeSearchText(
+        [rule.roleName, rule.enterpriseName ?? "", ruleTriggerLabel(rule, t)].join(" "),
+      ).includes(needle),
     );
   }, [rules, query, t]);
 

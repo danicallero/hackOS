@@ -161,7 +161,7 @@ export function useCachedApi<T>(
     inFlightCacheKey.current = null;
     dataRef.current = null;
     dataCacheKey.current = null;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- account gate must clear sensitive data immediately.
+    // Account gate must clear sensitive data immediately.
     setDataState(null);
     setStaleSince(null);
     setError(null);

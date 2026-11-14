@@ -19,11 +19,12 @@ Usage:
   services.sh <environment> backups <create|list|status|verify|restore|undo|unlock|drop-prev> [args]
 
 Environments: staging production
-Services: postgres valkey minio minio-init migrate api worker web
+Services: postgres valkey minio minio-init migrate api worker web proxy
 
 The default start/stop operations cover the long-running runtime. shutdown
 stops the whole selected project and never removes volumes or bind data.
-recreate force-recreates selected runtime services without building; release
+recreate force-recreates selected runtime services without building, with a
+brief interruption (deploy replaces api, worker and web without one); release
 prints the deployed image identity. available reads published GHCR package tags;
 deploy is explicit and never accepts Docker :latest.
 
@@ -302,8 +303,8 @@ run_api_script() {
   fi
 }
 
-all_services=(postgres valkey minio minio-init migrate api worker web)
-runtime_services=(postgres valkey minio api worker web)
+all_services=(postgres valkey minio minio-init migrate api worker web proxy)
+runtime_services=(postgres valkey minio api worker web proxy)
 service_status_format='{{.Service}}\t{{.State}}\t{{.Health}}\t{{.ExitCode}}\t{{.Ports}}'
 
 validate_services() {

@@ -22,7 +22,7 @@ edits the same photo from the Account avatar and the networking profile editor
 
 The "Public profile" section (`components/profile/public-profile-card.tsx`)
 shows only the opt-in switch ("Share my profile"), with one line saying that
-only people who scan the person's badge will see it, until the person opts in; then it reveals the surname, photo and project switches, the
+only people who scan the person's badge will see their profile and that, while the profile is shared, their name and connections also show on public event screens, which can be photographed or copied, until the person opts in; then it reveals the surname, photo and project switches, the
 headline and location note (placeholder "Room 2.1", so people know which classroom to enter), the bio (with a character count), up to six links
 (type + address rows; empty rows are not saved), the linked GitHub account as a matching link row with its own profile-visibility switch, and the CV. Hiding that link does not unlink the account.
 There is no preview card. While the opt-in is off the fields stay in view,
@@ -30,6 +30,20 @@ disabled, so people see what sharing would show; they neither
 enable Save nor get published: switching it off saves the stored text and
 toggles unchanged. Fields are locked while a save is in flight, and each
 change set saves with one `Idempotency-Key`.
+
+**Disclosure and the TV exception.** The profile stays visible only to people
+who scan the badge, but the public TV connections graph is a documented
+exception to "private" (#934, #935): while `directory_visible` is true, the owner
+appears by name (surname per `show_surname`) with their connections (people and
+company, including sponsor scans) on public event screens. People who do not share
+do not appear at all: no anonymous dot and no line to or from them. There is no
+separate switch; sharing is the only control. That display and its data are public
+and can be photographed or copied; turning sharing off removes the person and all
+their connections on the next refresh, but cannot retract copies. The privacy
+policy section 3.4, the sharing copy on web and mobile and the onboarding step say
+the same. People who already share newly appear publicly, so an announcement to
+existing users is needed before launch; it is not built here. Organizer privacy
+review is required before launch.
 
 The CV file saves on its own (upload, replace, remove), like the photo; the
 "Share CV" switch appears once a CV exists and is part of the form. Removing
@@ -142,8 +156,8 @@ including the account photo, stays in `users` and is projected, never copied.
 | `consented_at` | `NULL` | Stamped on every hidden→visible transition; required while visible. |
 
 Text is trimmed, empty text becomes `NULL`, and control characters are
-rejected. `PUT` may omit `bio`, `socials` and `shareCv` to keep their stored
-values.
+rejected. `PUT` may omit `bio`, `socials` and `shareCv` to
+keep their stored values.
 
 ### Account photo and CV storage
 
@@ -152,7 +166,9 @@ Both files live in private object storage under `profiles/<user id>/`
 exposes anonymously (only `enterprises/` is public). `<op>` is derived from
 the upload's `Idempotency-Key`, so a retried upload addresses the same
 object. The type is sniffed from the bytes (PNG/JPEG/WebP signatures, `%PDF-`)
-and the declared type is ignored; photos are capped at 2 MB, CVs at 5 MB.
+and the declared type is ignored; photos and CVs are capped at 5 MB. Web and
+mobile compress a larger photo on the device to fit the cap instead of
+refusing it; photos stored before the cap was enforced stay as they are.
 Oversize, empty and unsupported files are explicit 400s. The object is written
 while the owner's `users` row is locked, the same lock H54 removal takes, and
 a replaced or removed object is deleted after the row commits.
@@ -169,6 +185,12 @@ the API returns (`/api/me`, `/api/users/:id`) and every `photoUrl` is the
 authenticated route `/api/users/<id>/photo?v=<op prefix>`; the web prefixes it
 with the API origin (`apiAssetUrl` in `apps/web/src/lib/directory.ts`) so the
 session cookie travels with the image request.
+
+Besides the owner, staff and readers who saved the person, any signed-in user may read a
+shared photo (`show_photo` on a visible profile) while the person speaks at a shown,
+participant-visible schedule item or represents a visible company (H44, H48): that is
+what lets the schedule and company pages show an avatar (`photoPublishedOnPublicSurface`).
+The profile card follows the same rule (`profilePublishedOnPublicSurface`, below).
 
 ### CV from the application
 
@@ -201,7 +223,13 @@ removal, like any other upload.
 ## What a reader sees
 
 A reader is an attendee who saved the person in their diary by scanning their
-badge or ticket.
+badge or ticket. Without a scan, any attendee with event access may also read
+the card of an opted-in person (`directory_visible`) who
+speaks at a shown, published, participant-audience schedule item or is a member
+of a visible, non-synthetic company (H44, H48): the people the schedule and
+company pages already show. Opened this way the card carries no `cvUrl` and
+the CV route answers 404: the CV stays scan-only. Nobody else is readable
+unsaved, and no field is added by this rule.
 
 `DirectoryEntry` is the complete list of exposed fields:
 
@@ -216,6 +244,8 @@ badge or ticket.
 | `projects[]` `{kind, id, name}` | every active `submissions` → `repos` (`kind: "project"`), then every active, unlinked `planned_work_groups` membership (`kind: "workGroup"`), each by id | `show_project` |
 | `project` | deprecated: the first of `projects` (or `null`), kept for app builds that predate the list | `show_project` |
 | `challenges[]` `{id, name}` | published, non-test challenges of any of those projects (`queue_entries`) or groups (`planned_work_group_challenges`) | `show_project` |
+| `activities[]` `{id, title, startsAt, endsAt, location}` | shown schedule items the person speaks at (`schedule_speakers`, H48), by start time; only items visible to the participant audience with a due `publishAt` | always (`[]` when none) |
+| `enterprises[]` `{id, name, logoUrl}` | every visible, non-synthetic company the person is a sponsor member of (`sponsors`, H44; a person can have several rows), oldest membership first, once each | always (`[]` when none) |
 | `helpTopics[]` `{id, name}` | the person's help desk knowledge (`helper_topics`, H61; [`help-desk.md`](./help-desk.md)) | their helper profile is published (`[]` otherwise) |
 
 Nothing else leaves the module: no email, DNI, badge, intolerances,
@@ -236,7 +266,7 @@ a test account. The same rule decides whether a scan saves the person
 | `GET /api/me/public-profile` | authenticated + event access |
 | `PUT /api/me/public-profile` | authenticated + event access, `Idempotency-Key` |
 | `GET /api/directory/:userId` | event access + the person is in the caller's diary (#935) |
-| `GET /api/directory/:userId/cv` | as above; visible profile with `share_cv`. Also help desk readers (`helpdesk:request`/`offer`/`coverage`) for a published helper with `share_cv`, no scan needed (H61, H63) |
+| `GET /api/directory/:userId/cv` | readers who saved the person only (not the speaker/representative rule); visible profile with `share_cv`. Also help desk readers (`helpdesk:request`/`offer`/`coverage`) for a published helper with `share_cv`, no scan needed (H61, H63) |
 | `POST /api/me/public-profile/cv` | authenticated + event access, multipart, `Idempotency-Key` |
 | `DELETE /api/me/public-profile/cv` | authenticated + event access, `Idempotency-Key` |
 | `GET /api/me/public-profile/cv` | authenticated (own CV, shared or not) |
@@ -258,7 +288,7 @@ account photo for scanner rosters, independent of `show_photo`. The route schema
 - There is no listing route and no save-by-id route; people are added to a
   diary only by `POST /api/me/diary/scan`.
 - `GET /api/directory/:userId` answers 404 for missing, hidden and unsaved
-  people alike, so visibility cannot be probed.
+  people alike (unsaved speakers and company representatives excepted), so visibility cannot be probed.
 - `GET /api/me/public-profile` returns the settings plus `preview`, the entry
   as readers would see it if visible.
 - `GET /api/directory/:userId/cv` and `GET /api/users/:id/photo` answer the
@@ -285,8 +315,10 @@ address stays visible next to the icon; links open with
 and challenges. Empty rows are omitted. A 404 (hidden or missing) shows
 "Person not found"; other failures keep an inline error with Retry. It
 refetches on `domain.changed` for the `directory` topic. Only attendees who
-saved the person in their diary may open it; the API answers the same 404 to
-anyone else.
+saved the person, or who is a shown speaker or company representative, may
+open it; the API answers the same 404 to anyone else. A person opened without
+a diary entry shows no CV row, favourite star, note or remove action: those
+need the reader's diary entry.
 
 Every CV link on the web (the person page, the owner's file name and the
 "View CV" link of the My profile preview) opens the shared viewer
@@ -320,6 +352,12 @@ removals write `user.photo_updated` / `user.photo_removed` on the `user`
 entity with only `hasPhoto` before/after. Moderation writes
 `public_profile.moderated` with the staff reason and answers 409 for an account
 being removed.
+
+Moderation (`PUT /api/users/:id/public-profile`, `users:write`) may stop sharing
+but never start it: turning `directoryVisible` on answers 409
+`profile_consent_required`. Staff stopping sharing also removes the person from the
+public TV graph. Removal-pending accounts are refused (owner
+404 at the caller gate, 409 in the service; staff 409).
 
 A card's challenges exclude cancelled and disqualified queue entries.
 

@@ -47,6 +47,7 @@ flowchart TB
     end
 
     subgraph egress[egress Compose network]
+        proxy[proxy · Caddy, owns :3000/:3001/:9464]
         web[web · Next.js :3001]
     end
 
@@ -60,8 +61,8 @@ flowchart TB
     end
 
     browser & phone --> caddy
-    caddy -->|hackos LXC :3000| api
-    caddy -->|hackos LXC :3001| web
+    caddy -->|hackos LXC :3000 / :3001| proxy
+    proxy -->|every running replica| api & web
     migrate --> pg
     init --> minio
     web -->|browser XHR to API_DOMAIN| api
@@ -71,8 +72,11 @@ flowchart TB
     phone -.push.-> expo
 ```
 
-The Compose networks are private to the project. API and web publish only their
-HTTP ports to the external proxy; the datastores have no published ports.
+The Compose networks are private to the project. Only the internal `proxy`
+publishes the API, web and worker-metrics ports to the external proxy, so an
+old and a new replica can serve side by side during a rolling deploy
+([`deploy/README.md` § Despliegue sin corte](../deploy/README.md#despliegue-sin-corte-1327));
+the datastores have no published ports.
 
 ---
 
@@ -81,7 +85,8 @@ HTTP ports to the external proxy; the datastores have no published ports.
 `deploy/docker-compose.yml` is the only production source of truth. Compose
 pulls pre-built application images from GHCR and pinned infrastructure images
 from their official registries, then recreates the application tier after the
-explicit `migrate` process succeeds.
+explicit `migrate` process succeeds, replacing each application service by
+starting its new replica before draining the old one.
 
 ### api — the HTTP surface
 - **Stack:** Fastify 5, `fastify-type-provider-zod` (schemas *are* the OpenAPI
@@ -89,13 +94,16 @@ explicit `migrate` process succeeds.
   parameterized SQL (no ORM), `ioredis` for Valkey.
 - **Image/command:** the shared GHCR image, `node dist/server.js`; the server
   entrypoint repeats the migration check as a process-level guard.
-- **Network:** the private and egress Compose bridges, with a configurable host
-  binding (port `3000`) for the external proxy.
+- **Network:** the private and egress Compose bridges. The `proxy` service
+  owns the host binding (port `3000`) and reaches every replica through the
+  `api-replicas` alias.
 - **Public:** Caddy terminates TLS and proxies the configured API hostname.
   `TRUST_PROXY=true` preserves the real client IP for the audit trail.
 - **State:** none. Fully horizontally scalable (§7).
-- **Health:** Docker probes `/healthz`; Compose waits for PostgreSQL, Valkey,
-  MinIO, migration completion and the API healthcheck before the handoff.
+- **Health:** Docker probes `/readyz`; the deploy waits for it before retiring
+  the previous replica. On SIGTERM the API drains (`lib/shutdown.ts`): `/readyz`
+  answers 503, responses close their connection, the listener closes,
+  in-flight requests finish and SSE streams end spread over a few seconds.
 - **Migration:** `migrate` (`node dist/migrate.js`) is a separate one-shot,
   guarded by a Postgres advisory lock.
 
@@ -448,12 +456,13 @@ pre-built `linux/amd64` and `linux/arm64` GHCR images, selected by an immutable
 In production, the proxy is an external host-level concern: it terminates TLS
 and proxies the public API and web hostnames to the published ports of the
 `hackos` LXC. `PUBLISH_BIND_ADDRESS`, `API_PUBLISH_PORT` and
-`WEB_PUBLISH_PORT` define that boundary. The Compose project does not own TLS,
+`WEB_PUBLISH_PORT` define that boundary; the internal `proxy` service binds
+them. The Compose project does not own TLS,
 DNS or proxy configuration.
 
 For a host-level tunnel that resolves Docker service names, the optional
-`EDGE_NETWORK_NAME`/`EDGE_NETWORK_EXTERNAL` profile connects `api`, `web`, and
-`minio` to an existing ingress network using their stable service aliases. The
+`EDGE_NETWORK_NAME`/`EDGE_NETWORK_EXTERNAL` profile connects `proxy` (aliases
+`api` and `web`) and `minio` to an existing ingress network. The
 database and queue store remain private. The default production profile leaves
 this network Compose-owned and uses published ports instead.
 

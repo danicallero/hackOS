@@ -197,7 +197,6 @@ export default function LogisticsStatsPage() {
   );
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadBefore();
   }, [loadBefore]);
 
@@ -215,7 +214,6 @@ export default function LogisticsStatsPage() {
   }, [activePhase, canGeneralStats, t]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadAfter();
   }, [loadAfter]);
 

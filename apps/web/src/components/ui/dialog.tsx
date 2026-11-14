@@ -113,7 +113,11 @@ function DialogContent({
           onPointerDownOutside?.(event)
         }}
         onFocusOutside={(event) => {
-          if (floatingContent && isFloatingTarget(event.target)) event.preventDefault()
+          // H13: without the modal trap, focus can land behind the dialog on
+          // its own (a live refresh re-rendering the list, a restored focus);
+          // only an explicit click outside, Escape or Close may dismiss it.
+          if (floatingContent && (floatingFocus || isFloatingTarget(event.target)))
+            event.preventDefault()
           onFocusOutside?.(event)
         }}
         {...focusRestore}

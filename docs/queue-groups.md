@@ -146,7 +146,8 @@ hops. The shared SQL fragments and helpers live in
 | `queueGroupEnterpriseId` | which enterprise a queue group belongs to |
 
 Consumers: `queue/reads.ts`, `queue/rooms.routes.ts`, `queue/entries.routes.ts`,
-`queue/notify.ts`, `queue/service.ts`, `queue/contextual-access.ts` and
+`queue/notify.ts`, `queue/transitions.ts`, `queue/rooms.ts`,
+`queue/contextual-access.ts` and
 `challenges/service.ts`.
 
 ### Topology invalidation

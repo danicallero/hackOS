@@ -156,7 +156,7 @@ const PUBLIC_CONTENT_FIELDS: Record<string, readonly string[]> = {
     "description_i18n",
   ],
   challenge: ["title", "description", "title_i18n", "description_i18n", "criteria"],
-  enterprise: ["name", "description"],
+  enterprise: ["name", "description", "descriptionI18n", "description_i18n"],
   sponsor_faq: ["items"],
   application: ["name", "description"],
   event_config: ["name", "tagline", "venueName", "venue_name"],

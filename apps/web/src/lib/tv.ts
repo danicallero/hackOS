@@ -1,3 +1,4 @@
+import { TV_CONNECTIONS_MODE, type TvConnectionsResponse } from "@hackos/shared/tv-connections";
 import { api } from "@/lib/api";
 import type { Language, PublicEvent } from "@/lib/types";
 
@@ -7,7 +8,14 @@ import type { Language, PublicEvent } from "@/lib/types";
  * state machines are unit-tested rather than eyeballed on a projector.
  */
 
-type TvModeName = "rooms" | "schedule" | "sponsors" | "wifi" | "live" | "github";
+type TvModeName =
+  | "rooms"
+  | "schedule"
+  | "sponsors"
+  | "wifi"
+  | "live"
+  | "github"
+  | typeof TV_CONNECTIONS_MODE;
 
 /** Modes organisers may select from the TV control surface. */
 export const TV_CONTROL_MODES = [
@@ -17,6 +25,7 @@ export const TV_CONTROL_MODES = [
   "sponsors",
   "wifi",
   "github",
+  TV_CONNECTIONS_MODE,
 ] as const;
 export type TvControlMode = (typeof TV_CONTROL_MODES)[number];
 
@@ -39,6 +48,9 @@ export const getTvState = () => api.get<TvState>("/api/tv/mode");
 export const setTvMode = (mode: TvModeName, payload: unknown = null) =>
   api.patch<TvState>("/api/tv/mode", { mode, payload });
 export const clearTvMode = () => api.delete<TvState>("/api/tv/mode");
+/** Public, unauthenticated, active-edition-only connections snapshot (#934, #935). */
+export const getTvConnections = (signal?: AbortSignal) =>
+  api.get<TvConnectionsResponse>("/api/tv/connections", { signal });
 export const getTvVenueConfig = () => api.get<TvVenueConfig>("/api/tv/config");
 /** Sets the wall's fixed display language; null clears the override. */
 export const setTvLanguage = (language: Language | null) =>

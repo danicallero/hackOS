@@ -4,6 +4,7 @@ import { pool } from "../db/pool.js";
 import { getMaintenanceStatus } from "./maintenance.js";
 import { register } from "./metrics.js";
 import { refreshOperationalMetrics } from "./operational-metrics.js";
+import { isDraining } from "./shutdown.js";
 import { valkey } from "./valkey.js";
 
 /** Infrastructure probes: liveness, maintenance status, readiness and the Prometheus scrape. */
@@ -43,10 +44,11 @@ export function registerHealthRoutes(app: FastifyInstance): void {
       config: { routeAccessPolicy: { kind: "public", anonymousCategory: "health" } },
       schema: {
         description:
-          "Bounded readiness probe. PostgreSQL is required; Valkey is ephemeral and reports a degraded 200 response so its outage does not remove a replica that can still serve durable reads.",
+          "Bounded readiness probe. PostgreSQL is required; Valkey is ephemeral and reports a degraded 200 response so its outage does not remove a replica that can still serve durable reads. A replica draining for a rolling deployment answers 503 `draining` while it finishes in-flight requests (#1327).",
       },
     },
     async (_req, reply) => {
+      if (isDraining()) return reply.code(503).send({ status: "draining" });
       const [postgres, broker] = await Promise.allSettled([pool.query("SELECT 1"), valkey.ping()]);
       if (postgres.status === "rejected") {
         return reply.code(503).send({

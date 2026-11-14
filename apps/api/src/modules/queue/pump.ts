@@ -1,6 +1,7 @@
 import { config } from "../../config.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { afterCommit } from "../../lib/after-commit.js";
+import { isScopedEditionClosed } from "../../lib/edition.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { queueFixtureMarker } from "./broadcast.js";
@@ -87,6 +88,8 @@ export async function scheduleTopUp(roomId: number): Promise<void> {
 }
 
 export async function pumpTick(): Promise<void> {
+  // Multi-edition: a closed current edition has nothing left to call.
+  if (await isScopedEditionClosed(pool)) return;
   // Only rooms that can actually take a call this tick: not paused, inside the
   // judging window, below their waiting-area cap and with a waiting team in the
   // queue they serve. Full or idle rooms used to cost a `callNextForRoom`
@@ -98,6 +101,7 @@ export async function pumpTick(): Promise<void> {
        JOIN rooms r ON r.id = rqs.room_id
        JOIN queue_settings qs ON qs.id = 1
       WHERE rqs.is_paused = false
+        AND r.event_key = current_edition()
         AND (qs.schedule_start_at IS NULL OR qs.schedule_start_at <= now())
         AND (qs.schedule_end_at IS NULL OR qs.schedule_end_at > now())
         AND (SELECT count(*) FROM queue_entries called
@@ -352,6 +356,7 @@ async function emitPreCallWarnings(): Promise<void> {
        FROM queue_group_challenges qgc
        JOIN room_queue_groups rqg ON rqg.queue_group_id = qgc.queue_group_id
        JOIN room_queue_state rqs ON rqs.room_id = rqg.room_id AND rqs.is_paused = false
+       JOIN queue_groups qg ON qg.id = qgc.queue_group_id AND qg.event_key = current_edition()
       WHERE EXISTS (
         SELECT 1 FROM queue_entries qe
          WHERE qe.challenge_id = qgc.challenge_id

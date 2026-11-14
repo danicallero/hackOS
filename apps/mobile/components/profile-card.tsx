@@ -64,6 +64,7 @@ export function ProfileCard({
   afterBio,
   beforeKnowledge,
   identityAccessory,
+  nameColor,
   onNameLayout,
   edit,
 }: {
@@ -74,6 +75,8 @@ export function ProfileCard({
   /** Optional feature metadata above knowledge, within the same public profile. */
   beforeKnowledge?: ReactNode;
   identityAccessory?: ReactNode;
+  /** Name colour over a tinted hero; defaults to the label colour. */
+  nameColor?: string;
   onNameLayout?: (event: LayoutChangeEvent) => void;
   edit?: ProfileCardEdit;
 }) {
@@ -217,7 +220,7 @@ export function ProfileCard({
               selectable
               accessibilityRole="header"
               style={{
-                color: colors.label,
+                color: nameColor ?? colors.label,
                 fontSize: type.title.fontSize,
                 fontWeight: "700",
                 textAlign: "center",

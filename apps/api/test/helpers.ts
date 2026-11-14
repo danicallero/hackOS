@@ -1,6 +1,51 @@
-import { afterAll, beforeEach } from "vitest";
+import { afterAll, beforeEach, expect } from "vitest";
 import type { App } from "../src/app.js";
 import { pool } from "../src/db/pool.js";
+
+type IdempotencyReplayRequest = {
+  method: "POST" | "PUT" | "PATCH" | "DELETE";
+  url: string;
+  key: string;
+  payload?: Record<string, unknown>;
+};
+
+type IdempotencyReplayAudit = {
+  entityType: string;
+  entityId: string | number | ((body: Record<string, unknown>) => string | number);
+  action: string;
+};
+
+/** Assert one mutation is replayed for its key and records exactly one audit row. */
+export async function expectIdempotentReplay(
+  app: App,
+  actorId: number,
+  request: IdempotencyReplayRequest,
+  expectedStatus: number,
+  audit: IdempotencyReplayAudit,
+) {
+  const injectOptions = {
+    method: request.method,
+    url: request.url,
+    headers: { ...asUser(actorId), "Idempotency-Key": request.key },
+    ...(request.payload === undefined ? {} : { payload: request.payload }),
+  };
+  const first = await app.inject(injectOptions);
+  expect(first.statusCode).toBe(expectedStatus);
+  const replay = await app.inject(injectOptions);
+  expect(replay.statusCode).toBe(expectedStatus);
+  expect(replay.headers["idempotency-replayed"]).toBe("true");
+  expect(replay.json()).toEqual(first.json());
+
+  const body = first.json() as Record<string, unknown>;
+  const entityId = typeof audit.entityId === "function" ? audit.entityId(body) : audit.entityId;
+  const { rowCount } = await pool.query(
+    `SELECT 1 FROM audit_log
+      WHERE actor_id = $1 AND entity_type = $2 AND entity_id = $3 AND action = $4`,
+    [actorId, audit.entityType, String(entityId), audit.action],
+  );
+  expect(rowCount).toBe(1);
+  return first;
+}
 
 /**
  * Truncate every domain table (keeps schema + the queue_settings singleton).
@@ -10,6 +55,11 @@ export async function truncateAll(): Promise<void> {
   const tables = await testTableList();
   if (tables === "") return;
   await pool.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
+  // Every edition-scoped row needs its edition; `current_edition()` falls back
+  // to 'default' until a test writes event_config (docs/multi-edition-plan.md).
+  await pool.query(
+    `INSERT INTO editions (event_key, name, status) VALUES ('default', 'default', 'active')`,
+  );
   // Direct SQL seeding emits no event, so shared read caches must not outlive the data.
   const { invalidateSharedCache } = await import("../src/lib/shared-cache.js");
   await Promise.all(

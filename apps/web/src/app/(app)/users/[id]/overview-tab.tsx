@@ -43,7 +43,6 @@ import { toast } from "@/lib/toast";
 import type { Intolerance, Language, UserDetail } from "@/lib/types";
 import { MealPlanSection } from "./meal-plan-section";
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const editSchema = z.object({
   name: z.string().min(1, "Required").max(200),
   surname: z.string().min(1, "Required").max(200),

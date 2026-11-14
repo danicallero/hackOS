@@ -11,8 +11,15 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { useSortableSensors } from "@/components/common/use-sortable-sensors";
 import { Input } from "@/components/ui/input";
 import { useLocale } from "@/lib/i18n";
+import { normalizeSearchText } from "@/lib/search-text";
 import type { RoleSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+export function filterRolesByName(roles: RoleSummary[], query: string): RoleSummary[] {
+  const needle = normalizeSearchText(query);
+  if (!needle) return roles;
+  return roles.filter((role) => normalizeSearchText(role.name).includes(needle));
+}
 
 /**
  * A flat, reorderable role list (H8). Drag or keyboard-move a row
@@ -48,9 +55,7 @@ export function RoleList({
   );
 
   const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return sortable;
-    return sortable.filter((r) => r.name.toLowerCase().includes(needle));
+    return filterRolesByName(sortable, query);
   }, [sortable, query]);
 
   const sensors = useSortableSensors();

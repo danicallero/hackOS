@@ -1,4 +1,5 @@
 import type { ResponseRow } from "@/lib/applications";
+import { normalizeSearchText } from "@/lib/search-text";
 
 /** H13: multiselect membership is exact; false and zero are real answers. */
 export function answerValues(value: unknown): string[] {
@@ -43,11 +44,11 @@ export function matchesResponseSearch(
   row: Pick<ResponseRow, "name" | "email" | "reviews">,
   search: string,
 ): boolean {
-  const query = search.trim().toLocaleLowerCase();
+  const query = normalizeSearchText(search);
   return (
     !query ||
-    [row.name, row.email, ...row.reviews.map((review) => review.notes)].some((value) =>
-      value?.toLocaleLowerCase().includes(query),
+    [row.name, row.email, ...row.reviews.map((review) => review.notes)].some(
+      (value) => value != null && normalizeSearchText(value).includes(query),
     )
   );
 }

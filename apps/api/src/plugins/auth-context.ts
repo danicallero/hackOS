@@ -1,7 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
 import { config } from "../config.js";
+import { pool } from "../db/pool.js";
 import { type AuthorizationContext, createAuthorizationContext } from "../lib/capabilities.js";
+import { applyRequestedEdition } from "../lib/edition.js";
 import type { ReviewFixtureLogContext } from "../lib/review-fixture-log.js";
 
 declare module "fastify" {
@@ -49,6 +51,7 @@ export const authContextPlugin = fp(async (app: FastifyInstance) => {
           req.userId = parsed;
         }
         req.authorizationContext = createAuthorizationContext(req.userId);
+        await applyRequestedEdition(req, pool);
         return;
       }
     }
@@ -62,5 +65,8 @@ export const authContextPlugin = fp(async (app: FastifyInstance) => {
     }
     req.userId = await resolveUserId(req);
     req.authorizationContext = createAuthorizationContext(req.userId);
+    // Viewed edition (X-Edition) after the user is known: it is validated
+    // against the user's participation (docs/multi-edition-plan.md).
+    await applyRequestedEdition(req, pool);
   });
 });

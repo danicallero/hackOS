@@ -2,13 +2,14 @@
 
 // This person's application response and its decision state (H11-H15).
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { ReviewModal } from "@/components/applications/review-modal";
 import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
+import { useServerResource } from "@/hooks/use-server-resource";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { applicationStatusLabel, applicationStatusTone } from "@/lib/application-workflow";
@@ -58,8 +59,17 @@ interface ResponseDetailPayload {
 
 export function ApplicationTab({ userId }: { userId: number }) {
   const { language, t } = useLocale();
-  const [rows, setRows] = useState<UserApplicationRow[] | null>(null);
-  const [state, setState] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
+  const applications = useServerResource(["user", userId, "applications"], (signal) =>
+    api.get<{ responses: UserApplicationRow[] }>(`/api/users/${userId}/applications`, { signal }),
+  );
+  const rows = applications.data?.responses ?? null;
+  const state = applications.loading
+    ? "loading"
+    : applications.error instanceof ApiError && applications.error.status === 403
+      ? "forbidden"
+      : applications.error
+        ? "error"
+        : "ready";
   const [selected, setSelected] = useState<{
     response: ResponseRow;
     applicationId: number;
@@ -70,27 +80,6 @@ export function ApplicationTab({ userId }: { userId: number }) {
     reviewHiddenFields: string[];
   } | null>(null);
   const [openingId, setOpeningId] = useState<number | null>(null);
-
-  const loadRows = useCallback(
-    async (showLoading = true) => {
-      if (showLoading) setState("loading");
-      try {
-        const data = await api.get<{ responses: UserApplicationRow[] }>(
-          `/api/users/${userId}/applications`,
-        );
-        setRows(data.responses);
-        setState("ready");
-      } catch (err) {
-        setState(err instanceof ApiError && err.status === 403 ? "forbidden" : "error");
-      }
-    },
-    [userId],
-  );
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadRows();
-  }, [loadRows]);
 
   async function openResponse(responseId: number) {
     setOpeningId(responseId);
@@ -191,7 +180,7 @@ export function ApplicationTab({ userId }: { userId: number }) {
           askFoodIntolerances={selected.askFoodIntolerances}
           reviewHiddenFields={selected.reviewHiddenFields}
           onClose={() => setSelected(null)}
-          onChanged={() => loadRows(false)}
+          onChanged={applications.reload}
         />
       )}
     </SectionCard>

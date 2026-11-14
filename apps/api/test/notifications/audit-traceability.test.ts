@@ -329,3 +329,51 @@ it("presents legacy automatic exits as System in list and detail without guessin
     { actor_id: null, actor_kind: "system", source: "system", initiated_by: actor },
   ]);
 });
+
+it("labels catalogue subjects by their current name (H53, H54)", async () => {
+  const app = await getApp();
+  const actor = await createUserWithCapabilities([CAPABILITIES.AUDIT_READ]);
+  const university = await pool.query<{ id: number }>(
+    "INSERT INTO universities(name) VALUES ('Universidade da Coruña') RETURNING id",
+  );
+  const id = university.rows[0]!.id;
+  await audit(pool, {
+    actorId: actor,
+    entityType: "university",
+    entityId: id,
+    action: "created",
+    after: { name: "Universidade da Coruña" },
+  });
+  await audit(pool, {
+    actorId: actor,
+    entityType: "university",
+    entityId: 999999,
+    action: "deleted",
+  });
+
+  const list = await app.inject({
+    method: "GET",
+    url: "/api/audit?entityType=university",
+    headers: asUser(actor),
+  });
+  expect(list.statusCode).toBe(200);
+  const labels = Object.fromEntries(
+    list
+      .json()
+      .items.map((row: { entity_id: string; entity_label: string | null }) => [
+        row.entity_id,
+        row.entity_label,
+      ]),
+  );
+  expect(labels).toEqual({ [String(id)]: "Universidade da Coruña", "999999": null });
+
+  const created = list
+    .json()
+    .items.find((row: { entity_id: string }) => row.entity_id === String(id));
+  const detail = await app.inject({
+    method: "GET",
+    url: `/api/audit/${created.id}`,
+    headers: asUser(actor),
+  });
+  expect(detail.json().entity_label).toBe("Universidade da Coruña");
+});
