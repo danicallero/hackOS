@@ -4,11 +4,12 @@ import type { TvConnectionsResponse } from "@hackos/shared/tv-connections";
 import { UsersThreeIcon } from "@phosphor-icons/react/dist/csr/UsersThree";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Spinner } from "@/components/common/spinner";
-import type { PublicEvent } from "@/components/public/public-types";
+import type { PublicAnnouncement, PublicEvent } from "@/components/public/public-types";
 import { useJitteredCallback } from "@/hooks/use-jittered-callback";
 import { useLocale } from "@/lib/i18n";
 import { getTvConnections } from "@/lib/tv";
 import { ConnectionsGraph } from "./connections-graph";
+import { EmbeddedAnnouncement } from "./live-screen";
 import { TvBody, TvEmpty, TvHeader, TvScreen } from "./tv-screen";
 
 /** Poll window; each cycle waits a random time inside it so screens drift apart. */
@@ -26,9 +27,12 @@ const MIN_REFETCH_MS = 5_000;
 export function ConnectionsView({
   event,
   invalidation = 0,
+  announcement,
 }: {
   event: PublicEvent;
   invalidation?: number;
+  /** Active integrated announcement, shown as a bottom-right popup over the graph. */
+  announcement?: PublicAnnouncement;
 }) {
   const { t } = useLocale();
   const [data, setData] = useState<TvConnectionsResponse | null>(null);
@@ -82,7 +86,7 @@ export function ConnectionsView({
       {() => (
         <>
           <TvHeader title={t("modeConnections")} icon={UsersThreeIcon} eventName={event.name} />
-          <TvBody className="gap-[1em] p-[1.5em]">
+          <TvBody className="relative gap-[1em] p-[1.5em]">
             {!data ? (
               failed ? (
                 <TvEmpty text={t("connectionsUnavailable")} />
@@ -113,6 +117,17 @@ export function ConnectionsView({
                   </p>
                 )}
               </>
+            )}
+            {/* A popup, not a band: the graph owns the whole screen, so the
+                notice floats over its bottom-right corner on an opaque plate. */}
+            {announcement && (
+              <div
+                data-testid="connections-announcement"
+                role="status"
+                className="bg-[#0b0c14] absolute right-[1.5em] bottom-[1.5em] z-10 w-[26em] max-w-[45%] rounded-[0.6em] shadow-[0_0.4em_1.6em_rgba(0,0,0,0.6)]"
+              >
+                <EmbeddedAnnouncement announcement={announcement} compact />
+              </div>
             )}
           </TvBody>
         </>

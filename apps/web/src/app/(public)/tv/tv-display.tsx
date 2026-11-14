@@ -1059,7 +1059,13 @@ function TvView({
     return <WifiView venue={data.venue} event={data.event} announcement={embeddedAnnouncement} />;
   if (mode === "github") return <GithubView event={data.event} />;
   if (mode === TV_CONNECTIONS_MODE)
-    return <ConnectionsView event={data.event} invalidation={invalidation} />;
+    return (
+      <ConnectionsView
+        event={data.event}
+        invalidation={invalidation}
+        announcement={embeddedAnnouncement}
+      />
+    );
   if (mode === "rooms")
     return <RoomsView rooms={data.rooms} event={data.event} announcement={embeddedAnnouncement} />;
   return null;

@@ -184,7 +184,9 @@ the deterministic winner.
   underlying manual selection continues unchanged.
 - `embedded` reserves layout space: below the reduced sponsor grid on `live`,
   as an announcement card in the room grid, and as a compact non-covering band
-  on schedule, sponsors, and Wi-Fi views.
+  on schedule, sponsors, and Wi-Fi views. On the `connections` graph, which
+  fills the whole screen, it is a popup card over the bottom-right corner of
+  the graph (same `EmbeddedAnnouncement` component, opaque plate).
 
 Deleting an announcement broadcasts a public-content invalidation so an
 indefinite message disappears from already-open screens immediately.
@@ -347,7 +349,7 @@ implemented in `apps/api/src/modules/queue/tv-connections.ts` and tested in
   `SET LOCAL enable_nestloop = off` (same implicit transaction) because the
   planner underestimates the CTEs and otherwise nested-loops the diary
   (~800 ms vs ~4 ms at 500 attendees). `sharedCache` already single-flights
-  expiry (in-process promise plus Valkey lock). Cached in the shared cache for **15 s** per edition;
+  expiry (in-process promise plus Valkey lock). Cached in the shared cache for **15 s** for the current edition (an `X-Edition` header is ignored on this route, so a past edition's graph is never served);
   that TTL is the stale-data bound for sharing changes, account removal and edition
   switches (nothing else caches it). SSE stays payload-free and nothing is
   broadcast per scan: screens refetch on their own poll or on the existing TV
