@@ -156,7 +156,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const { rows } = await pool.query(
-        `SELECT ${COLUMNS} FROM applications WHERE event_key=COALESCE((SELECT event_key FROM event_config WHERE id=1),'default')`,
+        `SELECT ${COLUMNS} FROM applications WHERE event_key = current_edition()`,
       );
       const invited = req.userId ? await isInvitedParticipant(pool, req.userId) : false;
       // One lookup for every closed form instead of one per form.
@@ -193,7 +193,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const { rows } = await pool.query(
-        `SELECT ${COLUMNS} FROM applications WHERE id = $1 AND event_key=COALESCE((SELECT event_key FROM event_config WHERE id=1),'default')`,
+        `SELECT ${COLUMNS} FROM applications WHERE id = $1 AND event_key = current_edition()`,
         [req.params.id],
       );
       const found = rows[0];
@@ -224,7 +224,9 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       },
     },
     async () => {
-      const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications ORDER BY id`);
+      const { rows } = await pool.query(
+        `SELECT ${COLUMNS} FROM applications WHERE event_key = current_edition() ORDER BY id`,
+      );
       return { applications: rows };
     },
   );

@@ -578,3 +578,14 @@ Run `pnpm --filter @hackos/shared test` for these framework-free model tests.
 
 Inbox headers use the rendered subject, falling back to the payload title and then
 the localized category. Subject/title/body are not repeated as technical detail rows.
+
+## Editions
+
+Announcements carry `event_key`: the admin list, the public feed, the
+scheduled-visibility publisher and role-based audiences use the viewed edition
+(role holders are those of the announcement's edition plus global roles). The
+inbox (`notification_outbox`), notification preferences, push tokens and local
+reminders are global and stay writable while an edition is closed. Automation
+settings are current-edition settings. The announcement publisher, schedule
+reminders, draft-application reminders and the pre-event email reminder do
+nothing while the current edition is closed.

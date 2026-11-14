@@ -20,7 +20,9 @@ interface Row {
 
 async function readWindows(db: Queryable): Promise<{ rows: Row[]; now: Date }> {
   const [{ rows }, clock] = await Promise.all([
-    db.query<Row>("SELECT starts_at, ends_at FROM helpdesk_open_windows ORDER BY starts_at, id"),
+    db.query<Row>(
+      "SELECT starts_at, ends_at FROM helpdesk_open_windows WHERE event_key = current_edition() ORDER BY starts_at, id",
+    ),
     db.query<{ now: Date }>("SELECT now() AS now"),
   ]);
   return { rows, now: (clock.rows[0] as { now: Date }).now };
@@ -113,7 +115,7 @@ export async function replaceSchedule(
         [accessAfter],
       );
     }
-    await client.query("DELETE FROM helpdesk_open_windows");
+    await client.query("DELETE FROM helpdesk_open_windows WHERE event_key = current_edition()");
     if (windows.length > 0) {
       await client.query(
         `INSERT INTO helpdesk_open_windows (starts_at, ends_at)

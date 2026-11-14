@@ -5,6 +5,7 @@ import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit, auditMany } from "../../lib/audit.js";
+import { isScopedEditionClosed } from "../../lib/edition.js";
 import { assertVerifiedPrimaryEmail } from "../../lib/email-verification.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
@@ -1354,14 +1355,17 @@ async function revokeApplicationGrantedRoles(
      WHERE user_id = $1
        AND role_id = ANY($2::int[])
        AND source = 'application_confirmed'
+       AND event_key = (SELECT a.event_key FROM applications a WHERE a.id = $3)
        AND NOT EXISTS (
          SELECT 1
            FROM application_responses other_response
+           JOIN applications other_app ON other_app.id = other_response.application_id
            JOIN application_grants_roles other_grant
              ON other_grant.application_id = other_response.application_id
           WHERE other_response.user_id = $1
             AND other_response.status = 'confirmed'
             AND other_response.application_id <> $3
+            AND other_app.event_key = user_roles.event_key
             AND other_grant.role_id = user_roles.role_id
        )
      RETURNING role_id`,
@@ -2061,10 +2065,11 @@ async function doConfirm(
   const grantedRoleIds = grantRows.map((r) => r.role_id as number);
   if (grantedRoleIds.length > 0) {
     await client.query(
-      `INSERT INTO user_roles (user_id, role_id, assigned_by, source)
-       SELECT $1, unnest($2::int[]), $3, 'application_confirmed'
+      `INSERT INTO user_roles (user_id, role_id, assigned_by, source, event_key)
+       SELECT $1, unnest($2::int[]), $3, 'application_confirmed',
+              (SELECT a.event_key FROM applications a WHERE a.id = $4)
        ON CONFLICT DO NOTHING`,
-      [resp.user_id, grantedRoleIds, actorId],
+      [resp.user_id, grantedRoleIds, actorId, resp.application_id],
     );
   }
   const ticketAccess = await reconcileTicketAccess(client, resp.user_id);
@@ -2233,6 +2238,8 @@ export async function declineByResponseId(
  */
 export async function expireDueConfirmations(): Promise<{ expired: number }> {
   return withTransaction(async (client) => {
+    // Workers ignore a closed edition and only touch the current one.
+    if (await isScopedEditionClosed(client)) return { expired: 0 };
     // Resolve candidates without locking responses, then acquire each owner
     // first. Removal uses user -> application_response ordering; expiring a
     // response must follow that order too or it can race the scrub.
@@ -2241,6 +2248,7 @@ export async function expireDueConfirmations(): Promise<{ expired: number }> {
        JOIN applications a ON a.id = r.application_id
        JOIN users u ON u.id = r.user_id
        WHERE r.status = 'accepted'
+         AND a.event_key = current_edition()
          AND r.decision_sent_at IS NOT NULL
          AND r.decision_sent_at + make_interval(hours => a.confirmation_window_hours) < now()
          AND u.account_state = 'active' AND u.anonymized_at IS NULL
@@ -2341,7 +2349,7 @@ export async function listUserResponsesForStaff(userId: number): Promise<
      FROM application_responses r
      JOIN applications a ON a.id = r.application_id
      JOIN users u ON u.id = r.user_id AND u.is_test_account = false
-     WHERE r.user_id = $1 ORDER BY r.id DESC`,
+     WHERE r.user_id = $1 AND a.event_key = current_edition() ORDER BY r.id DESC`,
     [userId],
   );
   return rows.map(
@@ -2385,7 +2393,7 @@ export async function listMyResponses(userId: number): Promise<
             )) AS can_delete_draft
      FROM application_responses r
      JOIN applications a ON a.id = r.application_id
-     WHERE r.user_id = $1 ORDER BY r.id DESC`,
+     WHERE r.user_id = $1 AND a.event_key = current_edition() ORDER BY r.id DESC`,
     [userId],
   );
   return rows.map(

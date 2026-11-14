@@ -23,7 +23,7 @@ export async function exportProjectsCsv(actorId: number): Promise<string> {
         ELSE 'Pending' END AS judging_status
       FROM repos r LEFT JOIN LATERAL (SELECT snapshot,form_version_id FROM project_submission_versions WHERE repo_id=r.id ORDER BY id DESC LIMIT 1) v ON true
       LEFT JOIN project_form_versions f ON f.id=v.form_version_id
-      WHERE NOT r.is_test_account ORDER BY r.id`);
+      WHERE NOT r.is_test_account AND r.event_key = current_edition() ORDER BY r.id`);
     const maximum = Math.max(0, ...rows.map((row) => row.members.length - 1));
     const questions = new Map(currentTemplate.map((field) => [field.key, field]));
     for (const row of rows)

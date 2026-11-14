@@ -201,3 +201,13 @@ than introducing a second statistics registry.
 
 The browser regression in `e2e/browser/statistics-chart.spec.ts` checks native
 legend counts and repeated light/dark switches against the running web app.
+
+## Editions
+
+Scopes and aggregates follow the viewed edition: application scopes list only
+that edition's forms, role scopes count only holders of the role in that
+edition (plus global roles), and panel access resolves with the caller's roles
+of that edition. Changing panel access is a current-edition setting; the query
+and export endpoints are reads and work on closed editions. Operational CSV
+exports are scoped the same way, while personal-data export requests (H54) are
+global and cover every edition.

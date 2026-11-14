@@ -66,6 +66,7 @@ export function eligibleSql(userRef: string): string {
              WHERE ec.user_id = ${userRef} AND ec.capability = ANY(${OFFER_CAPABILITIES}))
     OR EXISTS (
       SELECT 1 FROM application_responses ar
+        JOIN applications ap ON ap.id = ar.application_id AND ap.event_key = current_edition()
         JOIN application_grants_roles agr ON agr.application_id = ar.application_id
         JOIN roles gr ON gr.id = agr.role_id AND gr.deleted_at IS NULL
         JOIN role_capabilities grc ON grc.role_id = gr.id AND grc.state = 'allow'
@@ -78,14 +79,15 @@ export function eligibleSql(userRef: string): string {
 export function presentSql(userRef: string): string {
   return `COALESCE((
     SELECT tl.kind = 'in' FROM time_logs tl
-     WHERE tl.user_id = ${userRef} AND tl.scanned_at <= now()
+     WHERE tl.user_id = ${userRef} AND tl.event_key = current_edition() AND tl.scanned_at <= now()
      ORDER BY tl.scanned_at DESC, tl.id DESC LIMIT 1), false)`;
 }
 
 /** H62: inside one of the person's stated intervals right now. */
 export function scheduledNowSql(userRef: string): string {
   return `EXISTS (SELECT 1 FROM helper_availability ha
-                   WHERE ha.user_id = ${userRef} AND ha.starts_at <= now() AND ha.ends_at > now())`;
+                   WHERE ha.user_id = ${userRef} AND ha.event_key = current_edition()
+                     AND ha.starts_at <= now() AND ha.ends_at > now())`;
 }
 
 /**
@@ -101,10 +103,13 @@ export const LISTED_HELPER_WHERE = `
 /** Display category: sponsor > mentor > staff; binds `u`. */
 export const KIND_SQL = `
   CASE
-    WHEN EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
+    WHEN EXISTS (SELECT 1 FROM sponsors s JOIN enterprises se ON se.id = s.enterprise_id
+                  WHERE s.user_id = u.id AND se.event_key = current_edition()) THEN 'sponsor'
     WHEN EXISTS (SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id
-                  WHERE ur.user_id = u.id AND r.name = 'Mentor' AND r.deleted_at IS NULL)
+                  WHERE ur.user_id = u.id AND r.name = 'Mentor' AND r.deleted_at IS NULL
+                    AND (ur.event_key IS NULL OR ur.event_key = current_edition()))
       OR EXISTS (SELECT 1 FROM application_responses ar
+                   JOIN applications ap ON ap.id = ar.application_id AND ap.event_key = current_edition()
                    JOIN application_grants_roles agr ON agr.application_id = ar.application_id
                    JOIN roles r ON r.id = agr.role_id AND r.name = 'Mentor' AND r.deleted_at IS NULL
                   WHERE ar.user_id = u.id AND ar.status IN ('accepted', 'confirmed'))
@@ -130,15 +135,18 @@ export const CARD_COLUMNS = `
   ${KIND_SQL} AS kind,
   ${highestVisibleRoleNameSql("u.id")} AS visible_role_name,
   (SELECT e.name FROM sponsors s JOIN enterprises e ON e.id = s.enterprise_id
-    WHERE s.user_id = u.id ORDER BY s.joined_at, s.id LIMIT 1) AS affiliation,
+    WHERE s.user_id = u.id AND e.event_key = current_edition()
+    ORDER BY s.joined_at, s.id LIMIT 1) AS affiliation,
   (SELECT e.logo_url FROM sponsors s JOIN enterprises e ON e.id = s.enterprise_id
-    WHERE s.user_id = u.id ORDER BY s.joined_at, s.id LIMIT 1) AS affiliation_logo_url,
+    WHERE s.user_id = u.id AND e.event_key = current_edition()
+    ORDER BY s.joined_at, s.id LIMIT 1) AS affiliation_logo_url,
   COALESCE((SELECT jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name) ORDER BY lower(t.name), t.id)
               FROM helper_topics ht JOIN help_topics t ON t.id = ht.topic_id
-             WHERE ht.user_id = u.id), '[]'::jsonb) AS topics,
+             WHERE ht.user_id = u.id AND ht.event_key = current_edition()), '[]'::jsonb) AS topics,
   COALESCE((SELECT jsonb_agg(jsonb_build_object('startsAt', ha.starts_at, 'endsAt', ha.ends_at)
                              ORDER BY ha.starts_at, ha.id)
-              FROM helper_availability ha WHERE ha.user_id = u.id), '[]'::jsonb) AS availability,
+              FROM helper_availability ha
+             WHERE ha.user_id = u.id AND ha.event_key = current_edition()), '[]'::jsonb) AS availability,
   ${scheduledNowSql("u.id")} AS scheduled_now,
   ${presentSql("u.id")} AS present`;
 
@@ -218,7 +226,7 @@ export async function getMyHelperProfile(
     await Promise.all([
       readOwnCard(db, userId),
       db.query<{ published: boolean; published_at: Date | null }>(
-        "SELECT published, published_at FROM helper_profiles WHERE user_id = $1",
+        "SELECT published, published_at FROM helper_profiles WHERE user_id = $1 AND event_key = current_edition()",
         [userId],
       ),
       isEligibleHelper(db, userId),
@@ -275,7 +283,8 @@ async function namedHelperChallenges(
   const { rows } = await db.query<{ id: number; title: string }>(
     `SELECT c.id, c.title FROM helper_profile_challenges hc
        JOIN challenges c ON c.id = hc.challenge_id
-      WHERE hc.user_id = $1 ORDER BY lower(c.title), c.id`,
+      WHERE hc.user_id = $1 AND hc.event_key = current_edition()
+      ORDER BY lower(c.title), c.id`,
     [userId],
   );
   return rows.map((r) => ({ id: Number(r.id), name: r.title }));
@@ -289,6 +298,7 @@ async function eventChallengeOptions(db: Queryable): Promise<{ id: number; name:
   const { rows } = await db.query<{ id: number; title: string }>(
     `SELECT id, title FROM challenges
       WHERE visibility = 'visible' AND is_test_account = false
+        AND event_key = current_edition()
       ORDER BY lower(title), id`,
   );
   return rows.map((r) => ({ id: Number(r.id), name: r.title }));
@@ -300,7 +310,7 @@ async function eventChallengeOptions(db: Queryable): Promise<{ id: number; name:
  */
 export async function challengeLimit(db: Queryable, userId: number): Promise<number[] | null> {
   const { rows } = await db.query<{ challenge_id: number }>(
-    "SELECT challenge_id FROM helper_profile_challenges WHERE user_id = $1 ORDER BY challenge_id",
+    "SELECT challenge_id FROM helper_profile_challenges WHERE user_id = $1 AND event_key = current_edition() ORDER BY challenge_id",
     [userId],
   );
   return rows.length > 0 ? rows.map((r) => Number(r.challenge_id)) : null;
@@ -320,11 +330,11 @@ async function lockActiveUser(db: Queryable, userId: number): Promise<void> {
 
 async function ensureProfileRow(db: Queryable, userId: number) {
   await db.query(
-    "INSERT INTO helper_profiles (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
+    "INSERT INTO helper_profiles (user_id) VALUES ($1) ON CONFLICT (user_id, event_key) DO NOTHING",
     [userId],
   );
   const { rows } = await db.query<{ published: boolean }>(
-    "SELECT published FROM helper_profiles WHERE user_id = $1 FOR UPDATE",
+    "SELECT published FROM helper_profiles WHERE user_id = $1 AND event_key = current_edition() FOR UPDATE",
     [userId],
   );
   return rows[0] as { published: boolean };
@@ -360,7 +370,7 @@ export async function updateMyHelperProfile(
       });
     }
     const { rows: topicRows } = await client.query<{ topic_id: number }>(
-      "SELECT topic_id FROM helper_topics WHERE user_id = $1 ORDER BY topic_id",
+      "SELECT topic_id FROM helper_topics WHERE user_id = $1 AND event_key = current_edition() ORDER BY topic_id",
       [userId],
     );
     const beforeTopics = topicRows.map((r) => Number(r.topic_id));
@@ -372,7 +382,8 @@ export async function updateMyHelperProfile(
       if (challengeIds.length > 0) {
         const { rows } = await client.query<{ id: number }>(
           `SELECT id FROM challenges
-            WHERE id = ANY($1::int[]) AND visibility = 'visible' AND is_test_account = false`,
+            WHERE id = ANY($1::int[]) AND visibility = 'visible' AND is_test_account = false
+              AND event_key = current_edition()`,
           [challengeIds],
         );
         const known = new Set(rows.map((r) => Number(r.id)));
@@ -398,7 +409,7 @@ export async function updateMyHelperProfile(
     await client.query(
       `UPDATE helper_profiles
           SET published = $2, published_at = CASE WHEN $2 AND NOT published THEN now() ELSE published_at END
-        WHERE user_id = $1`,
+        WHERE user_id = $1 AND event_key = current_edition()`,
       [userId, input.published],
     );
     if (shares) {
@@ -413,7 +424,10 @@ export async function updateMyHelperProfile(
       );
     }
     if (changedFields.includes("topics")) {
-      await client.query("DELETE FROM helper_topics WHERE user_id = $1", [userId]);
+      await client.query(
+        "DELETE FROM helper_topics WHERE user_id = $1 AND event_key = current_edition()",
+        [userId],
+      );
       if (topicIds.length > 0) {
         await client.query(
           "INSERT INTO helper_topics (user_id, topic_id) SELECT $1, unnest($2::int[])",
@@ -422,7 +436,10 @@ export async function updateMyHelperProfile(
       }
     }
     if (changedFields.includes("challengeIds")) {
-      await client.query("DELETE FROM helper_profile_challenges WHERE user_id = $1", [userId]);
+      await client.query(
+        "DELETE FROM helper_profile_challenges WHERE user_id = $1 AND event_key = current_edition()",
+        [userId],
+      );
       if (challengeIds.length > 0) {
         await client.query(
           "INSERT INTO helper_profile_challenges (user_id, challenge_id) SELECT $1, unnest($2::int[])",
@@ -502,14 +519,17 @@ export async function replaceMyAvailability(
     }
     await ensureProfileRow(client, userId);
     const { rows } = await client.query<{ starts_at: Date; ends_at: Date }>(
-      "SELECT starts_at, ends_at FROM helper_availability WHERE user_id = $1 ORDER BY starts_at, id",
+      "SELECT starts_at, ends_at FROM helper_availability WHERE user_id = $1 AND event_key = current_edition() ORDER BY starts_at, id",
       [userId],
     );
     const key = (list: { startsAt: Date; endsAt: Date }[]) =>
       list.map((i) => `${i.startsAt.toISOString()}/${i.endsAt.toISOString()}`).join(",");
     const before = rows.map((r) => ({ startsAt: r.starts_at, endsAt: r.ends_at }));
     if (key(before) === key(intervals)) return false;
-    await client.query("DELETE FROM helper_availability WHERE user_id = $1", [userId]);
+    await client.query(
+      "DELETE FROM helper_availability WHERE user_id = $1 AND event_key = current_edition()",
+      [userId],
+    );
     if (intervals.length > 0) {
       await client.query(
         `INSERT INTO helper_availability (user_id, starts_at, ends_at)
@@ -517,9 +537,10 @@ export async function replaceMyAvailability(
         [userId, intervals.map((i) => i.startsAt), intervals.map((i) => i.endsAt)],
       );
     }
-    await client.query("UPDATE helper_profiles SET updated_at = now() WHERE user_id = $1", [
-      userId,
-    ]);
+    await client.query(
+      "UPDATE helper_profiles SET updated_at = now() WHERE user_id = $1 AND event_key = current_edition()",
+      [userId],
+    );
     await audit(client, {
       actorId: actor.actorId,
       source: actor.source,
@@ -548,7 +569,8 @@ export async function listHelpers(filter: HelperFilter): Promise<HelperCard[]> {
   if (filter.topicId !== undefined) {
     params.push(filter.topicId);
     where.push(
-      `EXISTS (SELECT 1 FROM helper_topics ft WHERE ft.user_id = u.id AND ft.topic_id = $${params.length})`,
+      `EXISTS (SELECT 1 FROM helper_topics ft WHERE ft.user_id = u.id AND ft.event_key = current_edition()
+                 AND ft.topic_id = $${params.length})`,
     );
   }
   if (filter.q) {
@@ -557,7 +579,8 @@ export async function listHelpers(filter: HelperFilter): Promise<HelperCard[]> {
     where.push(`(
       unaccent(u.name || ' ' || COALESCE(u.surname, '')) ILIKE unaccent(${p})
       OR EXISTS (SELECT 1 FROM helper_topics qt JOIN help_topics t ON t.id = qt.topic_id
-                  WHERE qt.user_id = u.id AND unaccent(t.name) ILIKE unaccent(${p})))`);
+                  WHERE qt.user_id = u.id AND qt.event_key = current_edition()
+                    AND unaccent(t.name) ILIKE unaccent(${p})))`);
   }
   if (filter.availableNow) {
     where.push(presentSql("u.id"));
@@ -567,7 +590,7 @@ export async function listHelpers(filter: HelperFilter): Promise<HelperCard[]> {
        FROM helper_profiles hp
        JOIN users u ON u.id = hp.user_id
        LEFT JOIN user_public_profiles pp ON pp.user_id = u.id
-      WHERE ${where.join(" AND ")}`,
+      WHERE hp.event_key = current_edition() AND ${where.join(" AND ")}`,
     params,
   );
   return rows
@@ -584,7 +607,7 @@ const LISTED_HELPER_SQL = `
   FROM helper_profiles hp
   JOIN users u ON u.id = hp.user_id
   LEFT JOIN user_public_profiles pp ON pp.user_id = u.id
- WHERE ${LISTED_HELPER_WHERE}`;
+ WHERE hp.event_key = current_edition() AND ${LISTED_HELPER_WHERE}`;
 
 /** Whether `userId` is a helper browsers can see (published, eligible, active). */
 export async function isListedHelper(db: Queryable, userId: number): Promise<boolean> {
@@ -605,6 +628,7 @@ export async function claimedForViewer(
   const { rows } = await db.query(
     `SELECT 1 FROM help_requests hr
       WHERE hr.claimed_by = $2 AND hr.status IN ('claimed', 'resolved')
+        AND hr.event_key = current_edition()
         AND hr.requester_id = $1
       LIMIT 1`,
     [viewerId, helperId],
@@ -643,7 +667,7 @@ export async function mayOpenRequester(
   const limit = await challengeLimit(db, viewerId);
   const { rows } = await db.query(
     `SELECT 1 FROM help_requests hr
-      WHERE hr.requester_id = $2
+      WHERE hr.requester_id = $2 AND hr.event_key = current_edition()
         AND (hr.claimed_by = $1 OR EXISTS (
               SELECT 1 FROM help_request_recipients rr
                WHERE rr.request_id = hr.id AND rr.user_id = $1))

@@ -57,7 +57,7 @@ async function loadActivityCatalog(language: ExportLanguage): Promise<Record<str
         AND u.account_state = 'active' AND u.anonymized_at IS NULL
         AND u.is_test_account = false
        LEFT JOIN schedule s ON s.id = a.schedule_id
-      WHERE ${scannableActivitySql()}
+      WHERE a.event_key = current_edition() AND ${scannableActivitySql()}
       GROUP BY a.id, a.name, a.category, a.requires_scan, a.primary_language,
                a.name_i18n, a.description_i18n, s.starts_at, s.ends_at
       ORDER BY s.starts_at ASC NULLS LAST, a.name ASC, a.id ASC`,
@@ -244,7 +244,8 @@ async function exportPresenceLogCsv(): Promise<string> {
        FROM time_logs tl
        JOIN users u ON u.id = tl.user_id
        LEFT JOIN users actor ON actor.id = tl.scanned_by
-      WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
+      WHERE tl.event_key = current_edition()
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
         AND u.is_test_account = false
       ORDER BY tl.scanned_at, tl.id`,
   );
@@ -290,7 +291,11 @@ export function registerLogisticsExportRoutes(app: FastifyInstance): void {
     "/api/exports/activities.csv",
     {
       preHandler: requireCapability(CAPABILITIES.EXPORTS_RUN),
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.EXPORTS_RUN }),
+      config: routeAccess({
+        kind: "capability",
+        capability: CAPABILITIES.EXPORTS_RUN,
+        edition: "global",
+      }),
       schema: {
         body: activitiesExportBody,
         summary: "Export attendance for selected activities",

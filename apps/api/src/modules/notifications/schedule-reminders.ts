@@ -1,5 +1,6 @@
 import { config } from "../../config.js";
 import { type Queryable, withTransaction } from "../../db/pool.js";
+import { isScopedEditionClosed } from "../../lib/edition.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { readNotificationAutomationSettings } from "./automation-settings.js";
 import {
@@ -94,9 +95,12 @@ export async function runScheduleRemindersOnce(): Promise<{ reminded: number; no
     // Event setting (H45, H51): the organizer switch and the lead time.
     const automation = await readNotificationAutomationSettings(client);
     if (!automation.scheduleRemindersEnabled) return { reminded: 0, notified: 0 };
+    // Workers ignore a closed edition (multi-edition plan).
+    if (await isScopedEditionClosed(client)) return { reminded: 0, notified: 0 };
     const { rows } = await client.query(
       `SELECT id, title, location, starts_at, type FROM schedule
         WHERE visibility = 'shown'
+          AND event_key = current_edition()
           AND reminded_at IS NULL
           AND starts_at > now()
           AND starts_at <= now() + make_interval(mins => $1)
