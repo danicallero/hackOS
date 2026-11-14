@@ -29,7 +29,12 @@ export interface DirectoryEntry {
     location: string | null;
   }[];
   /** Every company the person represents (a person can belong to several), oldest membership first. */
-  enterprises?: { id: number; name: string; logoUrl: string | null }[];
+  enterprises?: {
+    id: number;
+    name: string;
+    logoUrl: string | null;
+    logoNegativeUrl?: string | null;
+  }[];
 }
 
 /** Absolute URL of an authenticated, root-relative API asset route. */

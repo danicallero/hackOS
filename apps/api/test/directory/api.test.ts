@@ -531,6 +531,10 @@ describe("speakers and company representatives (H44, H48)", () => {
         rep,
       ]);
     }
+    await pool.query("UPDATE enterprises SET logo_negative_url = $1 WHERE id = $2", [
+      "https://example.com/beta-dark.png",
+      ids[0],
+    ]);
     // A second membership row for the same company must not duplicate it.
     await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
       ids[0],
@@ -539,8 +543,13 @@ describe("speakers and company representatives (H44, H48)", () => {
     const res = await card(rep);
     expect(res.statusCode).toBe(200);
     expect(res.json().enterprises).toEqual([
-      { id: ids[0], name: "Beta", logoUrl: null },
-      { id: ids[1], name: "Alpha", logoUrl: null },
+      {
+        id: ids[0],
+        name: "Beta",
+        logoUrl: null,
+        logoNegativeUrl: "https://example.com/beta-dark.png",
+      },
+      { id: ids[1], name: "Alpha", logoUrl: null, logoNegativeUrl: null },
     ]);
   });
 

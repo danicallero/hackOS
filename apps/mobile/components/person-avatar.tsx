@@ -2,9 +2,10 @@ import { Image, type ImageProps } from "expo-image";
 import { useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { SymbolView } from "@/components/symbol";
+import { useColorScheme } from "@/components/useColorScheme";
 import { diaryInitials } from "@/lib/diary";
 import { apiImageSource } from "@/lib/directory";
-import { prefetchImageTint } from "@/lib/image-tint";
+import { prefetchImageTint, useImageBleed } from "@/lib/image-tint";
 import { colors } from "@/theme/colors";
 
 export interface ApiImage {
@@ -57,18 +58,27 @@ export function PersonAvatar({
   name,
   uri,
   kind = "person",
+  logoNegativeUrl,
+  testID,
 }: {
   size: number;
   name?: string | null;
   uri: string | null;
   kind?: "person" | "sponsor";
+  logoNegativeUrl?: string | null;
+  testID?: string;
 }) {
-  const photo = useApiImage(uri);
+  const dark = useColorScheme() === "dark";
+  const negative = kind === "sponsor" && dark && !!logoNegativeUrl;
+  const shown = negative ? logoNegativeUrl : uri;
+  const photo = useApiImage(shown);
+  const bleed = useImageBleed(kind === "sponsor" ? shown : null);
+  const imageSize = kind === "sponsor" && bleed ? size * 0.84 : size;
   // The page this avatar opens tints its hero with the image; get it ready first.
-  useEffect(() => prefetchImageTint(uri), [uri]);
+  useEffect(() => prefetchImageTint(shown), [shown]);
   const frame = {
     alignItems: "center" as const,
-    backgroundColor: colors.elevatedSurface,
+    backgroundColor: kind === "sponsor" && !negative ? colors.accentText : colors.elevatedSurface,
     borderRadius: kind === "person" ? size / 2 : size * 0.23,
     height: size,
     justifyContent: "center" as const,
@@ -78,14 +88,16 @@ export function PersonAvatar({
   const image = photo.props ? (
     <Image
       {...photo.props}
+      testID={testID ? `${testID}-image` : undefined}
       accessible={false}
       contentFit={kind === "person" ? "cover" : "contain"}
-      style={[{ height: size, width: size }, !photo.loaded && loadingImageStyle]}
+      style={[{ height: imageSize, width: imageSize }, !photo.loaded && loadingImageStyle]}
     />
   ) : null;
   // One tree for every state, so the image is not remounted when it loads.
   return (
     <View
+      testID={testID}
       style={[
         frame,
         // Tinted like the account avatar, so it reads on grouped and plain grounds.
