@@ -224,12 +224,13 @@ export function ConnectionsGraph({
   }, [positions, width, height, unit]);
 
   // Advance the sequence; a hidden tab holds still and resumes where it was.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `cursor` re-arms the timer when the loop wraps from one overview onto the next (same `step`)
   useEffect(() => {
     if (!visible || sequence.length < 2) return;
     const dwell = step === -1 ? OVERVIEW_DWELL_MS : SECTION_DWELL_MS;
     const timer = window.setTimeout(() => setCursor((c) => c + 1), dwell + MOVE_MS);
     return () => window.clearTimeout(timer);
-  }, [visible, sequence.length, step]);
+  }, [visible, sequence.length, cursor, step]);
 
   const target = useMemo(
     () => cameraFor(section, world, width, height),
@@ -582,6 +583,7 @@ export function ConnectionsGraph({
   // Render never depends on the camera or on which section is lit: elements keep their
   // keys and DOM nodes for the life of a snapshot, and read their live attributes from
   // the scene.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `world` flips from unmeasured to measured after mount, and edges must redraw then
   const edgeEls = useMemo(() => {
     const sc = scene.current;
     const draw = (edge: TvConnectionEdge, ghost: boolean) => {
@@ -616,7 +618,7 @@ export function ConnectionsGraph({
       );
     };
     return [...edges.map((e) => draw(e, false)), ...ghosts.edges.map((e) => draw(e, true))];
-  }, [edges, ghosts, unit, personDegree, companyDegree]);
+  }, [edges, ghosts, unit, personDegree, companyDegree, world]);
 
   const nodeEls = useMemo(() => {
     const sc = scene.current;

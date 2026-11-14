@@ -11,6 +11,7 @@ import {
   requireCapability,
 } from "../../lib/capabilities.js";
 import { isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
+import { getRequestContext } from "../../lib/request-context.js";
 import { positiveInt } from "../../lib/schemas.js";
 import { sharedCache } from "../../lib/shared-cache.js";
 import { subscribe } from "../../lib/sse.js";
@@ -242,6 +243,12 @@ export function registerReadsRoutes(app: FastifyInstance): void {
     "/api/tv/connections",
     {
       config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-tv" } },
+      // The wall shows the current edition only: an `X-Edition` override must not
+      // publish a past edition's named graph to anonymous callers (nor split the cache).
+      preHandler: async () => {
+        const ctx = getRequestContext();
+        if (ctx) ctx.edition = undefined;
+      },
       schema: {
         summary: "Public attendee connections graph (#934, #935)",
         description:

@@ -67,11 +67,9 @@ export function placeCompanyAngles(order: number[], preferred: number[]): number
   const TAU = Math.PI * 2;
   if (m < 2) return preferred;
   const minGap = (TAU / m) * 0.6;
-  const idx = preferred
-    .map((_, k) => k)
-    .sort((p, q) => preferred[p] - preferred[q] || order[p] - order[q]);
-  const ang = idx.map((k) => ((preferred[k] % TAU) + TAU) % TAU);
-  ang.sort((p, q) => p - q);
+  const norm = preferred.map((a) => ((a % TAU) + TAU) % TAU);
+  const idx = norm.map((_, k) => k).sort((p, q) => norm[p] - norm[q] || order[p] - order[q]);
+  const ang = idx.map((k) => norm[k]);
   for (let pass = 0; pass < 30; pass++) {
     let moved = false;
     for (let k = 0; k < m; k++) {

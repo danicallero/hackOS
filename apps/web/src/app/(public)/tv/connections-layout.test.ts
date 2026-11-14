@@ -12,6 +12,7 @@ import {
   linkAlpha,
   nodeRadius,
   personRadius,
+  placeCompanyAngles,
   selectLabels,
   snapshotSignature,
   spawnPoint,
@@ -251,6 +252,17 @@ describe("detectSections", () => {
     const sections = detectSections(nodes, edges);
     expect(sections.length).toBeLessThanOrEqual(12);
     expect(performance.now() - started).toBeLessThan(2_000);
+  });
+});
+
+describe("placeCompanyAngles", () => {
+  it("keeps each company at its own preferred angle when they are already spaced", () => {
+    const out = placeCompanyAngles([0, 1, 2], [-Math.PI / 2, 0, Math.PI]);
+    const TAU = Math.PI * 2;
+    [(3 * Math.PI) / 2, 0, Math.PI].forEach((want, i) => {
+      expect(out[i]).toBeCloseTo(want, 6);
+      expect(((out[i] % TAU) + TAU) % TAU).toBeCloseTo(want, 6);
+    });
   });
 });
 

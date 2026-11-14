@@ -244,6 +244,37 @@ describe("GET /api/tv/connections eligibility", () => {
     expect(body.edges).toEqual([]);
   });
 
+  it("ignores X-Edition: a past edition's graph is never served anonymously", async () => {
+    await pool.query(
+      `INSERT INTO editions (event_key, name, status) VALUES ('old', 'Old', 'active')`,
+    );
+    const a = await person();
+    const b = await person();
+    await meet(a, { user: b });
+    await invalidateSharedCache("tv");
+    const own = await app.inject({ method: "GET", url: "/api/tv/connections" });
+    expect(own.json().edges).toHaveLength(1);
+    // The people and the entry belong to the current edition; "old" has none.
+    await invalidateSharedCache("tv");
+    const viaHeader = await app.inject({
+      method: "GET",
+      url: "/api/tv/connections",
+      headers: { "x-edition": "old" },
+    });
+    expect(viaHeader.statusCode).toBe(200);
+    expect(viaHeader.json().edges).toHaveLength(1);
+    await pool.query(`UPDATE diary_entries SET event_key = 'old'`);
+    await pool.query(`UPDATE user_roles SET event_key = 'old' WHERE event_key IS NOT NULL`);
+    await invalidateSharedCache("tv");
+    const historical = await app.inject({
+      method: "GET",
+      url: "/api/tv/connections",
+      headers: { "x-edition": "old" },
+    });
+    expect(historical.statusCode).toBe(200);
+    expect(historical.json().nodes).toEqual([]);
+  });
+
   it("leaks no ids, emails, notes, timestamps or stars", async () => {
     const a = await person();
     const b = await person();

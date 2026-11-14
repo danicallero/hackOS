@@ -4,8 +4,9 @@ import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 
 // jsdom has no layout: hand the graph a fixed portrait-ish box.
+const box = vi.hoisted(() => ({ width: 1080, height: 1400 }));
 vi.mock("@/hooks/use-element-size", () => ({
-  useElementSize: () => ({ ref: useRef(null), width: 1080, height: 1400 }),
+  useElementSize: () => ({ ref: useRef(null), ...box }),
 }));
 
 import {
@@ -167,6 +168,88 @@ describe("ConnectionsGraph", () => {
       container.remove();
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it("keeps touring after a full cycle (the loop returns to the first section)", async () => {
+    vi.useFakeTimers({
+      toFake: [
+        "setTimeout",
+        "clearTimeout",
+        "requestAnimationFrame",
+        "cancelAnimationFrame",
+        "performance",
+      ],
+    });
+    try {
+      const nodes: TvConnectionNode[] = [];
+      const edges: TvConnectionEdge[] = [];
+      for (let c = 0; c < 3; c++)
+        for (let i = 0; i < 8; i++) {
+          nodes.push({ id: `p${c}-${i}`, kind: "person", label: `Person ${c}-${i}`, degree: 2 });
+          edges.push({ source: `p${c}-${i}`, target: `p${c}-${(i + 1) % 8}` });
+          edges.push({ source: `p${c}-${i}`, target: `p${c}-${(i + 3) % 8}` });
+        }
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      await act(async () =>
+        root.render(<ConnectionsGraph nodes={nodes} edges={edges} label="graph" />),
+      );
+      const labelCount = () => container.querySelectorAll("svg > g:last-child text").length;
+      // Overview, three sections, overview, then the loop wraps onto another overview.
+      const sectionMs = 10_000 + MOVE_MS;
+      const overviewMs = OVERVIEW_DWELL_MS + MOVE_MS;
+      const cycleMs = overviewMs * 3 + sectionMs * 3;
+      for (let t = 0; t < cycleMs; t += 500)
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(500);
+        });
+      // Into the first section again: labelled, where the stalled tour stayed on the overview.
+      let seen = 0;
+      for (let t = 0; t < sectionMs; t += 500) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(500);
+        });
+        seen = Math.max(seen, labelCount());
+      }
+      expect(seen).toBeGreaterThan(0);
+      act(() => root.unmount());
+      container.remove();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("draws edges once the box is measured after an unmeasured first render", async () => {
+    const nodes: TvConnectionNode[] = Array.from({ length: 4 }, (_, i) => ({
+      id: `n${i}`,
+      kind: "person",
+      label: `N${i}`,
+      degree: 2,
+    }));
+    const edges: TvConnectionEdge[] = [
+      { source: "n0", target: "n1" },
+      { source: "n1", target: "n2" },
+      { source: "n2", target: "n3" },
+    ];
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    Object.assign(box, { width: 0, height: 0 });
+    try {
+      await act(async () =>
+        root.render(<ConnectionsGraph nodes={nodes} edges={edges} label="graph" />),
+      );
+      Object.assign(box, { width: 800, height: 450 });
+      await act(async () =>
+        root.render(<ConnectionsGraph nodes={nodes} edges={edges} label="graph" />),
+      );
+      expect(container.querySelectorAll("svg line").length).toBe(edges.length);
+    } finally {
+      Object.assign(box, { width: 1080, height: 1400 });
+      act(() => root.unmount());
+      container.remove();
     }
   });
 
