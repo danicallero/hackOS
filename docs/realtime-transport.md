@@ -79,6 +79,16 @@ refetches the active scopes, and a gap refetches only that scope. The first
 event after a recovery establishes a new baseline. A gap hint replaces that
 event's refresh hint to avoid two recovery reads.
 
+## Rolling deploys (#1327)
+
+A draining API replica refuses new streams with 503 and ends its open streams
+at random moments within `SSE_DRAIN_SPREAD_MS` (5 s by default). Each client
+sees a clean end, reconnects through the deployment proxy to the remaining
+replica after its normal 1 s retry, and resyncs its scopes; events published
+during that second are not replayed. Both releases share `SSE_NAMESPACE`
+while they overlap, so events from either reach every client. Disconnects
+caused by the drain count as `hackos_sse_disconnects_total{reason="shutdown"}`.
+
 ## Lifecycle and revocation
 
 `packages/shared/src/realtime-client.ts` owns bounded fetch parsing and retry;

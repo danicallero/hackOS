@@ -381,11 +381,20 @@ chmod 0640 "$release_dir/metadata"
 
 wait_for_health() {
   local service="$1"
+  wait_for_container_health "$service" ""
+}
+
+# Wait for one container of a service, or for the service's only container
+# when no id is given. A rolling deploy briefly runs two replicas, so it waits
+# for the new one by id (#1327).
+wait_for_container_health() {
+  local service="$1" wanted_id="$2"
   local container_id status state attempt
 
   echo "WAIT: healthcheck $service"
   for attempt in {1..60}; do
-    container_id="$(compose ps --quiet "$service" 2>/dev/null || true)"
+    container_id="$wanted_id"
+    [[ -n "$container_id" ]] || container_id="$(compose ps --quiet "$service" 2>/dev/null | sed -n '1p' || true)"
     if [[ -n "$container_id" ]]; then
       status="$(docker inspect --format '{{.State.Health.Status}}' "$container_id" 2>/dev/null || true)"
       # A crash-looping container never reaches "unhealthy"; stop waiting as soon
@@ -415,6 +424,84 @@ wait_for_health() {
   return 1
 }
 
+# Every container of a service, running or not, one id per line.
+service_containers() {
+  compose ps --all --quiet "$1" 2>/dev/null || true
+}
+
+# Replace a service's containers without downtime (#1327). The new replica
+# starts beside the old one; the proxy service discovers it as soon as it
+# listens. Only once it is healthy is the old replica stopped: it stops
+# listening, finishes in-flight work within its stop_grace_period and exits.
+# A replica that never becomes healthy is removed while the old one keeps
+# serving, so a broken release never takes traffic away.
+roll_service() {
+  local service="$1"
+  local old_ids new_ids count
+
+  old_ids="$(service_containers "$service")"
+  count="$(grep -c . <<<"$old_ids" || true)"
+  echo "ROLL: starting a new $service replica beside $count running"
+  if ! run_compose "start new $service replica" up --detach --no-deps --no-recreate --pull never \
+    --scale "$service=$((count + 1))" "$service"; then
+    remove_new_replicas "$service" "$old_ids"
+    return 1
+  fi
+  new_ids="$(service_containers "$service" | grep -vxF -f <(printf '%s\n' "$old_ids") || true)"
+  if [[ "$(grep -c . <<<"$new_ids" || true)" != 1 ]]; then
+    echo "ERROR: expected exactly one new $service replica" >&2
+    remove_new_replicas "$service" "$old_ids"
+    return 1
+  fi
+  if ! wait_for_container_health "$service" "$new_ids"; then
+    remove_new_replicas "$service" "$old_ids"
+    return 1
+  fi
+  if [[ -n "$old_ids" ]]; then
+    echo "DRAIN: stopping the previous $service replica"
+    # docker stop honours each container's stop_grace_period.
+    # shellcheck disable=SC2086
+    docker stop $old_ids >/dev/null
+    # shellcheck disable=SC2086
+    docker rm $old_ids >/dev/null
+  fi
+  echo "OK: $service replaced without downtime"
+}
+
+remove_new_replicas() {
+  local service="$1" old_ids="$2" id
+  while IFS= read -r id; do
+    [[ -n "$id" ]] || continue
+    echo "ROLLBACK: removing the new $service replica; the previous one keeps serving" >&2
+    docker rm --force "$id" >/dev/null 2>&1 || true
+  done < <(service_containers "$service" | grep -vxF -f <(printf '%s\n' "$old_ids") || true)
+}
+
+# Whether a service's containers already match the Compose definition, so a
+# release that does not select it can still adopt a Compose change.
+service_config_current() {
+  local service="$1" expected id actual found=false
+  expected="$(compose config --hash "$service" 2>/dev/null | awk '{ print $2 }')"
+  [[ -n "$expected" ]] || return 1
+  while IFS= read -r id; do
+    [[ -n "$id" ]] || continue
+    found=true
+    actual="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.config-hash" }}' "$id" 2>/dev/null || true)"
+    [[ "$actual" == "$expected" ]] || return 1
+  done < <(service_containers "$service")
+  [[ "$found" == true ]]
+}
+
+# The proxy service owns the published ports. Until it runs, api and web still
+# publish them directly, and the first release with the proxy has to move the
+# ports once with a short interruption (deploy/README.md).
+proxy_running() {
+  [[ -n "$(compose ps --status running --quiet proxy 2>/dev/null || true)" ]]
+}
+
+rolling=false
+rolled_services=()
+
 # Put the previous release back after a failed rollout and fail the deployment
 # either way. The previous images are already on the host, so nothing is pulled.
 # Migrations that already ran stay applied: the runner lets an older image start
@@ -422,11 +509,27 @@ wait_for_health() {
 # backward compatible with the release before them.
 rollback_and_fail() {
   local reason="$1"
-  local restored=true
+  local restored=true service previous tag_variable
 
   echo "ERROR: $reason" >&2
   set +e
-  if [[ "$deploy_api" == true ]] && valid_image_tag "$previous_api_tag"; then
+  if [[ "$rolling" == true ]]; then
+    # The service that failed was never switched; undo the ones that were.
+    for service in ${rolled_services[@]+"${rolled_services[@]}"}; do
+      case "$service" in
+        web) previous="$previous_web_tag" tag_variable=WEB_IMAGE_TAG ;;
+        *) previous="$previous_api_tag" tag_variable=API_IMAGE_TAG ;;
+      esac
+      if valid_image_tag "$previous"; then
+        echo "ROLLBACK: rolling $service back to $previous" >&2
+        export "$tag_variable=$previous"
+        roll_service "$service" || restored=false
+      else
+        echo "ROLLBACK: no previous $service release is known" >&2
+        restored=false
+      fi
+    done
+  elif [[ "$deploy_api" == true ]] && valid_image_tag "$previous_api_tag"; then
     echo "ROLLBACK: restoring API and worker $previous_api_tag" >&2
     export API_IMAGE_TAG="$previous_api_tag"
     if compose up --detach --no-deps --force-recreate --pull never api worker >/dev/null 2>&1 \
@@ -439,12 +542,20 @@ rollback_and_fail() {
     echo "ROLLBACK: no previous API release is known" >&2
     restored=false
   fi
-  if [[ "$deploy_web" == true ]] && valid_image_tag "$previous_web_tag"; then
+  if [[ "$rolling" != true && "$deploy_web" == true ]] && valid_image_tag "$previous_web_tag"; then
     echo "ROLLBACK: restoring web $previous_web_tag" >&2
     export WEB_IMAGE_TAG="$previous_web_tag"
     if compose up --detach --no-deps --force-recreate --pull never web >/dev/null 2>&1 \
       && wait_for_health web; then
       echo "ROLLBACK: web is healthy on $previous_web_tag" >&2
+    else
+      restored=false
+    fi
+  fi
+  if [[ "$rolling" != true ]]; then
+    # The restored containers no longer publish ports themselves.
+    if compose up --detach --no-deps proxy >/dev/null 2>&1 && wait_for_health proxy; then
+      echo "ROLLBACK: proxy is serving the restored release" >&2
     else
       restored=false
     fi
@@ -528,25 +639,44 @@ fi
 if [[ "$deploy_api" == true ]]; then
   phase "Applying database migrations"
   run_compose "migrate database" run --rm --no-deps migrate
-  phase "Recreating API and worker"
-  if ! run_compose "update api and worker" up --detach --no-deps --force-recreate api worker; then
-    rollback_and_fail "API and worker could not be recreated for $image_tag"
+fi
+
+if proxy_running; then
+  rolling=true
+fi
+
+if [[ "$rolling" == true ]]; then
+  # Zero-downtime path (#1327). The worker goes first so the new API never
+  # enqueues work for a worker older than itself; the old replica of each
+  # service keeps serving until its successor is healthy.
+  phase "Refreshing the deployment proxy"
+  run_compose "refresh deployment proxy" up --detach --no-deps proxy || rollback_and_fail "deployment proxy could not start"
+  wait_for_health proxy || rollback_and_fail "deployment proxy did not become healthy"
+  for service in worker api web; do
+    selected=false
+    case "$service" in
+      web) [[ "$deploy_web" == true ]] && selected=true ;;
+      *) [[ "$deploy_api" == true ]] && selected=true ;;
+    esac
+    if [[ "$selected" != true ]] && service_config_current "$service"; then
+      echo "SKIP: $service unchanged"
+      continue
+    fi
+    phase "Rolling $service"
+    roll_service "$service" || rollback_and_fail "$service did not become healthy on this release"
+    rolled_services+=("$service")
+  done
+else
+  # One-time move of the published ports from api/web to the proxy service.
+  phase "Moving published ports to the deployment proxy (one-time)"
+  if ! run_compose "recreate api, worker and web" up --detach --no-deps --force-recreate --pull never api worker web; then
+    rollback_and_fail "application services could not be recreated for $image_tag"
   fi
+  run_compose "start deployment proxy" up --detach --no-deps proxy || rollback_and_fail "deployment proxy could not start"
   wait_for_health api || rollback_and_fail "API did not become healthy on $api_image_tag"
   wait_for_health worker || rollback_and_fail "worker did not become healthy on $api_image_tag"
-else
-  echo "SKIP: API and worker unchanged"
-fi
-if [[ "$deploy_web" == true ]]; then
-  phase "Recreating web"
-  if ! run_compose "update web" up --detach --no-deps --force-recreate web; then
-    rollback_and_fail "web could not be recreated for $image_tag"
-  fi
   wait_for_health web || rollback_and_fail "web did not become healthy on $web_image_tag"
-else
-  # Retain the image while adopting Compose changes such as metrics volumes.
-  run_compose "refresh retained web configuration" up --detach --no-deps --pull never web
-  wait_for_health web
+  wait_for_health proxy || rollback_and_fail "deployment proxy did not become healthy"
 fi
 
 state_tmp="$(mktemp "${state_file}.XXXXXX")"

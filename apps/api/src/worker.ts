@@ -18,6 +18,10 @@ console.log("hackOS worker running");
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, async () => {
+    // BullMQ's close waits for active jobs, so a rolling deploy retires this
+    // worker without abandoning them; Compose's stop_grace_period bounds the
+    // wait, and a job interrupted past it is retried after its lock expires
+    // (#1327).
     await stopQueues();
     await closeValkey();
     await pool.end();
