@@ -3,7 +3,7 @@ import { EVENTS, REALTIME_LIMITS, SSE_TOPICS, type SseEnvelope } from "@hackos/s
 import client from "@prometheus-io/client";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { config } from "../config.js";
-import { TooManyRequestsError } from "./errors.js";
+import { ServiceUnavailableError, TooManyRequestsError } from "./errors.js";
 import { register } from "./metrics.js";
 import { laneForSseTopic, metricTopicForSse, type RequestLane } from "./request-lanes.js";
 import { invalidateSharedCache } from "./shared-cache.js";
@@ -61,6 +61,11 @@ let relayStarting: Promise<void> | null = null;
 // rejection is a normal Fastify JSON error rather than an aborted stream.
 let globalConnCount = 0;
 const clientConnCounts = new Map<string, number>();
+
+// Shutdown drain (#1327): replies closed on purpose so clients reconnect to
+// another replica. New subscriptions are refused once the drain starts.
+let shuttingDown = false;
+const closedForShutdown = new WeakSet<FastifyReply>();
 
 // Backpressure (#540): tracks a reply currently waiting to drain, so repeat
 // writes to the same slow client are skipped instead of piling up.
@@ -398,6 +403,7 @@ async function attachSubscriptions(
   reply: FastifyReply,
   authorize?: () => Promise<void>,
 ): Promise<void> {
+  if (shuttingDown) throw new ServiceUnavailableError("SSE is moving to another API replica");
   await ensureRelay();
   const topics = [...new Set(subscriptions.map((subscription) => subscription.topic))];
   if (globalConnCount >= config.SSE_MAX_CONNECTIONS_GLOBAL) {
@@ -466,6 +472,8 @@ async function attachSubscriptions(
       clearTimeout(timer);
       draining.delete(reply);
       sseDisconnectsTotal.inc({ reason: "slow_client" });
+    } else if (closedForShutdown.has(reply)) {
+      sseDisconnectsTotal.inc({ reason: "shutdown" });
     } else {
       sseDisconnectsTotal.inc({ reason: state?.disconnectReason ?? "normal" });
     }
@@ -486,4 +494,36 @@ async function attachSubscriptions(
     if (remaining <= 0) clientConnCounts.delete(clientKey);
     else clientConnCounts.set(clientKey, remaining);
   });
+}
+
+/**
+ * Release every local SSE stream before this replica exits (#1327). Each
+ * stream ends cleanly at a random moment within `spreadMs`, so the clients'
+ * reconnect-and-refetch recovery reaches the remaining replica spread out
+ * instead of as a single burst. Events published while a client reconnects
+ * are not replayed; the refetch on reopen is the recovery contract.
+ */
+export async function closeAllSseStreams(spreadMs: number): Promise<void> {
+  shuttingDown = true;
+  const replies = new Set<FastifyReply>();
+  for (const conns of localSubscribers.values()) for (const reply of conns) replies.add(reply);
+  await Promise.all(
+    [...replies].map(
+      (reply) =>
+        new Promise<void>((resolve) => {
+          if (reply.raw.destroyed || reply.raw.writableEnded) return resolve();
+          const timer = setTimeout(
+            () => {
+              closedForShutdown.add(reply);
+              reply.raw.end();
+            },
+            Math.floor(Math.random() * spreadMs),
+          );
+          reply.raw.once("close", () => {
+            clearTimeout(timer);
+            resolve();
+          });
+        }),
+    ),
+  );
 }

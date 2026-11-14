@@ -20,8 +20,9 @@
 # proxy LXC normally needs 0.0.0.0.
 #
 # Event-day sizing (H22-H42, H46, H540, #544): postgres 5 GiB + valkey 2 GiB +
-# minio 1 GiB + api 2 GiB + worker 2 GiB + web 1 GiB = 13 GiB of declared
-# container RAM limits. Each service also has an explicit swap ceiling so a
+# minio 1 GiB + api 2 GiB + worker 2 GiB + web 1 GiB + proxy 256 MiB ≈ 13.25 GiB
+# of declared container RAM limits. A rolling deploy briefly runs a second
+# api, worker and web replica (#1327), so keep that much host headroom. Each service also has an explicit swap ceiling so a
 # short-lived burst can use host swap without allowing one service to consume
 # the entire host. Qualification mirrors the shared-service limits.
 
@@ -140,6 +141,9 @@ x-api-env: &api-env
   SSE_MAX_CONNECTIONS_PER_TOPIC: "${SSE_MAX_CONNECTIONS_PER_TOPIC:-500}"
   SSE_MAX_CONNECTIONS_PER_CLIENT: "${SSE_MAX_CONNECTIONS_PER_CLIENT:-20}"
   SSE_WRITE_TIMEOUT_MS: "${SSE_WRITE_TIMEOUT_MS:-5000}"
+  # Rolling-deploy drain (#1327); keep the sum below api.stop_grace_period.
+  SHUTDOWN_DRAIN_TIMEOUT_MS: "${SHUTDOWN_DRAIN_TIMEOUT_MS:-20000}"
+  SSE_DRAIN_SPREAD_MS: "${SSE_DRAIN_SPREAD_MS:-5000}"
   RATE_LIMIT_SCAN_MAX: "${RATE_LIMIT_SCAN_MAX:-120}"
   RATE_LIMIT_SCAN_WINDOW_SECONDS: "${RATE_LIMIT_SCAN_WINDOW_SECONDS:-60}"
   RATE_LIMIT_MEAL_BATCH_MAX: "${RATE_LIMIT_MEAL_BATCH_MAX:-60}"
@@ -415,8 +419,9 @@ services:
       - minio-memory:/run/hackos-memory/minio:ro
       - web-memory:/run/hackos-memory/web:ro
     dns: ["1.1.1.1", "8.8.8.8"]
-    ports:
-      - "${PUBLISH_BIND_ADDRESS:-0.0.0.0}:${API_PUBLISH_PORT:-3000}:3000"
+    # No host port: the proxy service owns API_PUBLISH_PORT so an old and a
+    # new replica can run side by side during a rolling deploy (#1327).
+    stop_grace_period: 30s
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -428,13 +433,12 @@ services:
         condition: service_healthy
     networks:
       private: {}
-      egress: {}
-      # Optional host-level tunnel/proxy network. Staging can point
-      # EDGE_NETWORK_NAME at an existing ingress network when a tunnel
-      # resolves the stable `api`, `web`, and (if needed) `minio` names.
-      edge: {}
+      egress:
+        aliases: [api-replicas]
+    # Readiness, not liveness: the deploy gate only retires the old replica
+    # once the new one reaches PostgreSQL (#1327).
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthz || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/readyz || exit 1"]
       interval: 15s
       timeout: 5s
       start_period: 30s
@@ -452,8 +456,9 @@ services:
     pull_policy: always
     command: ["node", "dist/worker.js"]
     environment: *worker-env
-    ports:
-      - "${PUBLISH_BIND_ADDRESS:-0.0.0.0}:${WORKER_METRICS_PUBLISH_PORT:-9464}:9464"
+    # The proxy publishes WORKER_METRICS_PUBLISH_PORT. BullMQ finishes active
+    # jobs before the worker exits; the grace period bounds that wait (#1327).
+    stop_grace_period: 60s
     dns: ["1.1.1.1", "8.8.8.8"]
     depends_on:
       migrate:
@@ -466,7 +471,8 @@ services:
         condition: service_healthy
     networks:
       private: {}
-      egress: {}
+      egress:
+        aliases: [worker-replicas]
     healthcheck:
       test: ["CMD-SHELL", "pidof node >/dev/null"]
       interval: 15s
@@ -496,13 +502,12 @@ services:
       WEB_DOMAIN: "${WEB_DOMAIN}"
       # #935 Android App Links for company-tag links (/.well-known/assetlinks.json).
       ANDROID_APP_CERT_SHA256: "${ANDROID_APP_CERT_SHA256:-}"
-    ports:
-      - "${PUBLISH_BIND_ADDRESS:-0.0.0.0}:${WEB_PUBLISH_PORT:-3001}:3001"
+    # Next.js stops accepting connections and finishes in-flight requests on
+    # SIGTERM; the proxy publishes WEB_PUBLISH_PORT (#1327).
+    stop_grace_period: 30s
     networks:
-      egress: {}
-      # See api.edge above. This is disabled as an external network by
-      # default, so the normal production profile remains isolated.
-      edge: {}
+      egress:
+        aliases: [web-replicas]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/ || exit 1"]
       interval: 15s
@@ -514,6 +519,94 @@ services:
         limits:
           memory: 1g
     memswap_limit: 2g
+    mem_swappiness: 40
+
+  # Stable entry point for rolling deploys (#1327). It owns the published API,
+  # web and worker-metrics ports, discovers every running replica through
+  # Docker DNS each second, and retries a refused connection on another
+  # replica. A new replica receives traffic once it listens; a draining one
+  # stops listening first, so neither side drops requests. Requests that
+  # already reached a replica are never replayed.
+  proxy:
+    <<: *hardening
+    image: caddy@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    entrypoint: ["/bin/sh", "-c"]
+    command: ['printf "%s" "$$HACKOS_PROXY_CADDYFILE" > /tmp/Caddyfile && exec caddy run --adapter caddyfile --config /tmp/Caddyfile']
+    environment:
+      HACKOS_PROXY_CADDYFILE: |
+        {
+        	admin off
+        	auto_https off
+        	persist_config off
+        	grace_period 10s
+        	servers {
+        		# Keep the client address from the TLS proxy (rate limits, audit).
+        		trusted_proxies static ${PROXY_TRUSTED_PROXIES:-private_ranges}
+        	}
+        }
+        (replicas) {
+        	lb_policy round_robin
+        	lb_try_duration 30s
+        	lb_try_interval 250ms
+        	fail_duration 2s
+        	max_fails 1
+        	transport http {
+        		dial_timeout 2s
+        	}
+        }
+        :3000 {
+        	reverse_proxy {
+        		dynamic a api-replicas 3000 {
+        			refresh 1s
+        			versions ipv4
+        		}
+        		import replicas
+        	}
+        }
+        :3001 {
+        	reverse_proxy {
+        		dynamic a web-replicas 3001 {
+        			refresh 1s
+        			versions ipv4
+        		}
+        		import replicas
+        	}
+        }
+        :9464 {
+        	reverse_proxy {
+        		dynamic a worker-replicas 9464 {
+        			refresh 1s
+        			versions ipv4
+        		}
+        		import replicas
+        	}
+        }
+        :8080 {
+        	respond "ok" 200
+        }
+    ports:
+      - "${PUBLISH_BIND_ADDRESS:-0.0.0.0}:${API_PUBLISH_PORT:-3000}:3000"
+      - "${PUBLISH_BIND_ADDRESS:-0.0.0.0}:${WEB_PUBLISH_PORT:-3001}:3001"
+      - "${PUBLISH_BIND_ADDRESS:-0.0.0.0}:${WORKER_METRICS_PUBLISH_PORT:-9464}:9464"
+    networks:
+      egress: {}
+      # Optional host-level tunnel network. A tunnel that resolves `api:3000`
+      # and `web:3001` reaches the replicas through this proxy. It is a
+      # project network by default, so production remains isolated.
+      edge:
+        aliases: [api, web]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+    stop_grace_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    memswap_limit: 512m
     mem_swappiness: 40
 
 volumes:

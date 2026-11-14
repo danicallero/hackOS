@@ -20,6 +20,7 @@ import { registerApiDocs } from "./lib/openapi.js";
 import { pathOf } from "./lib/request-path.js";
 import { registerRoutePolicyInfrastructure } from "./lib/route-policy.js";
 import { registerSessionInvalidations } from "./lib/session-invalidation.js";
+import { registerDrainHooks } from "./lib/shutdown.js";
 import { registerModules } from "./modules/index.js";
 import { authContextPlugin } from "./plugins/auth-context.js";
 import { clientFloorPlugin } from "./plugins/client-floor.js";
@@ -34,6 +35,12 @@ export type App = FastifyInstance;
 export async function buildApp(): Promise<App> {
   const app = Fastify({
     trustProxy: config.trustProxy,
+    // Fastify's default close destroys every open connection, cutting
+    // in-flight requests. A draining replica instead finishes them, including
+    // requests that arrive on an existing keep-alive connection, and
+    // lib/shutdown.ts closes the connections as they go idle (#1327).
+    forceCloseConnections: false,
+    return503OnClosing: false,
     logger: config.isTest
       ? false
       : {
@@ -46,6 +53,7 @@ export async function buildApp(): Promise<App> {
   // Startup fails closed if a route is added without an explicit policy; the
   // Better Auth generated catch-all is the sole narrow exemption.
   registerRoutePolicyInfrastructure(app);
+  registerDrainHooks(app);
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 

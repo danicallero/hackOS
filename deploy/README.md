@@ -15,6 +15,9 @@ stack tiene estos servicios de runtime:
 - `api`: Fastify en el puerto interno `3000`.
 - `worker`: BullMQ en proceso separado, sin HTTP.
 - `web`: Next.js en el puerto interno `3001`.
+- `proxy`: Caddy interno que publica los puertos de `api`, `web` y las métricas
+  del worker y reparte entre sus réplicas; permite desplegar sin corte
+  ([Despliegue sin corte](#despliegue-sin-corte-1327)).
 
 `minio-init` es un helper one-shot del mismo Compose para crear el bucket, la
 cuenta de servicio y la política de logos. No es un servicio de aplicación y
@@ -27,17 +30,22 @@ servicios de estado PostgreSQL y Valkey sólo están en `private`; MinIO usa
 `private` y puede unirse al ingress opcional para servir la API S3. API y worker
 usan las redes necesarias para resolver (`postgres:5432`, `valkey:6379`,
 `minio:9000`) y acceder a proveedores externos. `web` sólo necesita `egress`.
+`proxy` está en `egress` y localiza allí las réplicas por los alias
+`api-replicas`, `web-replicas` y `worker-replicas`.
 Por defecto todas las redes son del proyecto; el perfil opcional de ingress
 compartido se describe más abajo.
 
-Se publican dos puertos HTTP y un puerto S3 del host. En producción el proxy
+Se publican dos puertos HTTP, el de métricas del worker y un puerto S3 del
+host. Los tres primeros pertenecen a `proxy`, nunca a las réplicas, para que
+una réplica nueva y la anterior puedan convivir durante un despliegue. En producción el proxy
 está en otro LXC, por lo que la configuración canónica usa `0.0.0.0`; si el
 proxy comparte host, se puede fijar `PUBLISH_BIND_ADDRESS=127.0.0.1`.
 
 | Servicio | Puerto del contenedor | Publicación | Uso |
 |---|---:|---|---|
-| `api` | `3000` | `${PUBLISH_BIND_ADDRESS}:${API_PUBLISH_PORT}:3000` | Proxy → HTTP + SSE |
-| `web` | `3001` | `${PUBLISH_BIND_ADDRESS}:${WEB_PUBLISH_PORT}:3001` | Proxy → Next.js |
+| `proxy` → `api` | `3000` | `${PUBLISH_BIND_ADDRESS}:${API_PUBLISH_PORT}:3000` | Proxy → HTTP + SSE |
+| `proxy` → `web` | `3001` | `${PUBLISH_BIND_ADDRESS}:${WEB_PUBLISH_PORT}:3001` | Proxy → Next.js |
+| `proxy` → `worker` | `9464` | `${PUBLISH_BIND_ADDRESS}:${WORKER_METRICS_PUBLISH_PORT}:9464` | Prometheus |
 | `minio` | `9000` | `${PUBLISH_BIND_ADDRESS}:${S3_PUBLISH_PORT}:9000` | Proxy → S3 API |
 
 PostgreSQL y Valkey no tienen `ports:`. La consola MinIO también queda apagada
@@ -119,17 +127,17 @@ mismo que `EXPO_PUBLIC_EVENT_WEBSITE_URL` de la app.
 The normal profile uses a Compose-owned `edge` network and the external proxy
 reaches the published HTTP ports. A staging host that already has a host-level
 tunnel or proxy can instead set `EDGE_NETWORK_NAME` to its existing Docker
-network and `EDGE_NETWORK_EXTERNAL=true`. `api` and `web` join that network
-with the stable aliases `api` and `web`; MinIO also joins it so an explicitly
+network and `EDGE_NETWORK_EXTERNAL=true`. The `proxy` service joins that
+network with the stable aliases `api` and `web` and listens on `3000` and
+`3001`, so a tunnel whose origins are `api:3000` and `web:3001` reaches the
+current replicas through it; MinIO also joins it so an explicitly
 configured `s3` hostname can route to the S3 API at `minio:9000`. PostgreSQL
 and Valkey remain private. This lets a tunnel whose origins are Docker service
-names survive an application cutover while keeping the database and queue
-store off the ingress network.
+names survive every rolling deploy while keeping the database and queue store
+off the ingress network. The replicas themselves are never on it, so the
+aliases never resolve to two releases at once.
 
-Do not enable this option against an unreviewed shared network. Before the
-cutover, stop the previous API and web containers so the aliases cannot resolve
-to two releases at once. Keep the tunnel/proxy service running while the new
-containers are recreated.
+Do not enable this option against an unreviewed shared network.
 
 ## Configuración y secretos
 
@@ -280,9 +288,10 @@ contenedor.
 | `minio` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_BROWSER=off` |
 | `minio-init` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` |
 | `migrate` | `NODE_ENV`, `DATABASE_URL`, `BETTER_AUTH_SECRET` |
-| `api` | base de datos, Valkey, auth, URLs públicas, almacenamiento, Wallet, Live Activities (APNs), traducción, SSE, rate limits y fixtures API-only |
+| `api` | base de datos, Valkey, auth, URLs públicas, almacenamiento, Wallet, Live Activities (APNs), traducción, SSE, drenaje al desplegar, rate limits y fixtures API-only |
 | `worker` | base de datos, Valkey, `SSE_NAMESPACE`, auth/URLs necesarias para enlaces, almacenamiento, correo, Wallet, Live Activities (APNs) y tuning del worker |
 | `web` | sólo `API_DOMAIN`, `WEB_DOMAIN` y la configuración pública `ANDROID_APP_CERT_SHA256` |
+| `proxy` | sólo su configuración de Caddy, con `PROXY_TRUSTED_PROXIES` |
 
 En particular, `web` nunca recibe secretos; `api` no recibe credenciales de
 correo; y `migrate` no recibe Valkey, S3, correo ni Wallet.
@@ -490,11 +499,15 @@ anything and applies this order:
 
 1. `migrate` runs first and must succeed; a failing migration aborts the deploy
    while the running API and worker are still untouched.
-2. `api`/`worker`, then `web`, are recreated and must become healthy. A
-   container that is restarting or has exited fails the wait immediately.
-3. If recreation or a healthcheck fails, the previous tags are recreated from
-   the images already on the host (no registry access), health is awaited, and
-   the deployment still exits non-zero. `.image-tags` keeps the previous release.
+2. `worker`, `api`, then `web` are replaced one at a time without downtime
+   ([Despliegue sin corte](#despliegue-sin-corte-1327)): the new replica must
+   become healthy before the old one is stopped. A container that is
+   restarting or has exited fails the wait immediately.
+3. If a new replica fails, it is removed and the old replica, which never
+   stopped, keeps serving. Services already replaced in that run are rolled
+   back to their previous tags the same way, from the images already on the
+   host (no registry access), and the deployment still exits non-zero.
+   `.image-tags` keeps the previous release.
 
 Migrations that already ran stay applied. The runner accepts ledger entries from
 a newer release (same baseline lineage) so the previous image can start, which
@@ -555,6 +568,125 @@ each deployment also keeps a secret-free copy under
 `/opt/hackos/releases/<tag>`. Rollback does not automatically reverse database
 migrations: an incompatible migration needs a separately reviewed procedure.
 
+## Despliegue sin corte (#1327)
+
+Un despliegue correcto no interrumpe a quien está usando hackOS: no hay ventana
+de indisponibilidad, no se pierden sesiones y los clientes no recargan.
+
+### Cómo se relevan las réplicas
+
+`proxy` (Caddy, dentro del mismo Compose) es el único que publica puertos.
+Cada segundo resuelve por DNS de Docker todas las réplicas en ejecución de
+`api`, `web` y `worker` y reparte entre ellas. Si una réplica rechaza la
+conexión, reintenta en otra durante hasta 30 s; una petición que ya llegó a
+una réplica nunca se repite. El proxy externo (Caddy en otro LXC) sigue
+apuntando a los mismos puertos y no cambia.
+
+`incus-deploy.sh`, tras la migración, actualiza `proxy` (sólo se recrea si su
+definición cambió) y releva `worker`, `api` y `web` por este orden:
+
+1. Arranca una réplica nueva junto a la anterior
+   (`up --no-recreate --scale <servicio>=2`). Recibe tráfico en cuanto escucha.
+2. Espera su healthcheck. En `api` es `/readyz`, que exige PostgreSQL.
+3. Si no queda sana, la elimina; la anterior nunca dejó de atender.
+4. Si queda sana, para la anterior con `docker stop`, que drena (abajo) dentro
+   de su `stop_grace_period`, y la elimina.
+
+El worker va primero para que la API nueva nunca encole trabajo para un worker
+más antiguo que ella. Un servicio no seleccionado (por ejemplo la API en un
+despliegue sólo de web) sólo se releva si su definición de Compose cambió.
+
+### Drenaje y tiempos máximos
+
+| Servicio | Al recibir SIGTERM | Plazo |
+|---|---|---|
+| `api` | `/readyz` pasa a 503 `draining`; toda respuesta lleva `Connection: close`; deja de escuchar; termina las peticiones en curso; cierra cada SSE en un instante aleatorio dentro de `SSE_DRAIN_SPREAD_MS` (5 s); a los `SHUTDOWN_DRAIN_TIMEOUT_MS` (20 s) cierra lo que quede. | `stop_grace_period: 30s` |
+| `web` | Next.js deja de escuchar y termina las peticiones en curso. | `30s` |
+| `worker` | BullMQ deja de tomar trabajos y espera a que acaben los activos. | `60s` |
+| `proxy` | Termina las peticiones en curso (`grace_period 10s`). Sólo se para si cambia su definición. | `15s` |
+
+Cada relevo tarda como máximo la espera de salud (120 s) más el plazo de
+drenaje del servicio. Los clientes SSE (web y nativo, `realtime-client.ts`) se
+reconectan 1–1,25 s después del cierre y refrescan sus scopes; los eventos
+publicados durante ese segundo no se reenvían, el refresco es la recuperación
+(ver [`docs/realtime-transport.md`](../docs/realtime-transport.md)).
+
+Medición de referencia (portátil, imagen real de la API, PostgreSQL, Valkey y
+`proxy`, relevo de `api` con 16 clientes HTTP concurrentes y 20 SSE): 264 467
+peticiones sin errores de conexión; la única respuesta no 2xx fue un 503 de
+`/readyz` en la réplica que drenaba; los 20 SSE se reconectaron con un hueco
+máximo de 1,24 s; la réplica nueva quedó sana en 7 s y la anterior drenó en
+5 s. El worker se relevó con salida 0 en 1 s.
+
+### Estado compartido entre réplicas y versiones
+
+Nada de lo que un usuario necesita vive en la memoria de una réplica, así que
+no hacen falta sesiones pegajosas:
+
+| Estado | Dónde |
+|---|---|
+| Sesiones (Better Auth), claves de idempotencia, datos de dominio, auditoría | PostgreSQL |
+| Rate limits de la app y de `/api/auth/*`, caché de lecturas compartida, secuencias y difusión SSE (`sse:<SSE_NAMESPACE>:*`), trabajos BullMQ | Valkey |
+| Presupuestos de conexiones SSE y admisión de peticiones | Cada proceso, a propósito: limitan la carga de esa réplica |
+
+Las dos versiones comparten `SSE_NAMESPACE` durante el solapamiento, así que un
+evento publicado por la réplica antigua llega a los clientes de la nueva y al
+revés. Valkey no conserva eventos perdidos durante una reconexión: PostgreSQL
+sigue siendo la fuente de verdad.
+
+### Compatibilidad durante el solapamiento y el rollback
+
+Durante unos segundos atienden peticiones las dos versiones y el worker
+antiguo puede procesar trabajos encolados por la API antigua. Cada release
+debe ser compatible con la anterior en:
+
+- **Esquema**: expand/contract. La migración se aplica antes del relevo con la
+  versión anterior aún sirviendo, y un rollback arranca la versión anterior
+  sobre el esquema ya migrado.
+- **API y eventos SSE**: la web antigua puede hablar con la API nueva y al
+  revés; añadir campos o eventos, no cambiar ni retirar los existentes en el
+  mismo release. Un cambio de formato del canal SSE exige parar todas las
+  réplicas a la vez (ver `docs/realtime-transport.md`).
+- **Payloads de trabajos**: el worker nuevo debe aceptar los payloads que
+  encola la API anterior.
+
+### Límites
+
+- Una petición que sigue en una réplica cuando vence su plazo de drenaje se
+  corta; el cliente no vio el resultado y las mutaciones críticas se
+  reintentan sin duplicar efectos con su `Idempotency-Key`. Un trabajo que
+  supera los 60 s del worker se reintenta cuando expira su bloqueo de BullMQ.
+- Recrear `proxy` (sólo cuando cambia su definición) o reiniciar PostgreSQL,
+  Valkey o MinIO sí produce un corte breve. El proxy externo puede absorber el
+  reinicio de `proxy` con `lb_try_duration` en su `reverse_proxy`.
+- `services.sh recreate` y `backups restore` siguen recreando contenedores con
+  corte; `deploy` es el camino sin corte.
+- Durante el relevo corren dos réplicas del servicio: el host necesita memoria
+  libre para una réplica extra de `api`/`worker` (2 GiB) o `web` (1 GiB).
+
+### Primer despliegue con `proxy`
+
+Mientras `proxy` no está en marcha, `api` y `web` aún publican los puertos.
+El primer release que lo incluye los mueve una vez: recrea `api`, `worker` y
+`web` sin puertos y arranca `proxy`, con un corte de pocos segundos. Hacerlo
+fuera de horas de uso. A partir de ahí todos los despliegues son relevos.
+
+### Validación en staging
+
+Antes de confiar en el relevo en producción, repetirlo en staging con uso
+real y anotar los resultados en la PR o issue del release:
+
+1. Con la web abierta en varios navegadores y la app nativa con SSE activo,
+   generar tráfico concurrente contra `api.<dominio>` (lecturas y
+   operaciones: escaneos de acreditación y transiciones de cola con
+   `Idempotency-Key`).
+2. Desplegar un release con `services.sh staging deploy sha-<commit>`.
+3. Observar antes, durante y después: errores 5xx y de conexión en el proxy
+   externo, latencia (`/metrics`), `hackos_sse_disconnects_total{reason="shutdown"}`
+   y el tiempo hasta que los clientes recuperan el estado sin recargar.
+4. Repetir con un release que no arranca (por ejemplo un tag con una variable
+   obligatoria rota) y confirmar que la versión anterior sigue atendiendo.
+
 ## Orden de despliegue
 
 Ejecutar desde la raíz del repositorio en el host correspondiente. En
@@ -588,12 +720,21 @@ fi
 # 5. Ejecutar explícitamente la migración one-shot.
 "${COMPOSE[@]}" run --rm migrate
 
-# 6. Recrear sólo la aplicación con las imágenes descargadas.
-"${COMPOSE[@]}" up -d --no-build --force-recreate api worker web
+# 6. Asegurar el proxy que publica los puertos.
+"${COMPOSE[@]}" up -d --wait --wait-timeout 120 proxy
 
-# 7. Esperar API, worker y web saludables.
-"${COMPOSE[@]}" up -d --wait --wait-timeout 120 api worker web
+# 7. Relevar worker, api y web: réplica nueva junto a la anterior, esperar a
+#    que esté sana y sólo entonces parar (drenar) y eliminar la anterior.
+for service in worker api web; do
+  old_ids="$("${COMPOSE[@]}" ps --all --quiet "$service")"
+  "${COMPOSE[@]}" up -d --no-deps --no-recreate --pull never --scale "$service=2" "$service"
+  # Esperar a que el contenedor nuevo esté "healthy" (docker inspect), luego:
+  docker stop $old_ids && docker rm $old_ids
+done
 ```
+
+`incus-deploy.sh` automatiza estos pasos, espera la salud de cada réplica
+nueva por id y deshace el relevo si falla.
 
 El entrypoint de `server.js` conserva además la comprobación de migraciones de
 seguridad propia de la aplicación; el servicio `migrate` sigue siendo el paso

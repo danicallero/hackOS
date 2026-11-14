@@ -205,6 +205,14 @@ const envSchema = z.object({
   SSE_MAX_CONNECTIONS_PER_CLIENT: z.coerce.number().int().positive().default(20),
   /** How long a slow client has to drain a backpressured write before being disconnected. */
   SSE_WRITE_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
+  /**
+   * Rolling-deploy drain (#1327): how long a stopping API replica lets
+   * in-flight requests finish before closing every connection, and the window
+   * over which it ends its SSE streams so clients reconnect spread out. Keep
+   * the drain below the container's stop_grace_period.
+   */
+  SHUTDOWN_DRAIN_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
+  SSE_DRAIN_SPREAD_MS: z.coerce.number().int().nonnegative().default(5_000),
 
   /**
    * Rows claimed per outbox-dispatcher tick (H52, plan/07 §5.4), each

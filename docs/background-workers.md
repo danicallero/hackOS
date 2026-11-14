@@ -96,6 +96,18 @@ enqueueAuthEmail()/notify()                 dispatchOutboxOnce():
 (`channels/email.ts`), which lets invitation messages reach an address before
 it belongs to a user row.
 
+## Worker replacement during a deploy (#1327)
+
+A deploy starts the new `worker` container beside the old one; BullMQ hands
+each job to exactly one of them, so both versions briefly share the queues.
+The old worker then receives SIGTERM: it stops taking jobs and waits for its
+active ones (`stopQueues()`), bounded by Compose's `stop_grace_period: 60s`.
+A job cut off past that is marked stalled when its lock expires and runs
+again, so processors keep their effects idempotent (transactions with
+`SELECT … FOR UPDATE`, outbox claims). Repeatable jobs keep their fixed
+`jobId`, so both versions register the same schedule instead of two.
+Job payloads must stay readable by the release before and after the change.
+
 ## Queue structure, retries, concurrency & the dead-letter model
 
 The **`notification_outbox` table is the real queue.** Relevant columns:
