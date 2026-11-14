@@ -1,7 +1,7 @@
 import type { TvConnectionEdge, TvConnectionNode } from "@hackos/shared/tv-connections";
 import { act, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 // jsdom has no layout: hand the graph a fixed portrait-ish box.
 const box = vi.hoisted(() => ({ width: 1080, height: 1400 }));
@@ -24,7 +24,8 @@ import {
   true;
 
 describe("ConnectionsGraph", () => {
-  it("(setup) stubs the 2D context jsdom lacks", () => {
+  // jsdom has no 2D context: stub the one the logo and label probes use.
+  beforeAll(() => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
       measureText: () => ({ width: 6 }),
       clearRect: () => undefined,

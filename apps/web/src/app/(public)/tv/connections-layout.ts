@@ -30,6 +30,9 @@ export function hashUnit(text: string, salt = 0): number {
   return (hash >>> 0) / 4294967296;
 }
 
+/** Locale-independent string order: ids sort the same on every wall, whatever its language. */
+const byCodePoint = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 const clamp = (value: number) => Math.min(1 - MARGIN, Math.max(MARGIN, value));
 
 function seedPoint(id: string, anchor: Point | null, home: Point): Point {
@@ -125,7 +128,7 @@ export function layoutGraph(
   edges: TvConnectionEdge[],
   previous?: Positions,
 ): Positions {
-  const ids = nodes.map((node) => node.id).sort();
+  const ids = nodes.map((node) => node.id).sort(byCodePoint);
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const index = new Map(ids.map((id, i) => [id, i]));
   const n = ids.length;
@@ -677,7 +680,7 @@ export function snapshotSignature(nodes: TvConnectionNode[], edges: TvConnection
   const n = nodes.map(
     (x) => `${x.id}:${x.kind}:${x.label}:${x.degree}:${x.logoUrl ?? ""}:${x.logoNegativeUrl ?? ""}`,
   );
-  return `${n.sort().join("|")}#${edges.map(edgeKey).sort().join("|")}`;
+  return `${n.sort(byCodePoint).join("|")}#${edges.map(edgeKey).sort(byCodePoint).join("|")}`;
 }
 
 export interface SnapshotDiff {

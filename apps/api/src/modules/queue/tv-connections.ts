@@ -125,11 +125,13 @@ interface RawEdge {
   b: string;
 }
 
+const DEFAULT_LIMITS = { nodes: TV_GRAPH_MAX_NODES, edges: TV_GRAPH_MAX_EDGES };
+
 /** Builds the bounded public snapshot from raw rows; exported for unit tests of the bound. */
 export function buildGraph(
   rows: GraphRow[],
   now: number,
-  limits = { nodes: TV_GRAPH_MAX_NODES, edges: TV_GRAPH_MAX_EDGES },
+  limits = DEFAULT_LIMITS,
 ): TvConnectionsResponse {
   const idOf = nodeIdFactory(now);
   const key = (kind: "p" | "c", id: number) => `${kind}${id}`;
