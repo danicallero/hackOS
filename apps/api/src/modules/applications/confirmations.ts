@@ -119,10 +119,11 @@ async function doConfirm(
   const grantedRoleIds = grantRows.map((r) => r.role_id as number);
   if (grantedRoleIds.length > 0) {
     await client.query(
-      `INSERT INTO user_roles (user_id, role_id, assigned_by, source)
-       SELECT $1, unnest($2::int[]), $3, 'application_confirmed'
-       ON CONFLICT DO NOTHING`,
-      [resp.user_id, grantedRoleIds, actorId],
+      `INSERT INTO user_roles (user_id, role_id, assigned_by, source, event_key)
+       SELECT $1, unnest($2::int[]), $3, 'application_confirmed',
+              (SELECT a.event_key FROM applications a WHERE a.id = $4)
+       ON CONFLICT (user_id, role_id, event_key) DO NOTHING`,
+      [resp.user_id, grantedRoleIds, actorId, resp.application_id],
     );
   }
   const ticketAccess = await reconcileTicketAccess(client, resp.user_id);

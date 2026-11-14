@@ -1,6 +1,7 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { config } from "../../config.js";
 import { withTransaction } from "../../db/pool.js";
+import { isScopedEditionClosed } from "../../lib/edition.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { broadcast } from "../../lib/sse.js";
 import type { Announcement } from "./announcements-service.js";
@@ -20,9 +21,12 @@ const QUEUE_NAME = "announcements-publisher";
 
 export async function runAnnouncementsPublisherOnce(): Promise<{ published: number }> {
   const published = await withTransaction(async (client) => {
+    // Workers act on the current edition and ignore it once closed.
+    if (await isScopedEditionClosed(client)) return { published: 0 };
     const { rows } = await client.query(
       `SELECT * FROM announcements
-       WHERE notify_users = TRUE
+       WHERE event_key = current_edition()
+         AND notify_users = TRUE
          AND fanned_out_at IS NULL
          AND (publish_at IS NULL OR publish_at <= now())
          AND (expires_at IS NULL OR expires_at > now())

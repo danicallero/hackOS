@@ -79,7 +79,7 @@ check in the work process for the whole task, not only at startup.
   `03xx` projects · `04xx` queue/judging · `05xx` logistics ·
   `06xx` notifications · `07xx` sponsors/content · `08xx` roles/permissions
   (H8 rework replacing the capability-group model — see
-  `apps/api/src/lib/capabilities.ts`) · `09xx` help desk (H61-H67).
+  `apps/api/src/lib/capabilities.ts`) · `09xx` help desk (H61-H67) · `10xx` editions (multi-edition, `docs/multi-edition-plan.md`).
 - Document schema deltas vs `plan/schema-boceto.dbml` with a `DELTA(Hxx)`
   comment in the migration.
 - Tables with `updated_at` need the `set_updated_at` trigger (see 0001).

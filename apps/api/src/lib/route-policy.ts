@@ -1,6 +1,9 @@
 import { ALL_CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import type { FastifyInstance, FastifyRequest, RouteOptions } from "fastify";
+import { pool } from "../db/pool.js";
+import { assertEditionWritable, requestEditionOverride } from "./edition.js";
 import { requireVerifiedEmail } from "./email-verification.js";
+import { ConflictError } from "./errors.js";
 import { isProbePath } from "./request-path.js";
 
 /**
@@ -11,8 +14,23 @@ import { isProbePath } from "./request-path.js";
  */
 export type EmailVerificationRequirement = "caller" | "target" | "none";
 
+/**
+ * Multi-edition write scope (docs/multi-edition-plan.md §3). Mutations are
+ * `scoped` by default: they change data of the viewed edition and are
+ * rejected while it is closed. Routes that change only global data (account,
+ * profile, preferences, devices, catalogues, the edition lifecycle itself)
+ * declare `global`. Routes that write the current edition's singleton
+ * settings (event_config and the other id=1 settings rows) declare `current`:
+ * they are also rejected while viewing any other edition. A participant's own
+ * after-event record that stays valid once the edition closes (self-issued
+ * attendance certificates) declares `self-service`: it writes the viewed
+ * edition even while it is closed.
+ */
+export type EditionWriteScope = "scoped" | "current" | "global" | "self-service";
+
 interface RouteAccessOptions {
   emailVerification?: EmailVerificationRequirement;
+  edition?: EditionWriteScope;
 }
 
 /**
@@ -117,6 +135,12 @@ function validatePolicy(policy: RouteAccessPolicy, route: RouteOptions): void {
     throw new Error(
       `Route ${String(route.method)} ${route.url} cannot require caller email verification for ${policy.kind} access`,
     );
+  }
+  if (
+    policy.edition !== undefined &&
+    !["scoped", "current", "global", "self-service"].includes(policy.edition)
+  ) {
+    throw new Error(`Route ${String(route.method)} ${route.url} has an invalid edition scope`);
   }
   if (policy.emailVerification === "target" && policy.kind !== "token") {
     throw new Error(
@@ -226,6 +250,15 @@ export function registerRoutePolicyInfrastructure(app: FastifyInstance): void {
   app.addHook("preHandler", async (request) => {
     const policy = request.routeOptions.config?.routeAccessPolicy;
     if (!policy) return;
+    // The single closed-edition write guard: one place for every mutation.
+    if (MUTATION_METHODS.has(request.method.toUpperCase()) && policy.edition !== "global") {
+      if (policy.edition === "current" && requestEditionOverride() !== null) {
+        throw new ConflictError("Settings can only be changed in the current edition");
+      }
+      await assertEditionWritable(request, pool, {
+        selfServiceAfterClose: policy.edition === "self-service",
+      });
+    }
     if (emailVerificationForRoute(request.method, policy) === "caller") {
       await requireVerifiedEmail(request);
     }
@@ -300,9 +333,13 @@ export function describeRoutePolicy(policy: RouteAccessPolicy, method?: string):
   })();
   const requirement = method ? emailVerificationForRoute(method, policy) : policy.emailVerification;
   const explicitRequirement = policy.emailVerification !== undefined;
-  return requirement && (requirement !== "none" || explicitRequirement)
-    ? `${description} + email-verification:${requirement}`
-    : description;
+  const withVerification =
+    requirement && (requirement !== "none" || explicitRequirement)
+      ? `${description} + email-verification:${requirement}`
+      : description;
+  return policy.edition && policy.edition !== "scoped"
+    ? `${withVerification} + edition:${policy.edition}`
+    : withVerification;
 }
 
 /** OpenAPI's session/bearer marker derives exclusively from route policy. */

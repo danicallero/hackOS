@@ -23,6 +23,7 @@ export function registerCertificateTypeRoutes(app: FastifyInstance) {
   const access = routeAccessOption({
     kind: "capability",
     capability: CAPABILITIES.PRESENCE_MANAGE,
+    edition: "current",
   });
   r.get(
     "/api/certificates/types",
@@ -40,7 +41,7 @@ export function registerCertificateTypeRoutes(app: FastifyInstance) {
         `SELECT id,name FROM roles WHERE deleted_at IS NULL ORDER BY position DESC,id`,
       );
       const challenges = await pool.query(
-        `SELECT id,title,mandatory FROM challenges ORDER BY mandatory DESC,title,id`,
+        `SELECT id,title,mandatory FROM challenges WHERE event_key=current_edition() ORDER BY mandatory DESC,title,id`,
       );
       return {
         items: await listCertificateTypes(),
@@ -136,7 +137,8 @@ export function registerCertificateTypeRoutes(app: FastifyInstance) {
   r.post(
     "/api/me/certificates/issue",
     {
-      config: { routeAccessPolicy: { kind: "authenticated" } },
+      // A participant may obtain their certificate after the edition closed.
+      config: { routeAccessPolicy: { kind: "authenticated", edition: "self-service" } },
       preHandler: [requireAuth, idempotencyGuard],
       schema: {
         body: z.object({
@@ -146,7 +148,7 @@ export function registerCertificateTypeRoutes(app: FastifyInstance) {
         }),
         summary: "Obtain an eligible configured certificate",
         description:
-          "Enabled self-service definitions require event access and matching recipient criteria. Accepted spot is predefined for everyone with event access, without hours or demo requirements. Attendance types additionally enforce the attendance policy. Speaker/activity-specific certificates must be issued by staff. `refresh: true` replaces the current document with a new one, without revoking it, when the hours or activities it states changed after more attendance; otherwise it returns the current one (#1083).",
+          "Enabled self-service definitions require event access and matching recipient criteria. Accepted spot is predefined for everyone with event access, without hours or demo requirements. Attendance types additionally enforce the attendance policy. Speaker/activity-specific certificates must be issued by staff. `refresh: true` replaces the current document with a new one, without revoking it, when the hours or activities it states changed after more attendance; otherwise it returns the current one. Works in the viewed edition even after it closed: closing freezes what organizers administer, not what a participant may still obtain (#1083).",
       },
     },
     async (req) => {

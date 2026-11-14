@@ -37,6 +37,8 @@ const variant = z.enum(["participation", "hours", "activities"]);
 const locale = z.enum(["es", "gl", "en"]);
 const idParams = z.object({ id: z.coerce.number().int().positive() });
 
+const editionSchema = z.object({ eventKey: z.string(), name: z.string() });
+
 const verificationSchema = z.object({
   status: z.enum(["valid", "revoked"]),
   variant,
@@ -51,6 +53,7 @@ const verificationSchema = z.object({
   sha256: z.string().nullable(),
   generatedAt: z.string().nullable(),
   supersededAt: z.string().nullable(),
+  edition: editionSchema,
 });
 
 const settingsSchema = z.object({
@@ -91,6 +94,7 @@ const certificateSchema = z.object({
   revokedReason: z.string().nullable(),
   supersededAt: z.string().nullable(),
   outdated: z.boolean(),
+  edition: editionSchema,
 });
 
 /**
@@ -236,7 +240,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
       schema: {
         summary: "My certificate eligibility and certificates",
         description:
-          "The caller's secured venue hours, whether they meet the certificate policy (and why not), which certificate types are available to them now (and the reason when not) and the certificates already issued to them (#1083).",
+          "The caller's secured venue hours in the viewed edition, whether they meet the certificate policy (and why not), which certificate types are available to them now (and the reason when not) and the certificates already issued to them in every edition, each with its `edition` (#1083).",
         response: {
           200: z.object({
             settings: settingsSchema,
@@ -266,13 +270,16 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
   r.post(
     "/api/me/certificates",
     {
-      config: own,
+      // A participant may obtain their certificate after the edition closed.
+      config: {
+        routeAccessPolicy: { kind: "authenticated" as const, edition: "self-service" as const },
+      },
       preHandler: [requireAuth, idempotencyGuard],
       schema: {
         body: z.object({ variant, locale }),
         summary: "Issue my certificate",
         description:
-          "Issues the caller's certificate in the chosen variant (participation, hours or activities) and language, or returns the one already issued in that language. 409 with a reason when certificates are off, the venue-hours threshold is not met, the policy requires a presented project or an activities certificate has no attended activities to list (#1083, H53).",
+          "Issues the caller's certificate in the chosen variant (participation, hours or activities) and language, or returns the one already issued in that language. 409 with a reason when certificates are off, the venue-hours threshold is not met, the policy requires a presented project or an activities certificate has no attended activities to list. Works in the viewed edition even after it closed (#1083, H53).",
         response: { 200: certificateSchema },
       },
     },
@@ -317,7 +324,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
   r.put(
     "/api/certificates/settings",
     {
-      ...routeAccess(staffPolicy),
+      ...routeAccess({ ...staffPolicy, edition: "current" }),
       preHandler: [staff, idempotencyGuard],
       schema: {
         body: z
@@ -446,7 +453,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
         params: z.object({ code: z.string().min(16).max(64) }),
         summary: "Verify a certificate",
         description:
-          "Public check of a certificate by the code printed on it: whether it is valid or revoked, who it was issued to, the event and its dates, the hours only for documents that state them (the Attendance hours variant or an awarded custom type) and the SHA-256 and generation time of the stored copy, so a third party can compare the file they hold. Never returns a DNI/NIE; a revoked certificate shows no personal data. 404 for an unknown code, 429 past 60 requests a minute from one address (#1083).",
+          "Public check of a certificate by the code printed on it: whether it is valid or revoked, who it was issued to, the event and its dates, the hours only for documents that state them (the Attendance hours variant or an awarded custom type) and the SHA-256 and generation time of the stored copy, so a third party can compare the file they hold, and the `edition` it was issued in. Works for any edition, closed ones included. Never returns a DNI/NIE; a revoked certificate shows no personal data. 404 for an unknown code (also the answer for a person whose account was deleted or anonymized), 429 past 60 requests a minute from one address (#1083, H54).",
         response: {
           200: verificationSchema,
         },

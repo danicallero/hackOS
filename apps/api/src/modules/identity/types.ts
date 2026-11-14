@@ -33,7 +33,7 @@ export interface UserRemovalRow {
   dni: string | null;
   is_test_account: boolean;
   badge_id: string | null;
-  badge_id_history: string[];
+  badge_event_key: string | null;
   account_state: "active" | "removal_pending";
   removal_action: AccountRemovalAction | null;
   removal_requires_exit: boolean;

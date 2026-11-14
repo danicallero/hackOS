@@ -4,6 +4,7 @@ import { registerCertificatesModule } from "./certificates/index.js";
 import { registerChallengesModule } from "./challenges/index.js";
 import { registerDiaryModule } from "./diary/index.js";
 import { registerDirectoryModule } from "./directory/index.js";
+import { registerEditionsModule } from "./editions/index.js";
 import { registerEventModule } from "./event/index.js";
 import { registerExportsModule } from "./exports/index.js";
 import { registerFormLibrariesModule } from "./form-libraries/index.js";
@@ -38,6 +39,7 @@ export async function registerModules(app: FastifyInstance): Promise<void> {
   await registerChallengesModule(app); // WS-G  (H44)
   await registerDiaryModule(app); // #935 event diary (people and sponsor stands)
   await registerDirectoryModule(app); // #934 opt-in people directory
+  await registerEditionsModule(app); // multi-edition lifecycle (H8, H53)
   await registerEventModule(app); // WS-G  (H45, H47)
   await registerExportsModule(app); // WS-F  (H54, H56)
   registerFormLibrariesModule(app);

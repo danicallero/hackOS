@@ -39,7 +39,7 @@ async function aggregateActivities(
        LEFT JOIN users u ON u.id = al.user_id
         AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
        LEFT JOIN schedule s ON s.id = a.schedule_id
-      WHERE ${where}
+      WHERE a.event_key = current_edition() AND (${where})
       GROUP BY a.id, a.name, a.category, a.primary_language, a.name_i18n, a.description_i18n, s.starts_at
       ORDER BY s.starts_at ASC NULLS LAST, a.name ASC, a.id ASC`,
     params,
@@ -97,7 +97,8 @@ export async function accreditationCountsByRole() {
     `SELECT COALESCE(uern.role_name, 'Unassigned') AS role, count(*)::int AS count
        FROM users u
        LEFT JOIN user_effective_role_name uern ON uern.user_id = u.id
-      WHERE u.badge_id IS NOT NULL AND u.account_state = 'active' AND u.anonymized_at IS NULL
+      WHERE u.badge_event_key = current_edition()
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
         AND u.is_test_account = false
       GROUP BY role ORDER BY role`,
   );
@@ -114,7 +115,8 @@ export async function hourlyFlow() {
   const accreditations = await pool.query<{ bucket: Date; n: number }>(
     `SELECT date_trunc('hour', badge_assigned_at) AS bucket, count(*)::int AS n
        FROM users
-      WHERE badge_id IS NOT NULL AND account_state = 'active' AND anonymized_at IS NULL
+      WHERE badge_event_key = current_edition()
+        AND account_state = 'active' AND anonymized_at IS NULL
         AND is_test_account = false
       GROUP BY 1 ORDER BY 1`,
   );
@@ -123,7 +125,7 @@ export async function hourlyFlow() {
             (a.category = ANY($1::text[])) AS meal,
             count(*)::int AS n
        FROM activity_logs al
-       JOIN activities a ON a.id = al.activity_id
+       JOIN activities a ON a.id = al.activity_id AND a.event_key = current_edition()
        JOIN users u ON u.id = al.user_id
         AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
       WHERE ${scannableActivitySql()}
@@ -150,7 +152,8 @@ export async function hourlyFlow() {
 export async function logisticsStats() {
   const accredited = await pool.query(
     `SELECT count(*)::int AS n FROM users
-      WHERE badge_id IS NOT NULL AND account_state = 'active' AND anonymized_at IS NULL
+      WHERE badge_event_key = current_edition()
+        AND account_state = 'active' AND anonymized_at IS NULL
         AND is_test_account = false`,
   );
   const occ = await occupancyEstimate({ actorId: null });
@@ -160,10 +163,11 @@ export async function logisticsStats() {
   const hourly = await hourlyFlow();
   // H24/H27: intersect attendees with the same presence estimate as the denominator.
   const presentAttendance = await pool.query<{ activity_id: number; people: number }>(
-    `SELECT activity_id, count(DISTINCT user_id)::int AS people
-       FROM activity_logs
-      WHERE user_id = ANY($1::int[])
-      GROUP BY activity_id`,
+    `SELECT al.activity_id, count(DISTINCT al.user_id)::int AS people
+       FROM activity_logs al
+       JOIN activities a ON a.id = al.activity_id AND a.event_key = current_edition()
+      WHERE al.user_id = ANY($1::int[])
+      GROUP BY al.activity_id`,
     [occ.present],
   );
   const presentByActivity = new Map(
@@ -230,7 +234,7 @@ export async function scannerRoleStats(actorId?: number): Promise<
     has_capabilities: boolean;
   }>(
     `WITH classified AS (
-       SELECT u.id, u.badge_id,
+       SELECT u.id, (u.badge_event_key = current_edition()) AS has_badge,
               COALESCE(uern.role_name, 'Unassigned') AS role,
               EXISTS (SELECT 1 FROM user_effective_capabilities uec WHERE uec.user_id = u.id) AS has_capabilities,
               EXISTS (
@@ -242,7 +246,7 @@ export async function scannerRoleStats(actorId?: number): Promise<
      )
      SELECT role,
             count(*) FILTER (WHERE has_event_access)::int AS eligible,
-            count(*) FILTER (WHERE badge_id IS NOT NULL)::int AS accredited,
+            count(*) FILTER (WHERE has_badge)::int AS accredited,
             array_agg(id) AS user_ids,
             has_capabilities
        FROM classified

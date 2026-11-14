@@ -19,12 +19,20 @@ export async function assertActiveMember(userId: number, repoId: number): Promis
   if (!rowCount) throw new ForbiddenError("Only project members can manage the GitHub link");
 }
 
-/** Hacking window when set, else the event window; either end may be open. */
+/**
+ * Hacking window when set, else the event window; either end may be open.
+ * Event settings describe the current edition; another viewed edition uses
+ * its own dates from `editions`.
+ */
 async function activityWindow(): Promise<{ from: string | null; to: string | null }> {
   const { rows } = await pool.query(
     `SELECT COALESCE(hacking_starts_at, event_starts_at) AS "from",
             COALESCE(hacking_ends_at, event_ends_at) AS "to"
-       FROM event_config WHERE id = 1`,
+       FROM event_config WHERE id = 1 AND event_key = current_edition()
+     UNION ALL
+     SELECT starts_at, ends_at FROM editions
+      WHERE event_key = current_edition()
+        AND event_key IS DISTINCT FROM (SELECT event_key FROM event_config WHERE id = 1)`,
   );
   return {
     from: rows[0]?.from ? new Date(rows[0].from).toISOString() : null,
@@ -334,14 +342,14 @@ export async function leaderboard() {
          FROM github_commits c JOIN repos r ON r.id = c.repo_id
          LEFT JOIN github_accounts ga ON lower(ga.login) = lower(c.author_login)
          LEFT JOIN users u ON u.id = ga.user_id
-        WHERE r.is_test_account = false AND c.author_login IS NOT NULL AND ${inWindow("c.committed_at")}
+        WHERE r.is_test_account = false AND r.event_key = current_edition() AND c.author_login IS NOT NULL AND ${inWindow("c.committed_at")}
         GROUP BY c.author_login, u.name, u.surname ORDER BY count DESC, name LIMIT ${TOP}`,
       window,
     ),
     pool.query(
       `SELECT r.name, count(*)::int AS count
          FROM github_commits c JOIN repos r ON r.id = c.repo_id
-        WHERE r.is_test_account = false AND ${inWindow("c.committed_at")}
+        WHERE r.is_test_account = false AND r.event_key = current_edition() AND ${inWindow("c.committed_at")}
         GROUP BY r.id, r.name ORDER BY count DESC, r.name LIMIT ${TOP}`,
       window,
     ),
@@ -350,14 +358,14 @@ export async function leaderboard() {
          FROM github_pull_requests p JOIN repos r ON r.id = p.repo_id
          LEFT JOIN github_accounts ga ON lower(ga.login) = lower(p.author_login)
          LEFT JOIN users u ON u.id = ga.user_id
-        WHERE r.is_test_account = false AND p.author_login IS NOT NULL AND ${inWindow("p.opened_at")}
+        WHERE r.is_test_account = false AND r.event_key = current_edition() AND p.author_login IS NOT NULL AND ${inWindow("p.opened_at")}
         GROUP BY p.author_login, u.name, u.surname ORDER BY count DESC, merged DESC, name LIMIT ${TOP}`,
       window,
     ),
     pool.query(
       `SELECT r.name, count(*)::int AS count, count(p.merged_at)::int AS merged
          FROM github_pull_requests p JOIN repos r ON r.id = p.repo_id
-        WHERE r.is_test_account = false AND ${inWindow("p.opened_at")}
+        WHERE r.is_test_account = false AND r.event_key = current_edition() AND ${inWindow("p.opened_at")}
         GROUP BY r.id, r.name ORDER BY count DESC, merged DESC, r.name LIMIT ${TOP}`,
       window,
     ),
@@ -392,7 +400,7 @@ export interface PersonActivity {
 const windowFilter = (column: string, from: number, to: number) =>
   `($${from}::timestamptz IS NULL OR ${column} >= $${from}) AND ($${to}::timestamptz IS NULL OR ${column} <= $${to})`;
 
-/** Commit and pull-request totals per linked project inside the activity window (H18). */
+/** Commit and pull-request totals per linked project of the viewed edition inside its activity window (H18). */
 export async function teamActivity(): Promise<TeamActivity[]> {
   const { from, to } = await activityWindow();
   const { rows } = await pool.query(
@@ -403,7 +411,8 @@ export async function teamActivity(): Promise<TeamActivity[]> {
               WHERE p.repo_id = l.repo_id AND ${windowFilter("p.opened_at", 1, 2)}) AS "pullRequests",
             (SELECT count(p.merged_at)::int FROM github_pull_requests p
               WHERE p.repo_id = l.repo_id AND ${windowFilter("p.opened_at", 1, 2)}) AS merged
-       FROM github_repo_links l`,
+       FROM github_repo_links l
+       JOIN repos lr ON lr.id = l.repo_id AND lr.event_key = current_edition()`,
     [from, to],
   );
   return rows;

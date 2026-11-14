@@ -122,5 +122,6 @@
   "apiError_schedule_audience_role_invalid": "Elige roles marcados como visibles públicamente.",
   "apiError_helper_publish_own_consent": "Solo la propia persona puede publicar su perfil del help desk.",
   "apiError_topic_in_use": "Esta área de conocimiento está en uso. Fusiónala con otra.",
-  "apiError_rsvp_role_invalid": "Elige roles marcados como públicos."
+  "apiError_rsvp_role_invalid": "Elige roles marcados como públicos.",
+  "apiError_edition_closed": "Esta edición está cerrada y es de solo lectura."
 }

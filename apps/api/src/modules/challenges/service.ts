@@ -195,7 +195,7 @@ export async function listOwnedChallenges(userId: number) {
        JOIN sponsors author ON author.id = c.author
        JOIN enterprises ent ON ent.id = author.enterprise_id
        JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
-      WHERE mine.user_id = $1 AND c.is_test_account = $2
+      WHERE mine.user_id = $1 AND c.is_test_account = $2 AND c.event_key = current_edition()
       ORDER BY c.id`,
     [userId, fixtureMarker],
   );
@@ -211,7 +211,7 @@ export async function listAssignedJudgeChallenges(userId: number) {
        JOIN sponsors author ON author.enterprise_id = ej.enterprise_id
        JOIN challenges c ON c.author = author.id
        JOIN enterprises ent ON ent.id = author.enterprise_id
-      WHERE ej.user_id = $1 AND c.is_test_account = $2
+      WHERE ej.user_id = $1 AND c.is_test_account = $2 AND c.event_key = current_edition()
       ORDER BY c.id`,
     [userId, fixtureMarker],
   );
@@ -224,7 +224,7 @@ export async function listAllChallenges(fixtureMarker = false) {
        FROM challenges c
        JOIN sponsors author ON author.id = c.author
        JOIN enterprises ent ON ent.id = author.enterprise_id
-      WHERE c.is_test_account = $1
+      WHERE c.is_test_account = $1 AND c.event_key = current_edition()
       ORDER BY c.id`,
     [fixtureMarker],
   );
@@ -316,9 +316,13 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
 
     const repoIds = input.mandatory
       ? (
-          await client.query(`SELECT id FROM repos WHERE is_test_account = $1 ORDER BY id`, [
-            fixtureMarker,
-          ])
+          await client.query(
+            `SELECT id FROM repos
+              WHERE is_test_account = $1
+                AND event_key = (SELECT event_key FROM challenges WHERE id = $2)
+              ORDER BY id`,
+            [fixtureMarker, created.id],
+          )
         ).rows.map((row: { id: number }) => Number(row.id))
       : [];
     const outcomes = await enrollReposInMandatoryChallenges(client, actorId, repoIds, [created.id]);
@@ -603,9 +607,13 @@ export async function updateChallenge(
     const repoIds =
       patch.mandatory === true && before.mandatory !== true
         ? (
-            await client.query(`SELECT id FROM repos WHERE is_test_account = $1 ORDER BY id`, [
-              await isSyntheticOperator(client, editorId),
-            ])
+            await client.query(
+              `SELECT id FROM repos
+                WHERE is_test_account = $1
+                  AND event_key = (SELECT event_key FROM challenges WHERE id = $2)
+                ORDER BY id`,
+              [await isSyntheticOperator(client, editorId), challengeId],
+            )
           ).rows.map((row: { id: number }) => Number(row.id))
         : [];
     const outcomes = await enrollReposInMandatoryChallenges(client, editorId, repoIds, [
@@ -688,6 +696,8 @@ export async function revealDueChallenges(client: Queryable = pool): Promise<num
             available_from = NULL,
             updated_at = now()
       WHERE visibility = 'hidden'
+        AND event_key = current_edition()
+        AND event_key NOT IN (SELECT event_key FROM editions WHERE status = 'closed')
         AND available_from IS NOT NULL
         AND available_from <= now()
       RETURNING id`,

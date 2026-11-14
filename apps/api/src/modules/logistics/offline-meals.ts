@@ -3,7 +3,7 @@ import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS } from "@hackos/shared/events";
 import type { Job } from "bullmq";
 import { pool, withTransaction } from "../../db/pool.js";
-import { AppError, BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { AppError, BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { fixtureSubjectScopeErrors } from "../../lib/fixture-subject-scope.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { broadcast } from "../../lib/sse.js";
@@ -30,8 +30,15 @@ export async function enqueueMealScanBatch(
     }>;
   },
 ) {
-  const activity = await pool.query(`SELECT category FROM activities WHERE id = $1`, [activityId]);
+  const activity = await pool.query(
+    `SELECT category, event_key = current_edition() AS in_current_edition
+       FROM activities WHERE id = $1`,
+    [activityId],
+  );
   if (!activity.rows[0]) throw new NotFoundError("Activity not found");
+  if (!activity.rows[0].in_current_edition) {
+    throw new ConflictError("This activity belongs to another edition", { activityId });
+  }
   if (!isMealActivityKind(activity.rows[0].category)) {
     throw new BadRequestError("Offline meal queue only accepts meal activities", { activityId });
   }
@@ -57,7 +64,8 @@ export async function enqueueMealScanBatch(
         badge_id: string | null;
         badge_assigned_at: Date | null;
       }>(
-        `SELECT id, badge_id, badge_assigned_at FROM users
+        `SELECT id, CASE WHEN badge_event_key = current_edition() THEN badge_id END AS badge_id,
+                badge_assigned_at FROM users
           WHERE id = ANY($1::int[]) AND account_state = 'active' AND anonymized_at IS NULL
           ORDER BY id
           FOR SHARE`,

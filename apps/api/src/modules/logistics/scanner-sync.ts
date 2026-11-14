@@ -44,7 +44,15 @@ export async function scannerSnapshot(actorId?: number) {
   // for immediate operator feedback.
   const [peopleResult, activitiesResult, statesResult] = await Promise.all([
     pool.query(
-      `SELECT u.id, u.email, u.name, u.surname, u.dni, u.badge_id, u.badge_id_history,
+      `SELECT u.id, u.email, u.name, u.surname, u.dni,
+              -- A badge only identifies someone in the edition it was assigned in;
+              -- the history likewise only revokes within the edition it was released in.
+              CASE WHEN u.badge_event_key = current_edition() THEN u.badge_id END AS badge_id,
+              COALESCE((
+                SELECT array_agg(h.badge_id ORDER BY h.released_at, h.badge_id)
+                  FROM badge_id_history h
+                 WHERE h.user_id = u.id AND h.event_key = current_edition()
+              ), ARRAY[]::text[]) AS badge_id_history,
               u.food_intolerance_notes, u.notes,
               u.photo_key,
               CASE WHEN EXISTS (
@@ -70,15 +78,19 @@ export async function scannerSnapshot(actorId?: number) {
                 SELECT 1 FROM user_effective_capabilities uec WHERE uec.user_id = u.id
               ) AS has_capabilities,
               EXISTS (
-                SELECT 1 FROM enterprise_judges ej WHERE ej.user_id = u.id
+                SELECT 1 FROM enterprise_judges ej
+                  JOIN enterprises en ON en.id = ej.enterprise_id AND en.event_key = current_edition()
+                 WHERE ej.user_id = u.id
               ) AS is_enterprise_judge,
               EXISTS (
                 SELECT 1 FROM application_responses ar
+                  JOIN applications ap ON ap.id = ar.application_id AND ap.event_key = current_edition()
                  WHERE ar.user_id = u.id
                    AND ar.status IN ('accepted_internal', 'accepted', 'confirmed')
               ) AS accepted,
               EXISTS (
                 SELECT 1 FROM application_responses ar
+                  JOIN applications ap ON ap.id = ar.application_id AND ap.event_key = current_edition()
                  WHERE ar.user_id = u.id AND ar.status = 'confirmed'
               ) AS confirmed,
               COALESCE((
@@ -90,7 +102,7 @@ export async function scannerSnapshot(actorId?: number) {
               last_presence.scanned_at AS last_presence_at
          FROM users u
          LEFT JOIN user_effective_role_name uern ON uern.user_id = u.id
-         LEFT JOIN tickets t ON t.user_id = u.id
+         LEFT JOIN tickets t ON t.user_id = u.id AND t.event_key = current_edition()
          -- Anonymized profiles (H54) must never reach a scanner's local store.
          LEFT JOIN LATERAL (
            -- As-of-now, like presenceScan's session guard: a future scheduled
@@ -99,6 +111,7 @@ export async function scannerSnapshot(actorId?: number) {
            SELECT tl.kind, tl.scanned_at
              FROM time_logs tl
             WHERE tl.user_id = u.id AND tl.scanned_at <= now()
+              AND tl.event_key = current_edition()
             ORDER BY tl.scanned_at DESC, tl.id DESC
             LIMIT 1
          ) last_presence ON true
@@ -110,13 +123,14 @@ export async function scannerSnapshot(actorId?: number) {
               a.primary_language, a.name_i18n, a.description_i18n
          FROM activities a
          LEFT JOIN schedule s ON s.id = a.schedule_id
-        WHERE ${scannableActivitySql()}
+        WHERE a.event_key = current_edition() AND ${scannableActivitySql()}
         ORDER BY s.starts_at ASC NULLS LAST, a.name ASC, a.id ASC`,
       [scannableCategoriesParam()],
     ),
     pool.query(
       `SELECT user_id, activity_id, count(*)::int AS scan_count
          FROM activity_logs al
+         JOIN activities a ON a.id = al.activity_id AND a.event_key = current_edition()
          JOIN users u ON u.id = al.user_id
         WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
           ${subjectScope}

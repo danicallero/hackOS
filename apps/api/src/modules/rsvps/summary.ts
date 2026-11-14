@@ -44,7 +44,7 @@ async function peopleSql(actorId: number, eventKeyParam: string): Promise<string
   return `
   people AS (
     SELECT u.id, k.kind, u.food_intolerances, u.food_intolerance_notes,
-           ARRAY(SELECT ur.role_id FROM user_roles ur JOIN roles ro ON ro.id = ur.role_id AND ro.deleted_at IS NULL
+           ARRAY(SELECT ur.role_id FROM user_roles ur JOIN roles ro ON ro.id = ur.role_id AND ro.deleted_at IS NULL AND (ur.event_key IS NULL OR ur.event_key = current_edition())
                   WHERE ur.user_id = u.id) AS role_ids
       FROM users u
       JOIN event_attendance_kinds k ON k.user_id = u.id AND k.event_key = ${eventKeyParam}

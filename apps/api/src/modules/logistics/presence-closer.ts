@@ -2,6 +2,7 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { config } from "../../config.js";
 import { withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
+import { isScopedEditionClosed } from "../../lib/edition.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import {
   type AccountRemovalAction,
@@ -59,21 +60,27 @@ export async function runPresenceEventEndCloserOnce(): Promise<{
     // any identity-bearing records are scrubbed. Lock and re-check each
     // candidate so a concurrent removal simply makes this participant a
     // no-op, rather than aborting the entire event-end closer transaction.
+    // A closed edition is read-only: its sessions are never auto-closed
+    // (multi-edition plan §3). Pending account removals below are global and
+    // still finalize.
+    const editionClosed = await isScopedEditionClosed(client);
     const { rows: candidates } = await client.query<{
       user_id: number;
       event_ends_at: Date;
     }>(
       `SELECT DISTINCT ON (tl.user_id) tl.user_id, ec.event_ends_at
          FROM event_config ec
-         JOIN time_logs tl ON tl.scanned_at <= now()
+         JOIN time_logs tl ON tl.scanned_at <= now() AND tl.event_key = current_edition()
          JOIN users u ON u.id = tl.user_id
         WHERE ec.id = 1 AND ec.event_ends_at IS NOT NULL AND ec.event_ends_at <= now()
+          AND NOT $1::boolean
           AND (
             u.account_state = 'active'
             OR (u.account_state = 'removal_pending' AND u.removal_requires_exit = true)
           )
           AND u.anonymized_at IS NULL
         ORDER BY tl.user_id, tl.scanned_at DESC, tl.id DESC`,
+      [editionClosed],
     );
 
     // Lock every still-eligible candidate in one statement, in ascending id
@@ -97,7 +104,7 @@ export async function runPresenceEventEndCloserOnce(): Promise<{
       ? await client.query<{ user_id: number; kind: string; scanned_at: Date }>(
           `SELECT DISTINCT ON (user_id) user_id, kind, scanned_at
              FROM time_logs
-            WHERE user_id = ANY($1::int[])
+            WHERE user_id = ANY($1::int[]) AND event_key = current_edition()
             ORDER BY user_id, scanned_at DESC, id DESC`,
           [lockedList],
         )

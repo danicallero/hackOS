@@ -11,7 +11,7 @@ const baseDatabaseUrl = new URL(
 // H53: balance measured suite time without splitting a domain. Each shard
 // receives independent Postgres, Valkey and storage namespaces below.
 const shardDirectories = [
-  ["identity", "certificates", "notifications", "directory", "event"],
+  ["identity", "certificates", "notifications", "directory", "event", "editions"],
   ["queue", "live-activities", "exports", "diary", "helpdesk"],
   ["logistics", "projects", "github", "reports", "sponsors"],
   ["applications", "challenges", "statistics"],

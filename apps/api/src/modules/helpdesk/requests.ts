@@ -134,7 +134,8 @@ function requestSelect(where: string, order: string, limit = 100): string {
          hr.resolved_at, hr.cancelled_at, hr.created_at, hr.queued_at,
          CASE WHEN hr.status = 'open' THEN (
            SELECT count(*)::int + 1 FROM help_requests q
-            WHERE q.status = 'open' AND (q.queued_at, q.id) < (hr.queued_at, hr.id)
+            WHERE q.status = 'open' AND q.event_key = hr.event_key
+              AND (q.queued_at, q.id) < (hr.queued_at, hr.id)
          ) END AS queue_position,
          COALESCE((SELECT jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name) ORDER BY lower(t.name), t.id)
                      FROM help_request_topics rt JOIN help_topics t ON t.id = rt.topic_id
@@ -238,7 +239,7 @@ async function toViews(
 /** Eligible AND published: what claiming and the helper inbox require. */
 async function isActiveHelper(db: Queryable, userId: number): Promise<boolean> {
   const { rows } = await db.query(
-    "SELECT 1 FROM helper_profiles WHERE user_id = $1 AND published",
+    "SELECT 1 FROM helper_profiles WHERE user_id = $1 AND event_key = current_edition() AND published",
     [userId],
   );
   return rows.length > 0 && (await isEligibleHelper(db, userId));
@@ -309,7 +310,11 @@ async function isRequester(db: Queryable, userId: number, id: number): Promise<b
 
 export async function listMyRequests(userId: number): Promise<HelpRequestView[]> {
   const { rows } = await pool.query<RequestRow>(
-    requestSelect("hr.requester_id = $1", "hr.created_at DESC, hr.id DESC", 50),
+    requestSelect(
+      "hr.requester_id = $1 AND hr.event_key = current_edition()",
+      "hr.created_at DESC, hr.id DESC",
+      50,
+    ),
     [userId],
   );
   return toViews(pool, rows, await isActiveHelper(pool, userId), userId);
@@ -328,11 +333,12 @@ export async function listInbox(
   const { rows } = await pool.query<RequestRow>(
     scope === "open"
       ? requestSelect(
-          `hr.status = 'open' AND ($2::int[] IS NULL OR hr.challenge_id = ANY($2::int[]))`,
+          `hr.status = 'open' AND hr.event_key = current_edition()
+           AND ($2::int[] IS NULL OR hr.challenge_id = ANY($2::int[]))`,
           "hr.queued_at, hr.id",
         )
       : requestSelect(
-          "hr.claimed_by = $1 AND hr.status IN ('claimed', 'resolved')",
+          "hr.claimed_by = $1 AND hr.status IN ('claimed', 'resolved') AND hr.event_key = current_edition()",
           "(hr.status = 'claimed') DESC, hr.claimed_at DESC, hr.id DESC",
           50,
         ),
@@ -355,6 +361,7 @@ export async function listRequestChallenges(
                     WHERE qe.challenge_id = c.id AND s.user_id = $1 AND s.status = 'active') AS mine
        FROM challenges c
       WHERE c.visibility = 'visible' AND c.is_test_account = false
+        AND c.event_key = current_edition()
       ORDER BY mine DESC, lower(c.title), c.id`,
     [userId],
   );
@@ -432,15 +439,19 @@ async function routeAudience(
   }>(
     `SELECT u.id AS user_id,
             -- A helper with no topics is a generalist: any request matches (H61, H65).
-            NOT EXISTS (SELECT 1 FROM helper_topics ht WHERE ht.user_id = u.id)
+            NOT EXISTS (SELECT 1 FROM helper_topics ht
+                         WHERE ht.user_id = u.id AND ht.event_key = hp.event_key)
               OR EXISTS (SELECT 1 FROM helper_topics ht
-                          WHERE ht.user_id = u.id AND ht.topic_id = ANY($2::int[])) AS matches,
-            NOT EXISTS (SELECT 1 FROM helper_profile_challenges hc WHERE hc.user_id = u.id)
+                          WHERE ht.user_id = u.id AND ht.event_key = hp.event_key
+                            AND ht.topic_id = ANY($2::int[])) AS matches,
+            NOT EXISTS (SELECT 1 FROM helper_profile_challenges hc
+                         WHERE hc.user_id = u.id AND hc.event_key = hp.event_key)
               OR EXISTS (SELECT 1 FROM helper_profile_challenges hc
-                          WHERE hc.user_id = u.id AND hc.challenge_id = $3::int) AS challenge_ok
+                          WHERE hc.user_id = u.id AND hc.event_key = hp.event_key
+                            AND hc.challenge_id = $3::int) AS challenge_ok
        FROM helper_profiles hp
        JOIN users u ON u.id = hp.user_id
-      WHERE ${LISTED_HELPER_WHERE}
+      WHERE hp.event_key = current_edition() AND ${LISTED_HELPER_WHERE}
         AND ${presentSql("u.id")}
         AND NOT (u.id = ANY($1::int[]))
       ORDER BY u.id`,
@@ -476,13 +487,13 @@ export async function createRequest(
     const challengeId = input.challengeId ?? null;
     if (challengeId != null) {
       const { rows } = await client.query(
-        "SELECT 1 FROM challenges WHERE id = $1 AND visibility = 'visible' AND is_test_account = false",
+        "SELECT 1 FROM challenges WHERE id = $1 AND visibility = 'visible' AND is_test_account = false AND event_key = current_edition()",
         [challengeId],
       );
       if (!rows[0]) throw new BadRequestError("Choose a visible challenge", { challengeId });
     }
     const active = await client.query<{ id: number }>(
-      "SELECT id FROM help_requests WHERE status IN ('open', 'claimed') AND requester_id = $1",
+      "SELECT id FROM help_requests WHERE status IN ('open', 'claimed') AND requester_id = $1 AND event_key = current_edition()",
       [userId],
     );
     if (active.rows[0]) {
@@ -609,7 +620,7 @@ export async function editRequest(
     const challengeId = input.challengeId ?? null;
     if (challengeId != null) {
       const { rows } = await client.query(
-        "SELECT 1 FROM challenges WHERE id = $1 AND visibility = 'visible' AND is_test_account = false",
+        "SELECT 1 FROM challenges WHERE id = $1 AND visibility = 'visible' AND is_test_account = false AND event_key = current_edition()",
         [challengeId],
       );
       if (!rows[0]) throw new BadRequestError("Choose a visible challenge", { challengeId });

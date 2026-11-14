@@ -109,10 +109,12 @@ export function registerDegreeRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
   const manage = requireCapability(CAPABILITIES.INTOLERANCES_MANAGE);
   const publicAccess = routeAccess({ kind: "public", anonymousCategory: "public-content" });
-  const authenticated = routeAccess({ kind: "authenticated" });
+  // Catalogues are global: edits never touch an edition's rows.
+  const authenticated = routeAccess({ kind: "authenticated", edition: "global" });
   const manageAccess = routeAccess({
     kind: "capability",
     capability: CAPABILITIES.INTOLERANCES_MANAGE,
+    edition: "global",
   });
 
   r.get(

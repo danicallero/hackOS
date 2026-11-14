@@ -49,10 +49,24 @@ const Q_IDEMPOTENCY_SCOPE = `(
   OR scope LIKE '% /api/enterprises/%/queue-groups%'
 )`;
 
-async function countRows(client: Queryable, table: string): Promise<number> {
-  const { rows } = await client.query(`SELECT count(*)::int AS count FROM ${table}`);
-  return Number(rows[0]?.count ?? 0);
-}
+/**
+ * Multi-edition: the reset only touches the scoped edition's rows (a closed
+ * edition is read-only history and other editions are untouched). Tables
+ * without their own event_key are reached through their parent.
+ */
+const IN_EDITION = {
+  repos: `event_key = current_edition()`,
+  submissions: `repo_id IN (SELECT id FROM repos WHERE event_key = current_edition())`,
+  queue_entries: `event_key = current_edition()`,
+  entryChildren: `queue_entry_id IN (SELECT id FROM queue_entries WHERE event_key = current_edition())`,
+  attemptChildren: `attempt_id IN (SELECT id FROM queue_entries WHERE event_key = current_edition())`,
+  challenge_winners: `challenge_id IN (SELECT id FROM challenges WHERE event_key = current_edition())`,
+  enterprise_judges: `enterprise_id IN (SELECT id FROM enterprises WHERE event_key = current_edition())`,
+  queue_groups: `event_key = current_edition()`,
+  groupChildren: `queue_group_id IN (SELECT id FROM queue_groups WHERE event_key = current_edition())`,
+  roomChildren: `room_id IN (SELECT id FROM rooms WHERE event_key = current_edition())`,
+  rooms: `event_key = current_edition()`,
+} as const;
 
 async function countWhere(
   client: Queryable,
@@ -72,6 +86,7 @@ async function recreateDefaultQueueGroups(client: Queryable): Promise<number> {
     `SELECT c.id, c.title, s.enterprise_id
        FROM challenges c
        JOIN sponsors s ON s.id = c.author
+      WHERE c.event_key = current_edition()
       ORDER BY c.id
       FOR UPDATE OF c`,
   );
@@ -147,20 +162,32 @@ export async function resetJudgingData(
       AND ($1::text IS NULL OR key <> $1 OR scope <> $2)`;
 
     const counts: JudgingDataResetResult["counts"] = {
-      projects: await countRows(client, "repos"),
-      projectMembers: await countRows(client, "submissions"),
-      queueEntries: await countRows(client, "queue_entries"),
-      queueHistory: await countRows(client, "queue_history"),
-      reviews: await countRows(client, "attempt_review"),
-      reviewVersions: await countRows(client, "attempt_review_versions"),
-      judgingSessions: await countRows(client, "judging_session"),
-      winners: await countRows(client, "challenge_winners"),
-      judgeAssignments: await countRows(client, "enterprise_judges"),
-      queueGroupsRemoved: await countRows(client, "queue_groups"),
+      projects: await countWhere(client, "repos", IN_EDITION.repos),
+      projectMembers: await countWhere(client, "submissions", IN_EDITION.submissions),
+      queueEntries: await countWhere(client, "queue_entries", IN_EDITION.queue_entries),
+      queueHistory: await countWhere(client, "queue_history", IN_EDITION.entryChildren),
+      reviews: await countWhere(client, "attempt_review", IN_EDITION.attemptChildren),
+      reviewVersions: await countWhere(
+        client,
+        "attempt_review_versions",
+        IN_EDITION.attemptChildren,
+      ),
+      judgingSessions: await countWhere(client, "judging_session", IN_EDITION.entryChildren),
+      winners: await countWhere(client, "challenge_winners", IN_EDITION.challenge_winners),
+      judgeAssignments: await countWhere(client, "enterprise_judges", IN_EDITION.enterprise_judges),
+      queueGroupsRemoved: await countWhere(client, "queue_groups", IN_EDITION.queue_groups),
       queueGroupsRecreated: 0,
-      queueGroupMembers: await countRows(client, "queue_group_challenges"),
-      roomQueueAssignments: await countRows(client, "room_queue_groups"),
-      roomEnterpriseAssignments: await countRows(client, "room_enterprises"),
+      queueGroupMembers: await countWhere(
+        client,
+        "queue_group_challenges",
+        IN_EDITION.groupChildren,
+      ),
+      roomQueueAssignments: await countWhere(client, "room_queue_groups", IN_EDITION.roomChildren),
+      roomEnterpriseAssignments: await countWhere(
+        client,
+        "room_enterprises",
+        IN_EDITION.roomChildren,
+      ),
       queueNotifications: await countWhere(
         client,
         "notification_outbox",
@@ -183,22 +210,22 @@ export async function resetJudgingData(
     // Review and queue history tables have no delete cascade by design: the
     // reset names every dependent table explicitly so no judging artifact is
     // left behind when its queue entry disappears.
-    await client.query(`DELETE FROM attempt_review_versions`);
-    await client.query(`DELETE FROM attempt_review`);
-    await client.query(`DELETE FROM judging_session`);
-    await client.query(`DELETE FROM queue_history`);
-    await client.query(`DELETE FROM queue_entries`);
-    await client.query(`DELETE FROM challenge_winners`);
-    await client.query(`DELETE FROM enterprise_judges`);
-    await client.query(`DELETE FROM room_queue_groups`);
-    await client.query(`DELETE FROM room_enterprises`);
-    await client.query(`DELETE FROM queue_groups`);
+    await client.query(`DELETE FROM attempt_review_versions WHERE ${IN_EDITION.attemptChildren}`);
+    await client.query(`DELETE FROM attempt_review WHERE ${IN_EDITION.attemptChildren}`);
+    await client.query(`DELETE FROM judging_session WHERE ${IN_EDITION.entryChildren}`);
+    await client.query(`DELETE FROM queue_history WHERE ${IN_EDITION.entryChildren}`);
+    await client.query(`DELETE FROM queue_entries WHERE ${IN_EDITION.queue_entries}`);
+    await client.query(`DELETE FROM challenge_winners WHERE ${IN_EDITION.challenge_winners}`);
+    await client.query(`DELETE FROM enterprise_judges WHERE ${IN_EDITION.enterprise_judges}`);
+    await client.query(`DELETE FROM room_queue_groups WHERE ${IN_EDITION.roomChildren}`);
+    await client.query(`DELETE FROM room_enterprises WHERE ${IN_EDITION.roomChildren}`);
+    await client.query(`DELETE FROM queue_groups WHERE ${IN_EDITION.queue_groups}`);
 
     // Challenge definitions remain event configuration; the baseline
     // one-queue-per-challenge groups are rebuilt below.
 
-    await client.query(`DELETE FROM submissions`);
-    await client.query(`DELETE FROM repos`);
+    await client.query(`DELETE FROM submissions WHERE ${IN_EDITION.submissions}`);
+    await client.query(`DELETE FROM repos WHERE ${IN_EDITION.repos}`);
 
     // Remove queued/inbox project and queue messages. An email already
     // delivered by a provider cannot be recalled; the audit trail remains.
@@ -215,12 +242,12 @@ export async function resetJudgingData(
 
     // Preserve room definitions, but return all room and queue controls to
     // their initial paused/default values.
-    await client.query(`UPDATE rooms SET status = 'paused'`);
+    await client.query(`UPDATE rooms SET status = 'paused' WHERE ${IN_EDITION.rooms}`);
     await client.query(`
       INSERT INTO room_queue_state (room_id, is_paused)
       SELECT r.id, true
         FROM rooms r
-       WHERE NOT EXISTS (
+       WHERE r.event_key = current_edition() AND NOT EXISTS (
          SELECT 1 FROM room_queue_state rqs WHERE rqs.room_id = r.id
        )
     `);
@@ -229,6 +256,7 @@ export async function resetJudgingData(
          SET is_paused = true,
              max_in_waiting_area = 2,
              started_at = NULL
+       WHERE ${IN_EDITION.roomChildren}
     `);
     await client.query(`
       UPDATE queue_settings
@@ -239,6 +267,7 @@ export async function resetJudgingData(
              requeue_prompt_default = 'ask',
              called_too_long_threshold_minutes = 10
        WHERE id = 1
+         AND current_edition() = COALESCE((SELECT event_key FROM event_config WHERE id = 1), 'default')
     `);
 
     counts.queueGroupsRecreated = await recreateDefaultQueueGroups(client);

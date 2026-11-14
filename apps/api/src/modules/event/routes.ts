@@ -24,6 +24,7 @@ import {
   routeAccessOption as routeAccess,
 } from "../../lib/route-policy.js";
 import { sharedCache } from "../../lib/shared-cache.js";
+import { changeCurrentEditionKey } from "../editions/service.js";
 import { requestLiveActivitySync } from "../live-activities/kick.js";
 import {
   bumpAllAppleWalletUpdateTags,
@@ -413,7 +414,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
   r.put(
     "/api/event",
     {
-      ...routeAccess(eventSettingsRead),
+      // Singleton settings of the current edition (multi-edition plan).
+      ...routeAccess({ ...eventSettingsRead, edition: "current" }),
       preHandler: [requireAnyCapability(...EVENT_SETTINGS_ANY_CAPABILITY), idempotencyGuard],
       schema: {
         summary: "Update event config",
@@ -625,18 +627,11 @@ export function registerEventRoutes(app: FastifyInstance): void {
           if (current.event_key !== "default" && b.eventKey === "default") {
             throw new BadRequestError("The legacy default event key cannot be reused");
           }
-          // The first rename adopts the legacy default edition. Later edition
-          // changes leave every application and role assignment in history.
-          if (current.event_key === "default" && b.eventKey !== "default") {
-            await client.query("UPDATE applications SET event_key=$1 WHERE event_key='default'", [
-              b.eventKey,
-            ]);
-            await client.query(
-              "UPDATE user_role_event_evidence SET event_key=$1 WHERE event_key='default'",
-              [b.eventKey],
-            );
-          }
-          await client.query("UPDATE event_config SET event_key=$1 WHERE id=1", [b.eventKey]);
+          // The first rename adopts the legacy default edition (its key
+          // cascades to every edition row). A later key opens or activates
+          // that edition through the edition lifecycle and leaves the
+          // previous one intact (docs/multi-edition-plan.md).
+          await changeCurrentEditionKey(client, req.userId, current.event_key, b.eventKey);
         }
         const phaseCheck = await client.query(
           `SELECT COALESCE(project_submissions_close_at,hacking_ends_at) < COALESCE(project_drafts_open_at,hacking_starts_at) AS invalid FROM event_config WHERE id=1`,

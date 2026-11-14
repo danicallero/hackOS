@@ -43,7 +43,7 @@ export function registerLocalReminderRoutes(app: FastifyInstance): void {
   api.put(
     "/api/me/local-reminders",
     {
-      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      ...routeAccess({ kind: "authenticated", emailVerification: "none", edition: "global" }),
       preHandler: requireAuth,
       schema: {
         summary: "Report the reminders this device schedules locally",

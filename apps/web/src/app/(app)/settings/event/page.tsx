@@ -20,6 +20,7 @@ import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { ListChecksIcon } from "@phosphor-icons/react/dist/csr/ListChecks";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
+import { StackIcon } from "@phosphor-icons/react/dist/csr/Stack";
 import { TagIcon } from "@phosphor-icons/react/dist/csr/Tag";
 import { UserCheckIcon } from "@phosphor-icons/react/dist/csr/UserCheck";
 import { WalletIcon } from "@phosphor-icons/react/dist/csr/Wallet";
@@ -37,6 +38,7 @@ import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { CertificatesTab } from "./certificates-tab";
+import { EditionsTab } from "./editions-tab";
 import { EventConfigProvider } from "./event-config-context";
 import { EventTab } from "./event-tab";
 import { InvitesTab } from "./invites-tab";
@@ -51,7 +53,11 @@ import { WalletTab } from "./wallet-tab";
 // Grouped by what an organizer is trying to change, not by the module that
 // stores it: every date and deadline sits under "dates".
 const GROUPS = [
-  { id: "general", label: "settingsGroupGeneral", categories: ["event", "venue", "onboarding"] },
+  {
+    id: "general",
+    label: "settingsGroupGeneral",
+    categories: ["event", "editions", "venue", "onboarding"],
+  },
   {
     id: "dates",
     label: "settingsGroupDates",
@@ -71,6 +77,7 @@ const CATEGORIES = GROUPS.flatMap((g) => g.categories) as Category[];
 
 const CATEGORY_ICONS = {
   event: TagIcon,
+  editions: StackIcon,
   schedule: CalendarDotsIcon,
   projects: FolderSimpleIcon,
   projectForm: FileTextIcon,
@@ -89,6 +96,7 @@ const CATEGORY_ICONS = {
 // One renderer per category: the section body, wired to the shared dirty report.
 const SECTIONS: Record<Category, (onDirtyChange: (dirty: boolean) => void) => ReactNode> = {
   event: (onDirtyChange) => <EventTab view="general" onDirtyChange={onDirtyChange} />,
+  editions: () => <EditionsTab />,
   schedule: (onDirtyChange) => <EventTab view="schedule" onDirtyChange={onDirtyChange} />,
   projects: (onDirtyChange) => <EventTab view="participants" onDirtyChange={onDirtyChange} />,
   projectForm: (onDirtyChange) => <ProjectFormSection onDirtyChange={onDirtyChange} />,
@@ -120,6 +128,7 @@ export default function EventSettingsPage() {
   const canReadEventConfig = canEvent || canVenue || canWallet || canPresence || canInvites;
   const canByCategory: Record<Category, boolean> = {
     event: canEvent,
+    editions: canEvent,
     schedule: canEvent,
     projects: canEvent,
     projectForm: canProjectForm,
@@ -141,6 +150,7 @@ export default function EventSettingsPage() {
   })).filter((g) => g.categories.length > 0);
   const labels: Record<Category, string> = {
     event: t("eventTitle"),
+    editions: t("editions"),
     schedule: t("eventDatesTitle"),
     projects: t("projectDeadlinesTitle"),
     projectForm: t("projectFormTitle"),

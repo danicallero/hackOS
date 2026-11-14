@@ -63,7 +63,8 @@ export async function buildApp(): Promise<App> {
     // allowed explicitly or the browser preflight blocks them.
     methods: ["GET", "HEAD", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     // Custom request headers the app sends (idempotency on critical mutations).
-    allowedHeaders: ["content-type", "idempotency-key"],
+    // X-Edition carries the viewed edition (docs/multi-edition-plan.md).
+    allowedHeaders: ["content-type", "idempotency-key", "x-edition"],
     // Response headers the browser must be able to read cross-origin: rate
     // limit backoff (H3), idempotent-replay signalling, per-file export
     // failures (H56) the web client surfaces so staff can act on them, and the

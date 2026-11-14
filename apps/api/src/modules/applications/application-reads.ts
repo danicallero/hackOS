@@ -50,7 +50,7 @@ export async function listUserResponsesForStaff(userId: number): Promise<
      FROM application_responses r
      JOIN applications a ON a.id = r.application_id
      JOIN users u ON u.id = r.user_id AND u.is_test_account = false
-     WHERE r.user_id = $1 ORDER BY r.id DESC`,
+     WHERE r.user_id = $1 AND a.event_key = current_edition() ORDER BY r.id DESC`,
     [userId],
   );
   return rows.map(
@@ -94,7 +94,7 @@ export async function listMyResponses(userId: number): Promise<
             )) AS can_delete_draft
      FROM application_responses r
      JOIN applications a ON a.id = r.application_id
-     WHERE r.user_id = $1 ORDER BY r.id DESC`,
+     WHERE r.user_id = $1 AND a.event_key = current_edition() ORDER BY r.id DESC`,
     [userId],
   );
   return rows.map(

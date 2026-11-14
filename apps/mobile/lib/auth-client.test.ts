@@ -41,7 +41,8 @@ jest.mock("./env", () => ({ API_URL: "https://api.example.test/" }));
 jest.mock("./sign-out-events", () => ({ notifySignOut: jest.fn() }));
 
 import * as SecureStore from "expo-secure-store";
-import { authClient, forceLocalSignOut, signOut } from "./auth-client";
+import { authClient, forceLocalSignOut, signIn, signOut } from "./auth-client";
+import { getViewedEdition, selectViewedEdition } from "./edition";
 import { notifySignOut } from "./sign-out-events";
 
 const mockSecureStore = SecureStore as jest.Mocked<typeof SecureStore>;
@@ -49,6 +50,7 @@ const mockAuthClient = authClient as unknown as {
   $fetch: jest.Mock;
   $store: { atoms: { session: { get: jest.Mock; set: jest.Mock } } };
   getCookie: jest.Mock;
+  signIn: { email: jest.Mock };
   signOut: jest.Mock;
 };
 const mockNotifySignOut = notifySignOut as jest.Mock;
@@ -152,5 +154,16 @@ describe("mobile sign-out", () => {
       error: null,
       isPending: false,
     });
+  });
+});
+
+describe("mobile sign-in", () => {
+  it("starts every session on the current edition", async () => {
+    mockAuthClient.signIn.email = jest.fn().mockResolvedValue({ error: null });
+    selectViewedEdition("hackudc-2025");
+
+    await signIn.email({ email: "a@b.test", password: "x" });
+
+    expect(getViewedEdition()).toBeNull();
   });
 });

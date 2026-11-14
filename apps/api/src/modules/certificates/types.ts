@@ -114,7 +114,7 @@ export async function activeRoleIds(
   db: pg.Pool | pg.PoolClient = pool,
 ): Promise<Set<number>> {
   const { rows } = await db.query<{ role_id: number }>(
-    `SELECT ur.role_id FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=$1 AND r.deleted_at IS NULL`,
+    `SELECT ur.role_id FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=$1 AND r.deleted_at IS NULL AND (ur.event_key IS NULL OR ur.event_key=current_edition())`,
     [userId],
   );
   return new Set(rows.map((row) => row.role_id));
@@ -132,7 +132,7 @@ export async function recipientMatchesType(
   if (type.audienceRoleIds == null) return true;
   if (roleIds) return type.audienceRoleIds.some((id) => roleIds.has(id));
   const { rowCount } = await db.query(
-    `SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=$1 AND r.id=ANY($2::int[]) AND r.deleted_at IS NULL LIMIT 1`,
+    `SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=$1 AND r.id=ANY($2::int[]) AND r.deleted_at IS NULL AND (ur.event_key IS NULL OR ur.event_key=current_edition()) LIMIT 1`,
     [userId, type.audienceRoleIds],
   );
   return Boolean(rowCount);
@@ -147,7 +147,7 @@ export async function isExemptRecipient(
   if (!type.exemptRoleIds?.length) return false;
   if (roleIds) return type.exemptRoleIds.some((id) => roleIds.has(id));
   const { rowCount } = await db.query(
-    `SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=$1 AND r.id=ANY($2::int[]) AND r.deleted_at IS NULL LIMIT 1`,
+    `SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=$1 AND r.id=ANY($2::int[]) AND r.deleted_at IS NULL AND (ur.event_key IS NULL OR ur.event_key=current_edition()) LIMIT 1`,
     [userId, type.exemptRoleIds],
   );
   return Boolean(rowCount);

@@ -157,8 +157,10 @@ export const requireSponsorPortalAccess: preHandlerHookHandler = async (request)
     await userHasCapability(getRequestAuthorizationContext(request), CAPABILITIES.SPONSORS_MANAGE)
   )
     return;
-  const { rowCount } = await pool.query(`SELECT 1 FROM sponsors WHERE user_id = $1 LIMIT 1`, [
-    request.userId,
-  ]);
+  const { rowCount } = await pool.query(
+    `SELECT 1 FROM sponsors s JOIN enterprises e ON e.id = s.enterprise_id
+      WHERE s.user_id = $1 AND e.event_key = current_edition() LIMIT 1`,
+    [request.userId],
+  );
   if (!rowCount) throw new ForbiddenError("Not a sponsor representative");
 };

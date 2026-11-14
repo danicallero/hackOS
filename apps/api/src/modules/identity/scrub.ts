@@ -21,14 +21,18 @@ import type { RunAccountRemovalOptions, UserRemovalRow } from "./types.js";
 export async function guaranteedMinutesAtRemoval(
   client: pg.PoolClient,
   userId: number,
+  eventKey: string | null = null,
 ): Promise<number> {
   const { rows: timeRows } = await client.query<{ t: string; kind: PresenceEvent["kind"] }>(
     `SELECT extract(epoch FROM scanned_at) * 1000 AS t, kind
-       FROM time_logs WHERE user_id = $1 AND kind IN ('in', 'out')
+       FROM time_logs
+      WHERE user_id = $1 AND kind IN ('in', 'out') AND ($2::text IS NULL OR event_key = $2)
       UNION ALL
-     SELECT extract(epoch FROM logged_at) * 1000 AS t, 'activity' AS kind
-       FROM activity_logs WHERE user_id = $1`,
-    [userId],
+     SELECT extract(epoch FROM al.logged_at) * 1000 AS t, 'activity' AS kind
+       FROM activity_logs al
+       LEFT JOIN activities a ON a.id = al.activity_id
+      WHERE al.user_id = $1 AND ($2::text IS NULL OR a.event_key = $2)`,
+    [userId, eventKey],
   );
   const { rows: eventRows } = await client.query<{ gap: number }>(
     `SELECT presence_certainty_window_minutes AS gap FROM event_config WHERE id = 1`,
@@ -38,6 +42,28 @@ export async function guaranteedMinutesAtRemoval(
   const cutoff = nowRows[0]?.now.getTime() ?? Date.now();
   const gap = Number(eventRows[0]?.gap ?? DEFAULT_SUSPICIOUS_GAP_MS / 60_000) * 60_000;
   return Math.floor(guaranteedPresenceMs(events, cutoff, { suspiciousGapMs: gap }) / 60_000);
+}
+
+/** Editions the person took part in, with verified presence minutes in each. */
+export async function guaranteedMinutesPerEdition(
+  client: pg.PoolClient,
+  userId: number,
+): Promise<{ eventKey: string; minutes: number }[]> {
+  const { rows } = await client.query<{ event_key: string }>(
+    `SELECT event_key FROM edition_participation WHERE user_id = $1
+     UNION SELECT event_key FROM time_logs WHERE user_id = $1
+     UNION SELECT event_key FROM check_in_logs WHERE user_id = $1
+     ORDER BY event_key`,
+    [userId],
+  );
+  const result: { eventKey: string; minutes: number }[] = [];
+  for (const row of rows) {
+    result.push({
+      eventKey: row.event_key,
+      minutes: await guaranteedMinutesAtRemoval(client, userId, row.event_key),
+    });
+  }
+  return result;
 }
 
 async function deleteOrphanedProjects(
@@ -120,29 +146,42 @@ async function deleteOrphanedProjects(
  * that an arbitrarily late offline retry cannot be attributed to somebody
  * else.
  */
+interface CredentialInEdition {
+  value: string;
+  eventKey: string;
+}
+
 async function addScannerTombstones(
   client: pg.PoolClient,
-  badgeIds: string[],
-  ticketTokens: string[],
+  badges: CredentialInEdition[],
+  tickets: CredentialInEdition[],
 ): Promise<void> {
-  if (badgeIds.length > 0) {
+  // One revocation per edition the credential belonged to, so a code reused
+  // by a different person in another edition is never blocked (H8, H54).
+  if (badges.length > 0) {
     await client.query(
-      `INSERT INTO scanner_revoked_badges (credential_digest, revoked_at)
-       SELECT value, clock_timestamp()
-         FROM unnest($1::text[]) AS badge_values(value)
-       ON CONFLICT (credential_digest) DO UPDATE
+      `INSERT INTO scanner_revoked_badges (credential_digest, event_key, revoked_at)
+       SELECT digest, event_key, clock_timestamp()
+         FROM unnest($1::text[], $2::text[]) AS badge_values(digest, event_key)
+       ON CONFLICT (credential_digest, event_key) DO UPDATE
          SET revoked_at = EXCLUDED.revoked_at`,
-      [badgeIds.map((badgeId) => scannerCredentialDigest("badge", badgeId))],
+      [
+        badges.map((badge) => scannerCredentialDigest("badge", badge.value)),
+        badges.map((badge) => badge.eventKey),
+      ],
     );
   }
-  if (ticketTokens.length > 0) {
+  if (tickets.length > 0) {
     await client.query(
-      `INSERT INTO scanner_revoked_tickets (credential_digest, revoked_at)
-       SELECT value, clock_timestamp()
-         FROM unnest($1::text[]) AS ticket_values(value)
-       ON CONFLICT (credential_digest) DO UPDATE
+      `INSERT INTO scanner_revoked_tickets (credential_digest, event_key, revoked_at)
+       SELECT digest, event_key, clock_timestamp()
+         FROM unnest($1::text[], $2::text[]) AS ticket_values(digest, event_key)
+       ON CONFLICT (credential_digest, event_key) DO UPDATE
          SET revoked_at = EXCLUDED.revoked_at`,
-      [ticketTokens.map((token) => scannerCredentialDigest("ticket", token))],
+      [
+        tickets.map((ticket) => scannerCredentialDigest("ticket", ticket.value)),
+        tickets.map((ticket) => ticket.eventKey),
+      ],
     );
   }
 }
@@ -171,18 +210,28 @@ export async function scrubRelationships(
       ),
     ),
   ];
-  const badgeIds = [user.badge_id, ...(user.badge_id_history ?? [])].filter(
-    (value): value is string => Boolean(value),
+  const { rows: badgeHistoryRows } = await client.query<{ badge_id: string; event_key: string }>(
+    `SELECT badge_id, event_key FROM badge_id_history WHERE user_id = $1`,
+    [userId],
   );
-  const { rows: ticketRows } = await client.query<{ token: string }>(
-    `SELECT token FROM tickets WHERE user_id = $1`,
+  const badgeCredentials = new Map<string, CredentialInEdition>();
+  const addBadge = (value: string | null, eventKey: string | null) => {
+    if (!value || !eventKey) return;
+    badgeCredentials.set(`${eventKey}\u0000${value}`, { value, eventKey });
+  };
+  addBadge(user.badge_id, user.badge_event_key);
+  for (const row of badgeHistoryRows) addBadge(row.badge_id, row.event_key);
+  const badgeIds = [...new Set([...badgeCredentials.values()].map((badge) => badge.value))];
+  const { rows: ticketRows } = await client.query<{ token: string; event_key: string }>(
+    `SELECT token, event_key FROM tickets WHERE user_id = $1`,
     [userId],
   );
   await addScannerTombstones(
     client,
-    [...new Set(badgeIds)],
-    ticketRows.map((row) => row.token),
+    [...badgeCredentials.values()],
+    ticketRows.map((row) => ({ value: row.token, eventKey: row.event_key })),
   );
+  await client.query(`DELETE FROM badge_id_history WHERE user_id = $1`, [userId]);
 
   const { rows: responseRows } = await client.query<{ id: number }>(
     `SELECT id FROM application_responses WHERE user_id = $1`,
@@ -258,15 +307,10 @@ export async function scrubRelationships(
   await client.query(`DELETE FROM content_reports WHERE reporter_id = $1 OR target_user_id = $1`, [
     userId,
   ]);
+  // #1083: certificates and approvals of every edition are deleted, so their
+  // codes and hashes verify as nonexistent (same 404 as an unknown code).
   await client.query(`DELETE FROM certificate_approvals WHERE user_id = $1`, [userId]);
-  // #1083: certificates stay verifiable as revoked, without the person's data.
-  await client.query(
-    `UPDATE attendance_certificates
-        SET snapshot = '{}'::jsonb, recipient_name=NULL, recipient_document_kind=NULL, recipient_document_number=NULL, revoked_at = COALESCE(revoked_at, now()),
-            revoked_reason = COALESCE(revoked_reason, 'account_removed')
-      WHERE user_id = $1`,
-    [userId],
-  );
+  await client.query(`DELETE FROM attendance_certificates WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM project_files WHERE uploaded_by=$1`, [userId]);
   await client.query(
     `UPDATE users SET gallery_show_photo=false,gallery_show_name=false,gallery_consented_at=NULL WHERE id=$1`,
@@ -377,7 +421,18 @@ export async function scrubRelationships(
   await client.query(`UPDATE schedule_owners SET assigned_by = NULL WHERE assigned_by = $1`, [
     userId,
   ]);
-  await client.query(`UPDATE repos SET created_by = NULL WHERE created_by = $1`, [userId]);
+  // H54: a repository this person created or linked to GitHub is identified
+  // by its URL/full name; clear the link on projects that stay for others.
+  await client.query(
+    `DELETE FROM github_repo_links
+      WHERE linked_by = $1
+         OR repo_id IN (SELECT id FROM repos WHERE created_by = $1)`,
+    [userId],
+  );
+  await client.query(
+    `UPDATE repos SET github_url = NULL, created_by = NULL WHERE created_by = $1`,
+    [userId],
+  );
   await client.query(`UPDATE submissions SET invited_by = NULL WHERE invited_by = $1`, [userId]);
   await client.query(`UPDATE enterprise_judges SET added_by = NULL WHERE added_by = $1`, [userId]);
 
@@ -394,10 +449,14 @@ export async function scrubRelationships(
     [userId],
   );
   await client.query(`DELETE FROM sponsors WHERE user_id = $1`, [userId]);
-  await client.query(`DELETE FROM announcement_reads WHERE user_id = $1`, [userId]);
-  await client.query(`DELETE FROM announcement_recipients WHERE user_id = $1`, [userId]);
-  await client.query(`DELETE FROM notification_preferences WHERE user_id = $1`, [userId]);
-  await client.query(`DELETE FROM notification_outbox WHERE user_id = $1`, [userId]);
+  for (const table of [
+    "announcement_reads",
+    "announcement_recipients",
+    "notification_preferences",
+    "notification_outbox",
+  ] as const) {
+    await client.query(`DELETE FROM ${table} WHERE user_id = $1`, [userId]);
+  }
 
   await client.query(
     `DELETE FROM wallet_pass_devices

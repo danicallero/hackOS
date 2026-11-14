@@ -1,7 +1,13 @@
 import type pg from "pg";
 import { config } from "../../config.js";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
-import { AppError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import {
+  AppError,
+  ConflictError,
+  EditionClosedError,
+  ForbiddenError,
+  NotFoundError,
+} from "../../lib/errors.js";
 import { type DirectoryEntry, visibleDirectoryEntries } from "../directory/service.js";
 import { hasEventAccess } from "../identity/role.js";
 import { resolveByBadge } from "../logistics/badge.js";
@@ -98,7 +104,7 @@ export async function listDiary(owner: number): Promise<{ items: DiaryEntry[] }>
   await assertAttendee(pool, owner);
   const { rows } = await pool.query<EntryRow>(
     `SELECT ${ENTRY_COLUMNS} FROM diary_entries
-      WHERE owner_id = $1
+      WHERE owner_id = $1 AND event_key = current_edition()
       ORDER BY starred DESC, created_at DESC, id DESC`,
     [owner],
   );
@@ -130,13 +136,14 @@ export async function listSponsorCollection(owner: number): Promise<{
   await assertAttendee(pool, owner);
   const { rows: entries } = await pool.query<EntryRow>(
     `SELECT ${ENTRY_COLUMNS} FROM diary_entries
-      WHERE owner_id = $1 AND enterprise_id IS NOT NULL`,
+      WHERE owner_id = $1 AND enterprise_id IS NOT NULL AND event_key = current_edition()`,
     [owner],
   );
   // Scannable companies are listed (locked) even before staff generate their
   // tags: marking a stand scannable comes first in the staff workflow.
   const { rows: tagged } = await pool.query<{ enterprise_id: number }>(
-    `SELECT id AS enterprise_id FROM enterprises WHERE stand_scannable`,
+    `SELECT id AS enterprise_id FROM enterprises
+      WHERE stand_scannable AND event_key = current_edition()`,
   );
   const ids = new Set([
     ...tagged.map((row) => Number(row.enterprise_id)),
@@ -197,7 +204,8 @@ async function insertEntry(
     inserted.rows[0] ??
     (
       await db.query<EntryRow>(
-        `SELECT ${ENTRY_COLUMNS} FROM diary_entries WHERE owner_id = $1 AND ${column} = $2`,
+        `SELECT ${ENTRY_COLUMNS} FROM diary_entries WHERE owner_id = $1 AND ${column} = $2
+            AND event_key = current_edition()`,
         [owner, value],
       )
     ).rows[0];
@@ -246,7 +254,8 @@ async function personForCode(db: Queryable, code: string): Promise<number> {
   }
   const { rows } = await db.query(
     `SELECT t.user_id FROM tickets t JOIN users u ON u.id = t.user_id
-      WHERE t.token = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
+      WHERE t.token = $1 AND t.event_key = current_edition()
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
     [code],
   );
   if (rows[0]) return Number(rows[0].user_id);
@@ -313,9 +322,17 @@ export async function saveScanned(
       return await withTransaction(async (db) => {
         await assertAttendee(db, owner);
         const stand = await standEnterpriseForCode(db, code);
-        const cards = stand?.scannable
-          ? await visibleSponsorCards(db, [stand.enterpriseId])
-          : new Map<number, SponsorCard>();
+        // Plan §9: a tag whose company belongs to a closed edition answers
+        // "edition closed" and never writes; it stays unusable until staff
+        // reassign it. A tag of another, still open edition is just unavailable.
+        const closedStandEdition =
+          stand && stand.eventKey !== stand.scopedKey && stand.editionStatus === "closed"
+            ? stand.eventKey
+            : null;
+        const cards =
+          stand?.scannable && stand.eventKey === stand.scopedKey
+            ? await visibleSponsorCards(db, [stand.enterpriseId])
+            : new Map<number, SponsorCard>();
         const collectStand = stand !== null && cards.has(stand.enterpriseId);
         const resolved = await resolvePersonForScan(db, code);
         let { userId } = resolved;
@@ -359,6 +376,7 @@ export async function saveScanned(
           };
         }
         if (standSaved) return standSaved;
+        if (closedStandEdition !== null) throw new EditionClosedError(closedStandEdition);
         if (stand !== null)
           throw new AppError(409, "stand_unavailable", "This sponsor is not available yet");
         throw personError ?? new AppError(404, "diary_code_unknown", "Code not recognized");

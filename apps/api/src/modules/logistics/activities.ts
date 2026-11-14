@@ -4,7 +4,7 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { isImplausiblyFuture } from "../../lib/clock.js";
-import { AppError, BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { AppError, BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { resolveByTicket } from "./accreditation.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
@@ -54,10 +54,16 @@ export async function activityScan(
     sourceScanId?: string;
   },
 ): Promise<ScanResult> {
-  const act = await pool.query(`SELECT id, category, requires_scan FROM activities WHERE id = $1`, [
-    activityId,
-  ]);
+  const act = await pool.query(
+    `SELECT id, category, requires_scan, event_key = current_edition() AS in_current_edition
+       FROM activities WHERE id = $1`,
+    [activityId],
+  );
   if (!act.rows[0]) throw new NotFoundError("Activity not found");
+  // The activity's edition comes from its row; a scan only counts in its own edition.
+  if (!act.rows[0].in_current_edition) {
+    throw new ConflictError("This activity belongs to another edition", { activityId });
+  }
   const isMeal = isMealActivityKind(act.rows[0].category);
   if (!isScannableActivity(act.rows[0])) {
     throw new BadRequestError("Activity is not scannable", { activityId });
@@ -94,7 +100,8 @@ export async function activityScan(
       badge_id: string | null;
       badge_assigned_at: Date | null;
     }>(
-      `SELECT id, badge_id, badge_assigned_at FROM users
+      `SELECT id, CASE WHEN badge_event_key = current_edition() THEN badge_id END AS badge_id,
+              badge_assigned_at FROM users
         WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
         FOR UPDATE`,
       [userId],

@@ -25,6 +25,8 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   logistics:
     "Accreditation, badge/presence scanning, schedule, Wallet and on-site activities (H22–H28, H48–H49, H59).",
   event: "Event identity, timing, venue and admission settings (H10, H45, H47).",
+  editions:
+    "Edition catalogue and lifecycle: create, make current, close (read-only) and reopen; the caller's editions (H8, H53).",
   exports: "Application and operational data exports (H54, H56).",
   directory: "Opt-in public participant profiles and their shared details (#934).",
   diary: "The attendee's saved people and sponsor stands (#935).",
@@ -57,6 +59,8 @@ function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
     (url.startsWith("/api/users/") && url.endsWith("/certificates"))
   )
     return "certificates";
+  if (pathMatchesPrefix(url, "/api/editions") || pathMatchesPrefix(url, "/api/me/editions"))
+    return "editions";
   if (pathMatchesPrefix(url, "/api/me/diary")) return "diary";
   if (pathMatchesPrefix(url, "/api/me/helper-profile")) return "helpdesk";
   if (pathMatchesPrefix(url, "/api/me/live-activities")) return "live-activities";

@@ -21,6 +21,8 @@ export interface Certificate {
   variant: CertificateVariant;
   locale: Language;
   issuedAt: string;
+  /** The edition the certificate was issued for. */
+  edition?: { eventKey: string; name: string };
   revokedAt: string | null;
   supersededAt: string | null;
   /** Attendance changed since it was issued; Update replaces it with a new document. */
@@ -55,6 +57,36 @@ export interface CertificateParticipant {
   universityId: number | null;
   universityName: string | null;
   eligibility: CertificateEligibility;
+}
+
+export interface CertificateEditionGroup {
+  key: string;
+  name: string;
+  certificates: Certificate[];
+}
+
+/**
+ * Valid certificates grouped by edition, newest edition first, or null when
+ * they belong to at most one edition (the plain per-type list applies then).
+ */
+export function groupCertificatesByEdition(
+  certificates: Certificate[],
+): CertificateEditionGroup[] | null {
+  const groups = new Map<string, CertificateEditionGroup>();
+  const newestFirst = [...certificates]
+    .filter((cert) => cert.edition && !cert.revokedAt && !cert.supersededAt)
+    .sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
+  for (const cert of newestFirst) {
+    const edition = cert.edition as { eventKey: string; name: string };
+    const group = groups.get(edition.eventKey) ?? {
+      key: edition.eventKey,
+      name: edition.name,
+      certificates: [],
+    };
+    group.certificates.push(cert);
+    groups.set(edition.eventKey, group);
+  }
+  return groups.size > 1 ? [...groups.values()] : null;
 }
 
 /** #1083: attendance certificates, as the participant and as staff. */

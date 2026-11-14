@@ -2,6 +2,8 @@ import { withTransaction } from "../../db/pool.js";
 
 import { audit } from "../../lib/audit.js";
 
+import { isScopedEditionClosed } from "../../lib/edition.js";
+
 import { invalidateConfirmationToken } from "./internal.js";
 
 import type { ResponseRow } from "./types.js";
@@ -15,6 +17,8 @@ import type { ResponseRow } from "./types.js";
  */
 export async function expireDueConfirmations(): Promise<{ expired: number }> {
   return withTransaction(async (client) => {
+    // Workers ignore a closed edition and only touch the current one.
+    if (await isScopedEditionClosed(client)) return { expired: 0 };
     // Resolve candidates without locking responses, then acquire each owner
     // first. Removal uses user -> application_response ordering; expiring a
     // response must follow that order too or it can race the scrub.
@@ -23,6 +27,7 @@ export async function expireDueConfirmations(): Promise<{ expired: number }> {
        JOIN applications a ON a.id = r.application_id
        JOIN users u ON u.id = r.user_id
        WHERE r.status = 'accepted'
+         AND a.event_key = current_edition()
          AND r.decision_sent_at IS NOT NULL
          AND r.decision_sent_at + make_interval(hours => a.confirmation_window_hours) < now()
          AND u.account_state = 'active' AND u.anonymized_at IS NULL

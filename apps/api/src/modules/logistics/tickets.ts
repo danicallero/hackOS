@@ -28,12 +28,15 @@ export async function issueTicket(client: Queryable, userId: number): Promise<st
   const token = randomBytes(32).toString("base64url");
   const { rows } = await client.query(
     `INSERT INTO tickets (user_id, token) VALUES ($1, $2)
-     ON CONFLICT (user_id) DO NOTHING
+     ON CONFLICT (user_id, event_key) DO NOTHING
      RETURNING token`,
     [userId, token],
   );
   if (rows[0]) return rows[0].token as string;
-  const existing = await client.query(`SELECT token FROM tickets WHERE user_id = $1`, [userId]);
+  const existing = await client.query(
+    `SELECT token FROM tickets WHERE user_id = $1 AND event_key = current_edition()`,
+    [userId],
+  );
   return existing.rows[0].token as string;
 }
 
@@ -87,9 +90,11 @@ export async function ticketQrPayload(userId: number, actorId?: number) {
   const [{ rows }, { rows: acceptedRows }, { rows: applePassRows }, eventAccess] =
     await Promise.all([
       pool.query(
-        `SELECT u.id, u.badge_id, t.token
+        `SELECT u.id,
+              CASE WHEN u.badge_event_key = current_edition() THEN u.badge_id END AS badge_id,
+              t.token
        FROM users u
-       LEFT JOIN tickets t ON t.user_id = u.id
+       LEFT JOIN tickets t ON t.user_id = u.id AND t.event_key = current_edition()
       WHERE u.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
         [userId],
       ),
@@ -108,13 +113,15 @@ export async function ticketQrPayload(userId: number, actorId?: number) {
         WHERE r.user_id = $1
           AND r.status = 'accepted'
           AND r.decision_sent_at IS NOT NULL
+          AND a.event_key = current_edition()
         ORDER BY r.id DESC`,
         [userId],
       ),
       pool.query(
         `SELECT purpose, serial_number
          FROM wallet_passes
-        WHERE user_id = $1 AND platform = 'apple' AND status <> 'voided'`,
+        WHERE user_id = $1 AND platform = 'apple' AND status <> 'voided'
+          AND event_key = current_edition()`,
         [userId],
       ),
       hasEventAccess(pool, userId),

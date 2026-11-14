@@ -42,7 +42,7 @@ export function registerPreferenceRoutes(app: FastifyInstance): void {
   typedApp.put(
     "/api/me/notification-preferences",
     {
-      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      ...routeAccess({ kind: "authenticated", emailVerification: "none", edition: "global" }),
       preHandler: requireAuth,
       schema: {
         summary: "Update notification preferences",
@@ -79,7 +79,7 @@ export function registerPreferenceRoutes(app: FastifyInstance): void {
   typedApp.post(
     "/api/me/notification-preferences/onboarding",
     {
-      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      ...routeAccess({ kind: "authenticated", emailVerification: "none", edition: "global" }),
       preHandler: requireAuth,
       schema: {
         summary: "Complete the first-run notification channel prompt",

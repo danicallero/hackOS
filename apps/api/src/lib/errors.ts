@@ -1,3 +1,4 @@
+import { EDITION_CLOSED_CODE } from "@hackos/shared/editions";
 import { MAINTENANCE_CODE, MAINTENANCE_STATUS } from "@hackos/shared/maintenance";
 
 /**
@@ -47,6 +48,19 @@ export class NotFoundError extends AppError {
 export class ConflictError extends AppError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(409, "conflict", message, details);
+  }
+}
+
+/**
+ * A write into a closed edition (docs/multi-edition-plan.md §3). Closed
+ * editions are read-only until reopened; the route guard and the database
+ * trigger (migration 1001) both raise this.
+ */
+export class EditionClosedError extends AppError {
+  constructor(eventKey: string | null) {
+    super(409, EDITION_CLOSED_CODE, "This edition is closed and read-only", {
+      edition: eventKey ?? undefined,
+    });
   }
 }
 

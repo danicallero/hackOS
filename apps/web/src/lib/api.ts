@@ -1,8 +1,10 @@
+import { EDITION_HEADER } from "@hackos/shared/editions";
 import { isMaintenanceError, maintenancePhaseOf } from "@hackos/shared/maintenance";
 import { saveBlob } from "./download";
 import { API_URL } from "./env";
 import { intentKey, settleIntentKey } from "./intent-key";
 import { maintenanceStore } from "./maintenance";
+import { getViewedEdition, subscribeViewedEdition } from "./viewed-edition";
 
 /**
  * Typed error mirroring the API's error envelope
@@ -35,6 +37,12 @@ interface RequestOptions extends Omit<RequestInit, "body"> {
   query?: Record<string, string | number | boolean | undefined | null>;
 }
 
+/** `X-Edition` for the viewed edition; nothing for the current one. */
+function editionHeaders(): Record<string, string> {
+  const edition = getViewedEdition();
+  return edition ? { [EDITION_HEADER]: edition } : {};
+}
+
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
   const url = new URL(path.startsWith("http") ? path : `${API_URL}${path}`);
   if (query) {
@@ -53,6 +61,8 @@ interface SharedGet {
 }
 /** Identical GETs that are in flight at the same moment (#1227). Nothing is kept after they settle. */
 const inflightGets = new Map<string, SharedGet>();
+// An edition switch must not let a new read join a request made for the old one.
+subscribeViewedEdition(() => inflightGets.clear());
 
 function abortError(signal: AbortSignal): unknown {
   return signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
@@ -68,7 +78,7 @@ function abortError(signal: AbortSignal): unknown {
 function coalescedGet<T>(path: string, options: RequestOptions): Promise<T> {
   const { signal, ...rest } = options;
   if (signal?.aborted) return Promise.reject(abortError(signal));
-  const key = `${buildUrl(path, rest.query)}|${rest.credentials ?? ""}|${rest.cache ?? ""}`;
+  const key = `${getViewedEdition() ?? ""}|${buildUrl(path, rest.query)}|${rest.credentials ?? ""}|${rest.cache ?? ""}`;
   let entry = inflightGets.get(key);
   if (entry) {
     entry.shared = true;
@@ -191,6 +201,7 @@ async function performFetch<T>(path: string, options: RequestOptions): Promise<T
     headers: {
       ...(body !== undefined ? { "content-type": "application/json" } : {}),
       ...(intent ? { "Idempotency-Key": intentKey(intent) } : {}),
+      ...editionHeaders(),
       ...headers,
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
@@ -228,7 +239,7 @@ export async function apiUpload<T = unknown>(path: string, body: FormData): Prom
   const res = await fetch(buildUrl(path), {
     method: "POST",
     credentials: "include",
-    headers: { "Idempotency-Key": intentKey(intent) },
+    headers: { "Idempotency-Key": intentKey(intent), ...editionHeaders() },
     body,
   });
   settleIntentKey(intent, res.status);
@@ -265,6 +276,7 @@ export async function apiDownload(
     headers: {
       ...(body !== undefined ? { "content-type": "application/json" } : {}),
       ...(intent ? { "Idempotency-Key": intentKey(intent) } : {}),
+      ...editionHeaders(),
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });

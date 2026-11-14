@@ -80,7 +80,7 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List challenges available to the caller",
         description:
-          "Global challenge administrators see all challenges; sponsor representatives and assigned judges see only their scoped challenges (H44, H46).",
+          "Global challenge administrators see all challenges of the viewed edition (X-Edition); sponsor representatives and assigned judges see only their scoped challenges (H44, H46).",
       },
     },
     async (req) => {
@@ -140,7 +140,8 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
       preHandler: requireAuth,
       schema: {
         summary: "List my enterprise challenges",
-        description: "Returns challenges owned by the caller's sponsor enterprise (H44, H46).",
+        description:
+          "Returns challenges owned by the caller's sponsor enterprise in the viewed edition (H44, H46).",
       },
     },
     async (req) => ({
@@ -393,9 +394,7 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
       },
     },
     async (q) => {
-      const winners = (await visibleWinnerRows(pool, q.userId)).filter(
-        (row) => row.challengeId === q.params.id,
-      );
+      const winners = await visibleWinnerRows(pool, q.userId, undefined, false, q.params.id);
       return winners.length ? { winners } : {};
     },
   );

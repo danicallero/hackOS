@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { withTransaction } from "../../db/pool.js";
+import { withClosedEditionWrites } from "../../lib/edition.js";
 
 import { ConflictError } from "../../lib/errors.js";
 
@@ -36,6 +37,7 @@ export async function prepareAccountRemoval(
   options: RunAccountRemovalOptions,
 ): Promise<RemovalPreparation | null> {
   return withTransaction(async (client) => {
+    await withClosedEditionWrites(client, async () => undefined);
     await lockRoleGraph(client);
     const user = await loadUserForRemoval(client, options.targetId);
     if (
@@ -159,9 +161,6 @@ export async function prepareAccountRemoval(
           options.targetId,
         ]);
         await client.query(`DELETE FROM mentor_profiles WHERE user_id = $1`, [options.targetId]);
-        await client.query(`DELETE FROM user_role_event_evidence WHERE user_id = $1`, [
-          options.targetId,
-        ]);
       }
       if (options.preserveIdempotency) {
         // Keep the marker in the identity-free completion scope selected by

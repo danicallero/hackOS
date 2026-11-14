@@ -229,6 +229,13 @@ export async function buildExportBundle(
       [String(subjectUserId)],
     )
   ).rows;
+  // Released badge codes of every edition (table badge_id_history).
+  const badgeHistory = (
+    await db.query<{ badge_id: string }>(
+      `SELECT badge_id FROM badge_id_history WHERE user_id = $1 ORDER BY released_at, badge_id`,
+      [subjectUserId],
+    )
+  ).rows;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -246,7 +253,7 @@ export async function buildExportBundle(
         ? { contentType: photoContentType(user.photo_key), uploadedAt: user.photo_updated_at }
         : null,
       badgeId: user.badge_id,
-      badgeIdHistory: user.badge_id_history,
+      badgeIdHistory: badgeHistory.map((row) => row.badge_id),
       foodIntolerances: user.food_intolerances,
       foodIntoleranceNotes: user.food_intolerance_notes,
       dietaryDataState: user.dietary_data_state,

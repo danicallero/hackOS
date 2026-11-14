@@ -1125,5 +1125,9 @@
   "companyNotFound": "Company not available",
   "scheduleSpeakers": "Speakers",
   "scheduleCompanies": "Companies",
-  "personTalks": "Talks"
+  "personTalks": "Talks",
+  "accountEdition": "Edition",
+  "editionClosedNotice": "{name} · Closed, read only",
+  "editionClosedError": "This edition is closed and read only.",
+  "projectEdition": "Edition"
 }

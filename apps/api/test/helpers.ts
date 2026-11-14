@@ -55,6 +55,11 @@ export async function truncateAll(): Promise<void> {
   const tables = await testTableList();
   if (tables === "") return;
   await pool.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
+  // Every edition-scoped row needs its edition; `current_edition()` falls back
+  // to 'default' until a test writes event_config (docs/multi-edition-plan.md).
+  await pool.query(
+    `INSERT INTO editions (event_key, name, status) VALUES ('default', 'default', 'active')`,
+  );
   // Direct SQL seeding emits no event, so shared read caches must not outlive the data.
   const { invalidateSharedCache } = await import("../src/lib/shared-cache.js");
   await Promise.all(

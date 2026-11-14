@@ -521,6 +521,7 @@ async function crossRoomSkipReasons(
        JOIN queue_entries bqe ON bqe.repo_id = s2.repo_id
                               AND bqe.status IN ('called', 'in_room', 'presenting')
                               AND bqe.id <> qe.id
+                              AND bqe.event_key = qe.event_key
        JOIN rooms br ON br.id = bqe.assigned_room_id
        JOIN repos brepo ON brepo.id = bqe.repo_id
       ORDER BY p.room_id, qe.id, bqe.id`,
@@ -668,7 +669,9 @@ export async function publicRoomViews() {
   // Public TV is the real-venue projection. Synthetic and mixed room graphs
   // are omitted entirely rather than appearing as empty room shells after
   // `roomView` filters their queue contents.
-  const { rows: rooms } = await pool.query<{ id: number }>(`SELECT id FROM rooms ORDER BY id ASC`);
+  const { rows: rooms } = await pool.query<{ id: number }>(
+    `SELECT id FROM rooms WHERE event_key = current_edition() ORDER BY id ASC`,
+  );
   const markers = await queueRoomFixtureMarkers(
     pool,
     rooms.map((room) => Number(room.id)),
@@ -770,6 +773,7 @@ WITH viewer AS (
      JOIN repos sr ON sr.id = s.repo_id
      CROSS JOIN viewer v
     WHERE s.user_id = $1 AND s.status = 'active'
+      AND sr.event_key = current_edition()
       AND su.account_state = 'active' AND su.anonymized_at IS NULL
       AND su.is_test_account = v.is_test_account
       AND sr.is_test_account = v.is_test_account
@@ -788,6 +792,7 @@ WITH viewer AS (
      JOIN queue_groups group_qg ON group_qg.id = qgc.queue_group_id
      LEFT JOIN enterprise_markers em ON em.enterprise_id = group_qg.enterprise_id
      CROSS JOIN viewer v
+    WHERE group_qg.event_key = current_edition()
     GROUP BY qgc.queue_group_id, v.is_test_account
    HAVING bool_and(group_challenge.is_test_account = v.is_test_account)
       AND COUNT(em.marker) > 0
@@ -842,6 +847,7 @@ WITH viewer AS (
      FROM rooms r
      LEFT JOIN room_graphs rg ON rg.room_id = r.id
      LEFT JOIN room_markers rm ON rm.room_id = r.id
+    WHERE r.event_key = current_edition()
     GROUP BY r.id
  ), visible_rooms AS (
    SELECT rs.room_id

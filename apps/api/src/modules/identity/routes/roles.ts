@@ -71,6 +71,15 @@ const readRoles = requireAnyCapability(
   CAPABILITIES.INVITES_MANAGE,
 );
 
+const manageAccess = routeAccess({
+  kind: "capability",
+  capability: CAPABILITIES.PERMISSIONS_MANAGE,
+});
+const roleUserParams = z.object({
+  roleId: z.coerce.number().int(),
+  userId: z.coerce.number().int(),
+});
+
 const permissionState = z.enum(["allow", "deny", "inherit"]);
 const roleIdParams = z.object({ roleId: z.coerce.number().int() });
 
@@ -126,6 +135,7 @@ async function loadRole(db: pg.Pool | pg.PoolClient, roleId: number) {
        FROM user_roles ur
        JOIN users u ON u.id = ur.user_id
       WHERE ur.role_id = $1
+        AND (ur.event_key IS NULL OR ur.event_key = current_edition())
         AND u.account_state = 'active'
         AND u.anonymized_at IS NULL
         AND u.is_test_account = false
@@ -160,6 +170,7 @@ async function reconcileRoleMembers(client: pg.PoolClient, roleId: number): Prom
        FROM user_roles ur
        JOIN users u ON u.id = ur.user_id
       WHERE ur.role_id = $1
+        AND (ur.event_key IS NULL OR ur.event_key = current_edition())
         AND u.account_state = 'active'
         AND u.anonymized_at IS NULL
       ORDER BY ur.user_id`,
@@ -199,6 +210,7 @@ async function announceRoleChange(roleId?: number, affectedUserIds: number[] = [
              FROM user_roles ur
              JOIN users u ON u.id = ur.user_id
             WHERE ur.role_id = $1
+              AND (ur.event_key IS NULL OR ur.event_key = current_edition())
               AND u.account_state = 'active'
               AND u.anonymized_at IS NULL`,
             [roleId],
@@ -220,7 +232,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/role-templates",
     {
       preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "List role-creation templates",
         description:
@@ -282,7 +294,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId",
     {
       preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Read a role",
         description:
@@ -298,7 +310,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles",
     {
       preHandler: manageWithIdempotency,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Create a role",
         description:
@@ -375,7 +387,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId",
     {
       preHandler: manageWithIdempotency,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Rename or toggle visibility of a role",
         description:
@@ -433,7 +445,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/position",
     {
       preHandler: manageWithIdempotency,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Reorder a role",
         description:
@@ -485,7 +497,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/capabilities",
     {
       preHandler: manageWithIdempotency,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Replace a role's tri-state capability grants",
         description:
@@ -549,7 +561,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId",
     {
       preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Soft-delete a role",
         description:
@@ -591,7 +603,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/restore",
     {
       preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Restore a soft-deleted role",
         description:
@@ -643,7 +655,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/seed-diff",
     {
       preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Compare a seeded role against its seed-time snapshot",
         description:
@@ -694,7 +706,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/reset-to-default",
     {
       preHandler: manageWithIdempotency,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "Reset a seeded role's capabilities to its seed-time snapshot",
         description:
@@ -790,15 +802,12 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/users/:userId",
     {
       preHandler: manageWithIdempotency,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         description:
-          "Assigns the role to the user, enforcing role-authority rules. Audited in the same transaction (H8/H53).",
+          "Assigns the role to the user in the viewed edition, enforcing role-authority rules. Audited in the same transaction (H8/H53).",
         summary: "Assign a role to a user",
-        params: z.object({
-          roleId: z.coerce.number().int(),
-          userId: z.coerce.number().int(),
-        }),
+        params: roleUserParams,
         response: { 200: roleResponse },
       },
     },
@@ -822,7 +831,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         if (userRows.length === 0) throw new NotFoundError("User not found", { userId });
         await client.query(
           `INSERT INTO user_roles (user_id, role_id, assigned_by) VALUES ($1, $2, $3)
-           ON CONFLICT DO NOTHING`,
+           ON CONFLICT (user_id, role_id, event_key) DO NOTHING`,
           [userId, roleId, actorId],
         );
         // H8: role-assignment-as-trigger — assigning `roleId` may itself be
@@ -857,15 +866,12 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/:roleId/users/:userId",
     {
       preHandler: manageWithIdempotency,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         description:
-          "Removes the role from the user, enforcing role-authority rules. Audited in the same transaction (H8/H53).",
+          "Removes the role from the user in the viewed edition only, enforcing role-authority rules. Audited in the same transaction (H8/H53).",
         summary: "Remove a role from a user",
-        params: z.object({
-          roleId: z.coerce.number().int(),
-          userId: z.coerce.number().int(),
-        }),
+        params: roleUserParams,
         response: { 200: roleResponse },
       },
     },
@@ -885,10 +891,11 @@ export function registerRoleRoutes(app: FastifyInstance): void {
           [userId],
         );
         if (userRows.length === 0) throw new NotFoundError("User not found", { userId });
-        await client.query(`DELETE FROM user_roles WHERE user_id = $1 AND role_id = $2`, [
-          userId,
-          roleId,
-        ]);
+        await client.query(
+          `DELETE FROM user_roles
+            WHERE user_id = $1 AND role_id = $2 AND event_key = current_edition()`,
+          [userId, roleId],
+        );
         // H8: the removal-side counterpart of applyRoleAssignmentGrantRules
         // above — revokes an implied role ONLY if no other role the user
         // still holds justifies it (see role-grants.ts for the full guard).
@@ -927,7 +934,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       }),
       schema: {
         description:
-          "The user's complete assigned-role set, for PERMISSIONS_MANAGE or INVITES_MANAGE holders (H8).",
+          "The user's complete assigned-role set in the viewed edition (plus global roles), for PERMISSIONS_MANAGE or INVITES_MANAGE holders (H8).",
         summary: "List a user's assigned roles",
         params: z.object({ userId: z.coerce.number().int() }),
         response: {
@@ -949,6 +956,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
            FROM user_roles ur
            JOIN roles r ON r.id = ur.role_id
           WHERE ur.user_id = $1 AND r.deleted_at IS NULL
+            AND (ur.event_key IS NULL OR ur.event_key = current_edition())
           ORDER BY r.position DESC`,
         [req.params.userId],
       );
@@ -966,7 +974,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     "/api/roles/capability-catalogue",
     {
       preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      config: manageAccess,
       schema: {
         summary: "List every known capability",
         description: "The full shared capability catalogue (H8), for the role capability editor.",

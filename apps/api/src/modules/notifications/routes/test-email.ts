@@ -24,7 +24,11 @@ export function registerTestEmailRoutes(app: FastifyInstance): void {
   api.post(
     "/api/notifications/test-email",
     {
-      ...routeAccess({ kind: "capability", capability: CAPABILITIES.NOTIFICATIONS_SEND }),
+      ...routeAccess({
+        kind: "capability",
+        capability: CAPABILITIES.NOTIFICATIONS_SEND,
+        edition: "global",
+      }),
       preHandler: [requireCapability(CAPABILITIES.NOTIFICATIONS_SEND), idempotencyGuard],
       schema: {
         summary: "Send an individual email notice",

@@ -34,6 +34,7 @@ import {
   type CertificateType,
   certificatesApi,
   certificateTypesApi,
+  groupCertificatesByEdition,
 } from "@/lib/certificates";
 import { eventDateFormat } from "@/lib/datetime";
 import { LANGS, languageName, type MessageKey, useLocale } from "@/lib/i18n";
@@ -127,6 +128,7 @@ export function CertificatesPanel({
   const awardInput =
     certifiedHours ?? (data.settings?.awardHours == null ? "" : String(data.settings.awardHours));
   const dateFormat = eventDateFormat(language, "date");
+  const editionGroups = staff ? null : groupCertificatesByEdition(data.certificates);
 
   const rowMenu = (cert: Certificate) => (
     <DropdownMenu>
@@ -188,7 +190,37 @@ export function CertificatesPanel({
         )}
       </div>
 
-      {rows.length === 0 ? (
+      {editionGroups ? (
+        editionGroups.map((group) => (
+          <section key={group.key} className="space-y-1">
+            <h3 className="type-subheading text-muted-foreground">{group.name}</h3>
+            <ul className="divide-border/60 divide-y">
+              {group.certificates.map((cert) => (
+                <li key={cert.id} className="flex items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <p className="font-medium">{cert.typeName}</p>
+                    <p className="text-muted-foreground text-sm">
+                      {[cert.activityName, dateFormat.format(new Date(cert.issuedAt))]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    loading={pending === `cert-${cert.id}`}
+                    disabled={pending !== null}
+                    onClick={() => void run(`cert-${cert.id}`, () => download(cert.id))}
+                  >
+                    <DownloadSimpleIcon />
+                    {t("certificateDownload")}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))
+      ) : rows.length === 0 ? (
         <p className="text-muted-foreground text-sm">{t("certificatesNone")}</p>
       ) : (
         <ul className="divide-border/60 divide-y">

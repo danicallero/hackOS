@@ -71,7 +71,10 @@ export async function applyRoleGrantRule(
   }
   if (revokeRoleIds.length > 0) {
     const { rows: revoked } = await client.query(
-      `DELETE FROM user_roles WHERE user_id = $1 AND role_id = ANY($2::int[]) RETURNING role_id`,
+      `DELETE FROM user_roles
+        WHERE user_id = $1 AND role_id = ANY($2::int[])
+          AND (event_key = current_edition() OR event_key IS NULL)
+        RETURNING role_id`,
       [userId, revokeRoleIds],
     );
     for (const row of revoked as { role_id: number }[]) {
@@ -103,7 +106,8 @@ export async function applyRoleGrantRule(
  * source role is a no-op). The `source` column on the resulting user_roles
  * row is `role_assigned:<sourceRoleId>` so applyRoleAssignmentRevokeRules can
  * later tell an automatic grant apart from a manual one when deciding
- * whether it's still safe to revoke.
+ * whether it's still safe to revoke. All rules act on the scoped edition
+ * (protected roles are global).
  */
 export async function applyRoleAssignmentGrantRules(
   client: pg.PoolClient,
@@ -173,6 +177,7 @@ export async function applyRoleAssignmentRevokeRules(
   const { rows: revoked } = await client.query(
     `DELETE FROM user_roles ur
       WHERE ur.user_id = $1
+        AND (ur.event_key = current_edition() OR ur.event_key IS NULL)
         AND ur.role_id = ANY($3::int[])
         AND ur.source IS DISTINCT FROM 'manual'
         AND NOT EXISTS (
@@ -180,6 +185,7 @@ export async function applyRoleAssignmentRevokeRules(
             FROM user_roles held
             JOIN role_grant_rules rr ON rr.source_role_id = held.role_id
            WHERE held.user_id = $1
+             AND (held.event_key = current_edition() OR held.event_key IS NULL)
              AND held.role_id <> $2
              AND rr.role_id = ur.role_id
              AND rr.action = 'grant'

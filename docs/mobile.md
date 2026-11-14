@@ -64,6 +64,7 @@ Read/loading/error/refresh coverage by route and embedded sheet is recorded in
 - [Other infrastructure](#other-infrastructure)
 - [UI testing](#ui-testing)
 - [Scanner state transitions](#scanner-state-transitions)
+- [Editions](#editions)
 
 ## Story index
 
@@ -3034,3 +3035,15 @@ adds a local `rsvp` task for it. `pendingProfileTasks` keeps its existing
 for an unknown task. The same server offer calculation
 drives web onboarding. Dietary and RSVP changes share the sheet's Save; a
 successful dietary save is retained when retrying a failed RSVP save.
+
+
+## Editions
+
+One installation hosts one edition per year (`docs/multi-edition-plan.md`). The app views one edition at a time; the contract lives in `@hackos/shared/editions`.
+
+- **Viewed edition** (`lib/edition.ts`): in-memory only, `null` means the current edition. It resets on every cold start, on sign-in (`signIn.email`) and on sign-out, never persisted. `apiFetch`, the realtime stream, photo and file downloads send `X-Edition` only while a non-current edition is selected.
+- **Scanners are always current.** `scannerFetch` (live scans, offline replay, snapshot sync) passes `currentEdition: true`, so `apiFetch` never adds the header: a closed edition cannot be scanned. Closed editions also drop the scanner capabilities server-side, so those tabs disappear by capability.
+- **Switching** (`switchEdition` in `lib/me-context.tsx`): checks `GET /api/me/editions` against the new edition, clears the user's cached reads, refetches `/api/me` (tabs and capabilities follow) and bumps an epoch that remounts the authenticated tree. A failure restores the previous edition. The offline profile is only cached while viewing the current edition.
+- **Selector**: a labelled `Edition` row in Account's Profile section using the same native menu as Language; shown only when `shouldShowEditionSelector` (more than one edition).
+- **Read-only notice**: `EditionClosedNotice` at the top of Account while `me.edition.status` is `closed`. `edition_closed` errors map to `editionClosedError` in `apiErrorCopy`.
+- **Project detail** shows an `Edition` row when the project payload carries `edition` and more than one edition exists. The app has no certificates screen yet, so nothing to group there.

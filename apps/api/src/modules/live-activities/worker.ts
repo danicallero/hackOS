@@ -11,6 +11,7 @@ import {
 import type { Language } from "@hackos/shared/locale";
 import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
+import { isScopedEditionClosed } from "../../lib/edition.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { normalizeLanguage } from "../notifications/templates.js";
 import { type AndroidLiveUpdateTransport, expoAndroidTransport } from "./android.js";
@@ -318,6 +319,8 @@ export async function runLiveActivitiesTick(
 }
 
 async function tick(deps: LiveActivityTickDeps, summary: LiveActivityTickSummary): Promise<void> {
+  // Multi-edition: nothing is live once the current edition is closed.
+  if (await isScopedEditionClosed(pool)) return;
   const now = new Date();
   const devices = await loadDevices();
   if (devices.length === 0) return;

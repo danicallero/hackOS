@@ -145,7 +145,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List judging rooms",
         description:
-          "Lists the rooms visible to the caller, including their operational status, the queue (group) they serve and the enterprise room pool they belong to when assigned.",
+          "Lists the rooms of the viewed edition visible to the caller, including their operational status, the queue (group) they serve and the enterprise room pool they belong to when assigned.",
       },
     },
     async (req) => {
@@ -161,6 +161,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
              LEFT JOIN room_queue_state rqs ON rqs.room_id = rooms.id
              LEFT JOIN room_enterprises re ON re.room_id = rooms.id
              LEFT JOIN enterprises e ON e.id = re.enterprise_id
+            WHERE rooms.event_key = current_edition()
             ORDER BY rooms.id ASC`,
         );
         return rows;
@@ -176,7 +177,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
            LEFT JOIN room_queue_state rqs ON rqs.room_id = rooms.id
            LEFT JOIN room_enterprises re ON re.room_id = rooms.id
            LEFT JOIN enterprises e ON e.id = re.enterprise_id
-          WHERE rooms.id = ANY($1)
+          WHERE rooms.id = ANY($1) AND rooms.event_key = current_edition()
           ORDER BY rooms.id ASC`,
         [roomIds],
       );
@@ -716,7 +717,13 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     "/api/queue/settings",
     {
       preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN),
-      config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
+      config: {
+        routeAccessPolicy: {
+          kind: "capability",
+          capability: CAPABILITIES.QUEUE_ADMIN,
+          edition: "current",
+        },
+      },
       schema: {
         summary: "Update queue settings",
         description:

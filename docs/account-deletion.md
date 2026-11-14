@@ -554,7 +554,7 @@ synthetic identity-shaped `users` row.
 | Data / table and participant fields | Before check-in | During event | After anonymization | Permanent anonymous audit record | Reason |
 | --- | --- | --- | --- | --- | --- |
 | `users`: id, email, verification, image, photo key, name, surname, DNI, language, UI prefs, timestamps | Full account data | Active profile/service identity | Delete | No | Direct identity/auth profile. |
-| `users`: badge_id, badge_id_history | Credential before use | Active badge operations | Delete; permanent unlinked keyed-digest non-reuse tombstone | No | Credential is not audit data; the digest tombstone exists only to reject arbitrarily late offline replay. |
+| `users`: badge_id; `badge_id_history` (one row per released code and edition) | Credential before use | Active badge operations | Delete (the history rows are deleted too); one permanent unlinked keyed-digest non-reuse tombstone per edition the credential belonged to (`users.badge_event_key`, `badge_id_history.event_key`, `tickets.event_key`), so the same code in another edition is never blocked | No | Credential is not audit data; the digest tombstone exists only to reject arbitrarily late offline replay. |
 | `users`: food_intolerances, food_intolerance_notes, dietary_data_state, shirt_size | May be edited | Operational catering/badge data | Keep dietary values only during reversible `pending_exit`; clear them during finalization, then delete the remaining user row | No | Dietary data supports active/in-flight catering only and is never part of the permanent anonymous audit dataset. |
 | `users`: dietary_confirmed_at, meal_plan_confirmed_at; `activity_rsvps` (#933) | May be edited | Sponsor meal planning and the dietary re-ask | Clear the timestamps and delete plan rows with the dietary values; the user FK cascades at final deletion | No | Planned attendance supports catering headcounts only; aggregates never identify the person. |
 | University answer on `application_responses` / `universities.name` | Profile dimension | May support services | Deleted with the response; catalog survives | Only an application field explicitly configured for anonymous audit may retain a university value | Profile data is not copied merely because the shared university catalog exists. |
@@ -607,8 +607,8 @@ synthetic identity-shaped `users` row.
 | `enterprise_invite_link_redemptions`: user/email/name/IP/user-agent | Invite history | Access provisioning | Delete by FK and normalized email | No | Denormalized invitee identity and claim provenance. |
 | `user_invite_link_redemptions`: user/email/name/IP/user-agent | Invite history | Access provisioning | Delete by FK and normalized email | No | Denormalized invitee identity and claim provenance. |
 | `enterprise_invite_links` / `user_invite_links`: creator/token | Shared invite config | Provisioning | Null subject creator; expire/revoke shared token as normal | No | Shared link survives; subject authorship does not. |
-| `repos`: creator/name/description/URLs | Project/team | Judging/project service | Null creator; delete solo orphan; preserve shared repo for remaining members | No | Shared project is not anonymous demographic audit. |
-| `onboarding_step_states`, `mentor_profiles`, `user_role_event_evidence` | Event onboarding and helper publication | Resumable choices, public helper profile and role-assignment evidence | Delete before anonymizing a retained user; cascade on final deletion | No | The evidence and publication history are edition-scoped; audit retains only safe state metadata. |
+| `repos`: creator/name/description/URLs; `github_repo_links` | Project/team | Judging/project service | Null creator; if the person created the repo or linked it to GitHub, clear the GitHub URL and delete the repo link; delete solo orphan; preserve shared repo for remaining members (project name untouched) | No | Shared project is not anonymous demographic audit. |
+| `onboarding_step_states`, `mentor_profiles` (`user_role_event_evidence` is now a read-only view over `user_roles`) | Event onboarding and helper publication | Resumable choices, public helper profile and role-assignment evidence | Delete before anonymizing a retained user; cascade on final deletion | No | The evidence and publication history are edition-scoped; audit retains only safe state metadata. |
 | `user_public_profiles`: visibility/headline/location note/bio/links/CV key | Public profile | Public profile (#934) | Delete in the removal transaction; cascades on user delete; H54 trigger rejects pending writes | No | Opt-in public profile is identity-bearing; included in the personal export bundle as `publicProfile`. |
 | `helper_profiles`, `helper_topics`, `helper_availability`, `help_request_recipients` | Help desk | Helper profile and routing (H61-H65) | Delete in the removal transaction; cascade on user delete; H54 trigger rejects pending writes | No | The helper card and stated schedule; exported as `helperProfile`. |
 | `help_requests`: requester/claimer, description, location | Help desk | Help requests (H64-H66) | Requester and claimer set to NULL in the removal transaction; individual requests lose description/location and are cancelled if active; team requests keep their text for the team; a claim held by the subject returns to open; H54 triggers reject pending writes | No | Requests the subject opened are exported as `helpRequests`. `help_topics.proposed_by` is cleared. |
@@ -775,8 +775,21 @@ merely to preserve certificates or implementation convenience. The remaining
 high risks are deliberately visible rather than hidden behind a success
 response.
 
-Certificate review awards (#1083) are deleted during the removal scrub; issued
-documents are revoked and their snapshots cleared. No certified-hours approval
-remains linked to the anonymized person.
+Certificate review awards and issued certificates (#1083) of every edition are
+deleted during the removal scrub, so their codes and file hashes verify as
+nonexistent (404, like an unknown code). No certified-hours approval remains
+linked to the anonymized person.
+
+## Multiple editions
+
+Deletion and anonymization reach every edition, closed ones included: the
+erasure transactions run with closed-edition writes allowed
+(`withClosedEditionWrites`). Anonymization also records
+`anonymous_participant_editions` (anonymous id, edition, guaranteed presence
+minutes in that edition, computed with that edition's presence only), one row
+per edition the person took part in; `anonymous_participants` keeps the global
+total. Neither table maps to a person. `erasure-walk.test.ts` discovers every
+foreign key to `users(id)` from the catalog and fails if a row still references
+a removed person.
 
 H53 traceability also removes audit rows naming a departing user as `initiated_by`. Request correlation is detached from surviving rows related to deleted audit entries. Device actions retain internal subject pointers for erasure, never raw device identifiers in the audit entity ID. See [Audit trail](./audit-trail.md).

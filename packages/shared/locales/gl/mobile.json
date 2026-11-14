@@ -1125,5 +1125,9 @@
   "companyNotFound": "Empresa non dispoñible",
   "scheduleSpeakers": "Ponentes",
   "scheduleCompanies": "Empresas",
-  "personTalks": "Charlas"
+  "personTalks": "Charlas",
+  "accountEdition": "Edición",
+  "editionClosedNotice": "{name} · Pechada, só lectura",
+  "editionClosedError": "Esta edición está pechada e é de só lectura.",
+  "projectEdition": "Edición"
 }

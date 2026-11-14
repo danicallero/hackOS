@@ -19,6 +19,7 @@ import { setServerStateIdentity } from "./server-state";
 import { registerSignOutListener } from "./sign-out-events";
 import { setSseIdentity } from "./sse-broker";
 import type { Me } from "./types";
+import { resetViewedEdition, subscribeViewedEdition } from "./viewed-edition";
 
 type SessionStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -57,6 +58,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     inFlight.current = null;
     setSseIdentity(null, API_URL);
     setServerStateIdentity(null);
+    resetViewedEdition();
     setEventTimeZone(null);
     meRef.current = null;
     setMe(null);
@@ -84,6 +86,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         if (err instanceof ApiError && err.status === 401) {
           setSseIdentity(null, API_URL);
           setServerStateIdentity(null);
+          resetViewedEdition();
           meRef.current = null;
           setMe(null);
           setStatus("unauthenticated");
@@ -132,6 +135,17 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   useEffect(() => registerSignOutListener(clear), [clear]);
+
+  // Capabilities, roles and navigation follow the viewed edition: a read still
+  // in flight belongs to the previous one and is superseded.
+  useEffect(
+    () =>
+      subscribeViewedEdition(() => {
+        inFlight.current = null;
+        void refresh();
+      }),
+    [refresh],
+  );
 
   // The authenticated shell already holds the personal stream for queue and
   // inbox updates. Session changes are addressed to that same user topic,

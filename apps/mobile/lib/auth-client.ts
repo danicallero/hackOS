@@ -4,6 +4,7 @@ import { createAuthClient } from "better-auth/react";
 import * as SecureStore from "expo-secure-store";
 import type { ApiMode } from "./api-mode";
 import { clientHeaders } from "./client-build";
+import { resetViewedEdition } from "./edition";
 import { API_URL } from "./env";
 import { notifySignOut } from "./sign-out-events";
 import { isUpgradeRequired, markUpgradeRequired } from "./upgrade-required";
@@ -60,7 +61,11 @@ export function configureAuthClient(mode: ApiMode): void {
 // Keep this export stable for forms while resolving the active client at the
 // moment the user submits, after an endpoint switch has rebuilt it.
 export const signIn = {
-  email: (...args: Parameters<typeof authClient.signIn.email>) => authClient.signIn.email(...args),
+  email: (...args: Parameters<typeof authClient.signIn.email>) => {
+    // A new session always starts on the current edition.
+    resetViewedEdition();
+    return authClient.signIn.email(...args);
+  },
 };
 
 const sessionCookieKey = () => `${activeStoragePrefix}_cookie`;
