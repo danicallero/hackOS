@@ -512,6 +512,7 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | POST | `/api/telemetry/refetch-storm` | public:telemetry + edition:global |
 | GET | `/api/tv/config` | public:public-tv |
 | PATCH | `/api/tv/config` | capability:tv:control + email-verification:caller + edition:current |
+| GET | `/api/tv/connections` | public:public-tv |
 | GET | `/api/tv/github` | public:public-tv |
 | DELETE | `/api/tv/mode` | capability:tv:control + email-verification:caller + edition:current |
 | GET | `/api/tv/mode` | public:public-tv |

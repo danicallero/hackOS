@@ -43,6 +43,7 @@ describe("final route-policy ledger", () => {
       "GET /api/public/sponsors",
       "GET /api/public/universities",
       "GET /api/tv/config",
+      "GET /api/tv/connections",
       "GET /api/tv/github",
       "GET /api/tv/mode",
       "GET /api/tv/rooms",

@@ -38,6 +38,7 @@ import {
 } from "./reads.js";
 import { challengeIdParam, repoIdParam, roomIdParam, tvConfigBody, tvModeBody } from "./schemas.js";
 import { clearTvMode, resolveTvState, setTvLanguage, setTvMode, tvVenueConfig } from "./tv.js";
+import { tvConnections } from "./tv-connections.js";
 
 const tvControlPolicy = {
   kind: "capability" as const,
@@ -236,6 +237,18 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       },
     },
     () => sharedCache("tv", "rooms", 2, publicRoomViews),
+  );
+  typed.get(
+    "/api/tv/connections",
+    {
+      config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-tv" } },
+      schema: {
+        summary: "Public attendee connections graph (#934, #935)",
+        description:
+          "Opt-out networking graph of the active edition: connected people and companies only, keyed-hash node ids that rotate hourly, names only for shared profiles, bounded payload with truncated flag. No notes, favourites, timestamps or user ids. Shared cache, 15 s.",
+      },
+    },
+    () => sharedCache("tv", "connections", 15, tvConnections),
   );
 
   // Raw queue events contain operational room and team data. Public walls use

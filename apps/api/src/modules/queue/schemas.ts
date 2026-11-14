@@ -1,4 +1,5 @@
 import { questionnaireSchema } from "@hackos/shared/questions";
+import { TV_CONNECTIONS_MODE } from "@hackos/shared/tv-connections";
 import { z } from "zod";
 import { idParam, positiveInt } from "../../lib/schemas.js";
 
@@ -120,7 +121,15 @@ export const reviewMessageBody = z.object({
 });
 
 /** Every view a screen can show (H42). "live" combines countdown + schedule + sponsors + Wi-Fi. */
-const tvModeName = z.enum(["rooms", "schedule", "sponsors", "wifi", "live", "github"]);
+const tvModeName = z.enum([
+  "rooms",
+  "schedule",
+  "sponsors",
+  "wifi",
+  "live",
+  "github",
+  TV_CONNECTIONS_MODE,
+]);
 
 export const tvModeBody = z
   .object({

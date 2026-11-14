@@ -56,11 +56,39 @@ screen cannot grant judging access.
 | `sponsors` | Event name and sponsor logo wall, without a redundant “Sponsors” wordmark |
 | `wifi` | Full-screen network name + password |
 | `github` | Top committers and pull-request authors, per person and per project team, from `GET /api/tv/github` (polled every 15 s); see [GitHub activity](./github-activity.md) |
+| `connections` | Networking graph of attendees and companies from `GET /api/tv/connections` (#934, #935); see [Connections graph view](#connections-graph-view) |
 
-Only the six modes above are valid in a Valkey selection. Migration 0404
+Only the seven modes above are valid in a Valkey selection. Migration 0404
 removes the retired timetable and its stored entries. A stale or malformed
 Valkey payload is discarded on read; it is never translated into a current
 mode. The countdown remains available as a block of the `live` composition.
+
+### Connections graph view
+
+`connections-view.tsx` (+ `connections-graph.tsx`, `connections-layout.ts`,
+`connections-option.ts`) renders the typed `TvConnectionsResponse` from
+`@hackos/shared/tv-connections`. Display rules:
+
+- The whole snapshot is always drawn (ECharts `graph`, SVG renderer, tree-shaken
+  imports). People are dots sized by degree; companies are larger rounded
+  squares in a second colour. Labels appear only for companies and the most
+  connected *named* people (capped, overlaps hidden), so 500+ nodes stay legible.
+  Anonymous people (`label: null`) are never labelled.
+- Rotating focus: every 9 s a hub and its neighbours are highlighted and the rest
+  is dimmed. Rotation stops while the page is hidden or `prefers-reduced-motion`
+  is set; nothing reacts to hover, focus or clicks (`silent` series).
+- Layout is computed by our own deterministic force pass (`layoutGraph`), not
+  ECharts' random animated one: positions are seeded from the node id, kept by id
+  across polls, new nodes start next to their neighbours, and the simulation runs a
+  bounded number of steps then stops. Node ids rotate server-side, so a rotation
+  re-seeds the layout once.
+- Refresh: polled every 15–30 s with random spacing, plus the public TV stream's
+  `data.changed` (forwarded by `TvDisplay` as an `invalidation` counter, jittered
+  3 s, never more often than every 5 s). A failed poll keeps the last snapshot and
+  shows the reconnecting note; with no snapshot yet it shows an error state.
+- Totals (people / companies / connections) come from `totals`, so they stay
+  correct when `truncated` is true; a truncation note is shown then.
+- Empty snapshot: a friendly "no connections yet" state.
 
 ### Winners
 
@@ -228,3 +256,45 @@ fewer than two (`bestSponsorColumns`).
 
 TV keeps one public payload-free stream for every rendered domain. Details are
 in [realtime transport](./realtime-transport.md).
+
+<!-- BEGIN connections-graph-api (T3: API part only; the display is documented elsewhere in this file) -->
+## Connections graph API (#934, #935)
+
+Mode `connections` (`TV_CONNECTIONS_MODE`, shared contract
+`packages/shared/src/tv-connections.ts`) is accepted by `PATCH /api/tv/mode`
+and returned by `GET /api/tv/mode` like any other mode. Its data comes from
+the public, unauthenticated `GET /api/tv/connections` (`public:public-tv`),
+implemented in `apps/api/src/modules/queue/tv-connections.ts` and tested in
+`apps/api/test/queue/tv-connections.test.ts`.
+
+- **One aggregate SQL**, not `visibleDirectoryEntries`, scoped by
+  `current_edition()`. Cached in the shared cache for **15 s** per edition;
+  that TTL is the stale-data bound for opt-outs, account removal and edition
+  switches (nothing else caches it). SSE stays payload-free and nothing is
+  broadcast per scan: screens refetch on their own poll or on the existing TV
+  invalidations.
+- **Who is a node.** People with event access (active, not removal-pending or
+  anonymized), not a test account, with `tv_graph_visible` on (default on, even
+  with no profile row); companies of the active edition that are `visible` and
+  not synthetic. Only nodes with at least one edge are returned.
+- **Edges.** A person pair is one undirected edge while *either* side keeps
+  the diary entry (one-way, reciprocal and one-sided deletion converge on one
+  edge). A person–company edge exists per person under the same opt-out. Both
+  endpoints must be eligible, so an opt-out removes every incident edge.
+- **Labels.** A person's `label` is their display name only while
+  `directory_visible` (surname only if `show_surname`, else initial), otherwise
+  `null` (anonymous dot). Company label is its name. No photos.
+- **Node ids** are `base64url(HMAC-SHA256(key, kind:id))[0..22]`, where `key`
+  is derived from `BETTER_AUTH_SECRET` and the current UTC hour. Ids are stable
+  within the hour (layout continuity) and uncorrelatable across hours; raw user
+  or enterprise ids never appear. A snapshot cached across an hour boundary
+  keeps its ids for at most one TTL.
+- **Bound.** At most 2000 nodes and 30 000 edges (`TV_GRAPH_MAX_NODES`,
+  `TV_GRAPH_MAX_EDGES`; a 600-person graph with 40 scans each, 24 000 edges, is
+  under the cap, ~1.3 MB JSON before compression). Over the cap the lowest-degree
+  nodes, then the edges between the lowest-degree endpoints, are dropped
+  deterministically (degree, kind, internal id), nodes left without an edge are
+  omitted, and `truncated` is `true`. `totals` and each node's `degree` always
+  describe the full eligible graph.
+- **Never in the body:** user ids, emails, notes, stars, timestamps.
+<!-- END connections-graph-api -->

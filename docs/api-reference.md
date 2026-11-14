@@ -922,7 +922,7 @@ clients refetch finds the cache already empty and the first refetch repopulates 
 | `gallery` | `GET /api/public/projects` (the viewer's own projects are read live) | `projects`, `directory`, `public-content` | 30 s |
 | `content` | `GET /api/public/activities` (keyed by audience set), `/api/announcements/public`, `/api/public/event` | `content` | 15 s |
 | `public-content` | `GET /api/public/sponsors`, `/api/public/challenges`, `/api/tv/winners` (published winners, after the per-viewer gallery check) | `sponsors`, `public-content`, `public-tv` | 15 s |
-| `tv` | `GET /api/tv/rooms`, `/api/tv/mode` (2 s), `/api/tv/config` (15 s) | `queue`, `tv`, `public-tv`, `content` | 2–15 s |
+| `tv` | `GET /api/tv/rooms`, `/api/tv/mode` (2 s), `/api/tv/config` (15 s), `/api/tv/connections` (15 s, connections graph, #934/#935) | `queue`, `tv`, `public-tv`, `content` | 2–15 s |
 
 The live queue is never delayed by the cache: every queue event invalidates `tv`
 immediately (the TTL is only a backstop), per-user queue reads (`/api/queue/me`)

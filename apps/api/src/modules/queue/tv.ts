@@ -1,4 +1,5 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { TV_CONNECTIONS_MODE } from "@hackos/shared/tv-connections";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { broadcast } from "../../lib/sse.js";
@@ -10,7 +11,14 @@ import { valkey } from "../../lib/valkey.js";
  */
 const TV_MODE_KEY = "tv:mode";
 
-export type TvModeName = "rooms" | "schedule" | "sponsors" | "wifi" | "live" | "github";
+export type TvModeName =
+  | "rooms"
+  | "schedule"
+  | "sponsors"
+  | "wifi"
+  | "live"
+  | "github"
+  | typeof TV_CONNECTIONS_MODE;
 
 /** One operator-selected display mode. */
 export interface TvMode {
@@ -32,6 +40,7 @@ const TV_MODE_NAMES: readonly TvModeName[] = [
   "wifi",
   "live",
   "github",
+  TV_CONNECTIONS_MODE,
 ];
 
 function isTvModeName(value: unknown): value is TvModeName {
