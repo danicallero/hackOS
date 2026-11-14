@@ -4,7 +4,6 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool } from "../../db/pool.js";
-import { audit } from "../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
@@ -295,7 +294,7 @@ export function registerRsvpRoutes(app: FastifyInstance): void {
           "Global catering view: every current attendee (active, non-anonymized, with a current attendance kind) who declared " +
           "food intolerances or dietary notes, with kind, enterprise, intolerance labels and the free-text notes, plus the " +
           "per-intolerance counts and totals. Carries per-person dietary data, so it needs the meal-plans:export " +
-          "capability and every read writes an audit row (no content). A synthetic review operator only sees test accounts.",
+          "capability. This read-only view does not create audit entries. A synthetic review operator only sees test accounts.",
         response: {
           200: z.object({
             people: z.number(),
@@ -321,16 +320,6 @@ export function registerRsvpRoutes(app: FastifyInstance): void {
         },
       },
     },
-    async (req) => {
-      const actorId = req.userId as number;
-      const overview = await dietaryOverview(actorId);
-      await audit(pool, {
-        actorId,
-        entityType: "dietary_overview",
-        entityId: 1,
-        action: "view",
-      });
-      return overview;
-    },
+    async (req) => dietaryOverview(req.userId as number),
   );
 }

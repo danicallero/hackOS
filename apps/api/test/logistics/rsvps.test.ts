@@ -730,7 +730,7 @@ describe("RSVPs asked of roles (H59)", () => {
 });
 
 describe("GET /api/logistics/dietary", () => {
-  it("lists everyone with intolerances or notes, with counts, and audits the read", async () => {
+  it("lists everyone with intolerances or notes, with counts, without auditing the read", async () => {
     const exporter = await createUserWithCapabilities([CAPABILITIES.MEAL_PLANS_EXPORT]);
     const pool = await db();
     const { rows } = await pool.query(
@@ -774,8 +774,7 @@ describe("GET /api/logistics/dietary", () => {
     const { rows: audited } = await pool.query(
       `SELECT entity_type, action FROM audit_log WHERE entity_type = 'dietary_overview'`,
     );
-    expect(audited).toEqual([{ entity_type: "dietary_overview", action: "view" }]);
-    expect(JSON.stringify(audited)).not.toContain("kiwi");
+    expect(audited).toEqual([]);
 
     const denied = await app.inject({
       method: "GET",
