@@ -310,7 +310,9 @@ function DiaryPage() {
         destructive
         pending={removeTarget !== null && busyId === removeTarget.id}
         onConfirm={() => void confirmRemove()}
-      />
+      >
+        <p className="text-muted-foreground text-pretty text-sm">{t("diaryRemoveBody")}</p>
+      </AlertModal>
     </PageLayout>
   );
 }
