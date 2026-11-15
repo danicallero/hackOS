@@ -385,7 +385,12 @@ export function CompanyProfileScreen() {
                       feedback="opacity"
                       accessibilityRole="button"
                       onPress={() => setExpanded(true)}
-                      style={{ alignSelf: "flex-end" }}
+                      style={{
+                        alignSelf: "flex-end",
+                        minHeight: 44,
+                        justifyContent: "center",
+                        paddingHorizontal: 8,
+                      }}
                     >
                       <Text
                         style={{

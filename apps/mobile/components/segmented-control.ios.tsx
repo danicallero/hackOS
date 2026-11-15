@@ -13,7 +13,7 @@ export function SegmentedControl({
   label,
 }: SegmentedControlProps) {
   return (
-    <Host style={{ height: HEIGHT, width: "100%" }}>
+    <Host ignoreSafeArea="all" style={{ height: HEIGHT, width: "100%" }}>
       <Picker
         label={label}
         modifiers={[pickerStyle("segmented"), frame({ height: HEIGHT, maxWidth: Infinity })]}

@@ -39,6 +39,12 @@ there. Device coverage drives accreditation, meals, and recordable activities
 through stable IDs from `@hackos/shared/ui-test-ids`; ordinary CI remains on
 the hardware-free native screen suite.
 
+**Profile and RSVP layout.** Person profiles reserve the floating tab bar's full
+bottom clearance. Helper affiliations already represented by a linked company
+are shown once. The next-entry dietary/RSVP sheet keeps its title and actions
+in a fixed header above the scrolling form. Embedded iOS segmented pickers ignore
+the hosting window's safe area; the React Native row owns their spacing.
+
 **Sheet grabber.** Every sheet that can be pulled down shows the iOS drag handle. Router sheets use `sheetPresentation` (`lib/navigation.ts`): a one-detent iOS `formSheet` with `sheetGrabberVisible`, kept as tall as the former page sheet; an opaque `headerStyle` would paint over the grabber, so sheet headers stay transparent. `SheetModal` (`components/app-sheet.tsx`) draws the same `SheetGrabber` (36 x 5 pt, tertiary label) on iOS and Android. Full-screen and zoom-presented pages have none.
 
 Read/loading/error/refresh coverage by route and embedded sheet is recorded in
@@ -1237,6 +1243,11 @@ public) and Activities (opens `schedule/[id]`). Empty sections are omitted; a
 hidden or missing company shows "Company not available". iOS uses the
 transparent native header and the name joins the bar after 150 pt of scroll;
 Android and cold links float a glass back button.
+
+Company rows on person profiles also receive the negative logo and use it in dark mode.
+Sponsor tiles without a negative variant keep the positive artwork on a white ground.
+`PersonAvatar` reuses `useImageBleed` to render edge-touching logos at 84%;
+logos with built-in margin keep their full size. Person photos remain cropped circles.
 
 **Image tint (H44, H48).** `lib/image-tint.ts` keeps an in-memory colour per
 image URL. `PersonAvatar` calls `prefetchImageTint(uri)` for every logo and

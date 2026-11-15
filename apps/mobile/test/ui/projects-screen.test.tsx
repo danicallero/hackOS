@@ -13,6 +13,7 @@ jest.mock("@/theme/colors", () => ({ colors: new Proxy({}, { get: () => "#171717
 let mockTint: string | null = null;
 jest.mock("@/lib/image-tint", () => ({
   prefetchImageTint: jest.fn(),
+  useImageBleed: () => false,
   useImageTint: (uri: string | null | undefined) => ({
     color: uri ? mockTint : null,
     settled: !uri || mockTint !== null,

@@ -58,10 +58,10 @@ let person: DirectoryEntry | Error;
 let container: HTMLDivElement;
 let root: Root;
 
-async function render(userId = 42) {
+async function render(userId = 42, companyId?: number) {
   const { PersonDetail } = await import("./person-detail");
   await act(async () => {
-    root.render(<PersonDetail userId={userId} />);
+    root.render(<PersonDetail userId={userId} companyId={companyId} />);
   });
 }
 
@@ -133,6 +133,38 @@ describe("PersonDetail (#934, #935)", () => {
     );
   });
 
+  it("returns to the originating company, including missing profiles", async () => {
+    person = entry({ enterprises: [{ id: 7, name: "GPUL", logoUrl: null }] });
+    await render(42, 7);
+    expect(container.querySelector("a[href='/companies/7']")?.textContent).toBe("GPUL");
+    expect(container.querySelector("a[href='/people']")).toBeNull();
+    person = new ApiError(404, "not_found", "Person not found");
+    await render(43, 7);
+    expect(container.querySelector("a[href='/companies/7']")).not.toBeNull();
+  });
+
+  it("samples the authenticated API photo with credentials", async () => {
+    const images: HTMLImageElement[] = [];
+    const OriginalImage = globalThis.Image;
+    vi.stubGlobal(
+      "Image",
+      class extends OriginalImage {
+        constructor() {
+          super();
+          images.push(this);
+        }
+      },
+    );
+    try {
+      person = entry({ photoUrl: "/api/users/42/photo?v=color-test" });
+      await render();
+      const sampled = images.find((image) => image.crossOrigin === "use-credentials");
+      expect(sampled?.src).toBe(`${API_URL}/api/users/42/photo?v=color-test`);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("lists every project and work group the person is in", async () => {
     person = entry({
       projects: [
@@ -192,7 +224,10 @@ describe("shared helper identity (H63)", () => {
         />,
       );
     await act(async () => renderProfile(true));
-    expect(container.querySelector("header")?.textContent).toContain("Mentor");
+    expect(container.querySelector("header")?.textContent).not.toContain("Mentor");
+    const contextRow = container.querySelector("[data-hero-bleed] > div:last-child > div");
+    expect(contextRow?.textContent).toBe("Support teamMentor");
+    expect(contextRow?.className).toContain("justify-between");
     expect(container.querySelector('img[src$="/api/enterprises/7/logo"]')).not.toBeNull();
     expect([...container.querySelectorAll("section > h2")].map((el) => el.textContent)).toEqual([
       "helpDeskCompany",

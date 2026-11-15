@@ -949,3 +949,28 @@ outside reference art is bundled.
 
 ### Exceptions
 Brand art from outside the repo is fine when the user names it for this surface.
+
+## [R036] Verify back navigation through cross-linked records
+
+Status: active
+Scope: module:web
+Source: user-correction
+Date: 2026-11-15
+
+### Trigger
+Changing a record's return navigation when records link to other record types.
+
+### Mistake
+Fixed company → profile while profile → company still returned to a fixed catalogue.
+
+### Lesson
+A single entry-point fix does not establish correct navigation through a stack of cross-linked records.
+
+### Action
+Use the shared back-navigation contract and trace both directions, including repeated record visits. Keep the visible return label aligned with the actual destination.
+
+### Validation
+Exercise list → profile → company → profile, then unwind each step. Check filters, scroll, modified clicks and the canonical fallback for direct visits.
+
+### Exceptions
+An explicit parent-navigation action can deliberately leave the history stack.
