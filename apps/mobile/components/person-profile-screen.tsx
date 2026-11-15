@@ -410,6 +410,7 @@ export function PersonProfileScreen({
                               kind="sponsor"
                               name={company.name}
                               uri={company.logoUrl}
+                              logoNegativeUrl={company.logoNegativeUrl}
                             />
                           </View>
                         </Link.AppleZoom>

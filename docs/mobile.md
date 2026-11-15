@@ -1244,6 +1244,11 @@ hidden or missing company shows "Company not available". iOS uses the
 transparent native header and the name joins the bar after 150 pt of scroll;
 Android and cold links float a glass back button.
 
+Company rows on person profiles also receive the negative logo and use it in dark mode.
+Sponsor tiles without a negative variant keep the positive artwork on a white ground.
+`PersonAvatar` reuses `useImageBleed` to render edge-touching logos at 84%;
+logos with built-in margin keep their full size. Person photos remain cropped circles.
+
 **Image tint (H44, H48).** `lib/image-tint.ts` keeps an in-memory colour per
 image URL. `PersonAvatar` calls `prefetchImageTint(uri)` for every logo and
 photo a list renders, so the tint is computed before the page opens: in-flight

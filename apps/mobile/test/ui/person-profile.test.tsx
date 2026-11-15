@@ -53,6 +53,7 @@ jest.mock("@/lib/haptics", () => ({ haptic: jest.fn() }));
 let mockTint: string | null = null;
 jest.mock("@/lib/image-tint", () => ({
   prefetchImageTint: jest.fn(),
+  useImageBleed: () => false,
   useImageTint: (uri: string | null | undefined) => ({
     color: uri ? mockTint : null,
     settled: !uri || mockTint !== null,
