@@ -540,14 +540,27 @@ describe("speakers and company representatives (H44, H48)", () => {
       ids[0],
       rep,
     ]);
+    const negativeOnly = await card(rep);
+    expect(negativeOnly.statusCode).toBe(200);
+    expect(negativeOnly.json().enterprises[0]).toEqual({
+      id: ids[0],
+      name: "Beta",
+      logoUrl: null,
+      logoNegativeUrl: "https://example.com/beta-dark.png",
+    });
+    await pool.query(`UPDATE enterprises SET logo_url = $1, logo_negative_url = $2 WHERE id = $3`, [
+      "https://example.com/logo.png",
+      "https://example.com/logo-dark.png",
+      ids[0],
+    ]);
     const res = await card(rep);
     expect(res.statusCode).toBe(200);
     expect(res.json().enterprises).toEqual([
       {
         id: ids[0],
         name: "Beta",
-        logoUrl: null,
-        logoNegativeUrl: "https://example.com/beta-dark.png",
+        logoUrl: "https://example.com/logo.png",
+        logoNegativeUrl: "https://example.com/logo-dark.png",
       },
       { id: ids[1], name: "Alpha", logoUrl: null, logoNegativeUrl: null },
     ]);

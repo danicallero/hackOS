@@ -21,6 +21,7 @@ export interface HelperCard {
   visibleRoleName: string | null;
   affiliation: string | null;
   affiliationLogoUrl: string | null;
+  affiliationLogoNegativeUrl?: string | null;
   topics: HelpTopic[];
   availability: AvailabilityInterval[];
   scheduledNow: boolean;

@@ -156,7 +156,7 @@ export function CompanyView({ company, context }: { company: Company; context: R
               {company.representatives.map((person) => (
                 <li key={person.userId} className="min-w-0">
                   <Link
-                    href={`/people/${person.userId}`}
+                    href={`/people/${person.userId}?company=${company.id}`}
                     className="button-interaction -mx-1 flex min-w-0 items-center gap-3 rounded-sm px-1 py-1 hover:bg-muted"
                   >
                     <UserAvatar
