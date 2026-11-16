@@ -1,11 +1,12 @@
 import { DEFAULT_ACTIVITY_KIND, isMealActivityKind } from "@hackos/shared/activity-kinds";
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { AttendanceKind } from "@hackos/shared/onboarding";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { type AuthorizationContext, getEffectiveCapabilities } from "../../lib/capabilities.js";
+import { type AuthorizationContext, userHasAnyCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { likeContains } from "../../lib/like.js";
 import { photoUrl } from "../../lib/profile-files.js";
@@ -1180,8 +1181,12 @@ export interface CallerScheduleAudience {
 }
 
 /**
- * Staff (any authenticated account holding at least one capability) always
- * sees everything — never gated by the stored `audiences` set. Everyone else
+ * Staff (a caller holding SCHEDULE_READ or SCHEDULE_MANAGE) always sees
+ * everything — never gated by the stored `audiences` set. Holding some other
+ * capability is not enough: attendee roles carry self-service capabilities
+ * (the Participant role holds `queue:status`, help desk requesters hold
+ * `helpdesk:request`), so "any capability" leaked staff-only items, drafts,
+ * notes and owners to hackers (H8, H59). Everyone else
  * always sees the participant audience, then gains the mentor audience when
  * they hold the Mentor role and the sponsor audience when they're a linked
  * sponsor rep. An anonymous caller (no session — the public site/TV) gets
@@ -1192,13 +1197,13 @@ export async function callerScheduleAudiences(
 ): Promise<CallerScheduleAudience> {
   const userId = context.userId;
   if (userId == null) return { isStaff: false, audiences: new Set(["participant"]) };
-  const [capabilities, { isSponsorRep }, attendeeType, roleTags] = await Promise.all([
-    getEffectiveCapabilities(context),
+  const [readsFullSchedule, { isSponsorRep }, attendeeType, roleTags] = await Promise.all([
+    userHasAnyCapability(context, [CAPABILITIES.SCHEDULE_READ, CAPABILITIES.SCHEDULE_MANAGE]),
     computeMembershipFlags(pool, userId),
     mentorOrParticipantType(pool, userId),
     roleAudienceTagsForUsers([userId]),
   ]);
-  if (capabilities.size > 0) return { isStaff: true, audiences: new Set() };
+  if (readsFullSchedule) return { isStaff: true, audiences: new Set() };
   const audiences = new Set<ScheduleAudience>(["participant"]);
   // Sponsor and mentor views are additive to the universal participant feed,
   // never narrower views (H59).

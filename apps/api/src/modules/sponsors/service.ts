@@ -170,20 +170,11 @@ export async function getEnterpriseProfile(
   caller: CallerScheduleAudience,
   context: AuthorizationContext,
 ) {
-  const [canManage, canManageChallenges, canReadSchedule] = await Promise.all([
+  const [canManage, canManageChallenges] = await Promise.all([
     userHasCapability(context, CAPABILITIES.SPONSORS_MANAGE),
     userHasCapability(context, CAPABILITIES.CHALLENGES_MANAGE),
-    userHasCapability(context, CAPABILITIES.SCHEDULE_READ),
   ]);
   const seesHiddenChallenges = canManage || canManageChallenges;
-  // `caller.isStaff` means "holds any capability" (H59 feed); here it only
-  // widens the schedule when the capability is a schedule one.
-  const scheduleCaller: CallerScheduleAudience =
-    caller.isStaff &&
-    !canReadSchedule &&
-    !(await userHasCapability(context, CAPABILITIES.SCHEDULE_MANAGE))
-      ? { isStaff: false, audiences: new Set(["participant"]) }
-      : caller;
   const { rows } = await pool.query(
     `SELECT e.id, e.name, e.website, e.logo_url,
             COALESCE(e.logo_negative_url, e.logo_url) AS logo_negative_url, e.description,
@@ -222,7 +213,7 @@ export async function getEnterpriseProfile(
         ORDER BY c.title, c.id`,
       [enterpriseId, seesHiddenChallenges],
     ),
-    listScheduleForAudiences(scheduleCaller, { enterpriseId }),
+    listScheduleForAudiences(caller, { enterpriseId }),
   ]);
   return {
     id: Number(enterprise.id),
