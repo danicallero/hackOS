@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type pg from "pg";
 import { pool } from "../../db/pool.js";
-import { audit } from "../../lib/audit.js";
 import { UnauthorizedError } from "../../lib/errors.js";
 import { hasEventAccess } from "../identity/role.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
@@ -59,17 +58,8 @@ export async function issueWalletAccessToken(
      RETURNING expires_at`,
     [token, userId, purpose, WALLET_ACCESS_TTL_MINUTES],
   );
-  // H53: issuing a credential is auditable on its own, separate from the
-  // confirm that triggered it.
-  await audit(client, {
-    actorId: null,
-    actorKind: "token",
-    entityType: "wallet_access_token",
-    entityId: token.slice(0, 8),
-    action: "issued",
-    source: "email_link",
-    after: { userId, purpose },
-  });
+  // H53: this short-lived view credential is part of the confirmation that
+  // minted it, which is already audited; it gets no row of its own.
   return { token, expiresAt: rows[0].expires_at as Date };
 }
 

@@ -213,6 +213,14 @@ describe("HackUDC 2027 onboarding", () => {
     expect((await put(later())).statusCode).toBe(200);
     expect((await put({ action: "skip" })).statusCode).toBe(200);
     expect((await put(later())).statusCode).toBe(409);
+    // H53: the whole walkthrough coalesces into one entry with its net change.
+    const { rows } = await pool.query(
+      "SELECT before, after, changed_fields FROM audit_log WHERE action='onboarding.step_decided'",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].before).toEqual({ steps: [] });
+    expect(rows[0].after).toEqual({ steps: [{ step: "welcome", status: "skipped" }] });
+    expect(rows[0].changed_fields).toEqual(["welcome"]);
   });
 
   it("keeps participant precedence in the adopted edition and records a repeated role grant in a new edition", async () => {

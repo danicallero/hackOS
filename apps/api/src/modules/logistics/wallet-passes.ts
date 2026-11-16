@@ -145,7 +145,9 @@ async function createPassRecord(
     ],
   );
   await audit(client, {
-    actorId: getRequestContext()?.getActorId?.() ?? null,
+    // H53: a session download is the holder's own action; a scoped link acts
+    // for the pass owner; with no request, the system issued it.
+    actorId: getRequestContext() ? userId : null,
     actorKind: getRequestContext()
       ? getRequestContext()?.getActorId?.()
         ? "user"

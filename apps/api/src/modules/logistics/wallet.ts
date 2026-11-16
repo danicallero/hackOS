@@ -591,23 +591,32 @@ export async function registerAppleDevice(input: {
     );
     if (active.rowCount === 0) throw new UnauthorizedError();
     const r = await client.query(
-      `INSERT INTO wallet_pass_devices (pass_id, device_library_identifier, push_token)
+      `WITH previous AS (
+         SELECT push_token FROM wallet_pass_devices
+          WHERE pass_id = $1 AND device_library_identifier = $2
+       )
+       INSERT INTO wallet_pass_devices (pass_id, device_library_identifier, push_token)
        VALUES ($1, $2, $3)
        ON CONFLICT (pass_id, device_library_identifier)
        DO UPDATE SET push_token = EXCLUDED.push_token
-       RETURNING (xmax = 0) AS inserted`,
+       RETURNING (xmax = 0) AS inserted,
+                 (SELECT push_token FROM previous) IS DISTINCT FROM $3 AS changed`,
       [pass.id, input.deviceLibraryIdentifier, input.pushToken],
     );
     const inserted = Boolean(r.rows[0]?.inserted);
-    await audit(client, {
-      actorId: null,
-      actorKind: "device",
-      source: "device",
-      entityType: "wallet_pass_device",
-      entityId: pass.id,
-      action: inserted ? "registered" : "updated",
-      after: { userId: pass.user_id, passId: pass.id },
-    });
+    // H53: Wallet re-registers the same device repeatedly; only a new device
+    // or a rotated push token is a change worth a row.
+    if (inserted || r.rows[0]?.changed) {
+      await audit(client, {
+        actorId: pass.user_id,
+        actorKind: "device",
+        source: "device",
+        entityType: "wallet_pass_device",
+        entityId: pass.id,
+        action: inserted ? "registered" : "updated",
+        after: { userId: pass.user_id, passId: pass.id },
+      });
+    }
     return inserted;
   });
 }
@@ -627,7 +636,7 @@ export async function unregisterAppleDevice(input: {
     );
     if ((r.rowCount ?? 0) > 0) {
       await audit(client, {
-        actorId: null,
+        actorId: pass.user_id,
         actorKind: "device",
         source: "device",
         entityType: "wallet_pass_device",

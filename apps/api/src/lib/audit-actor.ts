@@ -34,7 +34,11 @@ export function intrinsicAuditExecutor(
   return null;
 }
 
-/** H53: initiator, executor and subject are separate facts; never infer identity from a target. */
+/**
+ * H53: initiator, executor and subject are separate facts; never infer identity
+ * from a target. A link or Wallet device acts with a credential issued to one
+ * account, so its row names that account while `actor_kind` keeps the channel.
+ */
 export function resolveAuditActor(entry: AuditEntry) {
   const context = getRequestContext();
   const identityFree = entry.ip === null && entry.userAgent === null;
@@ -51,7 +55,12 @@ export function resolveAuditActor(entry: AuditEntry) {
         : entry.actorId !== null
           ? "user"
           : "anonymous");
-  const actorId = kind === "user" ? (sessionActor ?? entry.actorId) : null;
+  const actorId =
+    kind === "user"
+      ? (sessionActor ?? entry.actorId)
+      : kind === "token" || kind === "device"
+        ? entry.actorId
+        : null;
   const initiatedBy = identityFree
     ? null
     : entry.initiatedBy !== undefined

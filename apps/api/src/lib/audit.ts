@@ -31,11 +31,11 @@ export interface AuditEntry {
 export async function audit(db: Queryable, entry: AuditEntry): Promise<void> {
   const requestContext = getRequestContext();
   const actor = resolveAuditActor(entry);
-  // H53: draft and availability autosaves are one bounded edit, never a state-transition log.
+  // H53: draft/availability autosaves and an onboarding walkthrough are one bounded edit, never a state-transition log.
   if (
     actor.kind === "user" &&
     actor.actorId !== null &&
-    (["save_draft", "review.update"].includes(entry.action) ||
+    (["save_draft", "review.update", "onboarding.step_decided"].includes(entry.action) ||
       (entry.entityType === "helper_profile" && entry.action === "availability_updated") ||
       (entry.entityType === "helpdesk_schedule" &&
         entry.action === "replaced" &&
