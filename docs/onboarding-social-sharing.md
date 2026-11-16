@@ -28,6 +28,14 @@ placement, routing and the signed-in data.
 - `onContinue` renders one footer button: **Skip** until the person downloads,
   copies, shares or opens a network link, then **Continue**.
 
+`useShareImage(event, attendee, format)` is the drawing pipeline on its own
+(fonts, band, artwork, photo, PNG blob), shared by the step and by
+`ShareCardPreview` (`share-card-preview.tsx`): a read-only landscape preview
+with only the person's name, shown beside the onboarding prompt on the
+confirmation landing (H15). The preview renders nothing while drawing or on
+failure. `useShareEvent` builds the card's event facts from the public feed,
+so it needs no session.
+
 ## The step
 
 One preview, **Download image** as the primary action, **Share** as a menu

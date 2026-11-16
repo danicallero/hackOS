@@ -48,6 +48,9 @@ vi.mock("../lib", () => ({
 vi.mock("@/components/common/qr-code", () => ({
   QrCode: () => <div data-testid="ticket-qr" />,
 }));
+vi.mock("@/components/onboarding/share-card-preview", () => ({
+  ShareCardPreview: ({ name }: { name: string }) => <div data-testid="share-preview">{name}</div>,
+}));
 vi.mock("@/components/common/wallet-buttons", () => ({
   WalletButtons: () => <div data-testid="wallet-buttons" />,
 }));
@@ -81,6 +84,10 @@ describe("acceptance confirmation", () => {
     expect(container.textContent).toContain("Ada Lovelace");
     expect(container.querySelector('[data-testid="ticket-qr"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="wallet-buttons"]')).not.toBeNull();
+    // H15: the card they'd share, drawn with their name, sits beside the onboarding prompt.
+    expect(container.querySelector('[data-testid="share-preview"]')?.textContent).toBe(
+      "Ada Lovelace",
+    );
     await act(async () => {
       [...container.querySelectorAll("button")]
         .find((button) => button.textContent === "onboardingStart")

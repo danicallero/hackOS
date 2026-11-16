@@ -7,6 +7,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { QrCode } from "@/components/common/qr-code";
 import { Spinner } from "@/components/common/spinner";
 import { WalletButtons } from "@/components/common/wallet-buttons";
+import { ShareCardPreview } from "@/components/onboarding/share-card-preview";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -243,18 +244,21 @@ function ConfirmInner() {
             />
           </div>
         )}
-        {/* H15: confirming is the moment to start onboarding (profile, share card), not just leave with the QR. */}
-        <section className="space-y-3 border-t pt-6">
-          <h2 className="type-section-title text-balance">{t("confirmOnboardingTitle")}</h2>
-          <Button
-            type="button"
-            className="w-full sm:w-auto"
-            disabled={navigating || sessionStatus === "loading"}
-            loading={navigating}
-            onClick={() => void goToApp()}
-          >
-            {t("onboardingStart")}
-          </Button>
+        {/* H15: confirming is the moment to start onboarding; the card they'd share, with their name, is the hook. */}
+        <section className="grid items-center gap-6 border-t pt-6 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+          <div className="space-y-3">
+            <h2 className="type-section-title text-balance">{t("confirmOnboardingTitle")}</h2>
+            <Button
+              type="button"
+              className="w-full sm:w-auto"
+              disabled={navigating || sessionStatus === "loading"}
+              loading={navigating}
+              onClick={() => void goToApp()}
+            >
+              {t("onboardingStart")}
+            </Button>
+          </div>
+          {result?.holder_name && <ShareCardPreview name={result.holder_name} />}
         </section>
       </CardContent>
     </Card>

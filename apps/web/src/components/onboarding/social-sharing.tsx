@@ -841,40 +841,21 @@ export async function renderShareImage(options: DrawCardOptions): Promise<Blob> 
   return canvasToBlob(canvas);
 }
 
-/* ------------------------------------------------------------- component */
-
-type RenderState =
-  | { status: "loading" }
-  | { status: "error" }
-  | { status: "ready"; blob: Blob; url: string; photoFailed: boolean };
-
 /**
- * The share step: one preview, Download as the primary action, the networks
- * behind a Share menu. Structure follows the Wallet pass on the profile
- * (bounded surface, official artwork, quiet secondary actions).
+ * Draws the personalised card for `format`; re-renders when any input changes.
+ * Shared by the share step and the read-only preview offered after confirming
+ * a place (H15), so both always show the same artwork.
  */
-export function SocialSharing({
-  event,
-  attendee,
-  onContinue,
-  onSkip,
-  className,
-  hideTitle = false,
-}: SocialSharingProps) {
+export function useShareImage(
+  event: SocialSharingEvent,
+  attendee: SocialSharingAttendee,
+  format: ShareFormat,
+): { render: RenderState; retry: () => void } {
   const { language } = useLocale();
-  const copy = copyFragments[language];
-  const text = (key: CopyKey, values: Record<string, string> = {}) => fill(copy[key], values);
-  const ids = useId();
-  const [format, setFormat] = useState<ShareFormat>("landscape");
   const [render, setRender] = useState<RenderState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
-  const [acted, setActed] = useState(false);
-  const [canShareFile, setCanShareFile] = useState(false);
-
   const title = eventTitle(event);
   const date = dateWithYear(event);
-  const caption = buildCaption(language, event);
-  const fileName = shareFileName(event, attendee.displayName, format);
 
   // The decoded photo survives format switches; only a changed source reloads
   // it. This ref owns exactly one bitmap: it is closed when replaced, when the
@@ -969,6 +950,43 @@ export function SocialSharing({
     attendee.photoUrl,
     releasePhoto,
   ]);
+
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  return { render, retry };
+}
+
+/* ------------------------------------------------------------- component */
+
+export type RenderState =
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "ready"; blob: Blob; url: string; photoFailed: boolean };
+
+/**
+ * The share step: one preview, Download as the primary action, the networks
+ * behind a Share menu. Structure follows the Wallet pass on the profile
+ * (bounded surface, official artwork, quiet secondary actions).
+ */
+export function SocialSharing({
+  event,
+  attendee,
+  onContinue,
+  onSkip,
+  className,
+  hideTitle = false,
+}: SocialSharingProps) {
+  const { language } = useLocale();
+  const copy = copyFragments[language];
+  const text = (key: CopyKey, values: Record<string, string> = {}) => fill(copy[key], values);
+  const ids = useId();
+  const [format, setFormat] = useState<ShareFormat>("landscape");
+  const [acted, setActed] = useState(false);
+  const [canShareFile, setCanShareFile] = useState(false);
+
+  const title = eventTitle(event);
+  const caption = buildCaption(language, event);
+  const fileName = shareFileName(event, attendee.displayName, format);
+  const { render, retry } = useShareImage(event, attendee, format);
 
   const blob = render.status === "ready" ? render.blob : null;
   useEffect(() => {
@@ -1100,7 +1118,7 @@ export function SocialSharing({
             <p role="alert" className="text-destructive text-sm">
               {copy.renderError}
             </p>
-            <Button size="sm" variant="outline" onClick={() => setAttempt((n) => n + 1)}>
+            <Button size="sm" variant="outline" onClick={retry}>
               {copy.retry}
             </Button>
           </div>
