@@ -15,7 +15,8 @@ persists each answer. Nothing here gates event access.
 - **After confirming a place** (H15) the journey is offered at once. The
   email-link landing (`/applications/confirm`) ends with "Complete your profile
   and share that you're coming" and Start, which opens `/onboarding` (through
-  sign-in when needed). Confirming from My applications redirects to
+  sign-in when needed), beside a sample of the share card (Emilia Pardo Bazán,
+  with the seagull's portrait). Confirming from My applications redirects to
   `/onboarding?next=/my-applications/:id` when steps are open
   (`onboardingAfterConfirm`), otherwise it stays on the application.
 - **Intro.** `/onboarding` without `?step=` opens "Let's finish setting up your
