@@ -464,6 +464,21 @@ describe("H28 Apple Wallet PassKit", () => {
       payload: { pushToken: "push-1" },
     });
     expect(register.statusCode).toBe(201);
+    // H53: re-registering the same device and push token is not a new event,
+    // and the device row names the pass owner it acts for.
+    const repeat = await app.inject({
+      method: "POST",
+      url: `/api/wallet/apple/v1/devices/device-1/registrations/${PASS_TYPE_IDENTIFIER}/${serial}`,
+      headers: { authorization: `ApplePass ${token}` },
+      payload: { pushToken: "push-1" },
+    });
+    expect(repeat.statusCode).toBe(200);
+    const deviceAudit = await pool.query(
+      `SELECT action, actor_id, actor_kind FROM audit_log WHERE entity_type = 'wallet_pass_device'`,
+    );
+    expect(deviceAudit.rows).toEqual([
+      { action: "registered", actor_id: uid, actor_kind: "device" },
+    ]);
 
     const changed = await app.inject({
       method: "GET",

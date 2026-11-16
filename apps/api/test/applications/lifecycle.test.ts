@@ -842,6 +842,22 @@ describe("confirm / decline (H15)", () => {
     );
     expect(rows[0]).toMatchObject({ user_id: userId, purpose: "ticket" });
 
+    // H53: the link acts for its recipient, and the scoped credential minted
+    // with the confirmation adds no row of its own.
+    const { rows: auditRows } = await pool.query(
+      `SELECT entity_type, action, actor_id, actor_kind FROM audit_log
+        WHERE entity_type IN ('application_response', 'wallet_access_token')
+          AND action IN ('confirmed', 'issued')`,
+    );
+    expect(auditRows).toEqual([
+      {
+        entity_type: "application_response",
+        action: "confirmed",
+        actor_id: userId,
+        actor_kind: "token",
+      },
+    ]);
+
     // Replaying the bearer token cannot mint another wallet credential.
     const again = await a.inject({
       method: "POST",

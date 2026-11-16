@@ -8,6 +8,7 @@ export interface CertificateSettings {
   minReviewHours: number | null;
   awardHours: number | null;
   issuerName: string;
+  issuerTaxId: string | null;
 }
 
 export interface Certificate {

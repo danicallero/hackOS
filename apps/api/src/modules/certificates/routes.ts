@@ -62,6 +62,7 @@ const settingsSchema = z.object({
   minReviewHours: z.number().nullable(),
   awardHours: z.number().nullable(),
   issuerName: z.string(),
+  issuerTaxId: z.string().nullable(),
 });
 const eligibilitySchema = z.object({
   hours: z.number(),
@@ -334,11 +335,18 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
             minReviewHours: z.number().min(0).max(999).nullable().optional(),
             awardHours: z.number().positive().max(999).nullable().optional(),
             issuerName: z.string().trim().min(1).max(200).optional(),
+            issuerTaxId: z
+              .string()
+              .trim()
+              .max(30)
+              .transform((value) => value || null)
+              .nullable()
+              .optional(),
           })
           .strict(),
         summary: "Update the certificate policy",
         description:
-          "Changes the optional certified-hours award, automatic/review hours thresholds or the issuer name. Already issued certificates keep what they were issued with. Audited as `certificate_settings.update` (#1083, H53).",
+          "Changes the optional certified-hours award, automatic/review hours thresholds, or the issuer's name and tax ID (NIF; empty omits it from new documents). Already issued certificates keep what they were issued with. Audited as `certificate_settings.update` (#1083, H53).",
         response: { 200: settingsSchema },
       },
     },

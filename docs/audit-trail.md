@@ -45,8 +45,9 @@ substituted for a historical snapshot.
 - Explicit `system` actions have a system executor. A known initiating user is
   kept in `initiated_by`, separate from `actor_id`; background work can pass its
   persisted requester. A scheduled action with no initiator stays system-only.
-- Email/link-token actions identify a link holder, not a verified account actor.
-  Wallet device registration identifies a device, not its pass beneficiary.
+- Email/link-token and Wallet device actions use a credential issued to one
+  account, so the row names that account as actor while `actor_kind`
+  (`token`/`device`) and the source keep the channel visible.
 - Anonymous requests remain anonymous. Known automatic event/entity pairs (event-end exits, scheduled reveals, spot
   expiration, reminder dispatch and export/deletion completion) explicitly use
   System as executor and source, including legacy reads that recorded Web by
@@ -73,8 +74,8 @@ response and session, autosaves update one entry for at most 30 minutes: the
 original score stays, the final score/changed-field union/last-edit time advance.
 Identical saves produce no event. A different session or reviewer stays separate.
 
-Project draft saves, administrative judging-review updates and helper availability
-autosaves and Help desk opening-window edits coalesce for the
+Project draft saves, administrative judging-review updates, onboarding step
+decisions, helper availability autosaves and Help desk opening-window edits coalesce for the
 same actor, entity, action and source while pauses remain under two minutes,
 with a hard 30-minute limit. State transitions, submissions, decisions, permission
 changes and separate operational actions are never coalesced by this policy.
@@ -83,6 +84,14 @@ number of intervals stays the same. Identical availability saves create no event
 Opening-window edits group only while event-access policy, configured state
 and current open/closed state remain unchanged; those transitions stay separate.
 `last_edited_at` records updates; legacy missing edit times stay missing.
+An onboarding walkthrough is one `onboarding_step_state` entry per person and
+edition (`userId:eventKey`): its before/after list every decided step, and
+changed fields name the steps decided.
+
+Side effects of an audited action get no row of their own: the short-lived
+Wallet view credential minted by an email-link confirmation is covered by the
+confirmation entry. Apple Wallet re-registering the same device with the same
+push token produces no entry; a new device or rotated push token does.
 
 Queue history now also produces a unified audit event for operations that used
 to exist only in the queue history (calling, entering, completing, no-show,

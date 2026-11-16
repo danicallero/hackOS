@@ -20,14 +20,14 @@ it("separates system execution from its human initiator", () => {
     initiatedBy: null,
   });
 });
-it("does not identify a link holder or wallet device as its beneficiary", () => {
+it("attributes a link or wallet device to the account its credential belongs to", () => {
   expect(
     runWithRequestContext({ getActorId: () => 7 }, () =>
       resolveAuditActor({ ...entry, source: "email" }),
     ),
-  ).toMatchObject({ actorId: null, kind: "token", initiatedBy: null });
+  ).toMatchObject({ actorId: 42, kind: "token", initiatedBy: null });
   expect(resolveAuditActor({ ...entry, actorKind: "device" })).toMatchObject({
-    actorId: null,
+    actorId: 42,
     kind: "device",
     initiatedBy: null,
   });
