@@ -4,6 +4,8 @@ import type {
   ResolvedOnboardingStep,
 } from "@hackos/shared/onboarding";
 import { api } from "./api";
+import { withReturnPath } from "./return-path";
+import { writeServerState } from "./server-state";
 import type { Me } from "./types";
 
 /** GET /api/me/onboarding. The server resolves every step; the client never re-derives status. */
@@ -125,4 +127,26 @@ export function forPerson(
   const welcome = state.welcomeMessage;
   if (!welcome || !Object.values(welcome).some(Boolean)) hidden.add("welcome");
   return { ...state, steps: state.steps.filter((step) => !hidden.has(step.step)) };
+}
+
+/**
+ * H15: a confirmed place unlocks the journey (profile, share card), so it is
+ * offered right away rather than at the next sign-in. Returns where to go when
+ * steps are open (Later comes back to `returnTo`), otherwise null. Also
+ * refreshes the cached journey the shell banner reads. A failed read is null:
+ * the offer is never a gate.
+ */
+export async function onboardingAfterConfirm(
+  me: Pick<Me, "profileLocked" | "dietaryLocked">,
+  returnTo: string,
+): Promise<string | null> {
+  try {
+    const state = await readOnboarding();
+    writeServerState(["me", "onboarding"], state);
+    return hasPendingOnboarding(forPerson(state, me))
+      ? withReturnPath(ONBOARDING_PATH, returnTo)
+      : null;
+  } catch {
+    return null;
+  }
 }
