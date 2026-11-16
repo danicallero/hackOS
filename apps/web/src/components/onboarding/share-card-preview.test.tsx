@@ -56,12 +56,12 @@ describe("share card preview after confirming (H15)", () => {
     expect(images).toEqual(["blob:card", "blob:card"]);
     expect(state.seen.slice(-2)).toEqual([
       {
-        name: "Emilia Pardo Bazán",
+        name: "Emilia Gaivota",
         format: "landscape",
         photo: `${location.origin}/onboarding/emilia-portrait.png`,
       },
       {
-        name: "Emilia Pardo Bazán",
+        name: "Emilia Gaivota",
         format: "story",
         photo: `${location.origin}/onboarding/emilia-portrait.png`,
       },
