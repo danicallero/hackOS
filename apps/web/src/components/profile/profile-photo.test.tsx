@@ -49,8 +49,11 @@ describe("ProfilePhoto (#934)", () => {
   it("uploads a photo and refreshes the session", async () => {
     vi.mocked(apiUpload).mockResolvedValue({ image: "/api/users/7/photo?v=abc" });
     await act(async () => root.render(<ProfilePhoto />));
-    expect(buttons()).toEqual([""]);
-    expect(container.querySelector("button")?.getAttribute("aria-label")).toBe("uploadPhoto");
+    // A label wraps the input so a tap opens the picker natively (iOS).
+    expect(buttons()).toEqual([]);
+    const input = container.querySelector("label > input[type=file]") as HTMLInputElement;
+    expect(input.getAttribute("aria-label")).toBe("uploadPhoto");
+    expect(input.tabIndex).toBe(0);
 
     const user = userEvent.setup();
     const file = new File(["png"], "me.png", { type: "image/png" });
@@ -64,7 +67,7 @@ describe("ProfilePhoto (#934)", () => {
   it("offers photo upload as a labelled button beside the share card", async () => {
     vi.mocked(apiUpload).mockResolvedValue({ image: "/api/users/7/photo?v=shared" });
     await act(async () => root.render(<ProfilePhoto variant="button" />));
-    expect(buttons()).toEqual(["uploadPhoto"]);
+    expect(container.querySelector("label")?.textContent).toBe("uploadPhoto");
     const user = userEvent.setup();
     await act(async () =>
       user.upload(
