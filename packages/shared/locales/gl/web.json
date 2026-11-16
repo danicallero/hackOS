@@ -3923,6 +3923,7 @@
   "certificateMinConfirmedHours": "Horas confirmadas mínimas para aprobación automática",
   "certificateConfirmedHoursHelp": "Só conta o tempo confirmado por unha saída ou un rexistro de actividade. As visitas abertas non contan.",
   "certificateIssuerName": "Entidade emisora",
+  "certificateIssuerTaxId": "NIF",
   "certificateMinReviewHours": "Horas confirmadas mínimas para revisión",
   "certificateReviewThresholdHelp": "Déixao baleiro para desactivar a cola de revisión. O mínimo de revisión non pode superar o automático.",
   "certificateAwaitingReview": "Pendente de revisión de asistencia",

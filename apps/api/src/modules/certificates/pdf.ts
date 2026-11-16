@@ -13,6 +13,8 @@ export interface CertificateSnapshot {
   eventStartsAt: string;
   eventEndsAt: string;
   issuerName: string;
+  /** Absent on documents issued before the NIF was printed. */
+  issuerTaxId?: string;
   hours: number;
   manuallyCertified?: boolean;
   certifiedAward?: boolean;
@@ -30,8 +32,10 @@ export type CertificateLocale = "es" | "gl" | "en";
 
 interface Copy {
   title: string;
-  by: (issuer: string) => string;
+  by: (issuer: string, taxId?: string) => string;
   certifies: string;
+  /** The identity document's label: account numbers may be any of the three. */
+  document: (passport: boolean) => string;
   person: (dni: string | null, passport?: boolean) => { before: string; after: string };
   took: (event: string, venue: string | null, from: string, to: string) => string;
   participation: string;
@@ -44,11 +48,13 @@ interface Copy {
 const COPY: Record<CertificateLocale, Copy> = {
   es: {
     title: "CERTIFICADO DE ASISTENCIA",
-    by: (issuer) => `${issuer}, como entidad organizadora,`,
+    by: (issuer, taxId) =>
+      `${issuer}${taxId ? `, con NIF ${taxId},` : ""} como entidad organizadora,`,
     certifies: "CERTIFICA:",
+    document: (passport) => (passport ? "pasaporte" : "DNI/NIE/pasaporte"),
     person: (dni, passport) => ({
       before: "Que ",
-      after: `${dni ? ` con ${passport ? "pasaporte" : "DNI/NIE"} ${dni}` : ""}, `,
+      after: `${dni ? ` con ${COPY.es.document(Boolean(passport))} ${dni}` : ""}, `,
     }),
     took: (event, venue, from, to) =>
       `ha participado activamente en el evento ${event}${venue ? `, celebrado en ${venue},` : ""} durante los días ${from} al ${to}.`,
@@ -61,11 +67,13 @@ const COPY: Record<CertificateLocale, Copy> = {
   },
   gl: {
     title: "CERTIFICADO DE ASISTENCIA",
-    by: (issuer) => `${issuer}, como entidade organizadora,`,
+    by: (issuer, taxId) =>
+      `${issuer}${taxId ? `, con NIF ${taxId},` : ""} como entidade organizadora,`,
     certifies: "CERTIFICA:",
+    document: (passport) => (passport ? "pasaporte" : "DNI/NIE/pasaporte"),
     person: (dni, passport) => ({
       before: "Que ",
-      after: `${dni ? ` con ${passport ? "pasaporte" : "DNI/NIE"} ${dni}` : ""}, `,
+      after: `${dni ? ` con ${COPY.gl.document(Boolean(passport))} ${dni}` : ""}, `,
     }),
     took: (event, venue, from, to) =>
       `participou activamente no evento ${event}${venue ? `, celebrado en ${venue},` : ""} durante os días ${from} ao ${to}.`,
@@ -78,9 +86,13 @@ const COPY: Record<CertificateLocale, Copy> = {
   },
   en: {
     title: "CERTIFICATE OF ATTENDANCE",
-    by: (issuer) => `${issuer}, as the organising body,`,
+    by: (issuer, taxId) => `${issuer}${taxId ? `, NIF ${taxId},` : ""} as the organising body,`,
     certifies: "CERTIFIES:",
-    person: (dni) => ({ before: "That ", after: `${dni ? `, ID ${dni}` : ""}, ` }),
+    document: (passport) => (passport ? "passport" : "DNI/NIE/passport"),
+    person: (dni, passport) => ({
+      before: "That ",
+      after: `${dni ? `, with ${COPY.en.document(Boolean(passport))} ${dni}` : ""}, `,
+    }),
     took: (event, venue, from, to) =>
       `actively took part in the event ${event}${venue ? `, held at ${venue},` : ""} from ${from} to ${to}.`,
     participation:
@@ -217,18 +229,26 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
     y -= scaled.height + 24;
   }
 
+  const passport = snapshot.documentKind === "passport";
+  paragraph(snapshot.templateTitle ?? copy.title, bold, 16, 18);
+  paragraph(copy.by(snapshot.issuerName, snapshot.issuerTaxId), regular, 12, 18);
+
   if (snapshot.templateBody != null) {
-    paragraph(snapshot.templateTitle ?? copy.title, bold, 16, 18);
-    paragraph(copy.by(snapshot.issuerName), regular, 12, 18);
-    paragraph(fullName, bold, 12, 14);
-    paragraph(snapshot.templateBody, regular, 12, 14);
-    if (dni)
-      paragraph(
-        `${snapshot.documentKind === "passport" ? { es: "Pasaporte", gl: "Pasaporte", en: "Passport" }[locale] : "DNI/NIE"}: ${dni}`,
-        regular,
-        12,
-        14,
-      );
+    // The wording names the person where its author put {recipient}: bold
+    // there, with their document beside it, like the built-in certificates.
+    const identity = dni ? ` (${copy.document(passport)} ${dni})` : "";
+    const at = fullName ? snapshot.templateBody.indexOf(fullName) : -1;
+    rich(
+      at < 0
+        ? [{ text: fullName, bold: true }, { text: `${identity}. ${snapshot.templateBody}` }]
+        : [
+            { text: snapshot.templateBody.slice(0, at) },
+            { text: fullName, bold: true },
+            { text: `${identity}${snapshot.templateBody.slice(at + fullName.length)}` },
+          ],
+      12,
+      14,
+    );
     if (statesHours(snapshot, variant))
       paragraph(copy.hours(formatHours(snapshot.hours, locale)), bold, 12, 14);
     paragraph(
@@ -239,10 +259,8 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
     );
     return pdf.save();
   }
-  paragraph(snapshot.templateTitle ?? copy.title, bold, 16, 18);
-  paragraph(copy.by(snapshot.issuerName), regular, 12, 18);
   paragraph(copy.certifies, bold, 12, 14);
-  const person = copy.person(dni, snapshot.documentKind === "passport");
+  const person = copy.person(dni, passport);
   rich(
     [
       { text: person.before },

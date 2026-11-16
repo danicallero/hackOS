@@ -59,6 +59,7 @@ const schema = (t: Translate) =>
           t("fieldMustBeNumber"),
         ),
       issuerName: z.string().trim().min(1, t("required")).max(200, t("tooLong")),
+      issuerTaxId: z.string().trim().max(30, t("tooLong")),
     })
     .superRefine((values, ctx) => {
       if (values.automatic && values.minHours.trim() === "")
@@ -71,6 +72,7 @@ const fromSettings = (settings: CertificateSettings): Values => ({
   minHours: settings.minHours == null ? "" : String(settings.minHours),
   awardHours: settings.awardHours == null ? "" : String(settings.awardHours),
   issuerName: settings.issuerName,
+  issuerTaxId: settings.issuerTaxId ?? "",
 });
 
 /** #1083: the certificate policy has one capability and one category Save. */
@@ -154,6 +156,7 @@ function CertificatePolicyForm({
           awardHours: values.awardHours.trim() === "" ? null : Number(values.awardHours),
         }),
         ...(dirty.issuerName && { issuerName: values.issuerName }),
+        ...(dirty.issuerTaxId && { issuerTaxId: values.issuerTaxId.trim() || null }),
       });
       onSaved(next);
       form.reset(fromSettings(next));
@@ -269,6 +272,19 @@ function CertificatePolicyForm({
                   <FormLabel>{t("certificateIssuerName")}</FormLabel>
                   <FormControl>
                     <Input {...field} maxLength={200} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="issuerTaxId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("certificateIssuerTaxId")}</FormLabel>
+                  <FormControl>
+                    <Input {...field} maxLength={30} className="max-w-48" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

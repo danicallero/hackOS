@@ -410,6 +410,7 @@ Table certificate_settings {
   award_hours "numeric(5,2)" [note: '#1083 optional configured certificate/university award; NULL uses confirmed attendance. Individual approvals win.']
   id integer [pk, not null, default: `1`]
   issuer_name text [not null, default: `'Asociación Universitaria Grupo de Programadores e Usuarios de Linux (GPUL)'::text`]
+  issuer_tax_id text [default: `'G15659220'::text`]
   min_hours "numeric(5,2)"
   min_review_hours "numeric(5,2)"
   updated_at "timestamp with time zone" [not null, default: `now()`]

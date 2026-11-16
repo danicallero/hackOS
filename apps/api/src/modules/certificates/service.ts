@@ -61,13 +61,14 @@ export interface CertificateSettings {
   minReviewHours: number | null;
   awardHours: number | null;
   issuerName: string;
+  issuerTaxId: string | null;
 }
 
 export async function readSettings(
   db: pg.Pool | pg.PoolClient = pool,
 ): Promise<CertificateSettings> {
   const { rows } = await db.query(
-    `SELECT min_hours, min_review_hours, award_hours, issuer_name FROM certificate_settings WHERE id = 1`,
+    `SELECT min_hours, min_review_hours, award_hours, issuer_name, issuer_tax_id FROM certificate_settings WHERE id = 1`,
   );
   const row = rows[0];
   return {
@@ -75,6 +76,7 @@ export async function readSettings(
     minReviewHours: row.min_review_hours == null ? null : Number(row.min_review_hours),
     awardHours: row.award_hours == null ? null : Number(row.award_hours),
     issuerName: row.issuer_name,
+    issuerTaxId: row.issuer_tax_id ?? null,
   };
 }
 
@@ -94,8 +96,8 @@ export async function updateSettings(
       throw new BadRequestError("The review threshold must not exceed the automatic threshold");
     }
     await client.query(
-      `UPDATE certificate_settings SET min_hours = $1, issuer_name = $2, min_review_hours = $3, award_hours = $4 WHERE id = 1`,
-      [next.minHours, next.issuerName, next.minReviewHours, next.awardHours],
+      `UPDATE certificate_settings SET min_hours = $1, issuer_name = $2, min_review_hours = $3, award_hours = $4, issuer_tax_id = $5 WHERE id = 1`,
+      [next.minHours, next.issuerName, next.minReviewHours, next.awardHours, next.issuerTaxId],
     );
     if (next.awardHours !== before.awardHours) {
       const { rows } = await client.query(
@@ -388,7 +390,7 @@ async function buildSnapshot(
   userId: number | null,
   locale: CertificateLocale,
   hours: number,
-  issuerName: string,
+  issuer: { issuerName: string; issuerTaxId: string | null },
   guestName?: string,
   preloaded?: { person: Record<string, unknown>; activities: { name: string; at: string }[] },
 ): Promise<CertificateSnapshot> {
@@ -423,7 +425,8 @@ async function buildSnapshot(
     timezone: person.timezone,
     eventStartsAt: (person.event_starts_at as Date).toISOString(),
     eventEndsAt: (person.event_ends_at as Date).toISOString(),
-    issuerName,
+    issuerName: issuer.issuerName,
+    ...(issuer.issuerTaxId && { issuerTaxId: issuer.issuerTaxId }),
     hours,
     activities,
   };
@@ -664,7 +667,7 @@ async function insertCertificate(
       opts.userId,
       opts.locale,
       certificateHours,
-      settings.issuerName,
+      settings,
       opts.guestName,
       pre && { person: pre.person, activities: pre.activities },
     );
