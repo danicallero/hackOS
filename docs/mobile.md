@@ -231,6 +231,8 @@ below.
 
 ## Navigation & tabs
 
+The Scanner stack independently requires an accreditation, presence or activity scan capability (including the wildcard). Unauthorized route entry redirects to Schedule before mounting scanner content, including gesture navigation and deep links (H8, H22, H55).
+
 The reusable component contract is documented in
 [`docs/router-tabs.md`](./router-tabs.md). This section documents only the
 hackOS adapter: capability policy, localized destinations, and the native
