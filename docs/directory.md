@@ -99,7 +99,7 @@ The mobile app edits the same profile from Account ("Edit networking profile",
 see [`mobile.md`](./mobile.md)): it opens on the `preview` card exactly as
 scanners see it, with the opt-in switch always available, and a pencil edits it
 in place (headline, location note, bio, and an eye on the surname, photo,
-project and CV that greys what is hidden). Links stay on web. The CV follows
+project and CV that greys what is hidden). Social links are edited in place too (type and address, up to six; empty rows are omitted on save). GitHub remains managed by the linked account. The CV follows
 the same source rules: an application CV is read-only; without one the phone
 can upload (PDF, 5 MB), replace and remove the CV through
 `POST`/`DELETE /api/me/public-profile/cv`, and the eye toggles `shareCv`.

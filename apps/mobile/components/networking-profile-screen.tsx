@@ -14,6 +14,7 @@ import { ProfileCard, type ProfileCardData } from "@/components/profile-card";
 import { QuickAction, VisibilityToggle } from "@/components/profile-parts";
 import { ProfilePhotoMenu } from "@/components/profile-photo-menu";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { SocialLinksEditor } from "@/components/social-links-editor";
 import { alert } from "@/lib/alert";
 import type { DirectoryEntry } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
@@ -56,8 +57,8 @@ function asError(cause: unknown): Error {
  * badge read. It opens as that card exactly as scanners see it; the pencil
  * edits it in place with the same layout. The "share" switch is always
  * reachable: in the preview it saves on its own, while editing it is part of
- * the pending change. Links and the CV file stay on web, except that a phone
- * can upload a CV when the application did not provide one.
+ * the pending change, including social links. A phone can upload a CV when
+ * the application did not provide one.
  */
 export default function NetworkingProfileScreen() {
   const router = useRouter();
@@ -374,6 +375,14 @@ export default function NetworkingProfileScreen() {
           </View>
         }
         edit={{
+          linksEditor: (
+            <SocialLinksEditor
+              links={form.socials}
+              githubUrl={current.preview.socials.find((link) => link.kind === "github")?.url}
+              disabled={saving}
+              onChange={(socials) => update({ socials })}
+            />
+          ),
           headline: form.headline,
           bio: form.bio,
           locationNote: form.locationNote,

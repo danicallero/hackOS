@@ -788,8 +788,11 @@ they are not device screenshots or proof of native toolbar behavior.
   on screen greyed instead of disappearing (while projects are hidden the card
   carries none, so the last ones seen, or a placeholder row, are shown greyed).
   Saving is `PUT /api/me/public-profile` under one `Idempotency-Key` per change
-  set; the response replaces the preview. It omits `socials` (links stay on web)
-  and sends `shareCv` only when a CV exists.
+  set; the response replaces the preview. Social links use type/address rows
+  in the same card, up to six; empty rows remain editable but are omitted from
+  the save. Existing links can be changed or removed, and Cancel discards the
+  draft. GitHub stays account-managed and does not count toward the six. It
+  saves `socials` with the text and sends `shareCv` only when a CV exists.
   **CV** (the side tile): a CV taken from the application (`cv.source:
   "application"`) always wins and is read-only here, with only the eye. With no
   application CV the phone manages the upload with `expo-document-picker`
