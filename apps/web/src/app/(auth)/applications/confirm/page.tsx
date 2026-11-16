@@ -243,15 +243,19 @@ function ConfirmInner() {
             />
           </div>
         )}
-        <div className="flex justify-start">
+        {/* H15: confirming is the moment to start onboarding (profile, share card), not just leave with the QR. */}
+        <section className="space-y-3 border-t pt-6">
+          <h2 className="type-section-title text-balance">{t("confirmOnboardingTitle")}</h2>
           <Button
             type="button"
+            className="w-full sm:w-auto"
             disabled={navigating || sessionStatus === "loading"}
+            loading={navigating}
             onClick={() => void goToApp()}
           >
-            {t("goToApp")}
+            {t("onboardingStart")}
           </Button>
-        </div>
+        </section>
       </CardContent>
     </Card>
   );
