@@ -20,6 +20,7 @@ import {
   initialEmailChoices,
   NotificationChoices,
 } from "@/components/onboarding/notification-choices";
+import { useShareEvent } from "@/components/onboarding/share-card-preview";
 import { SocialSharing } from "@/components/onboarding/social-sharing";
 import { MentorProfileEditor } from "@/components/profile/mentor-profile-editor";
 import { PersonalDetails } from "@/components/profile/personal-details";
@@ -30,15 +31,11 @@ import { Button } from "@/components/ui/button";
 import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { apiErrorText } from "@/lib/api-error-text";
-import { formatEventDate } from "@/lib/datetime";
-import { EVENT_CITY, EVENT_PUBLIC_URL } from "@/lib/event-brand";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { logisticsApi } from "@/lib/logistics";
 import { notificationsApi, type PreferencesResponse } from "@/lib/notifications";
 import type { OnboardingState } from "@/lib/onboarding";
-import { getPublicEvent } from "@/lib/public-content";
 import { useSessionContext } from "@/lib/session";
-import type { PublicEvent } from "@/lib/types";
 
 /** What every step receives: the decision callback and which decisions the server allows. */
 export interface StepProps {
@@ -127,43 +124,6 @@ export function ChangeLaterNote({ tab }: { tab: string }) {
       </Link>
     </p>
   );
-}
-
-/** The public event feed: name, tagline and dates exactly as the organizer configured them. */
-export function useEventFacts(): PublicEvent | null {
-  const [event, setEvent] = useState<PublicEvent | null>(null);
-  useEffect(() => {
-    let active = true;
-    getPublicEvent()
-      .then((value) => active && setEvent(value))
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, []);
-  return event;
-}
-
-/** Whole hours of the hacking window ("36 hours of development"); undefined without a window. */
-export function hackingHours(
-  event: Pick<PublicEvent, "hackingStartsAt" | "hackingEndsAt"> | null,
-): number | undefined {
-  if (!event?.hackingStartsAt || !event.hackingEndsAt) return undefined;
-  const ms = Date.parse(event.hackingEndsAt) - Date.parse(event.hackingStartsAt);
-  return ms > 0 ? Math.round(ms / 3_600_000) : undefined;
-}
-
-/** "5 Jan 2026" or "5 Jan – 7 Jan 2026", only from configured instants; "" when unset. */
-export function eventDateRange(
-  event: Pick<PublicEvent, "hackingStartsAt" | "hackingEndsAt" | "timezone"> | null,
-  language: "es" | "gl" | "en",
-): string {
-  if (!event?.hackingStartsAt) return "";
-  const start = formatEventDate(event.hackingStartsAt, language, "date", event.timezone);
-  const end = event.hackingEndsAt
-    ? formatEventDate(event.hackingEndsAt, language, "date", event.timezone)
-    : "";
-  return end && end !== start ? `${start} – ${end}` : start;
 }
 
 /** Only shown when the organizer wrote a message: a greeting and that message, nothing else. */
@@ -373,12 +333,8 @@ export function ShareCard({
   hideTitle?: boolean;
 }) {
   const { me } = useSessionContext();
-  const { language } = useLocale();
-  const event = useEventFacts();
-  if (!me || !event?.name) return <Spinner className="size-5" />;
-  const year = event.hackingStartsAt
-    ? formatEventDate(event.hackingStartsAt, language, "date", event.timezone).slice(-4)
-    : "";
+  const event = useShareEvent();
+  if (!me || !event) return <Spinner className="size-5" />;
   return (
     <div className="space-y-4">
       <div className="mx-auto flex w-full max-w-xl justify-end">
@@ -386,18 +342,7 @@ export function ShareCard({
       </div>
       <SocialSharing
         hideTitle={hideTitle}
-        event={{
-          name: event.name,
-          year: /^\d{4}$/.test(year) ? year : "",
-          dateLabel: eventDateRange(event, language) || undefined,
-          location: EVENT_CITY,
-          url: EVENT_PUBLIC_URL,
-          hours: hackingHours(event),
-          dates:
-            event.hackingStartsAt && event.hackingEndsAt
-              ? { start: event.hackingStartsAt, end: event.hackingEndsAt, timezone: event.timezone }
-              : undefined,
-        }}
+        event={event}
         attendee={{
           displayName: [me.name, me.surname].filter(Boolean).join(" "),
           roleLabel: me.visibleRoleName ?? undefined,

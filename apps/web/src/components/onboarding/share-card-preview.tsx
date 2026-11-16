@@ -1,0 +1,134 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  SHARE_ART,
+  type SocialSharingEvent,
+  useShareImage,
+} from "@/components/onboarding/social-sharing";
+import { formatEventDate } from "@/lib/datetime";
+import { EVENT_CITY, EVENT_PUBLIC_URL } from "@/lib/event-brand";
+import { useLocale } from "@/lib/i18n";
+import { getPublicEvent } from "@/lib/public-content";
+import type { PublicEvent } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+// The share card's event facts (public feed, no session needed) and its
+// read-only preview. Kept apart from the onboarding steps so public pages
+// such as the confirmation landing don't pull in the whole journey.
+
+/** The public event feed: name, tagline and dates exactly as the organizer configured them. */
+export function useEventFacts(): PublicEvent | null {
+  const [event, setEvent] = useState<PublicEvent | null>(null);
+  useEffect(() => {
+    let active = true;
+    getPublicEvent()
+      .then((value) => active && setEvent(value))
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+  return event;
+}
+
+/** Whole hours of the hacking window ("36 hours of development"); undefined without a window. */
+export function hackingHours(
+  event: Pick<PublicEvent, "hackingStartsAt" | "hackingEndsAt"> | null,
+): number | undefined {
+  if (!event?.hackingStartsAt || !event.hackingEndsAt) return undefined;
+  const ms = Date.parse(event.hackingEndsAt) - Date.parse(event.hackingStartsAt);
+  return ms > 0 ? Math.round(ms / 3_600_000) : undefined;
+}
+
+/** "5 Jan 2026" or "5 Jan – 7 Jan 2026", only from configured instants; "" when unset. */
+export function eventDateRange(
+  event: Pick<PublicEvent, "hackingStartsAt" | "hackingEndsAt" | "timezone"> | null,
+  language: "es" | "gl" | "en",
+): string {
+  if (!event?.hackingStartsAt) return "";
+  const start = formatEventDate(event.hackingStartsAt, language, "date", event.timezone);
+  const end = event.hackingEndsAt
+    ? formatEventDate(event.hackingEndsAt, language, "date", event.timezone)
+    : "";
+  return end && end !== start ? `${start} – ${end}` : start;
+}
+
+/** The event as the share card prints it, from the public feed; null until it loads. */
+export function useShareEvent(): SocialSharingEvent | null {
+  const { language } = useLocale();
+  const event = useEventFacts();
+  if (!event?.name) return null;
+  const year = event.hackingStartsAt
+    ? formatEventDate(event.hackingStartsAt, language, "date", event.timezone).slice(-4)
+    : "";
+  return {
+    name: event.name,
+    year: /^\d{4}$/.test(year) ? year : "",
+    dateLabel: eventDateRange(event, language) || undefined,
+    location: EVENT_CITY,
+    url: EVENT_PUBLIC_URL,
+    hours: hackingHours(event),
+    dates:
+      event.hackingStartsAt && event.hackingEndsAt
+        ? { start: event.hackingStartsAt, end: event.hackingEndsAt, timezone: event.timezone }
+        : undefined,
+  };
+}
+
+/** The sample attendee: Emilia, the event's seagull, named after A Coruña's Emilia Pardo Bazán. */
+const SAMPLE_NAME = "Emilia Pardo Bazán";
+
+/**
+ * H15: a sample of the card people get to share, shown before they are signed
+ * in (the confirmation landing). Decorative: hidden while it loads or if
+ * drawing fails, so it never stands between the person and the next step.
+ */
+export function ShareCardPreview({ className }: { className?: string }) {
+  const event = useShareEvent();
+  if (!event) return null;
+  return <ShareCardPreviewImage event={event} className={className} />;
+}
+
+function ShareCardPreviewImage({
+  event,
+  className,
+}: {
+  event: SocialSharingEvent;
+  className?: string;
+}) {
+  // The public page has no profile photo: Emilia, the event's seagull, stands in for it.
+  // Absolute, so the drawing fetches it from this web origin rather than the API.
+  const attendee = {
+    displayName: SAMPLE_NAME,
+    photoUrl:
+      typeof window === "undefined"
+        ? null
+        : new URL(SHARE_ART.seagullPortrait, window.location.origin).href,
+  };
+  const front = useShareImage(event, attendee, "landscape").render;
+  // The story format fanned out behind: the formats they can post, at a glance.
+  const back = useShareImage(event, attendee, "story").render;
+  if (front.status !== "ready") return null;
+  return (
+    <div
+      aria-hidden="true"
+      className={cn("group relative mx-auto w-full max-w-md py-6 pr-10 pl-2", className)}
+    >
+      {back.status === "ready" && (
+        // biome-ignore lint/performance/noImgElement: a generated blob URL, not an optimisable asset.
+        <img
+          src={back.url}
+          alt=""
+          className="absolute top-1 right-0 h-[calc(100%-0.5rem)] rotate-[8deg] rounded-surface object-contain opacity-90 shadow-lg motion-safe:transition-transform motion-safe:duration-300 group-hover:translate-x-2 group-hover:rotate-[12deg]"
+        />
+      )}
+      {/* biome-ignore lint/performance/noImgElement: a generated blob URL, not an optimisable asset. */}
+      <img
+        src={front.url}
+        alt=""
+        className="relative aspect-[1200/630] w-full -rotate-3 rounded-surface object-contain shadow-2xl ring-1 ring-foreground/10 motion-safe:transition-transform motion-safe:duration-300 group-hover:-translate-y-1 group-hover:rotate-0 group-hover:scale-[1.02]"
+      />
+    </div>
+  );
+}
