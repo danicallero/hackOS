@@ -93,14 +93,30 @@ function ShareCardPreviewImage({
   name: string;
   className?: string;
 }) {
-  const { render } = useShareImage(event, { displayName: name }, "landscape");
-  if (render.status !== "ready") return null;
+  const attendee = { displayName: name };
+  const front = useShareImage(event, attendee, "landscape").render;
+  // The story format fanned out behind: the formats they can post, at a glance.
+  const back = useShareImage(event, attendee, "story").render;
+  if (front.status !== "ready") return null;
   return (
-    // biome-ignore lint/performance/noImgElement: a generated blob URL, not an optimisable asset.
-    <img
-      src={render.url}
-      alt=""
-      className={cn("aspect-[1200/630] w-full rounded-surface border object-contain", className)}
-    />
+    <div
+      aria-hidden="true"
+      className={cn("group relative mx-auto w-full max-w-md py-6 pr-10 pl-2", className)}
+    >
+      {back.status === "ready" && (
+        // biome-ignore lint/performance/noImgElement: a generated blob URL, not an optimisable asset.
+        <img
+          src={back.url}
+          alt=""
+          className="absolute top-1 right-0 h-[calc(100%-0.5rem)] rotate-[8deg] rounded-surface object-contain opacity-90 shadow-lg motion-safe:transition-transform motion-safe:duration-300 group-hover:translate-x-2 group-hover:rotate-[12deg]"
+        />
+      )}
+      {/* biome-ignore lint/performance/noImgElement: a generated blob URL, not an optimisable asset. */}
+      <img
+        src={front.url}
+        alt=""
+        className="relative aspect-[1200/630] w-full -rotate-3 rounded-surface object-contain shadow-2xl ring-1 ring-foreground/10 motion-safe:transition-transform motion-safe:duration-300 group-hover:-translate-y-1 group-hover:rotate-0 group-hover:scale-[1.02]"
+      />
+    </div>
   );
 }

@@ -44,11 +44,15 @@ describe("share card preview after confirming (H15)", () => {
     container.remove();
   });
 
-  it("draws the landscape card with the holder's name once ready", async () => {
+  it("fans the landscape and story cards with the holder's name once ready", async () => {
     state.render = { status: "ready", url: "blob:card" };
     await act(async () => root.render(<ShareCardPreview name="Ada Lovelace" />));
-    expect(container.querySelector("img")?.getAttribute("src")).toBe("blob:card");
-    expect(state.seen.at(-1)).toEqual({ name: "Ada Lovelace", format: "landscape" });
+    const images = [...container.querySelectorAll("img")].map((img) => img.getAttribute("src"));
+    expect(images).toEqual(["blob:card", "blob:card"]);
+    expect(state.seen.slice(-2)).toEqual([
+      { name: "Ada Lovelace", format: "landscape" },
+      { name: "Ada Lovelace", format: "story" },
+    ]);
   });
 
   it("shows nothing while drawing or when drawing fails", async () => {
