@@ -441,8 +441,9 @@ Every caller receives the `participant` slice; a linked sponsor rep or Mentor
 also receives their additional audience slice. Non-staff responses project
 each item's `audiences` to only the tags that apply to that caller, so a
 participant cannot be offered a sponsor/mentor filter by client code. An
-authenticated caller holding any capability
-("staff") bypasses both the audience filter *and* the visibility/publishAt
+authenticated caller holding `SCHEDULE_READ` or `SCHEDULE_MANAGE`
+("staff"; any other capability does not count, since attendee roles hold
+self-service ones such as `queue:status`) bypasses both the audience filter *and* the visibility/publishAt
 one — every item regardless of state, including drafts and items still
 scheduled to reveal, each with its owners, contactNote, notes, and its own
 `visibility` (staff-only field, lets a client tell a draft apart from a live
