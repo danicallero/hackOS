@@ -49,19 +49,19 @@ describe("share card preview after confirming (H15)", () => {
     container.remove();
   });
 
-  it("fans the landscape and story cards with the holder's name once ready", async () => {
+  it("fans the landscape and story cards with the sample attendee once ready", async () => {
     state.render = { status: "ready", url: "blob:card" };
-    await act(async () => root.render(<ShareCardPreview name="Ada Lovelace" />));
+    await act(async () => root.render(<ShareCardPreview />));
     const images = [...container.querySelectorAll("img")].map((img) => img.getAttribute("src"));
     expect(images).toEqual(["blob:card", "blob:card"]);
     expect(state.seen.slice(-2)).toEqual([
       {
-        name: "Ada Lovelace",
+        name: "Emilia Pardo Bazán",
         format: "landscape",
         photo: `${location.origin}/onboarding/emilia-portrait.png`,
       },
       {
-        name: "Ada Lovelace",
+        name: "Emilia Pardo Bazán",
         format: "story",
         photo: `${location.origin}/onboarding/emilia-portrait.png`,
       },
@@ -70,7 +70,7 @@ describe("share card preview after confirming (H15)", () => {
 
   it("shows nothing while drawing or when drawing fails", async () => {
     state.render = { status: "error" };
-    await act(async () => root.render(<ShareCardPreview name="Ada Lovelace" />));
+    await act(async () => root.render(<ShareCardPreview />));
     expect(container.innerHTML).toBe("");
   });
 });

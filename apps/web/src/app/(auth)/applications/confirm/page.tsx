@@ -244,7 +244,7 @@ function ConfirmInner() {
             />
           </div>
         )}
-        {/* H15: confirming is the moment to start onboarding; the card they'd share, with their name, is the hook. */}
+        {/* H15: confirming is the moment to start onboarding; a sample of the card they'd share is the hook. */}
         <section className="grid items-center gap-6 border-t pt-6 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
           <div className="space-y-3">
             <h2 className="type-section-title text-balance">{t("confirmOnboardingTitle")}</h2>
@@ -258,7 +258,7 @@ function ConfirmInner() {
               {t("onboardingStart")}
             </Button>
           </div>
-          {result?.holder_name && <ShareCardPreview name={result.holder_name} />}
+          <ShareCardPreview />
         </section>
       </CardContent>
     </Card>

@@ -76,31 +76,31 @@ export function useShareEvent(): SocialSharingEvent | null {
   };
 }
 
+/** The sample attendee: Emilia, the event's seagull, named after A Coruña's Emilia Pardo Bazán. */
+const SAMPLE_NAME = "Emilia Pardo Bazán";
+
 /**
- * H15: a look at the card someone gets to share, drawn with their own name,
- * before they are signed in (the confirmation landing). Decorative: hidden
- * while it loads or if drawing fails, so it never stands between the person
- * and the next step.
+ * H15: a sample of the card people get to share, shown before they are signed
+ * in (the confirmation landing). Decorative: hidden while it loads or if
+ * drawing fails, so it never stands between the person and the next step.
  */
-export function ShareCardPreview({ name, className }: { name: string; className?: string }) {
+export function ShareCardPreview({ className }: { className?: string }) {
   const event = useShareEvent();
   if (!event) return null;
-  return <ShareCardPreviewImage event={event} name={name} className={className} />;
+  return <ShareCardPreviewImage event={event} className={className} />;
 }
 
 function ShareCardPreviewImage({
   event,
-  name,
   className,
 }: {
   event: SocialSharingEvent;
-  name: string;
   className?: string;
 }) {
   // The public page has no profile photo: Emilia, the event's seagull, stands in for it.
   // Absolute, so the drawing fetches it from this web origin rather than the API.
   const attendee = {
-    displayName: name,
+    displayName: SAMPLE_NAME,
     photoUrl:
       typeof window === "undefined"
         ? null
