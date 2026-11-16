@@ -76,8 +76,8 @@ export function useShareEvent(): SocialSharingEvent | null {
   };
 }
 
-/** The sample attendee: Emilia, the event's seagull, named after A Coruña's Emilia Pardo Bazán. */
-const SAMPLE_NAME = "Emilia Pardo Bazán";
+/** The sample attendee: Emilia, the event's seagull ("gaivota" in Galician). */
+const SAMPLE_NAME = "Emilia Gaivota";
 
 /**
  * H15: a sample of the card people get to share, shown before they are signed
