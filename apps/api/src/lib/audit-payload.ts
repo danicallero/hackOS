@@ -5,7 +5,7 @@ const PRIVATE_VALUE = "[private]";
 const PRIVATE_KEY =
   /password|secret|token|credential|email|phone|surname|first.?name|last.?name|\bname\b|notes?|message|description|headline|bio|address|location|diet|intolerance|birthday|birth_date|dni|photo|avatar|cv|url|storage.?key|deviceLibraryIdentifier|badge.?id|serialNumber|googleObjectId|translations|template|criteria|answers|responses|payload|body|title|subject|items/i;
 const SAFE_TEXT_KEY =
-  /^(audit_audience|status|statuses|state|capability|kind|type|mode|platform|visibility|source|decision|role|purpose|method|format|language|primaryLanguage|tvLanguage|slot|variant|position|target|triggerEvent|fieldKey|field_key|dimension|retention_mode|retentionMode|panel_key|scope|attendance_policy|attendancePolicy|identity_policy|identityPolicy|demo_requirement|demoRequirement|edit_session_id|last_edited_at|wifiSsid|wifi_ssid|timezone)$/;
+  /^(audit_audience|status|statuses|state|capability|kind|type|mode|platform|visibility|source|decision|role|purpose|method|format|language|primaryLanguage|tvLanguage|slot|variant|position|target|triggerEvent|fieldKey|field_key|dimension|retention_mode|retentionMode|panel_key|scope|attendance_policy|attendancePolicy|identity_policy|identityPolicy|demo_requirement|demoRequirement|edit_session_id|last_edited_at|wifiSsid|wifi_ssid|timezone|step)$/;
 const FIELD_LIST_KEY =
   /^(fields|changed_fields|changedFields|retainedFields|retainedRoles|fixtureKeys)$/;
 // H53: operational identifiers are evidence, not secret authentication material.
@@ -123,15 +123,9 @@ export function presentAuditRow(row: Record<string, unknown>): Record<string, un
   const executor = intrinsicAuditExecutor(String(row.entity_type ?? ""), String(row.action ?? ""));
   return {
     ...row,
-    ...(executor
-      ? {
-          actor_id: null,
-          actor_name: null,
-          actor_surname: null,
-          actor_email: null,
-          actor_kind: executor,
-          source: executor,
-        }
+    ...(executor ? { actor_kind: executor, source: executor } : {}),
+    ...(executor === "system"
+      ? { actor_id: null, actor_name: null, actor_surname: null, actor_email: null }
       : {}),
     changed_fields:
       Array.isArray(row.changed_fields) && row.changed_fields.length > 0

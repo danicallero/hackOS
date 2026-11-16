@@ -120,6 +120,14 @@ export function registerOnboardingModule(app: FastifyInstance): void {
               : action === "defer"
                 ? "deferred"
                 : "declined";
+        const decided = async () =>
+          (
+            await client.query<{ step: string; status: string }>(
+              "SELECT step,status FROM onboarding_step_states WHERE user_id=$1 AND event_key=$2 ORDER BY step",
+              [userId, current.eventKey],
+            )
+          ).rows;
+        const before = await decided();
         await client.query(
           `INSERT INTO onboarding_step_states
           (user_id,event_key,step,status,deferred_until,config_revision)
@@ -135,19 +143,21 @@ export function registerOnboardingModule(app: FastifyInstance): void {
             [userId],
           );
         }
+        // H53: one walkthrough is one entry. Decisions made in a row coalesce
+        // (lib/audit.ts) into a single before/after of every decided step.
         await audit(client, {
           actorId: userId,
           entityType: "onboarding_step_state",
-          entityId: `${userId}:${current.eventKey}:${step}`,
+          entityId: `${userId}:${current.eventKey}`,
           action: "onboarding.step_decided",
           changedFields: [
-            "status",
+            step,
             ...(step === "networking" && action === "decline"
               ? ["directory_visible", "consented_at"]
               : []),
           ],
-          before: { status: previous[0]?.status ?? null },
-          after: { status },
+          before: { steps: before },
+          after: { steps: await decided() },
         });
         return readOnboarding(client, userId);
       });
