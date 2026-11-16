@@ -38,6 +38,7 @@ import { enrichTemplate, withLogisticsSection } from "@/lib/application-form";
 import { fieldErrorsFromApi, validationErrorSummary } from "@/lib/application-validation";
 import { formatEventDate } from "@/lib/datetime";
 import { pickText, useLocale } from "@/lib/i18n";
+import { onboardingAfterConfirm } from "@/lib/onboarding";
 import type { SaveState } from "@/lib/save-state";
 import { useSessionContext } from "@/lib/session";
 import { showErrorToast, toast } from "@/lib/toast";
@@ -365,6 +366,11 @@ export default function MyApplicationDetailPage() {
         headers: { "Idempotency-Key": confirmKeyRef.current.key },
       });
       toast.success(t("placeConfirmedSeeYou"), { compactTitle: t("confirmPlace") });
+      // H15: a confirmed place unlocks onboarding; offer it right away instead of
+      // leaving the share card and profile steps for a later sign-in.
+      await refresh();
+      const journey = me ? await onboardingAfterConfirm(me, `/my-applications/${id}`) : null;
+      if (journey) return void router.push(journey);
       await load();
     } catch (err) {
       if (isConfirmationExpiredError(err)) {

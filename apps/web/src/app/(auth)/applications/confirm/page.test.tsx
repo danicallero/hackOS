@@ -83,7 +83,7 @@ describe("acceptance confirmation", () => {
     expect(container.querySelector('[data-testid="wallet-buttons"]')).not.toBeNull();
     await act(async () => {
       [...container.querySelectorAll("button")]
-        .find((button) => button.textContent === "goToApp")
+        .find((button) => button.textContent === "onboardingStart")
         ?.click();
     });
     expect(state.push).toHaveBeenCalledWith("/onboarding");

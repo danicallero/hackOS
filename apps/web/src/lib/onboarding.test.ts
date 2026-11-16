@@ -1,13 +1,17 @@
 import type { ResolvedOnboardingStep } from "@hackos/shared/onboarding";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   currentStep,
   deferUntilTomorrow,
   hasPendingOnboarding,
   type OnboardingState,
+  onboardingAfterConfirm,
   pendingSteps,
   stepAfter,
 } from "./onboarding";
+
+const apiGet = vi.hoisted(() => vi.fn());
+vi.mock("./api", () => ({ api: { get: apiGet } }));
 
 const step = (
   name: ResolvedOnboardingStep["step"],
@@ -64,5 +68,23 @@ describe("onboarding resume helpers", () => {
     expect(until.getTime()).toBeGreaterThan(now.getTime());
     expect(until.getDate()).toBe(11);
     expect(until.getHours()).toBe(9);
+  });
+});
+
+describe("onboarding after confirming a place (H15)", () => {
+  const me = { profileLocked: false, dietaryLocked: false };
+
+  it("opens the journey, returning to the application, while steps are open", async () => {
+    apiGet.mockResolvedValueOnce(state);
+    await expect(onboardingAfterConfirm(me, "/my-applications/4")).resolves.toBe(
+      "/onboarding?next=%2Fmy-applications%2F4",
+    );
+  });
+
+  it("stays put when nothing is open or the read fails", async () => {
+    apiGet.mockResolvedValueOnce({ ...state, steps: [step("completion", "completed")] });
+    await expect(onboardingAfterConfirm(me, "/my-applications/4")).resolves.toBeNull();
+    apiGet.mockRejectedValueOnce(new Error("offline"));
+    await expect(onboardingAfterConfirm(me, "/my-applications/4")).resolves.toBeNull();
   });
 });
