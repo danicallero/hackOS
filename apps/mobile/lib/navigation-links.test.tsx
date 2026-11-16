@@ -3,6 +3,8 @@ import { getReactNavigationConfig } from "expo-router/build/getReactNavigationCo
 import { getRoutes } from "expo-router/build/getRoutes";
 import type { RequireContext } from "expo-router/build/types";
 
+jest.mock("@/lib/me-context", () => ({ useMeContext: () => ({ me: null }) }));
+
 jest.mock("expo-router/stack", () => ({ Stack: () => null }));
 jest.mock("@/components/glass-view", () => ({ isRealLiquidGlassAvailable: () => false }));
 

@@ -125,6 +125,10 @@ image) and Preferences (language, shirt size, dietary) and Account (identity, si
 
 ## Tests
 
+Photo picker activation, multipart upload and session-photo refresh in the networking
+and sharing steps are covered in Chromium and WebKit by
+`e2e/browser/profile-regressions.spec.ts` (controlled API responses).
+
 `apps/web/src/lib/onboarding*.test.ts`, `components/onboarding/*.test.tsx`,
 `components/profile/mentor-profile-editor.test.tsx`; API:
 `apps/api/test/directory/mentor-profile.test.ts`.

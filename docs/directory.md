@@ -24,7 +24,7 @@ The "Public profile" section (`components/profile/public-profile-card.tsx`)
 shows only the opt-in switch ("Share my profile"), with one line saying that
 only people who scan the person's badge will see their profile and that, while the profile is shared, their name and connections also show on public event screens, which can be photographed or copied, until the person opts in; then it reveals the surname, photo and project switches, the
 headline and location note (placeholder "Room 2.1", so people know which classroom to enter), the bio (with a character count), up to six links
-(type + address rows; empty rows are not saved), the linked GitHub account as a matching link row with its own profile-visibility switch, and the CV. Hiding that link does not unlink the account.
+(type + address rows; adding an empty row keeps it in the editor even before any other edit, but empty rows are not saved), the linked GitHub account as a matching link row with its own profile-visibility switch, and the CV. Hiding that link does not unlink the account.
 There is no preview card. While the opt-in is off the fields stay in view,
 disabled, so people see what sharing would show; they neither
 enable Save nor get published: switching it off saves the stored text and

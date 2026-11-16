@@ -351,6 +351,28 @@ describe("PublicProfileCard", () => {
     );
   });
 
+  it("keeps a newly added empty link with an otherwise unchanged linked GitHub profile", async () => {
+    vi.mocked(api.get).mockImplementation(async (path: string) =>
+      path === "/api/me/github"
+        ? { configured: true, login: "maria" }
+        : profile({ directoryVisible: true }),
+    );
+    await render(<PublicProfileCard />);
+    const user = userEvent.setup();
+    const add = () =>
+      [...container.querySelectorAll("button")].find(
+        (button) => button.textContent === "publicProfileAddLink",
+      ) as HTMLButtonElement;
+    await act(async () => user.click(add()));
+    const urls = container.querySelectorAll<HTMLInputElement>(
+      "input[aria-label=publicProfileLinkUrl]:not([readonly])",
+    );
+    expect(urls).toHaveLength(1);
+    expect(submit()?.disabled).toBe(true);
+    await act(async () => user.type(urls[0] as HTMLInputElement, "maria"));
+    expect(submit()?.disabled).toBe(false);
+  });
+
   it("saves the bio and links, skipping empty link rows", async () => {
     vi.mocked(api.get).mockResolvedValue(profile({ directoryVisible: true }));
     vi.mocked(api.put).mockResolvedValue(profile({ directoryVisible: true }));
