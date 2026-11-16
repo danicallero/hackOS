@@ -104,12 +104,14 @@ const MONO_FONT = `ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
 const FALLBACK_SANS = "system-ui, -apple-system, Segoe UI, sans-serif";
 
 /** The Apple Wallet pass strip (apps/api/assets/apple-wallet/strip@3x.png): lighthouse and HackUDC 2027 wordmark. */
-const ASSETS = {
+export const SHARE_ART = {
   strip: "/onboarding/pass-strip.png",
   /** The pass's organizer logo (apple-wallet/logo@2x.png), recoloured ink for the blue body. */
   organizer: "/onboarding/gpul-logo.png",
   /** Emilia, the seagull of the 404 page: perches on the pass. */
   seagull: "/onboarding/emilia.png",
+  /** Emilia's head on the pass blue (cropped from errors/emilia-404.png): the photo when there is none to use. */
+  seagullPortrait: "/onboarding/emilia-portrait.png",
 };
 /** Strip proportions; the band is this tall at any card width. */
 const STRIP_RATIO = 294 / 1125;
@@ -299,7 +301,7 @@ async function loadFonts(): Promise<string> {
 }
 
 async function loadArt() {
-  const seagull = await loadStaticImage(ASSETS.seagull).catch(() => null);
+  const seagull = await loadStaticImage(SHARE_ART.seagull).catch(() => null);
   return { seagull };
 }
 
@@ -319,8 +321,8 @@ async function loadBand(
   if (custom) return { band: { kind: "logo", image: custom }, customLogo: custom };
   if (/hackudc/i.test(event.name)) {
     const [strip, organizer] = await Promise.all([
-      loadStaticImage(ASSETS.strip).catch(() => null),
-      loadStaticImage(ASSETS.organizer).catch(() => null),
+      loadStaticImage(SHARE_ART.strip).catch(() => null),
+      loadStaticImage(SHARE_ART.organizer).catch(() => null),
     ]);
     if (strip) return { band: { kind: "strip", image: strip, organizer }, customLogo: null };
   }

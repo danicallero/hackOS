@@ -10,7 +10,7 @@ const state = vi.hoisted(() => ({
     | { status: "loading" }
     | { status: "error" }
     | { status: "ready"; url: string },
-  seen: [] as { name: string; format: string }[],
+  seen: [] as { name: string; format: string; photo?: string | null }[],
 }));
 vi.mock("@/lib/public-content", () => ({
   getPublicEvent: async () => ({
@@ -22,8 +22,13 @@ vi.mock("@/lib/public-content", () => ({
 }));
 vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ language: "es", t: (k: string) => k }) }));
 vi.mock("@/components/onboarding/social-sharing", () => ({
-  useShareImage: (_event: unknown, attendee: { displayName: string }, format: string) => {
-    state.seen.push({ name: attendee.displayName, format });
+  SHARE_ART: { seagullPortrait: "/onboarding/emilia-portrait.png" },
+  useShareImage: (
+    _event: unknown,
+    attendee: { displayName: string; photoUrl?: string | null },
+    format: string,
+  ) => {
+    state.seen.push({ name: attendee.displayName, format, photo: attendee.photoUrl });
     return { render: state.render, retry: () => undefined };
   },
 }));
@@ -50,8 +55,16 @@ describe("share card preview after confirming (H15)", () => {
     const images = [...container.querySelectorAll("img")].map((img) => img.getAttribute("src"));
     expect(images).toEqual(["blob:card", "blob:card"]);
     expect(state.seen.slice(-2)).toEqual([
-      { name: "Ada Lovelace", format: "landscape" },
-      { name: "Ada Lovelace", format: "story" },
+      {
+        name: "Ada Lovelace",
+        format: "landscape",
+        photo: `${location.origin}/onboarding/emilia-portrait.png`,
+      },
+      {
+        name: "Ada Lovelace",
+        format: "story",
+        photo: `${location.origin}/onboarding/emilia-portrait.png`,
+      },
     ]);
   });
 

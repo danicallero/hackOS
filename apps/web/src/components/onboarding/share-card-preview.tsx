@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { type SocialSharingEvent, useShareImage } from "@/components/onboarding/social-sharing";
+import {
+  SHARE_ART,
+  type SocialSharingEvent,
+  useShareImage,
+} from "@/components/onboarding/social-sharing";
 import { formatEventDate } from "@/lib/datetime";
 import { EVENT_CITY, EVENT_PUBLIC_URL } from "@/lib/event-brand";
 import { useLocale } from "@/lib/i18n";
@@ -93,7 +97,15 @@ function ShareCardPreviewImage({
   name: string;
   className?: string;
 }) {
-  const attendee = { displayName: name };
+  // The public page has no profile photo: Emilia, the event's seagull, stands in for it.
+  // Absolute, so the drawing fetches it from this web origin rather than the API.
+  const attendee = {
+    displayName: name,
+    photoUrl:
+      typeof window === "undefined"
+        ? null
+        : new URL(SHARE_ART.seagullPortrait, window.location.origin).href,
+  };
   const front = useShareImage(event, attendee, "landscape").render;
   // The story format fanned out behind: the formats they can post, at a glance.
   const back = useShareImage(event, attendee, "story").render;
