@@ -291,6 +291,48 @@ describe("pdf and verification", () => {
   });
 });
 
+describe("certificate wording (#1083)", () => {
+  const snapshot = {
+    name: "Ada",
+    surname: "Lovelace",
+    eventName: "HackUDC",
+    venue: "FIC",
+    timezone: "Europe/Madrid",
+    eventStartsAt: "2027-02-26T09:00:00.000Z",
+    eventEndsAt: "2027-02-28T18:00:00.000Z",
+    issuerName: "GPUL",
+    issuerTaxId: "G15659220",
+    hours: 0,
+    activities: [],
+    templateTitle: "CERTIFICATE OF ACCEPTED SPOT",
+    templateBody: "This certifies that Ada Lovelace has an accepted spot at HackUDC.",
+  };
+  const render = async (overrides: Record<string, unknown>, dni: string | null) => {
+    const { renderCertificatePdf } = await import("../../src/modules/certificates/pdf.js");
+    const bytes = await renderCertificatePdf({
+      snapshot: { ...snapshot, ...overrides },
+      variant: "participation",
+      locale: "en",
+      issuedAt: new Date("2026-11-16T10:00:00Z"),
+      dni,
+    });
+    return (await pdfText(bytes)).replace(/\s+/g, " ");
+  };
+
+  it("names the issuer's NIF and the recipient once, with their document beside the name", async () => {
+    const text = await render({}, "12345678Z");
+    expect(text).toContain("GPUL, NIF G15659220, as the organising body,");
+    expect(text).toContain(
+      "This certifies that Ada Lovelace (DNI/NIE/passport 12345678Z) has an accepted spot",
+    );
+    expect(text.match(/Ada Lovelace/g)).toHaveLength(1);
+    expect(await render({ documentKind: "passport" }, "P1")).toContain("(passport P1)");
+    const legacy = await render({ issuerTaxId: undefined, templateBody: "Welcome." }, null);
+    expect(legacy).toContain("GPUL as the organising body,");
+    expect(legacy).toMatch(/Ada Lovelace ?\. Welcome\./);
+  });
+});
+
 describe("staff", () => {
   it("overrides the threshold only with a reason, audits it, and downloads anyone's PDF", async () => {
     await presence(person, 2);

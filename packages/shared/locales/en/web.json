@@ -3923,6 +3923,7 @@
   "certificateMinConfirmedHours": "Minimum confirmed hours for automatic approval",
   "certificateConfirmedHoursHelp": "Only time confirmed by an exit or activity scan counts. Open visits do not count.",
   "certificateIssuerName": "Issuing organisation",
+  "certificateIssuerTaxId": "Tax ID (NIF)",
   "certificateMinReviewHours": "Minimum confirmed hours for review",
   "certificateReviewThresholdHelp": "Leave blank to disable the review queue. The review minimum cannot exceed the automatic minimum.",
   "certificateAwaitingReview": "Awaiting attendance review",

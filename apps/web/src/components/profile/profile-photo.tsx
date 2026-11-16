@@ -27,7 +27,7 @@ const BADGE = cn(
  * The account photo (#934). It saves on its own, outside the personal-details
  * form: the API stores it privately and every surface reads it through the
  * authenticated photo route. People who scanned the owner see it only when
- * the public profile's photo switch is on. A camera button on the avatar
+ * the public profile's photo switch is on. A camera control on the avatar
  * opens the file picker, or a change/remove menu once a photo exists.
  */
 export function ProfilePhoto({
@@ -49,7 +49,7 @@ export function ProfilePhoto({
   return (
     <fieldset className="min-w-0 space-y-2">
       <legend className="sr-only">{t("profilePhoto")}</legend>
-      <input {...input} />
+      {me.image ? <input {...input} /> : null}
       <div className="relative w-fit">
         {variant === "avatar" ? (
           <UserAvatar
@@ -82,16 +82,28 @@ export function ProfilePhoto({
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
-          <button
-            type="button"
-            aria-label={t("uploadPhoto")}
-            disabled={pending !== null}
-            onClick={pick}
-            className={triggerClass}
+          // A label around the file input, not a button calling `input.click()`: the
+          // tap opens the picker natively, which iOS browsers honour where a scripted
+          // click on the hidden input was reported to do nothing (H15 share step).
+          <label
+            className={cn(
+              triggerClass,
+              "cursor-pointer has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background",
+              pending !== null && "cursor-progress opacity-70",
+            )}
           >
+            <input
+              ref={input.ref}
+              type="file"
+              accept={input.accept}
+              onChange={input.onChange}
+              className="sr-only"
+              aria-label={t("uploadPhoto")}
+              disabled={pending !== null}
+            />
             {icon}
             {variant === "button" ? label : null}
-          </button>
+          </label>
         )}
       </div>
       {error && (

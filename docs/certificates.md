@@ -29,6 +29,7 @@ before merging changes, so unrelated patches preserve each other:
 | `minReviewHours` | Lower secured-hours threshold that opens case-by-case review. `null` disables the review queue; cannot exceed `minHours` when both are set. |
 | `awardHours` | Optional hours stated on automatic certificates and university exports, also suggested in the reviewer. No preset: `null` uses confirmed attendance and leaves review awards blank. A reviewer can enter a different value per person. |
 | `issuerName` | The organisation printed on the document. |
+| `issuerTaxId` | Its NIF, printed after the name (default `G15659220`); `null` omits it. Frozen in each snapshot at issue. |
 
 A person who does not meet the policy gets nothing, with a reason
 (`certificate_hours_not_met`, `certificate_event_not_ended`, `certificate_demo_required`, `certificate_demo_jury_required`,
@@ -146,7 +147,10 @@ about 15 KB (the first version was 41 KB).
 persistent issued-document register, all guarded by `presence:manage`.
 Create or edit a type's name, PDF title and wording in es/gl/en. Text supports
 `{recipient}`, `{event}`, `{issuer}`, `{activity}`, `{hours}`,
-`{dates}` and `{venue}`. Issued text is frozen; later edits only affect new
+`{dates}` and `{venue}`. The PDF prints the recipient in bold where
+`{recipient}` appears, followed by their identity document in parentheses
+(`DNI/NIE/passport`, or `passport` when staff chose it); wording without
+`{recipient}` starts with that name. Issued text is frozen; later edits only affect new
 documents. Disabling a type stops issuance without revoking existing documents.
 Each definition is revision checked, locked and audited.
 
