@@ -1,7 +1,10 @@
+import { Redirect } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { useLocale } from "@/lib/i18n";
+import { useMeContext } from "@/lib/me-context";
 import { transparentDetailHeaderOptions, useTabStackScreenOptions } from "@/lib/navigation";
+import { isOperator } from "@/lib/tabs";
 
 import { colors } from "@/theme/colors";
 
@@ -12,6 +15,9 @@ export default function ScannerLayout() {
   const stackScreenOptions = useTabStackScreenOptions();
   const { t } = useLocale();
   const glassAvailable = isRealLiquidGlassAvailable();
+  const { me } = useMeContext();
+  // H8/H22/H55: route registration is not permission to open scanner tools.
+  if (!isOperator(me?.capabilities ?? [])) return <Redirect href="/(tabs)/schedule" />;
   return (
     <Stack screenOptions={stackScreenOptions}>
       <Stack.Screen

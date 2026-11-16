@@ -169,7 +169,11 @@ export function PublicProfileCard({
     setEdits((current) => {
       const next = { ...(current ?? (initialSettings as Settings)), ...patch };
       // Back to the stored settings (hidden edits are discarded): follow refreshes again.
-      return sameSettings(next, initialSettings as Settings, helperPublished) ? null : next;
+      const matchesStored = sameSettings(next, initialSettings as Settings, helperPublished);
+      // #935: empty link rows are editor state even though they are not saved.
+      const sameLinkRows =
+        JSON.stringify(next.socials) === JSON.stringify(initialSettings?.socials);
+      return matchesStored && (!fieldsOpen || sameLinkRows) ? null : next;
     });
   }
 

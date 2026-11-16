@@ -30,6 +30,7 @@ jest.mock("expo-navigation-bar", () => {
       ReactLib.createElement(Native.View, { style, testID: "scanner-navigation-bar" }),
   };
 });
+const mockSwitchTab = jest.fn();
 jest.mock("expo-router/ui", () => {
   const ReactLib = require("react");
   const Native = jest.requireActual("react-native");
@@ -60,7 +61,7 @@ jest.mock("expo-router/ui", () => {
     Tabs: ({ children }: { children: unknown }) =>
       ReactLib.createElement(Native.View, null, children),
     TabTrigger,
-    useTabTrigger: () => ({ switchTab: jest.fn() }),
+    useTabTrigger: () => ({ switchTab: mockSwitchTab }),
   };
 });
 jest.mock("expo-glass-effect", () => ({
@@ -71,12 +72,13 @@ jest.mock("expo-glass-effect", () => ({
   },
   isLiquidGlassAvailable: () => false,
 }));
+let mockScrubFinalize: (event: { x: number }, success: boolean) => void;
 jest.mock("react-native-gesture-handler", () => {
   const ReactLib = require("react");
   const Native = jest.requireActual("react-native");
-  const chainable = (): Record<string, () => unknown> => {
-    const handler: Record<string, () => unknown> = {};
-    const methods = [
+  const chainable = (): Record<string, (value?: unknown) => unknown> => {
+    const handler: Record<string, (value?: unknown) => unknown> = {};
+    for (const method of [
       "requireExternalGestureToFail",
       "activeOffsetX",
       "failOffsetY",
@@ -84,9 +86,11 @@ jest.mock("react-native-gesture-handler", () => {
       "onStart",
       "onUpdate",
       "onFinalize",
-    ];
-    for (const m of methods) {
-      handler[m] = () => chainable();
+    ]) {
+      handler[method] = (value) => {
+        if (method === "onFinalize") mockScrubFinalize = value as typeof mockScrubFinalize;
+        return handler;
+      };
     }
     return handler;
   };
@@ -450,5 +454,27 @@ describe("Help desk tab entry (H61-H67)", () => {
     await render(<OpaqueRouterTabs {...DEFAULT_PROPS} />);
     await fireEvent.press(screen.getByTestId("opaque-tab-help-desk"));
     expect(replace).toHaveBeenCalledWith("/(tabs)/help-desk");
+  });
+});
+
+// H55: scrub indices refer to rendered destinations, never the exhaustive route registry.
+describe("participant tab scrubbing", () => {
+  it("selects only visible destinations across the full direct group", async () => {
+    Object.defineProperty(Platform, "OS", { configurable: true, value: "ios" });
+    mockPrimaryTabs.mockReturnValue(["schedule", "queue", "diary", "account"]);
+    mockOverflowTabs.mockReturnValue([]);
+    mockUsePathname.mockReturnValue("/(tabs)/schedule");
+    mockSwitchTab.mockClear();
+    await renderTabs();
+    const group = screen.getByTestId("opaque-router-tabs-direct-group");
+    expect(group).toBeDefined();
+    await fireEvent(group, "layout", { nativeEvent: { layout: { width: 400 } } });
+    for (const x of [150, 250, 350]) {
+      await act(async () => mockScrubFinalize({ x }, true));
+    }
+    expect(mockSwitchTab.mock.calls.map(([name]) => name)).toEqual(["queue", "diary", "others"]);
+    mockSwitchTab.mockClear();
+    await act(async () => mockScrubFinalize({ x: 150 }, false));
+    expect(mockSwitchTab).not.toHaveBeenCalled();
   });
 });

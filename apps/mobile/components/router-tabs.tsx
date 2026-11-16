@@ -391,6 +391,7 @@ function RouterTabsContent({
     >
       <GestureDetector gesture={tabScrubGesture}>
         <View
+          testID={`${testID}-direct-group`}
           onLayout={({ nativeEvent }) => {
             const width = nativeEvent.layout.width;
             setDirectGroupWidth((current) => (current === width ? current : width));
