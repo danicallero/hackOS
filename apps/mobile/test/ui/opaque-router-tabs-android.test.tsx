@@ -162,6 +162,8 @@ jest.mock("react-native-reanimated", () => {
     useReducedMotion: () => false,
     useSharedValue: (v: unknown) => ReactLib.useRef({ value: v }).current,
     withSpring: (v: number) => v,
+    withTiming: (v: number) => v,
+    Easing: { bezier: () => (t: number) => t },
   };
 });
 jest.mock("react-native-safe-area-context", () => ({

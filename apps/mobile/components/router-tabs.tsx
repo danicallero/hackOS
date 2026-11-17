@@ -31,12 +31,14 @@ import {
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   cancelAnimation,
+  Easing,
   runOnJS,
   type SharedValue,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 import { useDockBackGesture } from "@/components/app-back-gesture";
 import {
@@ -63,16 +65,26 @@ export const ROUTER_TAB_BAR_HEIGHT = TAB_BAR_HEIGHT;
 const ROUTER_TAB_BAR_HORIZONTAL_PADDING = 16;
 const TAB_SELECTION_SPRING = { damping: 20, mass: 0.8, stiffness: 220 };
 /** A tap's lens travel: lifted at the current tab, it glides and lands on the target. */
-const TAB_TRAVEL_SPRING = { damping: 20, mass: 1, stiffness: 95 };
+const TAB_TRAVEL = { duration: 300, easing: Easing.bezier(0.2, 0.8, 0.2, 1) };
 /** Stiff enough to stay under a dragging finger. */
 const TAB_TRACKING_SPRING = { damping: 28, mass: 0.6, stiffness: 520 };
 /** How far the pressed lens grows past the bar's top and bottom edges. */
-const PRESS_LENS_OUTSET = 2;
-/** How far it grows past the resting lens's sides; never narrower than the aspect. */
-const PRESS_LENS_SIDE_OUTSET = 6;
-/** The pressed lens is a wide capsule, never a circle. */
-const PRESS_LENS_ASPECT = 1.25;
-const PRESS_LENS_SPRING = { damping: 18, mass: 0.8, stiffness: 220 };
+const PRESS_LENS_OUTSET = 3;
+/**
+ * The lifted lens spans this many cells, like the system bar's: wide enough
+ * that the clear glass bends only at its rim and the centre stays flat.
+ */
+const PRESS_LENS_CELLS = 1.6;
+/** Near-critical, and settled once visually still, so landing never lingers. */
+const PRESS_LENS_SPRING = {
+  damping: 26,
+  mass: 0.7,
+  stiffness: 320,
+  restDisplacementThreshold: 0.002,
+  restSpeedThreshold: 0.02,
+};
+/** The whole bar grows slightly while a finger is down. */
+const PRESS_BAR_GROWTH = 0.04;
 /** Horizontal travel that turns a press into a scrub. */
 const TAB_SCRUB_SLOP = 8;
 
@@ -337,10 +349,14 @@ function RouterTabsContent({
   const tabScrubGesture = useMemo(() => {
     const restingOffset =
       selectedDirectTabIndex >= 0 ? selectedDirectTabIndex * directTabCellWidth : 0;
-    const followFinger = (x: number, spring: typeof TAB_TRACKING_SPRING) => {
+    const followFinger = (x: number, tracking: boolean) => {
       "worklet";
       const target = selectionOffsetForPosition(x, directGroupWidth, directTabCount);
-      selectionOffset.value = reducedMotion ? target : withSpring(target, spring);
+      selectionOffset.value = reducedMotion
+        ? target
+        : tracking
+          ? withSpring(target, TAB_TRACKING_SPRING)
+          : withTiming(target, TAB_TRAVEL);
     };
     // H55: like the system tab bar, the lens moves under the finger on touch
     // down anywhere in the group and follows it in both directions; release
@@ -361,7 +377,7 @@ function RouterTabsContent({
         manager.activate();
         cancelAnimation(selectionOffset);
         // Lift where the lens rests, then glide towards the finger.
-        followFinger(touch.x, TAB_TRAVEL_SPRING);
+        followFinger(touch.x, false);
         lift.value = reducedMotion ? 1 : withSpring(1, PRESS_LENS_SPRING);
         runOnJS(setLensMounted)(true);
       })
@@ -372,7 +388,7 @@ function RouterTabsContent({
         touchX.value = touch.x;
         if (!scrubbed.value && Math.abs(touch.x - touchStartX.value) < TAB_SCRUB_SLOP) return;
         scrubbed.value = true;
-        followFinger(touch.x, TAB_TRACKING_SPRING);
+        followFinger(touch.x, true);
       })
       .onTouchesUp((event, manager) => {
         "worklet";
@@ -397,17 +413,14 @@ function RouterTabsContent({
           lift.value = 0;
           runOnJS(setLensMounted)(false);
         } else {
-          selectionOffset.value = withSpring(
-            nextOffset,
-            scrubbed.value ? TAB_SELECTION_SPRING : TAB_TRAVEL_SPRING,
-            (finished) => {
-              // An interrupting touch replaces this spring and keeps the lens up.
-              if (!finished) return;
-              lift.value = withSpring(0, PRESS_LENS_SPRING, (landed) => {
-                if (landed) runOnJS(setLensMounted)(false);
-              });
-            },
-          );
+          // Arrive on the cell with the system ease-out, then land at once.
+          selectionOffset.value = withTiming(nextOffset, TAB_TRAVEL, (finished) => {
+            // An interrupting touch replaces this travel and keeps the lens up.
+            if (!finished) return;
+            lift.value = withSpring(0, PRESS_LENS_SPRING, (landed) => {
+              if (landed) runOnJS(setLensMounted)(false);
+            });
+          });
         }
         if (nextIndex >= 0) {
           if (scrubbed.value) runOnJS(commitTabSelection)(nextIndex);
@@ -429,6 +442,10 @@ function RouterTabsContent({
     touchStartX,
     touchX,
   ]);
+
+  const barGrowthStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + PRESS_BAR_GROWTH * lift.value }],
+  }));
 
   const sideEdge = sideRegion.edge;
   if (sideEdge) {
@@ -469,13 +486,13 @@ function RouterTabsContent({
       }}
     >
       <GestureDetector gesture={tabScrubGesture}>
-        <View
+        <Animated.View
           testID={`${testID}-direct-group`}
           onLayout={({ nativeEvent }) => {
             const width = nativeEvent.layout.width;
             setDirectGroupWidth((current) => (current === width ? current : width));
           }}
-          style={{ flex: 1, height: tabBarHeight }}
+          style={[{ flex: 1, height: tabBarHeight }, barGrowthStyle]}
         >
           <TabSurface
             colorScheme={colorScheme}
@@ -533,7 +550,7 @@ function RouterTabsContent({
               selectionInset={tabItemVerticalInset}
             />
           ) : null}
-        </View>
+        </Animated.View>
       </GestureDetector>
 
       {overflow ? (
@@ -949,15 +966,22 @@ function TabPressLens({
 }) {
   const restingWidth = Math.max(0, cellWidth - selectionInset * 2);
   const height = barHeight + PRESS_LENS_OUTSET * 2;
-  const width = Math.max(restingWidth + PRESS_LENS_SIDE_OUTSET * 2, height * PRESS_LENS_ASPECT);
+  const width = cellWidth * PRESS_LENS_CELLS;
   const left = selectionInset + restingWidth / 2 - width / 2;
-  const restScale = itemHeight / height;
+  // At rest it matches the resting lens exactly, so mounting and unmounting
+  // are seamless; the brief non-uniform scale is hidden under that lens.
+  const restScaleX = restingWidth / width;
+  const restScaleY = itemHeight / height;
   // Mounted per press and never faded: UIKit drops the glass effect under a
   // translucent parent, and a glass view switched to `none` and back stops
   // rendering (expo/expo#43732). It mounts and unmounts at the resting
   // lens's size, so both edges are seamless; only the scale animates.
   const lensStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: offset.value }, { scale: restScale + (1 - restScale) * lift.value }],
+    transform: [
+      { translateX: offset.value },
+      { scaleX: restScaleX + (1 - restScaleX) * lift.value },
+      { scaleY: restScaleY + (1 - restScaleY) * lift.value },
+    ],
   }));
 
   if (cellWidth <= 0) return null;
