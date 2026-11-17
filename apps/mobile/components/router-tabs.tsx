@@ -15,10 +15,12 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
   type ColorValue,
+  type GestureResponderEvent,
   Platform,
   Pressable,
   type StyleProp,
@@ -60,6 +62,37 @@ export const MAX_TABS_WITHOUT_OVERFLOW = MAX_DIRECT_TABS + 1;
 export const ROUTER_TAB_BAR_HEIGHT = TAB_BAR_HEIGHT;
 const ROUTER_TAB_BAR_HORIZONTAL_PADDING = 16;
 const TAB_SELECTION_SPRING = { damping: 20, mass: 0.8, stiffness: 220 };
+/** A tap's lens travel: lifted at the current tab, it glides and lands on the target. */
+/**
+ * The lens's travel to a pressed tab. One spring from touch-down to release:
+ * retargeting a spring keeps its velocity, so a tap never stops mid-flight.
+ * Near-critical, and finished once visually still so landing starts at once.
+ */
+const TAB_TRAVEL_SPRING = {
+  damping: 31,
+  mass: 0.8,
+  stiffness: 300,
+  // "Arrived" within a few points: waiting for the spring's sub-pixel tail
+  // kept the lens hovering on the target for over half a second.
+  restDisplacementThreshold: 4,
+  restSpeedThreshold: 80,
+};
+/** Stiff enough to stay under a dragging finger. */
+const TAB_TRACKING_SPRING = { damping: 28, mass: 0.6, stiffness: 520 };
+/** Near-critical, and settled once visually still, so landing never lingers. */
+const PRESS_LENS_SPRING = {
+  damping: 26,
+  mass: 0.7,
+  stiffness: 320,
+  restDisplacementThreshold: 0.002,
+  restSpeedThreshold: 0.02,
+};
+/** How much the lens swells while a finger is down (it stays inside the bar). */
+const PRESS_LENS_GROWTH = { x: 0.12, y: 0.06 };
+/** The whole bar grows slightly while a finger is down. */
+const PRESS_BAR_GROWTH = 0.04;
+/** Horizontal travel that turns a press into a scrub. */
+const TAB_SCRUB_SLOP = 8;
 
 export type RouterTabsSurfaceMode = "liquid-glass" | "opaque";
 export type RouterTabsColorScheme = "auto" | "light" | "dark";
@@ -265,15 +298,27 @@ function RouterTabsContent({
   const directTabNames = useMemo(() => directTabs.map(({ name }) => name), [directTabs]);
   const { switchTab } = useTabTrigger({ name: directTabNames[0] ?? "" });
   const reducedMotion = useReducedMotion();
-  const selectedDirectTabIndex = directTabs.findIndex((tab) => isTabActive(pathname, tab));
+  const routeTabIndex = directTabs.findIndex((tab) => isTabActive(pathname, tab));
+  // H55: the released tab shows as selected at once; the route follows when
+  // the lens arrives (navigation is slow to commit, above all in debug).
+  // It holds only until the route changes from the one it was released on.
+  const [pendingTab, setPendingTab] = useState<{ index: number; from: number } | null>(null);
+  const pendingTabIndex = pendingTab?.from === routeTabIndex ? pendingTab.index : null;
+  const selectedDirectTabIndex = routeTabIndex;
   const [directGroupWidth, setDirectGroupWidth] = useState(0);
-  const [isScrubbing, setIsScrubbing] = useState(false);
   const selectionOffset = useSharedValue(0);
+  // H55: 0 resting, 1 lifted. Driven only from the gesture worklet, so the
+  // lift, travel and landing stay on the UI thread with no React render.
+  const lift = useSharedValue(0);
+  // 1 from touch-down until the lens has landed.
+  const pressing = useSharedValue(0);
   const directTabCellWidth = directTabCount > 0 ? directGroupWidth / directTabCount : 0;
   const tabItemHeight = tabBarHeight - tabBarVerticalPadding;
   const tabItemVerticalInset = (tabBarHeight - tabItemHeight) / 2;
 
   useEffect(() => {
+    // A lifted lens is still travelling under the gesture; it lands itself.
+    if (lift.value > 0) return;
     if (selectedDirectTabIndex < 0 || directTabCellWidth <= 0) {
       cancelAnimation(selectionOffset);
       selectionOffset.value = 0;
@@ -284,7 +329,7 @@ function RouterTabsContent({
     selectionOffset.value = reducedMotion
       ? nextOffset
       : withSpring(nextOffset, TAB_SELECTION_SPRING);
-  }, [directTabCellWidth, reducedMotion, selectedDirectTabIndex, selectionOffset]);
+  }, [directTabCellWidth, lift, reducedMotion, selectedDirectTabIndex, selectionOffset]);
 
   const commitTabSelection = useCallback(
     (nextIndex: number) => {
@@ -293,63 +338,137 @@ function RouterTabsContent({
 
       onTabSelect?.(nextIndex);
 
-      // Pan gestures do not pass through TabTrigger's Pressable, so mirror
-      // its tabPress emission before jumping. Ordinary taps stay on
-      // TabTrigger's Pressable and emit that event (which Schedule uses to
-      // jump to the live activity); a scrubbed selection only needs the
-      // router's tab state transition here.
+      // A scrub ends on a destination rather than pressing it, so it only
+      // needs the router's tab state transition; reselecting the current tab
+      // by dragging back to it is a no-op, not a scroll-to-top press.
       if (nextIndex === selectedDirectTabIndex) return;
       switchTab(nextName, {});
     },
     [directTabNames, onTabSelect, selectedDirectTabIndex, switchTab],
   );
 
+  // H55: the bar's gesture owns every touch, so a tap must run the same press
+  // as the cell's TabTrigger (tabPress event, reselect actions, haptics).
+  // Each cell registers that press here; VoiceOver and keyboard activation
+  // still reach the Pressable directly.
+  const tabPresses = useRef<Array<(() => void) | undefined>>([]);
+  const pressTab = useCallback((index: number) => tabPresses.current[index]?.(), []);
+
   const dockBackGesture = useDockBackGesture();
+  const touchStartX = useSharedValue(0);
+  const touchX = useSharedValue(0);
+  const scrubbed = useSharedValue(false);
   const tabScrubGesture = useMemo(() => {
-    // Let each TabTrigger own ordinary taps. Pan only takes ownership after
-    // six points, so tapping an active tab still emits the native tabPress
-    // event while a horizontal drag keeps the lens attached to the finger.
-    return Gesture.Pan()
-      .requireExternalGestureToFail(...(dockBackGesture ? [dockBackGesture] : []))
-      .activeOffsetX([-6, 6])
-      .failOffsetY([-14, 14])
+    const restingOffset =
+      selectedDirectTabIndex >= 0 ? selectedDirectTabIndex * directTabCellWidth : 0;
+    const followFinger = (x: number, tracking: boolean) => {
+      "worklet";
+      const target = selectionOffsetForPosition(x, directGroupWidth, directTabCount);
+      selectionOffset.value = reducedMotion
+        ? target
+        : tracking
+          ? withSpring(target, TAB_TRACKING_SPRING)
+          : withSpring(target, TAB_TRAVEL_SPRING);
+    };
+    // H55: like the system tab bar, the lens moves under the finger on touch
+    // down anywhere in the group and follows it in both directions; release
+    // selects the cell underneath. Activating on touch down makes this the
+    // only owner of the touch: the cells' Pressables are cancelled (so a long
+    // press cannot switch tabs mid-drag) and the dock back swipe, which waits
+    // on this gesture, cannot claim a rightward drag.
+    return Gesture.Manual()
+      .blocksExternalGesture(...(dockBackGesture ? [dockBackGesture] : []))
       .enabled(directTabCount > 0 && directTabCellWidth > 0)
-      .onStart(() => {
+      .onTouchesDown((event, manager) => {
         "worklet";
+        const touch = event.allTouches[0];
+        if (!touch || event.numberOfTouches > 1) return;
+        touchStartX.value = touch.x;
+        touchX.value = touch.x;
+        scrubbed.value = false;
+        manager.activate();
         cancelAnimation(selectionOffset);
-        runOnJS(setIsScrubbing)(true);
+        // Lift where the lens rests, then glide towards the finger.
+        followFinger(touch.x, false);
+        lift.value = reducedMotion ? 1 : withSpring(1, PRESS_LENS_SPRING);
+        pressing.value = 1;
       })
-      .onUpdate((event) => {
+      .onTouchesMove((event) => {
         "worklet";
-        selectionOffset.value = selectionOffsetForPosition(
-          event.x,
-          directGroupWidth,
-          directTabCount,
-        );
+        const touch = event.allTouches[0];
+        if (!touch) return;
+        touchX.value = touch.x;
+        if (!scrubbed.value && Math.abs(touch.x - touchStartX.value) < TAB_SCRUB_SLOP) return;
+        scrubbed.value = true;
+        followFinger(touch.x, true);
       })
-      .onFinalize((event, success) => {
+      .onTouchesUp((event, manager) => {
         "worklet";
-        if (success) {
-          const nextIndex = tabIndexForPosition(event.x, directGroupWidth, directTabCount);
-          if (nextIndex >= 0) {
-            const nextOffset = nextIndex * directTabCellWidth;
-            selectionOffset.value = reducedMotion
-              ? nextOffset
-              : withSpring(nextOffset, TAB_SELECTION_SPRING);
-            runOnJS(commitTabSelection)(nextIndex);
-          }
+        if (event.numberOfTouches > 0) return;
+        const touch = event.changedTouches[0];
+        if (touch) touchX.value = touch.x;
+        manager.end();
+      })
+      .onTouchesCancelled((_event, manager) => {
+        "worklet";
+        manager.fail();
+      })
+      .onFinalize((_event, success) => {
+        "worklet";
+        const nextIndex = success
+          ? tabIndexForPosition(touchX.value, directGroupWidth, directTabCount)
+          : -1;
+        const nextOffset = nextIndex >= 0 ? nextIndex * directTabCellWidth : restingOffset;
+        // The lens stays lifted until it reaches the destination, then lands.
+        // Navigation waits for the arrival: mounting a screen mid-flight would
+        // stall the main thread that Reanimated draws the travel on.
+        const wasScrubbed = scrubbed.value;
+        if (nextIndex >= 0 && nextIndex !== selectedDirectTabIndex)
+          runOnJS(setPendingTab)({ index: nextIndex, from: selectedDirectTabIndex });
+        const arrive = () => {
+          "worklet";
+          if (nextIndex < 0) return;
+          if (wasScrubbed) runOnJS(commitTabSelection)(nextIndex);
+          else runOnJS(pressTab)(nextIndex);
+        };
+        if (reducedMotion) {
+          selectionOffset.value = nextOffset;
+          lift.value = 0;
+          pressing.value = 0;
+          arrive();
+        } else {
+          // Arrive on the cell with the system ease-out, then land at once.
+          selectionOffset.value = withSpring(nextOffset, TAB_TRAVEL_SPRING, (finished) => {
+            // An interrupting touch replaces this travel and keeps the lens up.
+            if (!finished) return;
+            selectionOffset.value = withSpring(nextOffset, TAB_SELECTION_SPRING);
+            arrive();
+            lift.value = withSpring(0, PRESS_LENS_SPRING, (landed) => {
+              if (landed) pressing.value = 0;
+            });
+          });
         }
-        runOnJS(setIsScrubbing)(false);
       });
   }, [
     dockBackGesture,
+    pressing,
+    lift,
     commitTabSelection,
     directGroupWidth,
     directTabCellWidth,
     directTabCount,
+    pressTab,
     reducedMotion,
+    scrubbed,
+    selectedDirectTabIndex,
     selectionOffset,
+    touchStartX,
+    touchX,
   ]);
+
+  const barGrowthStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + PRESS_BAR_GROWTH * lift.value }],
+  }));
 
   const sideEdge = sideRegion.edge;
   if (sideEdge) {
@@ -390,13 +509,13 @@ function RouterTabsContent({
       }}
     >
       <GestureDetector gesture={tabScrubGesture}>
-        <View
+        <Animated.View
           testID={`${testID}-direct-group`}
           onLayout={({ nativeEvent }) => {
             const width = nativeEvent.layout.width;
             setDirectGroupWidth((current) => (current === width ? current : width));
           }}
-          style={{ flex: 1, height: tabBarHeight }}
+          style={[{ flex: 1, height: tabBarHeight }, barGrowthStyle]}
         >
           <TabSurface
             colorScheme={colorScheme}
@@ -413,20 +532,33 @@ function RouterTabsContent({
               liquidGlass={liquidGlass}
               selectionInset={tabItemVerticalInset}
               offset={selectionOffset}
+              lift={lift}
+              selected={selectedDirectTabIndex >= 0}
               theme={theme}
-              visible={selectedDirectTabIndex >= 0 || isScrubbing}
             />
             {directTabs.map((tab, index) => (
               <TabTrigger key={tab.name} asChild name={tab.name}>
                 <RouterTabButton
-                  activeOverride={tab.isActive ? isTabActive(pathname, tab) : undefined}
+                  activeOverride={
+                    pendingTabIndex !== null
+                      ? index === pendingTabIndex
+                      : tab.isActive
+                        ? isTabActive(pathname, tab)
+                        : undefined
+                  }
                   icon={tab.icon}
                   label={tab.label}
-                  onTabPress={() => {
+                  registerPress={(press) => {
+                    tabPresses.current[index] = press;
+                  }}
+                  gestureOwnsTouch={() => pressing.value === 1}
+                  onTabPress={(fromGesture) => {
+                    // The bar gesture already moves the lens; this path is VoiceOver and keyboards.
                     const targetOffset = index * directTabCellWidth;
-                    selectionOffset.value = reducedMotion
-                      ? targetOffset
-                      : withSpring(targetOffset, TAB_SELECTION_SPRING);
+                    if (!fromGesture)
+                      selectionOffset.value = reducedMotion
+                        ? targetOffset
+                        : withSpring(targetOffset, TAB_SELECTION_SPRING);
                     onTabPress?.(tab, index === selectedDirectTabIndex);
                   }}
                   selectedIcon={tab.selectedIcon}
@@ -437,7 +569,7 @@ function RouterTabsContent({
               </TabTrigger>
             ))}
           </TabSurface>
-        </View>
+        </Animated.View>
       </GestureDetector>
 
       {overflow ? (
@@ -610,15 +742,30 @@ function tabIndexForPosition(position: number, width: number, tabCount: number):
   return Math.min(tabCount - 1, Math.max(0, Math.floor(Math.max(0, position) / cellWidth)));
 }
 
+/** TabTrigger's press only checks that the event was not default-prevented. */
+const GESTURE_PRESS_EVENT = {
+  defaultPrevented: false,
+  isDefaultPrevented: () => false,
+  preventDefault: () => {},
+} as unknown as GestureResponderEvent;
+
 type RouterTabButtonProps = Omit<TabTriggerSlotProps, "children"> & {
   /** Replaces the trigger's route-focus state when a tab supplies `isActive`. */
   activeOverride?: boolean;
   icon: ReactNode;
   itemHeight: number;
   label: string;
-  onTabPress?: () => void;
+  onTabPress?: (fromGesture?: boolean) => void;
   selectedIcon?: ReactNode;
   theme: RouterTabsTheme;
+  /** Receives this cell's complete press for a gesture that owns the bar's touches. */
+  registerPress?: (press: () => void) => void;
+  /**
+   * True while the bar gesture owns the touch. The cell's Pressable still
+   * sees that touch (it is not cancelled), so its press and long press must
+   * stand down; VoiceOver and keyboard activation never set it.
+   */
+  gestureOwnsTouch?: () => boolean;
   /** Symbol only, with its own selection lens: the bar stands in a narrow side column. */
   vertical?: boolean;
   labelled?: boolean;
@@ -636,6 +783,8 @@ const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTa
     onLongPress,
     onPress,
     onTabPress,
+    registerPress,
+    gestureOwnsTouch,
     selectedIcon,
     theme,
     vertical = false,
@@ -645,6 +794,11 @@ const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTa
   ref,
 ) {
   const isFocused = activeOverride ?? triggerFocused;
+  // The latest TabTrigger press, rebound every render as its focus changes.
+  registerPress?.(() => {
+    onTabPress?.(true);
+    onPress?.(GESTURE_PRESS_EVENT);
+  });
   if (vertical) {
     // Foldable columns keep symbols; the wider tablet sidebar can show the labels.
     return (
@@ -704,8 +858,12 @@ const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTa
       accessibilityLabel={label}
       accessibilityRole="tab"
       accessibilityState={{ ...accessibilityState, selected: isFocused }}
-      onLongPress={onLongPress}
+      onLongPress={(event) => {
+        if (gestureOwnsTouch?.()) return;
+        onLongPress?.(event);
+      }}
       onPress={(event) => {
+        if (gestureOwnsTouch?.()) return;
         onTabPress?.();
         onPress?.(event);
       }}
@@ -750,26 +908,34 @@ function TabSelectionBlob({
   cellWidth,
   colorScheme,
   itemHeight,
+  lift,
   liquidGlass,
+  selected,
   selectionInset,
   offset,
   theme,
-  visible,
 }: {
   cellWidth: number;
   colorScheme: RouterTabsColorScheme;
   itemHeight: number;
+  /** Shows the lens while a touch scrubs a bar with no selected direct tab. */
+  lift: SharedValue<number>;
   liquidGlass: boolean;
+  selected: boolean;
   selectionInset: number;
   offset: SharedValue<number>;
   theme: RouterTabsTheme;
-  visible: boolean;
 }) {
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: offset.value }],
+    opacity: selected ? 1 : Math.min(1, lift.value * 2),
+    transform: [
+      { translateX: offset.value },
+      { scaleX: 1 + PRESS_LENS_GROWTH.x * lift.value },
+      { scaleY: 1 + PRESS_LENS_GROWTH.y * lift.value },
+    ],
   }));
 
-  if (!visible || cellWidth <= 0) return null;
+  if (cellWidth <= 0) return null;
 
   return (
     <Animated.View

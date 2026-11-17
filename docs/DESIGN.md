@@ -1510,7 +1510,8 @@ architecture: [`mobile.md`](./mobile.md).**
   can fit up to six before using a separate `Others` circle. The complete route
   registry remains mounted so hidden screens stay routable. The direct group is
   a single finger-scrub surface: its
-  selection lens follows the touch continuously and release selects the cell
+  selection lens moves under the finger on touch-down, follows it in both
+  directions, and release selects the cell
   under the final finger coordinate, including a jump across several direct
   tabs. `Others` stays a separate native menu trigger.
   - **Participants** (no scan capability): schedule, queue, wallet,

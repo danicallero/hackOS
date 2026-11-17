@@ -231,7 +231,7 @@ below.
 
 ## Navigation & tabs
 
-The Scanner stack independently requires an accreditation, presence or activity scan capability (including the wildcard). Unauthorized route entry redirects to Schedule before mounting scanner content, including gesture navigation and deep links (H8, H22, H55).
+Every tab route stays registered for every account, so each hidden tab stack checks its own capability: Scanner requires an accreditation, presence or activity scan capability (including the wildcard), Activities `activity:scan`, Queue operations `queue:operate`/`queue:admin`, and Help desk any help desk capability. Unauthorized entry redirects to Schedule before mounting the stack, including gesture navigation and deep links (H8, H22, H55). The `(tabs)` layout sets `initialRouteName: "schedule"`: a tab-level back (the dock swipe, `safeBack` at a tab root, Android back) returns to the tab router's first route, and Expo Router otherwise orders routes by name length, which put the hidden `scan` route first.
 
 The reusable component contract is documented in
 [`docs/router-tabs.md`](./router-tabs.md). This section documents only the
@@ -790,8 +790,11 @@ they are not device screenshots or proof of native toolbar behavior.
   on screen greyed instead of disappearing (while projects are hidden the card
   carries none, so the last ones seen, or a placeholder row, are shown greyed).
   Saving is `PUT /api/me/public-profile` under one `Idempotency-Key` per change
-  set; the response replaces the preview. Social links use type/address rows
-  in the same card, up to six; empty rows remain editable but are omitted from
+  set; the response replaces the preview. Social links use Contacts-style edit
+  rows in the same card (remove control, network menu, value), up to six; a
+  new row takes the first unused network, and LinkedIn, X and Instagram show
+  their fixed address so only the handle is typed (a pasted address is reduced
+  to the handle, shared with web through `@hackos/shared/social-links`); empty rows remain editable but are omitted from
   the save. Existing links can be changed or removed, and Cancel discards the
   draft. GitHub stays account-managed and does not count toward the six. It
   saves `socials` with the text and sends `shareCv` only when a CV exists.
@@ -1093,8 +1096,18 @@ they are not device screenshots or proof of native toolbar behavior.
   interactive `regular` material for the outer tab surface, preserving the
   visible liquid-glass rim used by the app's other floating controls; dark
   mode keeps the clearer material. Its direct surface is one native gesture
-  surface: the selection lens follows the finger from touch-down and
-  navigation commits on release to the tab cell under the finger, while the
+  surface: it owns every touch from touch-down (the cells' Pressables still
+  receive the touch, so they ignore press and long press while the lens is
+  shown; VoiceOver and keyboard activation still use them). The lens swells slightly with the bar while a finger is down, glides to the
+  finger, follows it in both directions, and lands on the cell under the
+  finger; a tap on a distant tab travels the same way. Lift, travel and
+  landing run on the UI thread from shared values. The released tab shows as
+  selected at once, and navigation waits for the arrival so mounting the next
+  screen cannot stall the travel. A refracting "lifted" lens like the system
+  bar's is not reachable with `expo-glass-effect` (its clear glass blurs the
+  centre); a native lens is tracked in #1360. A tap or held press
+  without movement runs that cell's normal press, a drag only switches, while
+  the
   separate Others circle remains its own menu (native `MenuView` on iOS; a
   hand-rolled card matching that look on Android — see `navigation.md`). On
   the native-search path,
@@ -3017,7 +3030,7 @@ Android navigation responds to the current window. Compact passport proportions 
 
 The native Account and Contacts bars stay transparent in either orientation, preserving the system scroll-edge treatment instead of clipping the profile with an opaque band. iPad profile avatars use 144 pt; phone and Duo sizes remain unchanged. Contacts keeps Wallet in-page, changing the same native toolbar item to Close. My Projects opens My queue in-page with its opener becoming Close; both overlays enter and exit on the right and respect Reduce Motion. Back gestures and Android Back close an open overlay before leaving its owner.
 
-The root iOS back recognizer covers side navigation and the bottom dock outside child stacks; native stacks retain their content gesture. A dock back gesture takes priority over tab scrubbing only while back/dismiss is possible. It rejects vertical drags and short horizontal movements. Contacts uses the measured native-header height with manual scroll padding to avoid restoring an obsolete automatic top inset. Projects uses a leading toolbar title immediately, without waiting for a large-title scroll event.
+The root iOS back recognizer covers side navigation and the bottom dock outside child stacks; native stacks retain their content gesture. A dock back swipe never starts inside the direct tab group: the group's gesture activates on touch-down and blocks it, so drags there always scrub; outside the group the dock still accepts the back swipe. It rejects vertical drags and short horizontal movements. Contacts uses the measured native-header height with manual scroll padding to avoid restoring an obsolete automatic top inset. Projects uses a leading toolbar title immediately, without waiting for a large-title scroll event.
 
 Project detail validates required project collections before mounting the editor (H20). A malformed response uses the existing retryable RequestFeedback state. Gallery removes the unused detail column when there are no results, centres its empty detail placeholder, and avoids inheriting the large-title offset for its embedded project header. The New project sheet uses matching header/body backgrounds with native X/check toolbar actions.
 

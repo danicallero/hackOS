@@ -322,11 +322,16 @@ describe("NetworkingProfileScreen", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "networkingEdit" }));
     await fireEvent.press(screen.getByRole("button", { name: "networkingLinkAdd" }));
     expect(screen.getByLabelText("networkingLinkUrl 1")).toBeTruthy();
-    await fireEvent.changeText(screen.getByLabelText("networkingLinkUrl 1"), " ada.example ");
+    // A new row takes the first unused network and only asks for its handle, as on web.
+    await fireEvent.changeText(
+      screen.getByLabelText("networkingLinkUrl 1"),
+      "https://www.linkedin.com/in/ada",
+    );
+    expect(screen.getByLabelText("networkingLinkUrl 1").props.value).toBe("ada");
     await fireEvent.press(screen.getByRole("button", { name: "save" }));
     await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
     expect(JSON.parse(mockApiFetch.mock.calls[1][1].body).socials).toEqual([
-      { kind: "website", url: "ada.example" },
+      { kind: "linkedin", url: "https://linkedin.com/in/ada" },
     ]);
     await fireEvent.press(await screen.findByRole("button", { name: "networkingEdit" }));
     expect(screen.getByLabelText("networkingLinkUrl 1").props.value).toBe(link.url);
