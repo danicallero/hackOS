@@ -1,7 +1,7 @@
 import { handleOf, SOCIAL_HANDLE_PREFIX, urlForHandle } from "@hackos/shared/social-links";
 import { useRef } from "react";
 import { Linking, Text, TextInput, View } from "react-native";
-import { MenuView } from "@/components/app-menu";
+import { type AppMenuAction, MenuView } from "@/components/app-menu";
 import { Section, Separator } from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { VisibilityToggle } from "@/components/profile-parts";
@@ -57,6 +57,7 @@ function KindMenu({
   disabled,
   label,
   onKind,
+  onLinkGithub,
   onRemove,
 }: {
   link: Link;
@@ -64,6 +65,8 @@ function KindMenu({
   disabled: boolean;
   label: (kind: SocialKind) => string;
   onKind: (kind: Kind) => void;
+  /** Present while GitHub can be linked: it is an account link, not a typed address. */
+  onLinkGithub?: () => void;
   onRemove: () => void;
 }) {
   const { t } = useLocale();
@@ -76,14 +79,29 @@ function KindMenu({
           id: "kinds",
           title: "",
           displayInline: true,
-          subactions: KINDS.map((kind) => ({
-            id: kind,
-            title: label(kind),
-            assetImage: socialGlyphAsset(kind),
-            glyph: <SocialGlyph kind={kind} size={20} color={colors.label as string} />,
-            state: kind === link.kind ? ("on" as const) : ("off" as const),
-            attributes: { disabled },
-          })),
+          subactions: [
+            ...KINDS.map(
+              (kind): AppMenuAction => ({
+                id: kind,
+                title: label(kind),
+                assetImage: socialGlyphAsset(kind),
+                glyph: <SocialGlyph kind={kind} size={20} color={colors.label as string} />,
+                state: kind === link.kind ? "on" : "off",
+                attributes: { disabled },
+              }),
+            ),
+            ...(onLinkGithub
+              ? [
+                  {
+                    id: LINK_GITHUB,
+                    title: "GitHub",
+                    assetImage: socialGlyphAsset("github"),
+                    glyph: <SocialGlyph kind="github" size={20} color={colors.label as string} />,
+                    attributes: { disabled },
+                  },
+                ]
+              : []),
+          ],
         },
         {
           id: REMOVE,
@@ -95,6 +113,7 @@ function KindMenu({
       onPressAction={({ nativeEvent }) => {
         if (disabled) return;
         if (nativeEvent.event === REMOVE) return onRemove();
+        if (nativeEvent.event === LINK_GITHUB) return onLinkGithub?.();
         const kind = KINDS.find((value) => value === nativeEvent.event);
         if (kind) onKind(kind);
       }}
@@ -133,6 +152,8 @@ function KindLabel({ text }: { text: string }) {
 
 const OPEN = "open";
 const RELINK = "relink";
+const VISIBILITY = "visibility";
+const LINK_GITHUB = "github";
 
 /** The linked GitHub account: managed by the account link, not typed here. */
 export interface GithubProps {
@@ -186,6 +207,12 @@ function GithubRow({
             attributes: { disabled: disabled || github.linking },
           },
           {
+            id: VISIBILITY,
+            title: t(github.shown ? "networkingGithubHide" : "networkingGithubShow"),
+            image: github.shown ? "eye.slash" : "eye",
+            attributes: { disabled: disabled || github.linking },
+          },
+          {
             id: RELINK,
             title: t("networkingGithubRelink"),
             image: "arrow.triangle.2.circlepath",
@@ -195,6 +222,7 @@ function GithubRow({
         onPressAction={({ nativeEvent }) => {
           if (disabled || github.linking) return;
           if (nativeEvent.event === OPEN) void Linking.openURL(`https://github.com/${login}`);
+          else if (nativeEvent.event === VISIBILITY) github.onShown(!github.shown);
           else if (nativeEvent.event === RELINK) github.onLink(true);
         }}
       >
@@ -272,6 +300,15 @@ export function SocialLinksEditor({
                 label={label}
                 onKind={(kind) =>
                   onChange(links.map((row, i) => (i === index ? retype(row, kind) : row)))
+                }
+                onLinkGithub={
+                  github?.configured && !github.login && !github.linking
+                    ? () => {
+                        // The row was only a way in: GitHub is the account link, not a typed address.
+                        if (!link.url.trim()) onChange(links.filter((_, i) => i !== index));
+                        github.onLink(false);
+                      }
+                    : undefined
                 }
                 onRemove={() => onChange(links.filter((_, i) => i !== index))}
               />
