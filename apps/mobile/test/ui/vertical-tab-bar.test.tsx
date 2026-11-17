@@ -43,7 +43,7 @@ jest.mock("react-native-gesture-handler", () => {
   return {
     GestureHandlerRootView: ({ children }: { children: unknown }) =>
       ReactLib.createElement(Native.View, null, children),
-    Gesture: { Pan: () => chainable() },
+    Gesture: { Manual: () => chainable(), Pan: () => chainable() },
     GestureDetector: ({ children }: { children: unknown }) =>
       ReactLib.createElement(Native.View, null, children),
   };

@@ -31,12 +31,17 @@ jest.mock("expo-navigation-bar", () => {
   };
 });
 const mockSwitchTab = jest.fn();
+const mockTriggerPress = jest.fn();
 jest.mock("expo-router/ui", () => {
   const ReactLib = require("react");
   const Native = jest.requireActual("react-native");
   const TabTrigger = ReactLib.forwardRef(
     (
-      { children, asChild }: { children: unknown; asChild?: boolean; name?: string; href?: string },
+      {
+        children,
+        asChild,
+        name,
+      }: { children: unknown; asChild?: boolean; name?: string; href?: string },
       _ref: unknown,
     ) => {
       if (asChild && ReactLib.isValidElement(children)) {
@@ -48,6 +53,7 @@ jest.mock("expo-router/ui", () => {
           {
             isFocused: false,
             accessibilityState: { selected: false },
+            onPress: () => mockTriggerPress(name),
           },
         );
       }
@@ -72,36 +78,75 @@ jest.mock("expo-glass-effect", () => ({
   },
   isLiquidGlassAvailable: () => false,
 }));
-let mockScrubFinalize: (event: { x: number }, success: boolean) => void;
+type MockTouchEvent = {
+  allTouches: { x: number }[];
+  changedTouches: { x: number }[];
+  numberOfTouches: number;
+};
+type MockTouchHandler = (event: MockTouchEvent, manager: MockManager) => void;
+type MockManager = { activate: () => void; end: () => void; fail: () => void };
+const mockScrub: {
+  down?: MockTouchHandler;
+  move?: MockTouchHandler;
+  up?: MockTouchHandler;
+  finalize?: (event: unknown, success: boolean) => void;
+} = {};
 jest.mock("react-native-gesture-handler", () => {
   const ReactLib = require("react");
   const Native = jest.requireActual("react-native");
+  const keys: Record<string, keyof typeof mockScrub> = {
+    onTouchesDown: "down",
+    onTouchesMove: "move",
+    onTouchesUp: "up",
+    onFinalize: "finalize",
+  };
   const chainable = (): Record<string, (value?: unknown) => unknown> => {
-    const handler: Record<string, (value?: unknown) => unknown> = {};
-    for (const method of [
-      "requireExternalGestureToFail",
-      "activeOffsetX",
-      "failOffsetY",
-      "enabled",
-      "onStart",
-      "onUpdate",
-      "onFinalize",
-    ]) {
-      handler[method] = (value) => {
-        if (method === "onFinalize") mockScrubFinalize = value as typeof mockScrubFinalize;
-        return handler;
-      };
-    }
+    const handler: Record<string, (value?: unknown) => unknown> = new Proxy(
+      {},
+      {
+        get: (_target, method: string) => (value?: unknown) => {
+          const key = keys[method];
+          if (key) mockScrub[key] = value as never;
+          return handler;
+        },
+      },
+    );
     return handler;
   };
   return {
     GestureHandlerRootView: ({ children }: { children: unknown }) =>
       ReactLib.createElement(Native.View, null, children),
-    Gesture: { Pan: () => chainable() },
+    Gesture: { Manual: () => chainable(), Pan: () => chainable() },
     GestureDetector: ({ children }: { children: unknown }) =>
       ReactLib.createElement(Native.View, null, children),
   };
 });
+
+/** Drives the bar's touch-owning gesture: down at `path[0]`, moves through the rest, then lifts. */
+function touchPath(path: number[], { cancel = false } = {}) {
+  let outcome: boolean | null = null;
+  const manager: MockManager = {
+    activate: () => {},
+    end: () => {
+      outcome = true;
+    },
+    fail: () => {
+      outcome = false;
+    },
+  };
+  const event = (x: number, touching: number): MockTouchEvent => ({
+    allTouches: touching ? [{ x }] : [],
+    changedTouches: [{ x }],
+    numberOfTouches: touching,
+  });
+  const [first = 0, ...rest] = path;
+  mockScrub.down?.(event(first, 1), manager);
+  for (const x of rest) mockScrub.move?.(event(x, 1), manager);
+  if (cancel) manager.fail();
+  else mockScrub.up?.(event(path.at(-1) ?? first, 0), manager);
+  mockScrub.finalize?.({}, outcome === true);
+}
+
 jest.mock("react-native-reanimated", () => {
   const ReactLib = require("react");
   const Native = jest.requireActual("react-native");
@@ -459,22 +504,39 @@ describe("Help desk tab entry (H61-H67)", () => {
 
 // H55: scrub indices refer to rendered destinations, never the exhaustive route registry.
 describe("participant tab scrubbing", () => {
-  it("selects only visible destinations across the full direct group", async () => {
+  beforeEach(async () => {
     Object.defineProperty(Platform, "OS", { configurable: true, value: "ios" });
     mockPrimaryTabs.mockReturnValue(["schedule", "queue", "diary", "account"]);
     mockOverflowTabs.mockReturnValue([]);
     mockUsePathname.mockReturnValue("/(tabs)/schedule");
     mockSwitchTab.mockClear();
+    mockTriggerPress.mockClear();
     await renderTabs();
-    const group = screen.getByTestId("opaque-router-tabs-direct-group");
-    expect(group).toBeDefined();
-    await fireEvent(group, "layout", { nativeEvent: { layout: { width: 400 } } });
+    await fireEvent(screen.getByTestId("opaque-router-tabs-direct-group"), "layout", {
+      nativeEvent: { layout: { width: 400 } },
+    });
+  });
+
+  it("selects only visible destinations across the full direct group", async () => {
     for (const x of [150, 250, 350]) {
-      await act(async () => mockScrubFinalize({ x }, true));
+      await act(async () => touchPath([50, x]));
     }
     expect(mockSwitchTab.mock.calls.map(([name]) => name)).toEqual(["queue", "diary", "others"]);
     mockSwitchTab.mockClear();
-    await act(async () => mockScrubFinalize({ x: 150 }, false));
+    await act(async () => touchPath([50, 150], { cancel: true }));
+    expect(mockSwitchTab).not.toHaveBeenCalled();
+  });
+
+  it("follows a rightward drag that starts outside the selected cell", async () => {
+    await act(async () => touchPath([150, 200, 260, 320]));
+    expect(mockSwitchTab.mock.calls.map(([name]) => name)).toEqual(["others"]);
+    expect(mockTriggerPress).not.toHaveBeenCalled();
+  });
+
+  it("presses the touched cell on a tap or a held press without movement", async () => {
+    await act(async () => touchPath([150]));
+    await act(async () => touchPath([252, 254]));
+    expect(mockTriggerPress.mock.calls.map(([name]) => name)).toEqual(["queue", "diary"]);
     expect(mockSwitchTab).not.toHaveBeenCalled();
   });
 });

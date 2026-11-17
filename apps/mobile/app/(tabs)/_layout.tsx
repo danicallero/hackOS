@@ -7,6 +7,14 @@ import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 
 /**
+ * H8/H55: a tab-level back (the dock swipe, `safeBack` at a tab root, Android
+ * back) returns to the tab router's first route. Expo Router sorts unnamed
+ * routes by length, which made the hidden `scan` route first; Schedule is the
+ * one destination every account sees.
+ */
+export const unstable_settings = { initialRouteName: "schedule" };
+
+/**
  * H55: one custom router tab bar on every iOS and Android surface. Five
  * destinations fit directly; `Others` is a separate native menu circle only
  * when the capability-driven navigation set is larger than that budget.
