@@ -40,6 +40,8 @@ export interface ResponseRow {
   rejection_reason: string | null;
   submitted_at: Date | null;
   allow_resubmit_after_close: boolean;
+  /** H14: sending this internal rejection returns the response as a draft. */
+  return_on_send: boolean;
   auto_accept_on_resubmit: boolean;
   can_delete_draft?: boolean;
   created_at: Date;

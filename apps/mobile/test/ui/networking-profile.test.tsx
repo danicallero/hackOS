@@ -139,6 +139,38 @@ jest.mock("@/lib/me-context", () => ({
     me: { name: "Ada", surname: "Lovelace", email: "ada@example.com", image: null },
   }),
 }));
+// The native menu: its actions render as menu items next to the trigger.
+jest.mock("@/components/app-menu", () => {
+  const ReactLib = require("react");
+  const Native = jest.requireActual("react-native");
+  return {
+    ...jest.requireActual("@/components/app-menu"),
+    MenuView: ({
+      actions,
+      children,
+      onPressAction,
+    }: {
+      actions: { id: string; title: string; subactions?: { id: string; title: string }[] }[];
+      children: unknown;
+      onPressAction: (event: { nativeEvent: { event: string } }) => void;
+    }) =>
+      ReactLib.createElement(
+        Native.View,
+        null,
+        children,
+        actions
+          .flatMap((action) => action.subactions ?? [action])
+          .map(({ id, title }) =>
+            ReactLib.createElement(Native.Pressable, {
+              key: id,
+              accessibilityRole: "menuitem",
+              accessibilityLabel: title,
+              onPress: () => onPressAction({ nativeEvent: { event: id } }),
+            }),
+          ),
+      ),
+  };
+});
 // The photo control has its own tests (profile-photo-menu.test.tsx).
 jest.mock("@/components/profile-photo-menu", () => {
   const Native = require("react-native");
@@ -149,6 +181,12 @@ jest.mock("@/components/profile-photo-menu", () => {
   };
 });
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
+const mockFetchGithubAccount = jest.fn();
+const mockLinkGithubAccount = jest.fn();
+jest.mock("@/lib/github", () => ({
+  fetchGithubAccount: () => mockFetchGithubAccount(),
+  linkGithubAccount: (selectAccount: boolean) => mockLinkGithubAccount(selectAccount),
+}));
 
 import { NetworkingInvite } from "@/components/networking-invite";
 import NetworkingProfileScreen from "@/components/networking-profile-screen";
@@ -160,9 +198,11 @@ const profile = {
   showSurname: false,
   showPhoto: false,
   showProject: true,
+  showGithub: true,
   headline: null,
   locationNote: null,
   bio: null,
+  socials: [],
   shareCv: false,
   cv: null,
   consentedAt: null,
@@ -205,6 +245,8 @@ beforeEach(() => {
   mockNativeHeader = false;
   mockHeaderOptions.mockReset();
   mockApiFetch.mockReset();
+  mockFetchGithubAccount.mockReset().mockResolvedValue({ configured: true, login: null });
+  mockLinkGithubAccount.mockReset();
   mockPush.mockReset();
   mockBack.mockReset();
   mockPickDocument.mockReset();
@@ -301,10 +343,153 @@ describe("NetworkingProfileScreen", () => {
     expect(init.headers["Idempotency-Key"]).toBeTruthy();
     const body = JSON.parse(init.body);
     expect(body).toMatchObject({ shareCv: false, headline: "Rovers", directoryVisible: true });
-    expect(body).not.toHaveProperty("socials");
+    expect(body.socials).toEqual([]);
     // Back to the preview, which no longer carries the CV.
     await waitFor(() => expect(screen.queryByRole("button", { name: "save" })).toBeNull());
     expect(screen.queryByRole("button", { name: "directoryCv" })).toBeNull();
+  });
+
+  it("adds a link alongside linked GitHub, saves it, and reopens the stored editor (#935)", async () => {
+    const github = { kind: "github", url: "https://github.com/ada" };
+    const link = { kind: "website", url: "https://ada.example/" };
+    mockFetchGithubAccount.mockResolvedValue({ configured: true, login: "ada" });
+    mockApiFetch
+      .mockResolvedValueOnce({ ...shared, preview: { ...shared.preview, socials: [github] } })
+      .mockResolvedValueOnce({
+        ...shared,
+        socials: [link],
+        preview: { ...shared.preview, socials: [link, github] },
+      });
+    await renderMobile(<NetworkingProfileScreen />);
+    await fireEvent.press(await screen.findByRole("button", { name: "networkingEdit" }));
+    await fireEvent.press(screen.getByRole("button", { name: "networkingLinkAdd" }));
+    expect(screen.getByLabelText("networkingLinkUrl 1")).toBeTruthy();
+    // A new row takes the first unused network and only asks for its handle, as on web.
+    await fireEvent.changeText(
+      screen.getByLabelText("networkingLinkUrl 1"),
+      "https://www.linkedin.com/in/ada",
+    );
+    // Only the handle: no address that wraps.
+    expect(screen.getByLabelText("networkingLinkUrl 1").props.value).toBe("ada");
+    // Switching to Instagram from the network menu keeps the handle.
+    await fireEvent.press(screen.getByRole("menuitem", { name: "Instagram" }));
+    expect(screen.getByLabelText("networkingLinkUrl 1").props.value).toBe("ada");
+    await fireEvent.changeText(screen.getByLabelText("networkingLinkUrl 1"), "@lovelace");
+    await fireEvent.press(screen.getByRole("menuitem", { name: "LinkedIn" }));
+    await fireEvent.press(screen.getByRole("button", { name: "save" }));
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(mockApiFetch.mock.calls[1][1].body).socials).toEqual([
+      { kind: "linkedin", url: "https://linkedin.com/in/lovelace" },
+    ]);
+    await fireEvent.press(await screen.findByRole("button", { name: "networkingEdit" }));
+    expect(screen.getByLabelText("networkingLinkUrl 1").props.value).toBe(link.url);
+    await fireEvent.press(screen.getByRole("menuitem", { name: "remove" }));
+    expect(screen.queryByLabelText("networkingLinkUrl 1")).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "cancel" }));
+    expect(screen.getByText("ada.example")).toBeTruthy();
+  });
+
+  it("hides linked GitHub with its eye and saves showGithub (#934)", async () => {
+    mockFetchGithubAccount.mockResolvedValue({ configured: true, login: "ada" });
+    mockApiFetch.mockResolvedValueOnce(shared).mockResolvedValueOnce(shared);
+    await renderMobile(<NetworkingProfileScreen />);
+    await fireEvent.press(await screen.findByRole("button", { name: "networkingEdit" }));
+    expect(await screen.findByText("ada")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("switch", { name: "networkingShowGithub" }));
+    expect(opacityOf(screen.getByText("ada"))).toBe(0.4);
+    await fireEvent.press(screen.getByRole("button", { name: "save" }));
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(mockApiFetch.mock.calls[1][1].body).showGithub).toBe(false);
+  });
+
+  it("links GitHub when none is linked and another account from the menu (#934)", async () => {
+    mockApiFetch.mockResolvedValueOnce(shared);
+    mockLinkGithubAccount.mockResolvedValue(true);
+    await renderMobile(<NetworkingProfileScreen />);
+    await fireEvent.press(await screen.findByRole("button", { name: "networkingEdit" }));
+    mockFetchGithubAccount.mockResolvedValue({ configured: true, login: "ada" });
+    await fireEvent.press(await screen.findByRole("button", { name: "networkingGithubLink" }));
+    expect(mockLinkGithubAccount).toHaveBeenCalledWith(false);
+    expect(await screen.findByRole("button", { name: "GitHub, ada" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("menuitem", { name: "networkingGithubRelink" }));
+    expect(mockLinkGithubAccount).toHaveBeenLastCalledWith(true);
+  });
+
+  it("hides and shows linked GitHub from its menu (#934)", async () => {
+    mockFetchGithubAccount.mockResolvedValue({ configured: true, login: "ada" });
+    mockApiFetch.mockResolvedValueOnce(shared);
+    await renderMobile(<NetworkingProfileScreen />);
+    await fireEvent.press(await screen.findByRole("button", { name: "networkingEdit" }));
+    expect(await screen.findByText("ada")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("menuitem", { name: "networkingGithubHide" }));
+    expect(opacityOf(screen.getByText("ada"))).toBe(0.4);
+    await fireEvent.press(screen.getByRole("menuitem", { name: "networkingGithubShow" }));
+    expect(opacityOf(screen.getByText("ada"))).toBe(1);
+  });
+
+  it("links GitHub from a new row's network menu (#934)", async () => {
+    mockFetchGithubAccount.mockResolvedValue({ configured: true, login: null });
+    mockApiFetch.mockResolvedValueOnce(shared);
+    mockLinkGithubAccount.mockResolvedValue(true);
+    await renderMobile(<NetworkingProfileScreen />);
+    await fireEvent.press(await screen.findByRole("button", { name: "networkingEdit" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "networkingLinkAdd" }));
+    await fireEvent.press(screen.getByRole("menuitem", { name: "GitHub" }));
+    expect(mockLinkGithubAccount).toHaveBeenCalledWith(false);
+    // The empty row was only a way in to the account link.
+    expect(screen.queryByLabelText("networkingLinkUrl 1")).toBeNull();
+  });
+
+  it("recovers from a failed GitHub link (#934)", async () => {
+    mockApiFetch.mockResolvedValueOnce(shared);
+    mockLinkGithubAccount.mockRejectedValue(new Error("denied"));
+    await renderMobile(<NetworkingProfileScreen />);
+    await fireEvent.press(await screen.findByRole("button", { name: "networkingEdit" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "networkingGithubLink" }));
+    expect(mockLinkGithubAccount).toHaveBeenCalledWith(false);
+    // The row comes back usable for another attempt; the failure banner reports it.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "networkingGithubLink" }).props.accessibilityState
+          ?.disabled,
+      ).toBeFalsy(),
+    );
+  });
+
+  it("keeps a blank row when another field changes and omits it from save (#935)", async () => {
+    mockApiFetch.mockResolvedValueOnce(profile).mockResolvedValueOnce(shared);
+    await renderMobile(<NetworkingProfileScreen />);
+    await fireEvent.press(await screen.findByRole("button", { name: "networkingLinkAdd" }));
+    await fireEvent.changeText(screen.getByLabelText("networkingHeadline"), "Robots");
+    expect(screen.getByLabelText("networkingLinkUrl 1")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "save" }));
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(mockApiFetch.mock.calls[1][1].body).socials).toEqual([]);
+  });
+
+  it("limits links to six and retains edits after a failed save (#935)", async () => {
+    mockApiFetch
+      .mockResolvedValueOnce({
+        ...profile,
+        socials: Array.from({ length: 6 }, (_, i) => ({
+          kind: "website",
+          url: `https://site${i}.example/`,
+        })),
+      })
+      .mockRejectedValueOnce(new Error("invalid link"));
+    await renderMobile(<NetworkingProfileScreen />);
+    await screen.findByLabelText("networkingLinkUrl 6");
+    expect(screen.queryByRole("button", { name: "networkingLinkAdd" })).toBeNull();
+    await fireEvent.changeText(
+      screen.getByLabelText("networkingLinkUrl 1"),
+      "http://invalid.example",
+    );
+    await fireEvent.press(screen.getByRole("button", { name: "save" }));
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
+    expect(screen.getByLabelText("networkingLinkUrl 1").props.value).toBe("http://invalid.example");
+    // The sixth row's menu: its Remove is the last one rendered.
+    await fireEvent.press(screen.getAllByRole("menuitem", { name: "remove" }).at(-1)!);
+    expect(screen.getByRole("button", { name: "networkingLinkAdd" })).toBeTruthy();
   });
 
   it("keeps hidden photo and surname on screen while editing", async () => {

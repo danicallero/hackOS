@@ -3,10 +3,12 @@
 // The answers, staff notes and all-reviews panels shown inside the review modal.
 
 import { sponsorShareKey } from "@hackos/shared/applications";
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { type FieldValue, TemplateFieldControl } from "@/components/common/template-field-control";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +18,7 @@ import { LOGISTICS_SECTION_KEY } from "@/lib/application-form";
 import {
   type FormSection,
   fmtScore,
+  type PreviousRejection,
   type ResponseRow,
   type ReviewEntry,
   type TemplateField,
@@ -174,6 +177,37 @@ export function AnswersSection({
         <p className="text-muted-foreground text-sm">{t("noAnswersRecorded")}</p>
       )}
     </div>
+  );
+}
+
+/** H13: a resubmitted response shows the rejections it went through, so the
+ *  re-review starts from why it came back. */
+export function PreviousRejections({ rejections }: { rejections: PreviousRejection[] }) {
+  const { t, language } = useLocale();
+  if (rejections.length === 0) return null;
+  return (
+    <Alert variant="warning" role="status">
+      <ArrowCounterClockwiseIcon aria-hidden="true" />
+      <AlertTitle>{t("rejectedBefore")}</AlertTitle>
+      <AlertDescription>
+        <ul className="w-full space-y-2">
+          {rejections.map((rejection) => (
+            <li key={`${rejection.rejected_at}-${rejection.reason ?? ""}`} className="space-y-0.5">
+              <p className="text-xs">
+                {[
+                  formatEventDate(rejection.rejected_at, language, "dateTime"),
+                  rejection.rejected_by_name,
+                  rejection.notified ? null : t("rejectionNotNotified"),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+              <p className="whitespace-pre-line">{rejection.reason ?? t("noRejectionReason")}</p>
+            </li>
+          ))}
+        </ul>
+      </AlertDescription>
+    </Alert>
   );
 }
 

@@ -79,7 +79,7 @@ siguiente especifica cada variable individualmente.
 | `MAIL_PROVIDER` | configuración | no | `smtp`; el transporte se mantiene explícito para el despliegue. |
 | `MAIL_FROM_ADDRESS` | configuración | sí | Remitente de los correos. |
 | `MAIL_FROM_NAME` | configuración | no | Nombre del remitente, por defecto `hackOS`. |
-| `MAIL_AUTH_FROM_ADDRESS`, `MAIL_AUTH_FROM_NAME` | configuración | no | Remitente de los correos de cuenta (`auth.*`: verificación, contraseña, invitaciones). Si están vacíos se usa `MAIL_FROM_*`. En producción usa otro subdominio que las notificaciones; ver [`email-ses.md`](./email-ses.md). |
+| `MAIL_AUTH_FROM_ADDRESS`, `MAIL_AUTH_FROM_NAME` | configuración | no | Remitente de los correos transaccionales (`auth.*`: verificación, contraseña, invitaciones; y la decisión de admisión). Si están vacíos se usa `MAIL_FROM_*`. En producción usa otro subdominio que las notificaciones; ver [`email-ses.md`](./email-ses.md). |
 | `MAIL_REPLY_TO` | configuración | no | Buzón vigilado para el `Reply-To` de todos los correos. |
 | `MAIL_SES_CONFIGURATION_SET` | configuración | no | Conjunto de configuración de Amazon SES (cabecera `X-SES-CONFIGURATION-SET`) que encamina rebotes y quejas. |
 | `SMTP_HOST`, `SMTP_PORT` | configuración | sí para SMTP | Host y puerto del relay SMTP. Por defecto usa `587` con STARTTLS; Amazon SES se configura aquí mediante su interfaz SMTP. |
@@ -204,6 +204,7 @@ Además de las variables de las dependencias anteriores, `api` recibe:
 | Auth y origen | `BETTER_AUTH_URL`, `WEB_URL`, `BETTER_AUTH_SECRET`, `MOBILE_APP_SCHEME`, `CORS_ORIGINS`, `TRUST_PROXY=true` |
 | Base del proceso | `NODE_ENV=production`, `WORKERS_INLINE=false`, `LOG_LEVEL` |
 | Pool PostgreSQL | `DB_POOL_MAX`, `DB_IDLE_TIMEOUT_MS`, `DB_CONNECTION_TIMEOUT_MS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` |
+| Admisión (#1367) | `REQUEST_ADMISSION_MAX_HOLD_MS` (por defecto `300000`: tiempo máximo que una petición puede retener un hueco de admisión; pasado ese plazo se libera una sola vez y se registra un `warn` con método, ruta y carril). Ver `docs/request-admission.md`. |
 | SSE | `SSE_MAX_CONNECTIONS_GLOBAL`, `SSE_MAX_CONNECTIONS_PER_TOPIC`, `SSE_MAX_CONNECTIONS_PER_CLIENT`, `SSE_WRITE_TIMEOUT_MS` |
 | Drenaje al desplegar (#1327) | `SHUTDOWN_DRAIN_TIMEOUT_MS` (por defecto `20000`: plazo para terminar peticiones en curso antes de cerrar todas las conexiones), `SSE_DRAIN_SPREAD_MS` (por defecto `5000`: ventana en la que se reparten los cierres de SSE). Su suma debe quedar por debajo del `stop_grace_period` de `api` (30 s). |
 | Scanners | `RATE_LIMIT_SCAN_MAX`, `RATE_LIMIT_SCAN_WINDOW_SECONDS`, `RATE_LIMIT_MEAL_BATCH_MAX`, `RATE_LIMIT_MEAL_BATCH_WINDOW_SECONDS`, `RATE_LIMIT_SNAPSHOT_MAX`, `RATE_LIMIT_SNAPSHOT_WINDOW_SECONDS` |

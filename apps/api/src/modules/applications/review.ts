@@ -10,6 +10,7 @@ import {
   invalidateConfirmationToken,
   lockResponse,
   pushTicketVoid,
+  recordRejection,
   revokeApplicationGrantedRoles,
 } from "./internal.js";
 
@@ -33,9 +34,11 @@ export async function returnToDraft(
     if (response.confirmation_token_id) {
       await invalidateConfirmationToken(client, response.confirmation_token_id);
     }
+    // H13: a returned rejection stays visible to whoever re-reviews it.
+    await recordRejection(client, response, actorId, false);
     const { rows } = await client.query(
       `UPDATE application_responses
-          SET status = 'draft', decision_sent_at = NULL, confirmation_token_id = NULL,
+          SET status = 'draft', return_on_send = false, decision_sent_at = NULL, confirmation_token_id = NULL,
               confirmed_at = NULL, declined_at = NULL, submitted_at = NULL,
               rejection_reason = NULL, draft_reminders_sent = 0, draft_reminded_at = NULL,
               allow_resubmit_after_close = $2, auto_accept_on_resubmit = $3

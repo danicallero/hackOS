@@ -288,7 +288,7 @@ contenedor.
 | `minio` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_BROWSER=off` |
 | `minio-init` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` |
 | `migrate` | `NODE_ENV`, `DATABASE_URL`, `BETTER_AUTH_SECRET` |
-| `api` | base de datos, Valkey, auth, URLs públicas, almacenamiento, Wallet, Live Activities (APNs), traducción, SSE, drenaje al desplegar, rate limits y fixtures API-only |
+| `api` | base de datos, Valkey, auth, URLs públicas, almacenamiento, Wallet, Live Activities (APNs), traducción, SSE, drenaje al desplegar, retención máxima de admisión (`REQUEST_ADMISSION_MAX_HOLD_MS`), rate limits y fixtures API-only |
 | `worker` | base de datos, Valkey, `SSE_NAMESPACE`, auth/URLs necesarias para enlaces, almacenamiento, correo, Wallet, Live Activities (APNs) y tuning del worker |
 | `web` | sólo `API_DOMAIN`, `WEB_DOMAIN` y la configuración pública `ANDROID_APP_CERT_SHA256` |
 | `proxy` | sólo su configuración de Caddy, con `PROXY_TRUSTED_PROXIES` |
@@ -587,7 +587,7 @@ definición cambió) y releva `worker`, `api` y `web` por este orden:
 
 1. Arranca una réplica nueva junto a la anterior
    (`up --no-recreate --scale <servicio>=2`). Recibe tráfico en cuanto escucha.
-2. Espera su healthcheck. En `api` es `/readyz`, que exige PostgreSQL.
+2. Espera su healthcheck. En `api` es `/readyz`, que exige PostgreSQL. Su campo `admission` sólo informa del estado de la admisión de peticiones y nunca cambia el resultado (#1367).
 3. Si no queda sana, la elimina; la anterior nunca dejó de atender.
 4. Si queda sana, para la anterior con `docker stop`, que drena (abajo) dentro
    de su `stop_grace_period`, y la elimina.

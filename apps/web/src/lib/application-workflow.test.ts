@@ -82,6 +82,14 @@ describe("application lifecycle presentation", () => {
     expect(applicationStatusLabel("accepted", translate)).toBe("acceptanceSent");
   });
 
+  it("names an unsent reject-and-return apart from a final rejection", () => {
+    expect(applicationStatusLabel("rejected_internal", translate)).toBe("rejectedInternalOnly");
+    expect(applicationStatusLabel("rejected_internal", translate, true)).toBe(
+      "rejectedForResubmission",
+    );
+    expect(applicationStatusLabel("rejected", translate, true)).toBe("rejectionSent");
+  });
+
   it("exposes every persistent save state", () => {
     expect(
       ["saved", "saving", "unsaved", "error"].map((state) =>

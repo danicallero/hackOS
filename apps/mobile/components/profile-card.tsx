@@ -3,11 +3,14 @@ import type { ReactNode } from "react";
 import { type LayoutChangeEvent, Linking, Text, TextInput, View } from "react-native";
 import { Section, Separator } from "@/components/native-ui";
 import { DetailRow, VisibilityToggle } from "@/components/profile-parts";
+import { SOCIAL_TILE_SIZE, SocialTile } from "@/components/social-glyph";
 import { type DirectoryEntry, displayUrl, socialLabel } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { colors, type } from "@/theme";
 
 const ROW_ICON_INSET = 52;
+/** Link rows lead with a network tile, wider than a symbol. */
+const LINK_ROW_INSET = 16 + SOCIAL_TILE_SIZE + 16;
 
 /** Singular and plural row labels per project kind. */
 const PROJECT_KINDS: { kind: "project"; one: MessageKey; many: MessageKey }[] = [
@@ -32,6 +35,7 @@ export type ProfileCardData = Pick<
  * Hidden data stays on screen, greyed, so the owner sees what is withheld.
  */
 export interface ProfileCardEdit {
+  linksEditor?: ReactNode;
   headline: string;
   bio: string;
   locationNote: string;
@@ -318,21 +322,23 @@ export function ProfileCard({
       ) : null}
       {afterBio}
 
-      {data.socials.length > 0 ? (
-        <Section title={t("directoryLinks")}>
-          {data.socials.map((link, index) => (
-            <View key={`${link.kind}-${link.url}`}>
-              {index > 0 ? <Separator inset={ROW_ICON_INSET} /> : null}
-              <DetailRow
-                icon={link.kind === "website" ? "globe" : "link"}
-                label={socialLabel(link, t)}
-                value={displayUrl(link.url)}
-                onPress={() => void Linking.openURL(link.url)}
-              />
-            </View>
-          ))}
-        </Section>
-      ) : null}
+      {edit?.linksEditor ??
+        (data.socials.length > 0 ? (
+          <Section title={t("directoryLinks")}>
+            {data.socials.map((link, index) => (
+              <View key={`${link.kind}-${link.url}`}>
+                {index > 0 ? <Separator inset={LINK_ROW_INSET} /> : null}
+                <DetailRow
+                  icon="link"
+                  leading={<SocialTile kind={link.kind} />}
+                  label={socialLabel(link, t)}
+                  value={displayUrl(link.url)}
+                  onPress={() => void Linking.openURL(link.url)}
+                />
+              </View>
+            ))}
+          </Section>
+        ) : null)}
 
       {rows.length > 0 ? (
         <Section>

@@ -12,9 +12,13 @@ import { translateEmail } from "../../lib/i18n.js";
 
 import { getEventName, getEventTimezone } from "../event/service.js";
 
+import { webUrl } from "../identity/unverified-removal.js";
+
 import { notify } from "../notifications/service.js";
 
 import { type EmailPayload, normalizeLanguage } from "../notifications/templates.js";
+
+import { recordRejection } from "./internal.js";
 
 import type { ApplicationRow, ResponseRow } from "./types.js";
 
@@ -77,6 +81,10 @@ export async function sendOne(
   app: ApplicationRow,
 ): Promise<string | null> {
   const user = await loadUserComms(client, resp.user_id);
+  if (resp.status === "rejected_internal" && resp.return_on_send) {
+    await sendReturnedRejection(client, actorId, resp, app, user);
+    return null;
+  }
   let token: string | null = null;
   const isAccepted = resp.status === "accepted_internal";
   const sentStatus = isAccepted ? "accepted" : "rejected";
@@ -104,6 +112,65 @@ export async function sendOne(
     after: { decision: sentStatus },
   });
   return token;
+}
+
+/**
+ * H12/H14: send a reject-and-return. The response goes back to its owner as a
+ * draft they can resubmit (also after the form closes); the reason stays on it
+ * for them until then, and the rejection is kept for the re-review (H13).
+ */
+async function sendReturnedRejection(
+  client: pg.PoolClient,
+  actorId: number,
+  resp: ResponseRow,
+  app: ApplicationRow,
+  user: UserComms,
+): Promise<void> {
+  await recordRejection(client, resp, actorId, true);
+  await client.query(
+    `UPDATE application_responses
+        SET status = 'draft', return_on_send = false, submitted_at = NULL,
+            allow_resubmit_after_close = true, auto_accept_on_resubmit = false,
+            draft_reminders_sent = 0, draft_reminded_at = NULL
+      WHERE id = $1`,
+    [resp.id],
+  );
+  const vars: Record<string, string> = {
+    name: user.name ?? "",
+    applicationName: app.name,
+    eventName: await getEventName(client),
+    applicationUrl: webUrl(`/my-applications/${app.id}`),
+    rejectionDetails: resp.rejection_reason
+      ? translateEmail(
+          "mail.application.decision.rejectionDetails",
+          normalizeLanguage(user.language),
+          {
+            reason: resp.rejection_reason,
+          },
+        )
+      : "",
+  };
+  await client.query(
+    `INSERT INTO notification_outbox (user_id, category, channel, payload)
+     VALUES ($1, 'application', 'email', $2::jsonb)`,
+    [
+      resp.user_id,
+      JSON.stringify({
+        template: "application.returned",
+        recipient: user.email,
+        language: user.language,
+        vars,
+      } satisfies EmailPayload),
+    ],
+  );
+  await audit(client, {
+    actorId,
+    entityType: "application_response",
+    entityId: resp.id,
+    action: "decision_sent",
+    before: { status: "rejected_internal" },
+    after: { decision: "returned", status: "draft" },
+  });
 }
 
 export async function enqueueDecisionEmailRow(
@@ -152,6 +219,20 @@ export async function enqueueDecisionNotificationRows(
   });
 }
 
+/** The confirmation deadline as written in decision and reminder emails (H14, H15). */
+export function formatConfirmationDeadline(at: Date, language: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(language, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone,
+    timeZoneName: "short",
+  }).format(at);
+}
+
 async function decisionNotificationPayload(
   client: pg.PoolClient,
   user: UserComms,
@@ -173,16 +254,7 @@ async function decisionNotificationPayload(
     if (!rows[0]) throw new NotFoundError("Confirmation token not found");
     confirmationExpiresAt = rows[0].expires_at.toISOString();
     confirmationTimeZone = await getEventTimezone(client);
-    const deadline = new Intl.DateTimeFormat(language, {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-      timeZone: confirmationTimeZone,
-      timeZoneName: "short",
-    }).format(rows[0].expires_at);
+    const deadline = formatConfirmationDeadline(rows[0].expires_at, language, confirmationTimeZone);
     decisionDetails = translateEmail("mail.application.decision.confirmationDetails", language, {
       confirmUrl: `${config.WEB_URL}/applications/confirm#token=${confirmToken}`,
       declineUrl: `${config.WEB_URL}/applications/decline#token=${confirmToken}`,

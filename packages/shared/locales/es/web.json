@@ -1347,8 +1347,8 @@
   "fillRequiredFields": "Rellena todos los campos obligatorios.",
   "applicationSubmitted": "Solicitud enviada.",
   "applicationSubmissionNoticeTitle": "Solicitud enviada",
-  "applicationSubmissionNoticeDecision": "Cuando revisemos tu solicitud y tomemos una decisión, recibirás un correo de no-reply@hackudc.com.",
-  "applicationSubmissionNoticeSpam": "Añade esta dirección como contacto aprobado en tu servicio de correo para evitar que llegue a spam. La aceptación tiene un plazo de confirmación.",
+  "applicationSubmissionNoticeDecision": "Estate atento: cuando tomemos una decisión te escribiremos desde {sender}.",
+  "applicationSubmissionNoticeSpam": "Añade esa dirección a tus contactos y, si no ves el correo, revisa Promociones y spam. La aceptación tiene un plazo de confirmación.",
   "couldNotSubmitApplication": "No se ha podido enviar tu solicitud.",
   "placeConfirmedSeeYou": "Tu plaza está confirmada. ¡Nos vemos allí!",
   "couldNotConfirmPlace": "No se ha podido confirmar tu plaza.",
@@ -4372,5 +4372,15 @@
   "auditPeriodLast30Days": "Últimos 30 días",
   "auditSearchActor": "Buscar por autor",
   "auditEntityHistory": "Historial",
-  "auditViewEntityHistory": "Ver todas las acciones sobre esta entidad"
+  "auditViewEntityHistory": "Ver todas las acciones sobre esta entidad",
+  "rejectedForResubmission": "Rechazada con reenvío",
+  "rejectedForResubmissionToast": "Rechazada con reenvío (sin enviar).",
+  "rejectAllowResubmit": "Rechazar y permitir reenvío",
+  "allowResubmit": "Permitir reenvío",
+  "disallowResubmit": "No permitir reenvío",
+  "rejectionUpdated": "Rechazo actualizado.",
+  "rejectedBefore": "Rechazada antes",
+  "rejectionNotNotified": "sin comunicar",
+  "noRejectionReason": "Sin motivo",
+  "returnedForChanges": "Tu solicitud necesita cambios"
 }

@@ -35,6 +35,7 @@
     "./image-color": "./src/image-color.ts",
     "./display-labels": "./src/display-labels.ts",
     "./account-removal": "./src/account-removal.ts",
+    "./social-links": "./src/social-links.ts",
     "./event-time-store": "./src/event-time-store.ts",
     "./forms": "./src/forms.ts",
     "./help-desk": "./src/help-desk.ts",

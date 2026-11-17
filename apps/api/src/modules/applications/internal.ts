@@ -231,3 +231,31 @@ export async function pushTicketVoid(userId: number, voidedPassIds: number[]): P
   });
   await enqueueWalletSync(voidedPassIds);
 }
+
+/**
+ * H13/H14: keep a rejection a response went through before it returns to its
+ * owner as a draft, so the re-review shows it was rejected before and why.
+ * Call before the UPDATE that turns the response into a draft.
+ */
+export async function recordRejection(
+  client: pg.PoolClient,
+  response: Pick<ResponseRow, "id" | "status" | "rejection_reason" | "decision_sent_at">,
+  actorId: number,
+  returned: boolean,
+): Promise<void> {
+  if (response.status !== "rejected" && response.status !== "rejected_internal") return;
+  const notified = response.status === "rejected" || returned;
+  await client.query(
+    `INSERT INTO application_response_rejections
+       (response_id, reason, notified, returned, rejected_by, created_at)
+     VALUES ($1, $2, $3, $4, $5, COALESCE($6, now()))`,
+    [
+      response.id,
+      response.rejection_reason,
+      notified,
+      returned,
+      actorId,
+      response.status === "rejected" && !returned ? response.decision_sent_at : null,
+    ],
+  );
+}

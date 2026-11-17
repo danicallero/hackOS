@@ -199,6 +199,10 @@ export interface ResponseRow {
   staff_notes: string | null;
   /** Reason recorded with a rejection (H14); visible to reviewers. */
   rejection_reason?: string | null;
+  /** H14: this unsent rejection returns the response as a draft when sent. */
+  return_on_send?: boolean;
+  /** H13: rejections it went through before coming back as a draft, newest first. */
+  previous_rejections?: PreviousRejection[];
   /** Applicant language; the rejection reason is written in it. */
   user_language?: string | null;
   submitted_at: string | null;
@@ -212,6 +216,16 @@ export interface ResponseRow {
   /** The caller's own score/notes (H13), or every reviewer's rows for a
    *  manager's explicit reveal; newest first. */
   reviews: ReviewEntry[];
+}
+
+export interface PreviousRejection {
+  reason: string | null;
+  /** The applicant was told about it. */
+  notified: boolean;
+  /** It invited the applicant to resubmit (reject-and-return). */
+  returned: boolean;
+  rejected_by_name: string | null;
+  rejected_at: string;
 }
 
 export interface ReviewEntry {

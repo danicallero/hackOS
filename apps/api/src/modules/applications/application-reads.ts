@@ -4,6 +4,21 @@ import { grantedRoleNameSql } from "./granted-role.js";
 
 // ── read helpers ──────────────────────────────────────────────────────────────
 
+/**
+ * H13/H14: staff-only JSON array of the rejections a response went through
+ * before it came back as a draft, newest first. `alias` is the
+ * application_responses alias of the surrounding query.
+ */
+export function previousRejectionsSql(alias: string): string {
+  return `(SELECT COALESCE(jsonb_agg(jsonb_build_object(
+              'reason', rr.reason, 'notified', rr.notified, 'returned', rr.returned,
+              'rejected_by_name', ru.name, 'rejected_at', rr.created_at
+            ) ORDER BY rr.created_at DESC, rr.id DESC), '[]'::jsonb)
+            FROM application_response_rejections rr
+            LEFT JOIN users ru ON ru.id = rr.rejected_by AND ru.anonymized_at IS NULL
+           WHERE rr.response_id = ${alias}.id)`;
+}
+
 /** Applicant-facing status masks internal decisions as "review" until sent (H14). */
 export function maskStatus(status: string): string {
   if (status === "accepted_internal" || status === "rejected_internal") return "review";
@@ -12,7 +27,8 @@ export function maskStatus(status: string): string {
 
 /**
  * Applicant-facing copy of a response row: masked status, and the rejection
- * reason only once the rejection has been sent (H14).
+ * reason only once the rejection has been sent (H14) — including a sent
+ * reject-and-return, whose reason stays on the draft until resubmission.
  */
 export function maskResponse<T extends { status: string; rejection_reason?: string | null }>(
   row: T,
@@ -20,7 +36,8 @@ export function maskResponse<T extends { status: string; rejection_reason?: stri
   return {
     ...row,
     status: maskStatus(row.status),
-    rejection_reason: row.status === "rejected" ? (row.rejection_reason ?? null) : null,
+    rejection_reason:
+      row.status === "rejected" || row.status === "draft" ? (row.rejection_reason ?? null) : null,
   };
 }
 

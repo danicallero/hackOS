@@ -21,7 +21,6 @@ import { AlertModal } from "@/components/common/alert-modal";
 import { DataTable } from "@/components/common/data-table";
 import { ListToolbar } from "@/components/common/list-toolbar";
 import { StaleDataNotice } from "@/components/common/stale-data-notice";
-import { StatusBadge } from "@/components/common/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -41,7 +40,6 @@ import { apiErrorText, errorText } from "@/lib/api-error-text";
 import {
   type ApplicationWorkspace,
   applicationStatusLabel,
-  applicationStatusTone,
   rowsForWorkspace,
   statusesForWorkspace,
 } from "@/lib/application-workflow";
@@ -50,7 +48,7 @@ import { pickText, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { type BatchResponse, groupSkips, runChunkedBatch, skipReasonText } from "./chunked-batch";
-import { buildResponseColumns } from "./response-columns";
+import { buildResponseColumns, ResponseStatus } from "./response-columns";
 import { answerValues, hasDietaryRestrictions, matchesResponseSearch } from "./response-filters";
 import { ScoreSelection } from "./score-selection";
 import { SendDecisionsModal } from "./send-decisions-modal";
@@ -781,9 +779,7 @@ export function ResponsesTab({
                   aria-hidden="true"
                 />
               </button>
-              <StatusBadge tone={applicationStatusTone(row.status)}>
-                {applicationStatusLabel(row.status, t)}
-              </StatusBadge>
+              <ResponseStatus response={row} t={t} />
               <dl className="flex min-w-0 flex-wrap items-start gap-x-4 gap-y-1.5 text-xs">
                 {columns
                   .filter((column) => {

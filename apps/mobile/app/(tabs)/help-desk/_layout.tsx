@@ -1,10 +1,12 @@
+import { Redirect } from "expo-router";
 import { Stack } from "expo-router/stack";
-
+import { useMeContext } from "@/lib/me-context";
 import {
   helpSheetOptions,
   transparentDetailHeaderOptions,
   useTabStackScreenOptions,
 } from "@/lib/navigation";
+import { canUseHelpDesk } from "@/lib/tabs";
 
 /** Secondary list pages share the tab root's bar: fixed title (the screen sets it), no large title, soft edge. */
 const fixedListOptions = {
@@ -17,6 +19,9 @@ const fixedListOptions = {
 /** H61-H67: the Help desk tab owns its stack so request, helper and coverage pages keep the tab selected. */
 export default function HelpDeskLayout() {
   const stackScreenOptions = useTabStackScreenOptions();
+  const { me } = useMeContext();
+  // H8/H61: route registration is not permission to open the help desk.
+  if (!canUseHelpDesk(me?.capabilities ?? [])) return <Redirect href="/(tabs)/schedule" />;
   return (
     <Stack screenOptions={stackScreenOptions}>
       <Stack.Screen name="index" />

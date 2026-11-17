@@ -1,3 +1,4 @@
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import type { Column } from "@/components/common/data-table";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -10,6 +11,24 @@ import { fmtScore, type ResponseRow } from "@/lib/applications";
 import { formatEventDate } from "@/lib/datetime";
 import type { Translate } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
+
+/** Status badge, plus a marker when a re-review follows an earlier rejection (H13). */
+export function ResponseStatus({ response, t }: { response: ResponseRow; t: Translate }) {
+  const rejectedBefore = (response.previous_rejections?.length ?? 0) > 0;
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <StatusBadge tone={applicationStatusTone(response.status)}>
+        {applicationStatusLabel(response.status, t, response.return_on_send)}
+      </StatusBadge>
+      {rejectedBefore && (
+        <span className="inline-flex items-center gap-1 text-xs">
+          <ArrowCounterClockwiseIcon className="text-warning size-3.5" aria-hidden="true" />
+          {t("rejectedBefore")}
+        </span>
+      )}
+    </div>
+  );
+}
 
 /** Table columns of the responses list; the Sent workspace adds delivery and deadline. */
 export function buildResponseColumns({
@@ -40,11 +59,7 @@ export function buildResponseColumns({
       width: "w-48",
       header: t("statusColumn"),
       sortValue: (r) => r.status,
-      cell: (r) => (
-        <StatusBadge tone={applicationStatusTone(r.status)}>
-          {applicationStatusLabel(r.status, t)}
-        </StatusBadge>
-      ),
+      cell: (r) => <ResponseStatus response={r} t={t} />,
     },
     {
       id: "score",

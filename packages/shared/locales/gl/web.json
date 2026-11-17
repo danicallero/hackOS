@@ -1347,8 +1347,8 @@
   "fillRequiredFields": "Cobre todos os campos obrigatorios.",
   "applicationSubmitted": "Solicitude enviada.",
   "applicationSubmissionNoticeTitle": "Solicitude enviada",
-  "applicationSubmissionNoticeDecision": "Cando revisemos a túa solicitude e tomemos unha decisión, recibirás un correo de no-reply@hackudc.com.",
-  "applicationSubmissionNoticeSpam": "Engade este enderezo como contacto aprobado no teu servizo de correo para evitar que chegue ao cartafol de spam. A aceptación ten un prazo de confirmación.",
+  "applicationSubmissionNoticeDecision": "Estate atento: cando tomemos unha decisión escribirémosche desde {sender}.",
+  "applicationSubmissionNoticeSpam": "Engade ese enderezo aos teus contactos e, se non ves o correo, revisa Promocións e spam. A aceptación ten un prazo de confirmación.",
   "couldNotSubmitApplication": "Non se puido enviar a túa solicitude.",
   "placeConfirmedSeeYou": "A túa praza está confirmada. Vémonos alí!",
   "couldNotConfirmPlace": "Non se puido confirmar a túa praza.",
@@ -4372,5 +4372,15 @@
   "auditPeriodLast30Days": "Últimos 30 días",
   "auditSearchActor": "Buscar por autor",
   "auditEntityHistory": "Historial",
-  "auditViewEntityHistory": "Ver todas as accións sobre esta entidade"
+  "auditViewEntityHistory": "Ver todas as accións sobre esta entidade",
+  "rejectedForResubmission": "Rexeitada con reenvío",
+  "rejectedForResubmissionToast": "Rexeitada con reenvío (sen enviar).",
+  "rejectAllowResubmit": "Rexeitar e permitir reenvío",
+  "allowResubmit": "Permitir reenvío",
+  "disallowResubmit": "Non permitir reenvío",
+  "rejectionUpdated": "Rexeitamento actualizado.",
+  "rejectedBefore": "Rexeitada antes",
+  "rejectionNotNotified": "sen comunicar",
+  "noRejectionReason": "Sen motivo",
+  "returnedForChanges": "A túa solicitude precisa cambios"
 }

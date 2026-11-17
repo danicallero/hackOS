@@ -19,6 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { exportAnswers } from "@/components/applications/answers-export";
 import {
   AnswersSection,
+  PreviousRejections,
   RejectionReasonCard,
   ReviewsPage,
   StaffNotesCard,
@@ -99,10 +100,18 @@ function reviewLogisticsFields(
   );
 }
 
-function ReviewStatus({ st, t }: { st: string; t: Translate }) {
+function ReviewStatus({
+  st,
+  returnOnSend,
+  t,
+}: {
+  st: string;
+  returnOnSend: boolean;
+  t: Translate;
+}) {
   return (
     <StatusBadge tone={applicationStatusTone(st)}>
-      <span className="truncate">{applicationStatusLabel(st, t)}</span>
+      <span className="truncate">{applicationStatusLabel(st, t, returnOnSend)}</span>
     </StatusBadge>
   );
 }
@@ -111,6 +120,7 @@ function ReviewStatus({ st, t }: { st: string; t: Translate }) {
 function StatusPillsRow({
   response,
   st,
+  returnOnSend,
   reviewedByMe,
   t,
   canRevealReviews,
@@ -119,6 +129,7 @@ function StatusPillsRow({
 }: {
   response: ResponseRow;
   st: string;
+  returnOnSend: boolean;
   reviewedByMe: boolean;
   t: Translate;
   canRevealReviews: boolean;
@@ -151,7 +162,7 @@ function StatusPillsRow({
         </Button>
       )}
       <div className="ms-auto hidden items-center gap-2 sm:flex">
-        <ReviewStatus st={st} t={t} />
+        <ReviewStatus st={st} returnOnSend={returnOnSend} t={t} />
       </div>
     </div>
   );
@@ -262,6 +273,7 @@ export function ReviewModal({
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [reviewPage, setReviewPage] = useState<"application" | "reviews">("application");
   const [modalStatus, setModalStatus] = useState(response.status);
+  const [returnOnSend, setReturnOnSend] = useState(response.return_on_send ?? false);
   const [fileViewerPreviewSide, setFileViewerPreviewSide] = useState<FileViewerSide | null>(null);
   const [fileViewerDragging, setFileViewerDragging] = useState(false);
   const [fileViewerSide, setFileViewerSide] = useState<FileViewerSide>("left");
@@ -360,6 +372,7 @@ export function ReviewModal({
     const mine = response.reviews.find((review) => review.author_id === me?.id);
     reviewDraft.seed(response.id, { score: mine?.score ?? null, notes: mine?.notes ?? "" });
     setModalStatus(response.status);
+    setReturnOnSend(response.return_on_send ?? false);
     setStaffNotes(response.staff_notes ?? "");
     setRejectionReason(response.rejection_reason ?? null);
     setEditValues({ ...response.responses });
@@ -492,7 +505,10 @@ export function ReviewModal({
     setBusy(true);
     try {
       await fn();
-      if (options.nextStatus) updateModalStatus(options.nextStatus);
+      if (options.nextStatus) {
+        updateModalStatus(options.nextStatus);
+        setReturnOnSend(options.nextReturnOnSend ?? false);
+      }
       if (options.refresh !== false) await onChanged();
       if (options.notify) options.notify();
       else toast.success(label, { compactTitle: t("toastDecisions") });
@@ -588,6 +604,7 @@ export function ReviewModal({
   const decisionMenu = canDecide ? (
     <DecisionMenu
       status={st}
+      returnOnSend={returnOnSend}
       busy={busy}
       run={run}
       responseId={response.id}
@@ -840,7 +857,7 @@ export function ReviewModal({
             <ReviewActions
               primary={decisionMenu}
               actions={mobileActions}
-              trailing={<ReviewStatus st={st} t={t} />}
+              trailing={<ReviewStatus st={st} returnOnSend={returnOnSend} t={t} />}
             />
           </>
         }
@@ -880,12 +897,15 @@ export function ReviewModal({
                 <StatusPillsRow
                   response={response}
                   st={st}
+                  returnOnSend={returnOnSend}
                   reviewedByMe={reviewedByMe}
                   t={t}
                   canRevealReviews={canRevealReviews}
                   onShowReviews={() => setReviewPage("reviews")}
                 />
               </div>
+
+              <PreviousRejections rejections={response.previous_rejections ?? []} />
 
               {files.length > 0 && (
                 <div className="grid gap-6 2xl:hidden lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">

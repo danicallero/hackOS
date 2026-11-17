@@ -86,7 +86,7 @@
         "subject": "Unha decisión sobre a túa solicitude",
         "body": "Ola {{name}},\n\nRevisamos a túa solicitude a {{applicationName}}.{{decisionDetails}}",
         "accepted": {
-          "subject": "A túa praza en {{eventName}} agárdate!",
+          "subject": "A túa solicitude para {{eventName}} foi aceptada",
           "heading": "Agardámoste en {{eventName}}!",
           "body": "Ola {{name}},\n\nParabéns! Aceptamos a túa solicitude de {{applicationName}} para {{eventName}} e fainos moita ilusión contar contigo.\n\nReservámosche unha praza. Agora só falta que confirmes a túa asistencia.{{decisionDetails}}\n\nTemos moitas ganas de coñecerte!\nO equipo de {{eventName}}"
         },
@@ -109,6 +109,18 @@
       "draftReminder3": {
         "subject": "Último lembrete sobre a túa solicitude de {{applicationName}}",
         "body": "Ola {{name}}:\n\nEsta é a última vez que che escribimos sobre isto. A túa solicitude para {{applicationName}} en {{eventName}} segue como borrador e non avaliamos borradores.\n\nSe aínda queres participar, podes presentala cando queiras:\n\n[Presentar a miña solicitude]({{applicationUrl}})\n\nNon che enviaremos máis lembretes.\n\nO equipo de {{eventName}}"
+      },
+      "returned": {
+        "subject": "A túa solicitude de {{applicationName}} precisa cambios",
+        "body": "Ola {{name}}:\n\nRevisamos a túa solicitude de {{applicationName}} para {{eventName}} e, tal como está, non podemos aceptala.{{rejectionDetails}}\n\nDevolvémoscha como borrador para que poidas corrixila e presentala de novo, aínda que o prazo xa pechase.\n\n[Revisar a miña solicitude]({{applicationUrl}})\n\nO equipo de {{eventName}}"
+      },
+      "confirmationReminder": {
+        "subject": "Lembra confirmar a túa praza en {{eventName}}",
+        "body": "Ola {{name}},\n\nA túa praza en {{eventName}} segue reservada, pero aínda non confirmaches a túa asistencia.{{confirmationDetails}}\n\nO equipo de {{eventName}}"
+      },
+      "confirmationLastChance": {
+        "subject": "Última oportunidade para confirmar a túa praza en {{eventName}}",
+        "body": "Ola {{name}},\n\nQuedan menos de 24 horas para confirmar a túa praza en {{eventName}}. É o último aviso que che enviaremos.{{confirmationDetails}}\n\nO equipo de {{eventName}}"
       }
     },
     "schedule": {

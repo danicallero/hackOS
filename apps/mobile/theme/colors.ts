@@ -187,6 +187,18 @@ const SPECS = {
     android: () => schemeHex("#af52de", "#bf5af2"),
     web: "#af52de",
   },
+  /** Settings-style icon tile behind a white glyph (profile link networks, #934). */
+  iconTile: {
+    ios: () => Color.ios.systemGray,
+    android: () => schemeHex("#8e8e93", "#8e8e93"),
+    web: "#8e8e93",
+  },
+  onIconTile: {
+    // Fixed white: the tile is grey in both appearances.
+    ios: () => "#ffffff",
+    android: () => schemeHex("#ffffff", "#ffffff"),
+    web: "#ffffff",
+  },
 } satisfies Record<string, ColorSpec>;
 
 type Palette = { [K in keyof typeof SPECS]: ColorValue } & {

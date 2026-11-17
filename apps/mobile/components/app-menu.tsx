@@ -5,6 +5,17 @@ import {
   MenuView as NativeMenuView,
 } from "@expo/ui/community/menu";
 import {
+  RNHostView,
+  Button as SwiftButton,
+  Host as SwiftHost,
+  Image as SwiftImage,
+  Label as SwiftLabel,
+  Menu as SwiftMenu,
+  Section as SwiftSection,
+  Toggle as SwiftToggle,
+} from "@expo/ui/swift-ui";
+import { disabled as disabledModifier } from "@expo/ui/swift-ui/modifiers";
+import {
   Fragment,
   type ReactNode,
   type Ref,
@@ -32,10 +43,30 @@ import { colors, motion, radius, space, type } from "@/theme";
 
 export type { MenuAction, MenuComponentRef };
 
+/**
+ * A menu action that may carry an app image where SF Symbols has none (brand
+ * marks, #934, #935): an asset-catalog template image in the iOS system menu
+ * and the matching glyph in the Android popover.
+ */
+export type AppMenuAction = Omit<MenuAction, "subactions"> & {
+  subactions?: AppMenuAction[];
+  /** iOS asset-catalog image (a vector template), in place of an SF Symbol. */
+  assetImage?: string;
+  /** The same mark for the Android popover. */
+  glyph?: ReactNode;
+};
+
+type AppMenuProps = Omit<MenuComponentProps, "actions"> & {
+  actions: AppMenuAction[];
+  ref?: Ref<MenuComponentRef>;
+};
+
 export interface MenuPopoverItem {
   id: string;
   label: string;
   icon?: string;
+  /** A custom trailing image (e.g. a network glyph); the checkmark then leads, as in UIKit. */
+  glyph?: ReactNode;
   selected?: boolean;
   destructive?: boolean;
   disabled?: boolean;
@@ -99,6 +130,7 @@ export function MenuPopover({
   const topInset = useAndroidTopInset();
   if (!visible) return null;
   const at = anchor ?? { x: windowWidth, y: topInset, width: 0, height: 44 };
+  const leadingCheck = items.some((item) => item.glyph);
 
   const left = Math.max(
     EDGE,
@@ -177,6 +209,19 @@ export function MenuPopover({
                   paddingHorizontal: space.lg,
                 }}
               >
+                {leadingCheck ? (
+                  <View style={{ alignItems: "center", width: 15 }}>
+                    {item.selected ? (
+                      <SymbolView
+                        accessible={false}
+                        name="checkmark"
+                        size={15}
+                        tintColor={colors.label}
+                        weight="semibold"
+                      />
+                    ) : null}
+                  </View>
+                ) : null}
                 <Text
                   numberOfLines={2}
                   style={{
@@ -187,7 +232,9 @@ export function MenuPopover({
                 >
                   {item.label}
                 </Text>
-                {item.selected ? (
+                {item.glyph ? (
+                  item.glyph
+                ) : item.selected && !leadingCheck ? (
                   <SymbolView
                     accessible={false}
                     name="checkmark"
@@ -213,7 +260,7 @@ export function MenuPopover({
 }
 
 /** Flattens `subactions` into one list; inline submenus become separated groups. */
-function toItems(actions: MenuAction[]): MenuPopoverItem[] {
+function toItems(actions: AppMenuAction[]): MenuPopoverItem[] {
   const out: MenuPopoverItem[] = [];
   for (const action of actions) {
     if (action.attributes?.hidden) continue;
@@ -227,6 +274,7 @@ function toItems(actions: MenuAction[]): MenuPopoverItem[] {
       id: action.id ?? action.title,
       label: action.title,
       icon: typeof action.image === "string" ? action.image : undefined,
+      glyph: action.glyph,
       selected: action.state === "on",
       destructive: action.attributes?.destructive,
       disabled: action.attributes?.disabled,
@@ -245,7 +293,7 @@ function AndroidMenu({
   testID,
   children,
   ref,
-}: MenuComponentProps & { ref?: Ref<MenuComponentRef> }) {
+}: AppMenuProps) {
   const { trigger, visible, anchor, open, close } = useMenuPopover();
   const show = useCallback(() => {
     void haptic("selection");
@@ -288,7 +336,83 @@ function AndroidMenu({
  * `@expo/ui` on iOS, the matching popover (`MenuPopover`) on Android. Same
  * props as `@expo/ui/community/menu`, so call sites only change the import.
  */
-export function MenuView(props: MenuComponentProps & { ref?: Ref<MenuComponentRef> }) {
+export function MenuView(props: AppMenuProps) {
   if (Platform.OS === "android") return <AndroidMenu {...props} />;
-  return <NativeMenuView {...props} />;
+  if (hasAssetImage(props.actions)) return <AssetImageMenu {...props} />;
+  return <NativeMenuView {...props} actions={props.actions as MenuAction[]} />;
+}
+
+function hasAssetImage(actions: AppMenuAction[]): boolean {
+  return actions.some(
+    (action) => action.assetImage !== undefined || hasAssetImage(action.subactions ?? []),
+  );
+}
+
+/**
+ * The iOS system menu built from `@expo/ui`'s SwiftUI views, like its
+ * community `MenuView`, but with app images: that wrapper passes only SF
+ * Symbol names, while SwiftUI menu items take any `Label` icon.
+ */
+function AssetImageMenu({ actions, onPressAction, style, testID, children }: AppMenuProps) {
+  const render = (action: AppMenuAction): ReactNode => {
+    if (action.attributes?.hidden) return null;
+    const key = action.id ?? action.title;
+    if (action.subactions?.length) {
+      const items = action.subactions.map(render);
+      return action.displayInline ? (
+        <SwiftSection key={key} title={action.title || undefined}>
+          {items}
+        </SwiftSection>
+      ) : (
+        <SwiftMenu key={key} label={action.title}>
+          {items}
+        </SwiftMenu>
+      );
+    }
+    const fire = () => onPressAction?.({ nativeEvent: { event: key } });
+    const modifiers = action.attributes?.disabled ? [disabledModifier(true)] : undefined;
+    const systemImage = typeof action.image === "string" ? action.image : undefined;
+    const label = action.assetImage ? (
+      <SwiftLabel title={action.title} icon={<SwiftImage assetName={action.assetImage} />} />
+    ) : undefined;
+    if (action.state === "on" || action.state === "off") {
+      return (
+        <SwiftToggle
+          key={key}
+          label={label ? undefined : action.title}
+          systemImage={label ? undefined : systemImage}
+          isOn={action.state === "on"}
+          onIsOnChange={fire}
+          modifiers={modifiers}
+        >
+          {label}
+        </SwiftToggle>
+      );
+    }
+    return (
+      <SwiftButton
+        key={key}
+        label={label ? undefined : action.title}
+        systemImage={label ? undefined : systemImage}
+        role={action.attributes?.destructive ? "destructive" : undefined}
+        modifiers={modifiers}
+        onPress={fire}
+      >
+        {label}
+      </SwiftButton>
+    );
+  };
+  return (
+    <SwiftHost matchContents style={style} testID={testID} ignoreSafeArea="all">
+      <SwiftMenu
+        label={
+          <RNHostView matchContents>
+            <>{children}</>
+          </RNHostView>
+        }
+      >
+        {actions.map(render)}
+      </SwiftMenu>
+    </SwiftHost>
+  );
 }

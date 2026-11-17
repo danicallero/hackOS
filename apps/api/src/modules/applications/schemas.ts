@@ -112,8 +112,12 @@ export const reviewUpsertSchema = z.object({
 
 export const staffNotesSchema = z.object({ staff_notes: z.string().nullish() });
 
+/** H14: a rejection may instead return the response as a draft when sent. */
+const returnToDraftFlag = z.boolean().default(false);
+
 export const decideSchema = z.object({
   decision: z.enum(["accepted", "rejected"]),
+  return_to_draft: returnToDraftFlag,
 });
 
 /** H14: optional reason for an unsent internal rejection; null/blank clears it. */
@@ -163,16 +167,19 @@ export const batchIdsSchema = z.object({
 
 export const batchDecideSchema = batchIdsSchema.extend({
   decision: z.enum(["accepted", "rejected"]),
+  return_to_draft: returnToDraftFlag,
 });
 
 export const batchSendDecisionsSchema = batchIdsSchema;
 
 export const batchRevertDecisionSchema = batchIdsSchema.extend({
   decision: z.enum(["accepted", "rejected", "review"]),
+  return_to_draft: returnToDraftFlag,
 });
 
 export const revertDecisionSchema = z.object({
   decision: z.enum(["accepted", "rejected", "review"]),
+  return_to_draft: returnToDraftFlag,
 });
 
 /** H12/H14: return one response to its owner for revision. */

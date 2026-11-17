@@ -5,6 +5,7 @@ import { audit } from "../../lib/audit.js";
 import { NotFoundError } from "../../lib/errors.js";
 
 import { validateResponses } from "../../lib/form-validation.js";
+import { previousRejectionsSql } from "./application-reads.js";
 import { stripDietaryResponses } from "./forms.js";
 import { grantedRoleNameSql } from "./granted-role.js";
 import { lockResponse } from "./internal.js";
@@ -12,8 +13,19 @@ import type { FormSection, TemplateField } from "./schemas.js";
 
 import type { ResponseRow } from "./types.js";
 
+/** H13/H14: a rejection the response went through before returning as a draft. */
+interface PreviousRejection {
+  reason: string | null;
+  /** The applicant was told (sent rejection or sent reject-and-return). */
+  notified: boolean;
+  /** The applicant was invited to resubmit with it (reject-and-return). */
+  returned: boolean;
+  rejected_by_name: string | null;
+  rejected_at: string;
+}
+
 interface ResponseDetail {
-  response: ResponseRow;
+  response: ResponseRow & { previous_rejections: PreviousRejection[] };
   user: {
     name: string | null;
     email: string;
@@ -83,7 +95,8 @@ export async function getResponseDetail(
   canViewAllReviews: boolean,
 ): Promise<ResponseDetail> {
   const { rows } = await pool.query(
-    `SELECT r.*, u.notes AS staff_notes, u.language AS user_language,
+    `SELECT r.*, ${previousRejectionsSql("r")} AS previous_rejections,
+            u.notes AS staff_notes, u.language AS user_language,
             NULLIF(concat_ws(' ', u.name, u.surname), '') AS name,
             u.name AS first_name, u.surname AS last_name, u.email, u.shirt_size,
             u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,

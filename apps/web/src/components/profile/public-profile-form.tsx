@@ -1,4 +1,5 @@
 "use client";
+import { handleOf, SOCIAL_HANDLE_PREFIX, urlForHandle } from "@hackos/shared/social-links";
 
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
@@ -422,24 +423,6 @@ function GithubAccountRow({
   );
 }
 
-/** Networks whose link is a fixed address plus a handle, so only the handle is typed. */
-const HANDLE_PREFIX: Partial<Record<SocialKind, string>> = {
-  linkedin: "linkedin.com/in/",
-  x: "x.com/",
-  instagram: "instagram.com/",
-};
-
-const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-/** The handle part of a stored link; a pasted full address is reduced the same way. */
-export function handleOf(url: string, prefix: string): string {
-  const lead = "^(https?://)?(www\\.)?";
-  const value = url.trim();
-  const full = value.replace(new RegExp(`${lead}${escapeRe(prefix)}`, "i"), "");
-  if (full !== value) return full;
-  return value.replace(new RegExp(`${lead}${escapeRe(prefix.split("/")[0])}/?`, "i"), "");
-}
-
 function LinksEditor({
   links,
   onChange,
@@ -501,9 +484,9 @@ function LinksEditor({
                     ))}
                   </SelectContent>
                 </Select>
-                {HANDLE_PREFIX[link.kind] ? (
+                {SOCIAL_HANDLE_PREFIX[link.kind] ? (
                   <HandleInput
-                    prefix={HANDLE_PREFIX[link.kind] as string}
+                    prefix={SOCIAL_HANDLE_PREFIX[link.kind] as string}
                     url={link.url}
                     label={t("publicProfileLinkUrl")}
                     onChange={(url) => replace(link.id, { url })}
@@ -571,10 +554,7 @@ function HandleInput({
         maxLength={150}
         aria-label={label}
         value={handleOf(url, prefix)}
-        onChange={(e) => {
-          const handle = handleOf(e.target.value, prefix);
-          onChange(handle ? `https://${prefix}${handle}` : "");
-        }}
+        onChange={(e) => onChange(urlForHandle(e.target.value, prefix))}
       />
     </div>
   );

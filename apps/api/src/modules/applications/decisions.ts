@@ -45,7 +45,11 @@ export async function decide(
   actorId: number,
   responseId: number,
   decision: "accepted" | "rejected",
+  returnToDraft = false,
 ): Promise<ResponseRow> {
+  if (returnToDraft && decision !== "rejected") {
+    throw new ConflictError("Only a rejection can return the response as a draft");
+  }
   return withTransaction(async (client) => {
     const resp = await lockResponse(client, responseId, actorId);
     // Serialize capacity checks across parallel accepts on the same form.
@@ -65,8 +69,8 @@ export async function decide(
 
     const internalStatus = decision === "accepted" ? "accepted_internal" : "rejected_internal";
     const updated = await client.query(
-      `UPDATE application_responses SET status = $2 WHERE id = $1 RETURNING *`,
-      [responseId, internalStatus],
+      `UPDATE application_responses SET status = $2, return_on_send = $3 WHERE id = $1 RETURNING *`,
+      [responseId, internalStatus, returnToDraft],
     );
     await audit(client, {
       actorId,
@@ -74,7 +78,11 @@ export async function decide(
       entityId: responseId,
       action: `decided_${decision}`,
       before: { status: "review" },
-      after: { status: internalStatus, decision_sent_at: null },
+      after: {
+        status: internalStatus,
+        decision_sent_at: null,
+        ...(returnToDraft ? { return_on_send: true } : {}),
+      },
       reason: "internal decision (unsent)",
     });
     return updated.rows[0];
@@ -120,7 +128,11 @@ export async function revertDecision(
   actorId: number,
   responseId: number,
   newDecision: "accepted" | "rejected" | "review",
+  returnToDraft = false,
 ): Promise<ResponseRow> {
+  if (returnToDraft && newDecision !== "rejected") {
+    throw new ConflictError("Only a rejection can return the response as a draft");
+  }
   return withTransaction(async (client) => {
     const resp = await lockResponse(client, responseId, actorId);
 
@@ -142,7 +154,8 @@ export async function revertDecision(
       const updated = await client.query(
         `UPDATE application_responses
          SET status = 'review', decision_sent_at = NULL, confirmation_token_id = NULL,
-             confirmed_at = NULL, declined_at = NULL, rejection_reason = NULL
+             confirmed_at = NULL, declined_at = NULL, rejection_reason = NULL,
+             return_on_send = false
          WHERE id = $1 RETURNING *`,
         [responseId],
       );
@@ -171,7 +184,21 @@ export async function revertDecision(
     const newInternalStatus =
       newDecision === "accepted" ? "accepted_internal" : "rejected_internal";
     if (resp.status === newInternalStatus) {
-      return resp; // idempotent — already this internal decision
+      if (resp.return_on_send === returnToDraft) return resp; // idempotent
+      // H14: switch an unsent rejection between final and reject-and-return.
+      const toggled = await client.query(
+        `UPDATE application_responses SET return_on_send = $2 WHERE id = $1 RETURNING *`,
+        [responseId, returnToDraft],
+      );
+      await audit(client, {
+        actorId,
+        entityType: "application_response",
+        entityId: responseId,
+        action: "reverted_to_rejected",
+        before: { status: resp.status, return_on_send: resp.return_on_send },
+        after: { status: resp.status, return_on_send: returnToDraft },
+      });
+      return toggled.rows[0];
     }
 
     // Re-check capacity when the result is an accepted slot (ignoring this row).
@@ -194,9 +221,10 @@ export async function revertDecision(
     const updated = await client.query(
       `UPDATE application_responses
          SET status = $2, decision_sent_at = NULL, confirmation_token_id = NULL,
-             confirmed_at = NULL, declined_at = NULL, rejection_reason = NULL
+             confirmed_at = NULL, declined_at = NULL, rejection_reason = NULL,
+             return_on_send = $3
        WHERE id = $1 RETURNING *`,
-      [responseId, newInternalStatus],
+      [responseId, newInternalStatus, returnToDraft],
     );
     await audit(client, {
       actorId,
@@ -204,7 +232,10 @@ export async function revertDecision(
       entityId: responseId,
       action: `reverted_to_${newDecision}`,
       before: { status: resp.status },
-      after: { status: newInternalStatus },
+      after: {
+        status: newInternalStatus,
+        ...(returnToDraft ? { return_on_send: true } : {}),
+      },
     });
     return updated.rows[0];
   });

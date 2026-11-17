@@ -225,6 +225,11 @@ describe("application responses (H12)", () => {
     expect(res.json().response.status).toBe("review");
     expect(typeof res.json().privacy_notice).toBe("string");
     expect(res.json().privacy_notice.length).toBeGreaterThan(10);
+    // The decision comes from the transactional sender; the applicant is told which (H12, H14).
+    const { config } = await import("../../src/config.js");
+    expect(res.json().decision_sender).toBe(
+      config.MAIL_AUTH_FROM_ADDRESS || config.MAIL_FROM_ADDRESS,
+    );
 
     const sensitive = await getUserSensitive(user);
     expect(sensitive.food_intolerances).toEqual([1, 2]);

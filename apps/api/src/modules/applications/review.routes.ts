@@ -12,6 +12,7 @@ import {
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { likeContains } from "../../lib/like.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
+import { previousRejectionsSql } from "./application-reads.js";
 import { requireApplication } from "./forms.js";
 import {
   batchDecideSchema,
@@ -116,7 +117,8 @@ export function registerReviewRoutes(app: FastifyInstance): void {
                 u.name AS first_name, u.surname AS last_name,
                 u.email, u.language AS user_language, u.shirt_size,
                 u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
-                r.status, r.responses, r.rejection_reason,
+                r.status, r.responses, r.rejection_reason, r.return_on_send,
+                ${previousRejectionsSql("r")} AS previous_rejections,
                 u.notes AS staff_notes, r.submitted_at, r.decision_sent_at,
                 r.confirmed_at, r.declined_at, t.expires_at AS confirmation_expires_at,
                 COALESCE(avg(ar.score), NULL) AS avg_score,
@@ -207,12 +209,18 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Record an internal decision",
         description:
-          "Sets a response's internal accept/reject decision (H14). Not yet visible to the applicant — see send-decision.",
+          "Sets a response's internal accept/reject decision (H14). Not yet visible to the applicant — see send-decision. A rejection with return_to_draft is a reject-and-return: when sent, the response goes back to the applicant as a draft they can resubmit (even after the form closes), with the rejection reason, and reviewers see the earlier rejection in its history.",
         params: responseIdParamSchema,
         body: decideSchema,
       },
     },
-    async (req) => decide(req.userId as number, req.params.responseId, req.body.decision),
+    async (req) =>
+      decide(
+        req.userId as number,
+        req.params.responseId,
+        req.body.decision,
+        req.body.return_to_draft,
+      ),
   );
 
   // ── H14: optional rejection reason ──────────────────────────────────────────
@@ -242,7 +250,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Send a decision to the applicant",
         description:
-          "Sends the already-recorded internal decision as the applicant-facing accept/reject email (H14). No-op if there is no unsent internal decision.",
+          "Sends the already-recorded internal decision as the applicant-facing accept/reject email (H14); a reject-and-return instead returns the response to the applicant as a draft and emails them the reason. No-op if there is no unsent internal decision.",
         params: responseIdParamSchema,
       },
     },
@@ -372,12 +380,18 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Revert a decision",
         description:
-          "Sends a decided response back to review, or flips/un-sends an internal decision to the other outcome (H14).",
+          "Sends a decided response back to review, or flips/un-sends an internal decision to the other outcome (H14). return_to_draft (rejections only) marks or unmarks an unsent rejection as reject-and-return.",
         params: responseIdParamSchema,
         body: revertDecisionSchema,
       },
     },
-    async (req) => revertDecision(req.userId as number, req.params.responseId, req.body.decision),
+    async (req) =>
+      revertDecision(
+        req.userId as number,
+        req.params.responseId,
+        req.body.decision,
+        req.body.return_to_draft,
+      ),
   );
 
   // ── H15: get confirm link with token ─────────────────────────────────────────
@@ -451,11 +465,17 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Batch internal decision",
         description:
-          "Records the same internal accept/reject decision (H14) for each response id; per-row failures are collected rather than aborting the batch.",
+          "Records the same internal accept/reject decision (H14) for each response id; return_to_draft makes the rejections reject-and-return. Per-row failures are collected rather than aborting the batch.",
         body: batchDecideSchema,
       },
     },
-    async (req) => batchDecide(req.userId as number, req.body.response_ids, req.body.decision),
+    async (req) =>
+      batchDecide(
+        req.userId as number,
+        req.body.response_ids,
+        req.body.decision,
+        req.body.return_to_draft,
+      ),
   );
 
   r.post(
@@ -501,12 +521,17 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Batch revert decisions",
         description:
-          "Reverts the decision for each response id — to review, or to the other internal decision (H14).",
+          "Reverts the decision for each response id — to review, or to the other internal decision (H14); return_to_draft marks rejections as reject-and-return.",
         body: batchRevertDecisionSchema,
       },
     },
     async (req) =>
-      batchRevertDecisions(req.userId as number, req.body.response_ids, req.body.decision),
+      batchRevertDecisions(
+        req.userId as number,
+        req.body.response_ids,
+        req.body.decision,
+        req.body.return_to_draft,
+      ),
   );
 
   // ── batch re-accept (declined/rejected/expired → accepted) ───────────────────

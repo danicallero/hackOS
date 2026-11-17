@@ -14,8 +14,10 @@ import { ProfileCard, type ProfileCardData } from "@/components/profile-card";
 import { QuickAction, VisibilityToggle } from "@/components/profile-parts";
 import { ProfilePhotoMenu } from "@/components/profile-photo-menu";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { SocialLinksEditor } from "@/components/social-links-editor";
 import { alert } from "@/lib/alert";
 import type { DirectoryEntry } from "@/lib/directory";
+import { fetchGithubAccount, type GithubAccount, linkGithubAccount } from "@/lib/github";
 import { haptic } from "@/lib/haptics";
 import type { MyHelperProfile } from "@/lib/help-desk";
 import { type MessageKey, useLocale } from "@/lib/i18n";
@@ -56,8 +58,8 @@ function asError(cause: unknown): Error {
  * badge read. It opens as that card exactly as scanners see it; the pencil
  * edits it in place with the same layout. The "share" switch is always
  * reachable: in the preview it saves on its own, while editing it is part of
- * the pending change. Links and the CV file stay on web, except that a phone
- * can upload a CV when the application did not provide one.
+ * the pending change, including social links. A phone can upload a CV when
+ * the application did not provide one.
  */
 export default function NetworkingProfileScreen() {
   const router = useRouter();
@@ -79,6 +81,8 @@ export default function NetworkingProfileScreen() {
   const [cvBusy, setCvBusy] = useState<"upload" | "remove" | null>(null);
   const [cvOpen, setCvOpen] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
+  const [githubAccount, setGithubAccount] = useState<GithubAccount | null>(null);
+  const [linkingGithub, setLinkingGithub] = useState(false);
   // One key per pending change set, so a retried save replays instead of re-applying.
   const idempotencyKey = useRef<string | null>(null);
   // The card omits projects while they are hidden; keep the last ones seen so
@@ -124,6 +128,31 @@ export default function NetworkingProfileScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // The linked account is read on its own: the card omits it while hidden (#934).
+  const loadGithub = useCallback(async () => {
+    try {
+      setGithubAccount(await fetchGithubAccount());
+    } catch {
+      // Without it the row is just absent; the rest of the profile still edits.
+      setGithubAccount(null);
+    }
+  }, []);
+  useEffect(() => {
+    void loadGithub();
+  }, [loadGithub]);
+
+  async function linkGithub(selectAccount: boolean) {
+    setLinkingGithub(true);
+    setFailure(null);
+    try {
+      if (await linkGithubAccount(selectAccount)) await loadGithub();
+    } catch (cause) {
+      setFailure({ message: "networkingGithubLinkError", cause: asError(cause) });
+    } finally {
+      setLinkingGithub(false);
+    }
+  }
 
   // Publishing the help desk profile (its own page) also shares this one: re-read on return.
   const settled = useRef(false);
@@ -374,6 +403,24 @@ export default function NetworkingProfileScreen() {
           </View>
         }
         edit={{
+          linksEditor: (
+            <SocialLinksEditor
+              links={form.socials}
+              github={
+                githubAccount
+                  ? {
+                      ...githubAccount,
+                      shown: form.showGithub,
+                      onShown: (showGithub) => update({ showGithub }),
+                      onLink: (selectAccount) => void linkGithub(selectAccount),
+                      linking: linkingGithub,
+                    }
+                  : undefined
+              }
+              disabled={saving}
+              onChange={(socials) => update({ socials })}
+            />
+          ),
           headline: form.headline,
           bio: form.bio,
           locationNote: form.locationNote,
