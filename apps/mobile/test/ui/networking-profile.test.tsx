@@ -140,10 +140,11 @@ jest.mock("@/lib/me-context", () => ({
   }),
 }));
 // The native menu: its actions render as menu items next to the trigger.
-jest.mock("@expo/ui/community/menu", () => {
+jest.mock("@/components/app-menu", () => {
   const ReactLib = require("react");
   const Native = jest.requireActual("react-native");
   return {
+    ...jest.requireActual("@/components/app-menu"),
     MenuView: ({
       actions,
       children,

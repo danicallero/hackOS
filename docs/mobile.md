@@ -796,9 +796,14 @@ they are not device screenshots or proof of native toolbar behavior.
   since SF Symbols has no brand marks); the read-only card rows use the same
   tiles. Tapping the tile or name opens the network picker, the
   system menu (`MenuView`, Liquid Glass on iOS 26) like every other menu in the
-  app: the networks by name in an inline section (iOS menus take only SF
-  Symbols, so the glyph stays on the row's tile) and a destructive Remove
-  below. The GitHub row's menu (open, link another account) is the same
+  app: each network with its mark in an inline section and a destructive
+  Remove below. SF Symbols has no brand marks, so
+  `plugins/withIosSocialGlyphs.js` turns the same paths
+  (`lib/social-glyph-paths.json`) into vector template image sets
+  (`social.<kind>`) in the iOS asset catalog at prebuild, and `MenuView`
+  renders actions with an `assetImage` through `@expo/ui`'s SwiftUI views
+  (its community menu passes only SF Symbol names); Android's popover shows
+  the same `glyph`. New marks need a native build. The GitHub row's menu (open, link another account) is the same
   system menu. A new row takes the
   first unused network; LinkedIn, X and Instagram show only the handle while
   the stored link keeps the full address (a typed `@` or a pasted address is

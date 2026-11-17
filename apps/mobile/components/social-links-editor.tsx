@@ -5,7 +5,12 @@ import { MenuView } from "@/components/app-menu";
 import { Section, Separator } from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { VisibilityToggle } from "@/components/profile-parts";
-import { SOCIAL_TILE_SIZE, SocialGlyph, SocialTile } from "@/components/social-glyph";
+import {
+  SOCIAL_TILE_SIZE,
+  SocialGlyph,
+  SocialTile,
+  socialGlyphAsset,
+} from "@/components/social-glyph";
 import { SymbolView } from "@/components/symbol";
 import { type SocialKind, socialLabel } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
@@ -44,9 +49,7 @@ function typedHandle(text: string): string {
 
 /**
  * The network picker: the system menu (Liquid Glass on iOS 26), like every
- * other menu in the app. iOS menus take only SF Symbols, which have no brand
- * marks, so the networks are listed by name; the row's tile keeps the glyph
- * (#934, #935).
+ * other menu in the app, with each network's mark as an app image (#934, #935).
  */
 function KindMenu({
   link,
@@ -76,6 +79,8 @@ function KindMenu({
           subactions: KINDS.map((kind) => ({
             id: kind,
             title: label(kind),
+            assetImage: socialGlyphAsset(kind),
+            glyph: <SocialGlyph kind={kind} size={20} color={colors.label as string} />,
             state: kind === link.kind ? ("on" as const) : ("off" as const),
             attributes: { disabled },
           })),
