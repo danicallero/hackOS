@@ -541,6 +541,19 @@ describe("participant tab scrubbing", () => {
     expect(mockTriggerPress).not.toHaveBeenCalled();
   });
 
+  it("ignores the cell's own press while the bar gesture owns the touch", async () => {
+    const manager = { activate: () => {}, end: () => {}, fail: () => {} };
+    const touch = { allTouches: [{ x: 250 }], changedTouches: [{ x: 250 }], numberOfTouches: 1 };
+    await act(async () => mockScrub.down?.(touch, manager));
+    await fireEvent.press(screen.getByTestId("opaque-tab-diary"));
+    expect(mockTriggerPress).not.toHaveBeenCalled();
+    await act(async () => {
+      mockScrub.up?.({ ...touch, allTouches: [], numberOfTouches: 0 }, manager);
+      mockScrub.finalize?.({}, true);
+    });
+    expect(mockTriggerPress.mock.calls.map(([name]) => name)).toEqual(["diary"]);
+  });
+
   it("presses the touched cell on a tap or a held press without movement", async () => {
     await act(async () => touchPath([150]));
     await act(async () => touchPath([252, 254]));

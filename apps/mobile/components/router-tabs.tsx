@@ -541,6 +541,7 @@ function RouterTabsContent({
                   registerPress={(press) => {
                     tabPresses.current[index] = press;
                   }}
+                  gestureOwnsTouch={() => lensShown.value === 1}
                   onTabPress={(fromGesture) => {
                     // The bar gesture already moves the lens; this path is VoiceOver and keyboards.
                     const targetOffset = index * directTabCellWidth;
@@ -762,6 +763,12 @@ type RouterTabButtonProps = Omit<TabTriggerSlotProps, "children"> & {
   theme: RouterTabsTheme;
   /** Receives this cell's complete press for a gesture that owns the bar's touches. */
   registerPress?: (press: () => void) => void;
+  /**
+   * True while the bar gesture owns the touch. The cell's Pressable still
+   * sees that touch (it is not cancelled), so its press and long press must
+   * stand down; VoiceOver and keyboard activation never set it.
+   */
+  gestureOwnsTouch?: () => boolean;
   /** Symbol only, with its own selection lens: the bar stands in a narrow side column. */
   vertical?: boolean;
   labelled?: boolean;
@@ -780,6 +787,7 @@ const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTa
     onPress,
     onTabPress,
     registerPress,
+    gestureOwnsTouch,
     selectedIcon,
     theme,
     vertical = false,
@@ -853,8 +861,12 @@ const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTa
       accessibilityLabel={label}
       accessibilityRole="tab"
       accessibilityState={{ ...accessibilityState, selected: isFocused }}
-      onLongPress={onLongPress}
+      onLongPress={(event) => {
+        if (gestureOwnsTouch?.()) return;
+        onLongPress?.(event);
+      }}
       onPress={(event) => {
+        if (gestureOwnsTouch?.()) return;
         onTabPress?.();
         onPress?.(event);
       }}

@@ -1096,7 +1096,9 @@ they are not device screenshots or proof of native toolbar behavior.
   interactive `regular` material for the outer tab surface, preserving the
   visible liquid-glass rim used by the app's other floating controls; dark
   mode keeps the clearer material. Its direct surface is one native gesture
-  surface: it owns every touch from touch-down. On iOS 26 the lens lifts out
+  surface: it owns every touch from touch-down (the cells' Pressables still
+  receive the touch, so they ignore press and long press while the lens is
+  shown; VoiceOver and keyboard activation still use them). On iOS 26 the lens lifts out
   of the bar as a wider clear-glass capsule above the cells (the native glass
   magnifies and refracts them), glides to the finger, follows it in both
   directions, and lands on the cell under the finger only once it arrives; a
