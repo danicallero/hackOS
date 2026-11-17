@@ -257,6 +257,16 @@ Table application_grants_roles {
   Note: 'H8/H11: roles granted to the applicant on confirmation, in addition to ticket issuance. No rows for a form grants nothing.'
 }
 
+Table application_response_rejections {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  id bigint [pk, not null, default: `nextval('application_response_rejections_id_seq'::regclass)`]
+  notified boolean [not null]
+  reason text
+  rejected_by integer
+  response_id integer [not null]
+  returned boolean [not null]
+}
+
 Table application_responses {
   allow_resubmit_after_close boolean [not null, default: `false`]
   application_form_version_id bigint [not null]
@@ -276,6 +286,7 @@ Table application_responses {
   referrer_user_id integer
   rejection_reason text
   responses jsonb [not null, default: `'{}'::jsonb`]
+  return_on_send boolean [not null, default: `false`]
   status app_response_status [not null, default: `'draft'::app_response_status`]
   submitted_at "timestamp with time zone"
   updated_at "timestamp with time zone" [not null, default: `now()`]
@@ -1828,6 +1839,8 @@ Ref: application_form_versions.application_id > applications.id
 Ref: application_form_versions.created_by > users.id
 Ref: application_grants_roles.application_id > applications.id
 Ref: application_grants_roles.role_id > roles.id
+Ref: application_response_rejections.rejected_by > users.id
+Ref: application_response_rejections.response_id > application_responses.id
 Ref: application_responses.application_form_version_id > application_form_versions.id
 Ref: application_responses.application_form_version_id > application_form_versions.id
 Ref: application_responses.application_id > application_form_versions.application_id

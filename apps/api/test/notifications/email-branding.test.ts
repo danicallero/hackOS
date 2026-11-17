@@ -118,6 +118,19 @@ describe("senders", () => {
     await sendEmail(
       pool,
       userId,
+      {
+        template: "application.returned",
+        vars: { name: "Who", applicationName: "Hackers", applicationUrl: "http://x" },
+      },
+      mail,
+    );
+    const returned = await waitForMessage();
+    expect(returned.From).toMatchObject({ Address: "no-reply@auth.example.org" });
+
+    await clearMailpit();
+    await sendEmail(
+      pool,
+      userId,
       { template: "application.draftReminder1", vars: { name: "Who" } },
       mail,
     );

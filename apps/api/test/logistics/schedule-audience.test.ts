@@ -65,9 +65,9 @@ describe("audience-aware schedule feed (H59)", () => {
     expect(items[0].audiences).toEqual(["participant"]);
   });
 
-  it("a capability-holding staff member sees the full run-of-show — every live item regardless of audience — each with notes and owners", async () => {
+  it("a schedule:read holder sees the full run-of-show — every live item regardless of audience — each with notes and owners", async () => {
     const a = await getApp();
-    const staffUser = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
+    const staffUser = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_READ]);
     const participantId = await createItem({
       title: "Opening ceremony",
       audiences: ["participant"],
@@ -103,7 +103,7 @@ describe("audience-aware schedule feed (H59)", () => {
 
   it("staff sees draft/hidden items too, with their own visibility field, while participants and sponsor reps never do", async () => {
     const a = await getApp();
-    const staffUser = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
+    const staffUser = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_READ]);
     const draftId = await createItem({
       title: "Load-in prep",
       audiences: ["participant"],
@@ -251,6 +251,51 @@ describe("audience-aware schedule feed (H59)", () => {
       headers: asUser(participant),
     });
     expect(res.json().items.map((i: { id: number }) => i.id)).toEqual([participantId]);
+  });
+
+  it("a hacker holding attendee self-service capabilities still gets only the participant slice", async () => {
+    const a = await getApp();
+    // The seeded Participant role holds queue:status; help desk requesters
+    // hold helpdesk:request. Neither makes the caller staff (H8, H59).
+    const hacker = await createUserWithCapabilities([
+      CAPABILITIES.QUEUE_STATUS,
+      CAPABILITIES.HELPDESK_REQUEST,
+    ]);
+    await grantAttendeeRole(hacker, "participant");
+    const liveId = await createItem({
+      title: "Opening ceremony",
+      audiences: ["participant"],
+      notes: "Mic check at 9",
+    });
+    await createItem({ title: "Staff-only prep", audiences: [] });
+    await createItem({ title: "Draft talk", audiences: ["participant"], visibility: "hidden" });
+    await createItem({ title: "Sponsor reception", audiences: ["sponsor"] });
+    await createItem({ title: "Mentor briefing", audiences: ["mentor"] });
+
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/public/activities",
+      headers: asUser(hacker),
+    });
+    const items = res.json().items;
+    expect(items.map((i: { id: number }) => i.id)).toEqual([liveId]);
+    expect(items[0].notes).toBeUndefined();
+    expect(items[0].owners).toBeUndefined();
+    expect(items[0].visibility).toBeUndefined();
+  });
+
+  it("a scanner volunteer without a schedule capability is not staff for the feed", async () => {
+    const a = await getApp();
+    const volunteer = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
+    const liveId = await createItem({ title: "Opening ceremony", audiences: ["participant"] });
+    await createItem({ title: "Staff-only prep", audiences: [] });
+
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/public/activities",
+      headers: asUser(volunteer),
+    });
+    expect(res.json().items.map((i: { id: number }) => i.id)).toEqual([liveId]);
   });
 
   it("a participant cannot fetch the management listing", async () => {
@@ -656,7 +701,7 @@ describe("visibility requires an audience (H59 follow-up)", () => {
 
   it("staff still sees a staff-only item unconditionally even though it's always stored as hidden", async () => {
     const a = await getApp();
-    const staffUser = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
+    const staffUser = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_READ]);
     const staffOnlyId = await createItem({
       title: "Staff-only prep",
       audiences: [],

@@ -62,12 +62,13 @@ function mailConfigFromEnv(): MailConfig {
 
 /**
  * One-to-one transactional emails: account mail (`auth.*`) and the admission
- * decision with its confirmation link and reminders (H14, H15). They leave from their own
+ * decision with its confirmation link and reminders, and a reject-and-return
+ * (H14, H15). They leave from their own
  * sender so Gmail and others never learn them alongside the bulk notices
  * (announcements, event reminders) that go out from the notifications sender
  * and land in the Promotions tab.
  */
-const TRANSACTIONAL_TEMPLATES = /^(auth\.|application\.(decision(\.|$)|confirmation))/;
+const TRANSACTIONAL_TEMPLATES = /^(auth\.|application\.(decision(\.|$)|confirmation|returned$))/;
 
 /** Address the admission decision leaves from, shown to applicants when they submit (H12, H14). */
 export function decisionSenderAddress(mail: MailConfig = mailConfigFromEnv()): string {

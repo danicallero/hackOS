@@ -4369,5 +4369,15 @@
   "auditPeriodLast30Days": "Últimos 30 días",
   "auditSearchActor": "Buscar por autor",
   "auditEntityHistory": "Historial",
-  "auditViewEntityHistory": "Ver todas las acciones sobre esta entidad"
+  "auditViewEntityHistory": "Ver todas las acciones sobre esta entidad",
+  "rejectedForResubmission": "Rechazada con reenvío",
+  "rejectedForResubmissionToast": "Rechazada con reenvío (sin enviar).",
+  "rejectAllowResubmit": "Rechazar y permitir reenvío",
+  "allowResubmit": "Permitir reenvío",
+  "disallowResubmit": "No permitir reenvío",
+  "rejectionUpdated": "Rechazo actualizado.",
+  "rejectedBefore": "Rechazada antes",
+  "rejectionNotNotified": "sin comunicar",
+  "noRejectionReason": "Sin motivo",
+  "returnedForChanges": "Tu solicitud necesita cambios"
 }

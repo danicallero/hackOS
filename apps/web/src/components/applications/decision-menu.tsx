@@ -25,6 +25,8 @@ export interface RunOptions {
   /** A decision stays in the modal until the reviewer closes it. */
   refresh?: boolean;
   nextStatus?: ResponseRow["status"];
+  /** H14: whether the (rejected_internal) response is now a reject-and-return. */
+  nextReturnOnSend?: boolean;
   notify?: () => void;
 }
 
@@ -33,6 +35,7 @@ type RunAction = (label: string, fn: () => Promise<unknown>, options?: RunOption
 /** Admin decisions stay available without competing with the review forum. */
 export function DecisionMenu({
   status,
+  returnOnSend,
   busy,
   run,
   responseId,
@@ -41,6 +44,7 @@ export function DecisionMenu({
   onAccepted,
 }: {
   status: ResponseRow["status"];
+  returnOnSend: boolean;
   busy: boolean;
   run: RunAction;
   responseId: number;
@@ -92,6 +96,23 @@ export function DecisionMenu({
           >
             {t("reject")}
           </DropdownMenuItem>
+          <DropdownMenuItem
+            variant="destructive"
+            disabled={busy}
+            onSelect={() =>
+              void run(
+                t("rejectedForResubmissionToast"),
+                () =>
+                  api.post(`/api/responses/${responseId}/decide`, {
+                    decision: "rejected",
+                    return_to_draft: true,
+                  }),
+                { refresh: false, nextStatus: "rejected_internal", nextReturnOnSend: true },
+              )
+            }
+          >
+            {t("rejectAllowResubmit")}
+          </DropdownMenuItem>
         </>
       )}
       {outboxActions && (
@@ -104,7 +125,12 @@ export function DecisionMenu({
                 () => api.post(`/api/responses/${responseId}/send-decision`),
                 {
                   refresh: false,
-                  nextStatus: status === "accepted_internal" ? "accepted" : "rejected",
+                  nextStatus:
+                    status === "accepted_internal"
+                      ? "accepted"
+                      : returnOnSend
+                        ? "draft"
+                        : "rejected",
                 },
               )
             }
@@ -127,6 +153,28 @@ export function DecisionMenu({
           >
             {t("backToReview")}
           </DropdownMenuItem>
+          {status === "rejected_internal" && (
+            <DropdownMenuItem
+              disabled={busy}
+              onSelect={() =>
+                void run(
+                  t("rejectionUpdated"),
+                  () =>
+                    api.post(`/api/responses/${responseId}/revert-decision`, {
+                      decision: "rejected",
+                      return_to_draft: !returnOnSend,
+                    }),
+                  {
+                    refresh: false,
+                    nextStatus: "rejected_internal",
+                    nextReturnOnSend: !returnOnSend,
+                  },
+                )
+              }
+            >
+              {t(returnOnSend ? "disallowResubmit" : "allowResubmit")}
+            </DropdownMenuItem>
+          )}
         </>
       )}
       {status !== "draft" && (

@@ -76,7 +76,9 @@ export function applicationStatusTone(status: string): Tone {
   return STATUS_TONE[status] ?? "neutral";
 }
 
-export function applicationStatusLabel(status: string, t: Translate): string {
+/** `returnOnSend` marks an unsent reject-and-return (H14). */
+export function applicationStatusLabel(status: string, t: Translate, returnOnSend = false): string {
+  if (status === "rejected_internal" && returnOnSend) return t("rejectedForResubmission");
   const labels: Record<string, string> = {
     draft: t("dataStatusDraft"),
     review: t("dataStatusReview"),

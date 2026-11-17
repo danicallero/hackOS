@@ -24,7 +24,7 @@ Por qué:
 
 El código elige el remitente por plantilla (`senderFor` en
 `apps/api/src/modules/notifications/channels/email.ts`): si el nombre empieza
-por `auth.`, `application.decision` o `application.confirmation` y existe `MAIL_AUTH_FROM_ADDRESS`, sale por ahí; si no, por
+por `auth.`, `application.decision`, `application.confirmation` o es `application.returned` y existe `MAIL_AUTH_FROM_ADDRESS`, sale por ahí; si no, por
 `MAIL_FROM_ADDRESS`. Con las variables de cuenta vacías (staging, desarrollo)
 todo sale por el remitente normal.
 

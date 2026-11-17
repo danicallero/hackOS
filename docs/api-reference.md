@@ -224,7 +224,17 @@ A confirmed response keeps its application-granted role and live ticket access
 only when auto-accept is enabled; otherwise those are revoked until a later
 review and confirmation. The decision-maker can optionally allow that one
 response to resubmit after the form window closes and auto-accept that next
-submission with a fresh confirmation email. Form deletion removes its responses, reviews,
+submission with a fresh confirmation email.
+A rejection can instead be decided as **reject and allow resubmission**
+(`return_to_draft` on decide/revert/batch decide; `return_on_send`). Like any
+internal decision it stays in the outbox, its reason is editable and the
+applicant sees nothing until it is sent (individually or in a batch). Sending
+returns the response as a draft that can be resubmitted after close, emails the
+reason (`application.returned`) and shows it on the draft until resubmission.
+Every rejection a response went through before coming back as a draft (this
+one, or a rejection later returned with **Return to draft**) is kept in
+`application_response_rejections` and listed as `previous_rejections` on staff
+reads, so the re-review shows when, by whom and why it was rejected. Form deletion removes its responses, reviews,
 versions, grants and confirmation tokens transactionally; anonymous-retention
 records remain a deliberate deletion boundary. The confirmation-window expirer worker is registered in `applications/expirer.ts`;
 its transition implementation lives in `applications/expirations.ts`, not a
@@ -441,8 +451,9 @@ Every caller receives the `participant` slice; a linked sponsor rep or Mentor
 also receives their additional audience slice. Non-staff responses project
 each item's `audiences` to only the tags that apply to that caller, so a
 participant cannot be offered a sponsor/mentor filter by client code. An
-authenticated caller holding any capability
-("staff") bypasses both the audience filter *and* the visibility/publishAt
+authenticated caller holding `SCHEDULE_READ` or `SCHEDULE_MANAGE`
+("staff"; any other capability does not count, since attendee roles hold
+self-service ones such as `queue:status`) bypasses both the audience filter *and* the visibility/publishAt
 one — every item regardless of state, including drafts and items still
 scheduled to reveal, each with its owners, contactNote, notes, and its own
 `visibility` (staff-only field, lets a client tell a draft apart from a live

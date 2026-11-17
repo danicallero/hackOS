@@ -438,6 +438,12 @@ with congratulations and a personal welcome, then explains that a place is
 reserved pending confirmation, how to decline and the automatic release at
 the deadline. Operational queue alerts and security instructions remain precise.
 
+A reject-and-return (H14: an internal rejection marked to return the response
+as a draft when sent) uses `application.returned` instead: the outcome, the
+same optional `rejectionDetails` reason line, that the draft can be resubmitted
+even after the deadline, and an `applicationUrl` link to it. Like the decision,
+it leaves from the transactional sender ([email-ses](email-ses.md)).
+
 `application.decision` stays the outbox template name; the renderer selects
 complete `accepted`/`rejected` subject/body variants in es/gl/en from the internal
 decision variable, so raw status keys never appear in participant messages.
