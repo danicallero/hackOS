@@ -1,4 +1,4 @@
-import { createSign, randomBytes } from "node:crypto";
+import { createHash, createSign, randomBytes } from "node:crypto";
 import {
   type PassFieldLabels,
   type PassFieldVisibility,
@@ -508,10 +508,9 @@ export async function buildGoogleSaveUrl(userId: number, purpose: Purpose): Prom
 }
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
+let tokenRequest: Promise<string> | null = null;
 
-async function getAccessToken(): Promise<string> {
-  if (cachedToken && cachedToken.expiresAt - 60_000 > Date.now()) return cachedToken.token;
-
+async function requestAccessToken(): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const assertion = signJwt({
     iss: config.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL,
@@ -528,6 +527,7 @@ async function getAccessToken(): Promise<string> {
       grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
       assertion,
     }),
+    signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -539,6 +539,103 @@ async function getAccessToken(): Promise<string> {
 }
 
 /**
+ * Concurrent callers with an expired cache share one token exchange; a failed
+ * exchange is not cached, so the next caller retries.
+ */
+async function getAccessToken(): Promise<string> {
+  if (cachedToken && cachedToken.expiresAt - 60_000 > Date.now()) return cachedToken.token;
+  tokenRequest ??= requestAccessToken().finally(() => {
+    tokenRequest = null;
+  });
+  return tokenRequest;
+}
+
+/**
+ * Class-sync memo (H28). Every Save URL used to PATCH the shared class before
+ * its object. The class body is derived from the same event content that is
+ * about to be sent, so an identical body (by SHA-256) that Google already
+ * accepted moments ago is redundant. A config edit changes the body and
+ * therefore the fingerprint, so the next sync after the edit writes it. This
+ * is not a freshness guarantee: the memo can hide an out-of-band class change
+ * (console, another API instance) for up to CLASS_SYNC_TTL_MS, and another
+ * instance may write a different body at any time.
+ *
+ * PATCHes for one class are serialized in start order, so the last write to
+ * land is the last one started and the memo can say which body that was. The
+ * memo is trusted only while nothing is queued or in flight (a pending PATCH
+ * of another body would overwrite it), and it is cleared by any failure or
+ * 404, whose effect on Google's state is unknown. Waiting only happens when
+ * syncs of different bodies overlap, which is rare (config edits).
+ */
+const CLASS_SYNC_TTL_MS = 5 * 60_000;
+interface ClassSyncState {
+  syncedFingerprint: string | null;
+  syncedAt: number;
+  /** Attempts queued or running. */
+  pending: number;
+  /** Body of the most recently queued attempt; joinable while pending > 0. */
+  lastQueued: { fingerprint: string; promise: Promise<void> } | null;
+  /** Settles when the most recently queued attempt has finished (never rejects). */
+  tail: Promise<void>;
+}
+const classSyncStates = new Map<string, ClassSyncState>();
+
+function fingerprintOf(body: unknown): string {
+  return createHash("sha256").update(JSON.stringify(body)).digest("hex");
+}
+
+/** `apply` resolves true when Google acknowledged the body, false on a 404 no-op. */
+async function syncClass(
+  key: string,
+  body: unknown,
+  apply: () => Promise<boolean>,
+  { force = false }: { force?: boolean } = {},
+): Promise<void> {
+  const fingerprint = fingerprintOf(body);
+  let state = classSyncStates.get(key);
+  if (!state) {
+    state = {
+      syncedFingerprint: null,
+      syncedAt: 0,
+      pending: 0,
+      lastQueued: null,
+      tail: Promise.resolve(),
+    };
+    classSyncStates.set(key, state);
+  }
+  const current = state;
+  if (!force) {
+    if (
+      current.pending === 0 &&
+      current.syncedFingerprint === fingerprint &&
+      Date.now() - current.syncedAt < CLASS_SYNC_TTL_MS
+    )
+      return;
+    // The same body is already the last write queued: it lands after every
+    // other pending write, so waiting for it is equivalent to writing.
+    if (current.pending > 0 && current.lastQueued?.fingerprint === fingerprint)
+      return current.lastQueued.promise;
+  }
+
+  current.pending += 1;
+  const attempt = current.tail.then(async () => {
+    try {
+      const applied = await apply();
+      current.syncedFingerprint = applied ? fingerprint : null;
+      current.syncedAt = Date.now();
+    } catch (err) {
+      current.syncedFingerprint = null;
+      throw err;
+    } finally {
+      current.pending -= 1;
+    }
+  });
+  current.lastQueued = { fingerprint, promise: attempt };
+  current.tail = attempt.catch(() => {});
+  return attempt;
+}
+
+/**
  * Updates the shared EventTicketClass. Google propagates class changes to all
  * saved EventTicketObjects, so one PATCH is enough for an event-wide edit.
  * A class may not exist yet when a user only generated a link but did not save
@@ -546,17 +643,23 @@ async function getAccessToken(): Promise<string> {
  */
 export async function refreshGoogleEventTicketClass(): Promise<void> {
   requireConfigured();
-  const token = await getAccessToken();
   const { reviewStatus: _reviewStatus, ...body } = eventTicketClass(await readEventConfig());
+  // Explicit refreshes (settings edits, manual sync) always write.
+  await syncClass(eventTicketClassId(), body, () => patchEventTicketClass(body), { force: true });
+}
+
+async function patchEventTicketClass(body: Record<string, unknown>): Promise<boolean> {
+  const token = await getAccessToken();
   const url = `${WALLET_API_BASE}/eventTicketClass/${eventTicketClassId()}`;
   const request = (payload: unknown) =>
     fetch(url, {
       method: "PATCH",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15_000),
     });
   let res = await request(body);
-  if (res.status === 404) return;
+  if (res.status === 404) return false;
   if (!res.ok) {
     const responseBody = await res.text().catch(() => "");
     if (
@@ -565,7 +668,7 @@ export async function refreshGoogleEventTicketClass(): Promise<void> {
       /approved/i.test(responseBody)
     ) {
       res = await request({ ...body, reviewStatus: "UNDER_REVIEW" });
-      if (res.ok) return;
+      if (res.ok) return true;
       const retryBody = await res.text().catch(() => "");
       throw new Error(`Google Wallet event ticket class update failed: ${res.status} ${retryBody}`);
     }
@@ -573,6 +676,7 @@ export async function refreshGoogleEventTicketClass(): Promise<void> {
       `Google Wallet event ticket class update failed: ${res.status} ${responseBody}`,
     );
   }
+  return true;
 }
 
 /** Marks a Google Wallet object expired (H28: rotation invalidates the old pass). */
@@ -608,22 +712,33 @@ export async function refreshGooglePassObject(
   if (!pass.google_object_id) return;
   const data = content ?? (await passContent(pass.user_id, pass.purpose));
   if (pass.google_object_type === "event_ticket") {
-    // The approved class belongs to this deployment; refresh before issuance.
-    if (content) await refreshGoogleEventTicketClass();
+    // The approved class belongs to this deployment; sync it before issuance
+    // unless the identical body was just acknowledged (see syncClass).
+    if (content) {
+      const { reviewStatus: _reviewStatus, ...classBody } = eventTicketClass(data.event);
+      await syncClass(eventTicketClassId(), classBody, () => patchEventTicketClass(classBody));
+    }
     await upsertGoogleResource(
       "eventTicketObject",
       pass.google_object_id,
       eventTicketObject(pass.google_object_id, pass, data),
     );
   } else {
-    await upsertGoogleResource("genericClass", classId(pass.purpose), {
+    const genericClassBody = {
       ...genericClass(pass.purpose),
       ...data.event.settings.googleClassOptions,
       textModulesData: mergeTextModules(
         googleBackModules(data.event),
         data.event.settings.googleClassOptions.textModulesData,
       ),
-    });
+    };
+    const sync = () =>
+      upsertGoogleResource("genericClass", classId(pass.purpose), genericClassBody).then(
+        () => true,
+      );
+    // Only Save URLs carry fresh content; worker refreshes always write.
+    if (content) await syncClass(classId(pass.purpose), genericClassBody, sync);
+    else await syncClass(classId(pass.purpose), genericClassBody, sync, { force: true });
     await upsertGoogleResource(
       "genericObject",
       pass.google_object_id,

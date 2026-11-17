@@ -460,6 +460,18 @@ REST and carry only the object ID in the signed JWT, keeping long customization
 out of Google's recommended 1,800-character save URL. Ticket classes must
 already be approved and isolated per environment.
 
+**Save URL latency.** Each Save URL PATCHes its object, but the shared class is
+PATCHed only when its body differs from the last one Google acknowledged
+(SHA-256 of the exact body about to be sent), so a config edit is always
+written immediately. Concurrent identical syncs share one request. The memo
+records only acknowledged writes (never a 404 for a not-yet-created class or a
+failure), is dropped if a different body was attempted meanwhile, and expires
+after five minutes to bound drift from out-of-band edits. Worker refreshes and
+settings saves (`refreshGoogleEventTicketClass`) always write. The OAuth token
+exchange is singleflight per process and a failed exchange is not cached; both
+Google calls time out after 15 s. The memo is per process: each API instance
+may issue one class PATCH per body.
+
 Primary provider references:
 - [Google event pass builder](https://developers.google.com/wallet/tickets/events/resources/pass-builder)
 - [Google card/detail templates](https://developers.google.com/wallet/reference/rest/v1/ClassTemplateInfo)

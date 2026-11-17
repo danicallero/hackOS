@@ -17,7 +17,33 @@ import { checkResendVerificationRateLimit } from "../rate-limit.js";
  * Better Auth's endpoint server-side (`auth.api.sendVerificationEmail`) to
  * do the actual (enumeration-safe, timing-equalized) token issuance +
  * outbox enqueue.
+ *
+ * Latency (H3): without a session, better-auth@1.6.23
+ * (`dist/api/routes/email-verification.mjs`, `/send-verification-email`,
+ * `MINIMUM_MS = 500`) sleeps until 500 ms have elapsed so "unknown / already
+ * verified" cannot be told apart from "unverified" by timing. Every
+ * unauthenticated call therefore takes at least 500 ms; do not lower it.
+ * Delivery is the notification outbox, never inline. Time above the floor is
+ * not attributed here: each phase is timed and a slow request logs the split.
  */
+/** Better Auth's anti-enumeration floor for the unauthenticated path. */
+const ANTI_ENUMERATION_FLOOR_MS = 500;
+const SLOW_AUTH_MS = ANTI_ENUMERATION_FLOOR_MS + 250;
+const SLOW_LIMIT_MS = 100;
+
+/** Log fields when a phase exceeds its threshold, otherwise null. No PII. */
+export function slowResendPhases(
+  limitMs: number,
+  authMs: number,
+): { rateLimitMs: number; betterAuthMs: number; floorMs: number } | null {
+  if (authMs <= SLOW_AUTH_MS && limitMs <= SLOW_LIMIT_MS) return null;
+  return {
+    rateLimitMs: Math.round(limitMs),
+    betterAuthMs: Math.round(authMs),
+    floorMs: ANTI_ENUMERATION_FLOOR_MS,
+  };
+}
+
 export function registerResendVerificationRoutes(app: FastifyInstance): void {
   const api = app.withTypeProvider<ZodTypeProvider>();
 
@@ -47,14 +73,25 @@ export function registerResendVerificationRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const { email, callbackURL } = req.body;
+      const t0 = performance.now();
       const limit = await checkResendVerificationRateLimit(email);
+      const limitMs = performance.now() - t0;
       if (!limit.allowed) {
         throw new TooManyRequestsError(
           "Too many verification requests — try again later.",
           limit.retryAfterSeconds,
         );
       }
+      const t1 = performance.now();
       await auth.api.sendVerificationEmail({ body: { email, callbackURL } });
+      const authMs = performance.now() - t1;
+      const slow = slowResendPhases(limitMs, authMs);
+      if (slow) {
+        req.log.warn(
+          { route: "resend-verification", ...slow },
+          "resend-verification slower than the anti-enumeration floor",
+        );
+      }
       return { status: true as const };
     },
   );
