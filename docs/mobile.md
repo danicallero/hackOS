@@ -1110,9 +1110,9 @@ they are not device screenshots or proof of native toolbar behavior.
   shown; VoiceOver and keyboard activation still use them). The lens swells slightly with the bar while a finger is down, glides to the
   finger, follows it in both directions, and lands on the cell under the
   finger; a tap on a distant tab travels the same way. Lift, travel and
-  landing run on the UI thread from shared values. The released tab shows as
-  selected at once, and navigation waits for the arrival so mounting the next
-  screen cannot stall the travel. A refracting "lifted" lens like the system
+  landing run on the UI thread from shared values. The tab switches on release
+  (tap or drag) and the lens settles alongside; the animation never holds the
+  navigation back. A refracting "lifted" lens like the system
   bar's is not reachable with `expo-glass-effect` (its clear glass blurs the
   centre); a native lens is tracked in #1360. A tap or held press
   without movement runs that cell's normal press, a drag only switches, while

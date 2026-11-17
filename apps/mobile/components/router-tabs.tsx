@@ -62,20 +62,14 @@ export const MAX_TABS_WITHOUT_OVERFLOW = MAX_DIRECT_TABS + 1;
 export const ROUTER_TAB_BAR_HEIGHT = TAB_BAR_HEIGHT;
 const ROUTER_TAB_BAR_HORIZONTAL_PADDING = 16;
 const TAB_SELECTION_SPRING = { damping: 20, mass: 0.8, stiffness: 220 };
-/** A tap's lens travel: lifted at the current tab, it glides and lands on the target. */
 /**
  * The lens's travel to a pressed tab. One spring from touch-down to release:
  * retargeting a spring keeps its velocity, so a tap never stops mid-flight.
- * Near-critical, and finished once visually still so landing starts at once.
  */
 const TAB_TRAVEL_SPRING = {
   damping: 31,
   mass: 0.8,
   stiffness: 300,
-  // "Arrived" within a few points: waiting for the spring's sub-pixel tail
-  // kept the lens hovering on the target for over half a second.
-  restDisplacementThreshold: 4,
-  restSpeedThreshold: 80,
 };
 /** Stiff enough to stay under a dragging finger. */
 const TAB_TRACKING_SPRING = { damping: 28, mass: 0.6, stiffness: 520 };
@@ -353,6 +347,16 @@ function RouterTabsContent({
   // still reach the Pressable directly.
   const tabPresses = useRef<Array<(() => void) | undefined>>([]);
   const pressTab = useCallback((index: number) => tabPresses.current[index]?.(), []);
+  // H55: show the released tab as selected in its own cheap render, then
+  // navigate on the next frame; a screen that is slow to mount never delays
+  // the bar's response.
+  const releaseOnTab = useCallback(
+    (index: number, from: number, scrubbed: boolean) => {
+      if (index !== from) setPendingTab({ index, from });
+      requestAnimationFrame(() => (scrubbed ? commitTabSelection(index) : pressTab(index)));
+    },
+    [commitTabSelection, pressTab],
+  );
 
   const dockBackGesture = useDockBackGesture();
   const touchStartX = useSharedValue(0);
@@ -419,33 +423,18 @@ function RouterTabsContent({
           ? tabIndexForPosition(touchX.value, directGroupWidth, directTabCount)
           : -1;
         const nextOffset = nextIndex >= 0 ? nextIndex * directTabCellWidth : restingOffset;
-        // The lens stays lifted until it reaches the destination, then lands.
-        // Navigation waits for the arrival: mounting a screen mid-flight would
-        // stall the main thread that Reanimated draws the travel on.
-        const wasScrubbed = scrubbed.value;
-        if (nextIndex >= 0 && nextIndex !== selectedDirectTabIndex)
-          runOnJS(setPendingTab)({ index: nextIndex, from: selectedDirectTabIndex });
-        const arrive = () => {
-          "worklet";
-          if (nextIndex < 0) return;
-          if (wasScrubbed) runOnJS(commitTabSelection)(nextIndex);
-          else runOnJS(pressTab)(nextIndex);
-        };
+        // H55: the tab switches on release, like the system bar; the lens
+        // travels and settles alongside and never holds the navigation back.
+        if (nextIndex >= 0)
+          runOnJS(releaseOnTab)(nextIndex, selectedDirectTabIndex, scrubbed.value);
         if (reducedMotion) {
           selectionOffset.value = nextOffset;
           lift.value = 0;
           pressing.value = 0;
-          arrive();
         } else {
-          // Arrive on the cell with the system ease-out, then land at once.
-          selectionOffset.value = withSpring(nextOffset, TAB_TRAVEL_SPRING, (finished) => {
-            // An interrupting touch replaces this travel and keeps the lens up.
-            if (!finished) return;
-            selectionOffset.value = withSpring(nextOffset, TAB_SELECTION_SPRING);
-            arrive();
-            lift.value = withSpring(0, PRESS_LENS_SPRING, (landed) => {
-              if (landed) pressing.value = 0;
-            });
+          selectionOffset.value = withSpring(nextOffset, TAB_TRAVEL_SPRING);
+          lift.value = withSpring(0, PRESS_LENS_SPRING, (landed) => {
+            if (landed) pressing.value = 0;
           });
         }
       });
@@ -453,11 +442,10 @@ function RouterTabsContent({
     dockBackGesture,
     pressing,
     lift,
-    commitTabSelection,
     directGroupWidth,
     directTabCellWidth,
     directTabCount,
-    pressTab,
+    releaseOnTab,
     reducedMotion,
     scrubbed,
     selectedDirectTabIndex,

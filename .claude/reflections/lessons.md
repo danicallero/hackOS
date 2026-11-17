@@ -974,3 +974,28 @@ Exercise list → profile → company → profile, then unwind each step. Check 
 
 ### Exceptions
 An explicit parent-navigation action can deliberately leave the history stack.
+
+## [R037] Never hold a navigation back behind its animation
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-11-17
+
+### Trigger
+Animating a control that navigates or commits a selection (tab bars, segmented controls, menus).
+
+### Mistake
+Deferred the tab switch until the tab-bar lens had travelled and settled, to avoid a hitch while the next screen mounted. In a release build the bar visibly paused for about a second before every tab change.
+
+### Lesson
+The action a person asked for commits immediately; the animation runs alongside and may be interrupted. A hitch is fixed at its source, never by delaying the outcome.
+
+### Action
+Commit navigation or selection on the input event (release, tap). Keep animations on the UI thread and let them settle after the content has changed.
+
+### Validation
+Record the interaction in a release build and confirm that the destination appears on the frame after release, with no pause while the animation settles.
+
+### Exceptions
+A deliberate confirmation step (an undo window, a destructive confirmation) the product asks for.
