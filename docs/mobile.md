@@ -790,13 +790,22 @@ they are not device screenshots or proof of native toolbar behavior.
   on screen greyed instead of disappearing (while projects are hidden the card
   carries none, so the last ones seen, or a placeholder row, are shown greyed).
   Saving is `PUT /api/me/public-profile` under one `Idempotency-Key` per change
-  set; the response replaces the preview. Social links use Contacts-style edit
-  rows in the same card (remove control, network menu, value), up to six; a
-  new row takes the first unused network, and LinkedIn, X and Instagram show
-  their fixed address so only the handle is typed (a pasted address is reduced
-  to the handle, shared with web through `@hackos/shared/social-links`); empty rows remain editable but are omitted from
-  the save. Existing links can be changed or removed, and Cancel discards the
-  draft. GitHub stays account-managed and does not count toward the six. It
+  set; the response replaces the preview. Social links are rows in the same card
+  (network tile, network name, value), up to six. Tiles are neutral grey with a
+  monochrome glyph (`components/social-glyph.tsx`, inlined Phosphor paths,
+  since SF Symbols has no brand marks); the read-only card rows use the same
+  tiles. Tapping the tile or name opens the network picker, the app's
+  UIKit-style `MenuPopover` (iOS system menus only accept SF Symbols), listing
+  each network with its glyph plus a destructive Remove. A new row takes the
+  first unused network; LinkedIn, X and Instagram show only the handle while
+  the stored link keeps the full address (a typed `@` or a pasted address is
+  reduced to the handle, shared with web through
+  `@hackos/shared/social-links`); empty rows remain editable but are omitted
+  from the save. The linked GitHub account (`GET /api/me/github`) shows as a
+  row with an eye (`showGithub`, saved with the rest) and a menu to open it or
+  link another account; with none linked, a Link GitHub row starts the same
+  app-callback OAuth flow as projects (`linkGithubAccount` in `lib/github.ts`,
+  `selectAccount` for another account). Cancel discards the draft. GitHub stays account-managed and does not count toward the six. It
   saves `socials` with the text and sends `shareCv` only when a CV exists.
   **CV** (the side tile): a CV taken from the application (`cv.source:
   "application"`) always wins and is read-only here, with only the eye. With no

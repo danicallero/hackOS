@@ -1,12 +1,14 @@
 import { handleOf, SOCIAL_HANDLE_PREFIX, urlForHandle } from "@hackos/shared/social-links";
 import { useRef } from "react";
 import { Linking, Text, TextInput, View } from "react-native";
-import { MenuView } from "@/components/app-menu";
+import { MenuPopover, useMenuPopover } from "@/components/app-menu";
 import { Section, Separator } from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
-import { DetailRow } from "@/components/profile-parts";
+import { VisibilityToggle } from "@/components/profile-parts";
+import { SOCIAL_TILE_SIZE, SocialGlyph, SocialTile } from "@/components/social-glyph";
 import { SymbolView } from "@/components/symbol";
-import { displayUrl, socialLabel } from "@/lib/directory";
+import { type SocialKind, socialLabel } from "@/lib/directory";
+import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { type NetworkingDraft, SOCIALS_MAX } from "@/lib/networking-profile";
@@ -16,9 +18,10 @@ const KINDS = ["linkedin", "x", "instagram", "website", "other"] as const;
 type Kind = (typeof KINDS)[number];
 type Link = NetworkingDraft["socials"][number];
 /** Fixed type column, so every row's value starts on the same line. */
-const KIND_WIDTH = 92;
-/** Separators start under the type label, past the remove control. */
-const ROW_TEXT_INSET = 50;
+const KIND_WIDTH = 104;
+/** Separators start under the type label, past the tile. */
+const ROW_TEXT_INSET = space.lg + SOCIAL_TILE_SIZE + space.md;
+const REMOVE = "remove";
 
 /** The first kind not used yet, so a new row rarely needs a type change (matches web). */
 function nextKind(links: Link[]): Kind {
@@ -34,23 +37,227 @@ function retype(link: Link, kind: Kind): Link {
   return { ...link, kind, url: to ? urlForHandle(handle, to) : from ? "" : link.url };
 }
 
+/** A typed "@ada" is the handle "ada"; a pasted address is reduced by urlForHandle. */
+function typedHandle(text: string): string {
+  return text.trimStart().replace(/^@+/, "");
+}
+
+/**
+ * The network picker: tap the tile or name to change it. The UIKit-style
+ * popover rather than the system menu, because iOS menus only take SF Symbols
+ * and the choices need their network glyphs (#934, #935).
+ */
+function KindMenu({
+  link,
+  index,
+  disabled,
+  label,
+  onKind,
+  onRemove,
+}: {
+  link: Link;
+  index: number;
+  disabled: boolean;
+  label: (kind: SocialKind) => string;
+  onKind: (kind: Kind) => void;
+  onRemove: () => void;
+}) {
+  const { t } = useLocale();
+  const { trigger, visible, anchor, open, close } = useMenuPopover();
+  return (
+    <>
+      <View ref={trigger} collapsable={false}>
+        <PressableFeedback
+          accessibilityRole="button"
+          accessibilityLabel={`${t("networkingLinkType")} ${index + 1}`}
+          disabled={disabled}
+          onPress={() => {
+            void haptic("selection");
+            open();
+          }}
+          style={{
+            alignItems: "center",
+            flexDirection: "row",
+            gap: space.md,
+            minHeight: MIN_TARGET,
+          }}
+        >
+          <SocialTile kind={link.kind} />
+          <View style={{ alignItems: "center", flexDirection: "row", gap: 3, width: KIND_WIDTH }}>
+            <Text numberOfLines={1} style={{ ...type.body, color: colors.label, flexShrink: 1 }}>
+              {label(link.kind)}
+            </Text>
+            <SymbolView
+              accessible={false}
+              name="chevron.up.chevron.down"
+              size={11}
+              tintColor={colors.tertiaryLabel}
+              weight="semibold"
+            />
+          </View>
+        </PressableFeedback>
+      </View>
+      <MenuPopover
+        align="left"
+        anchor={anchor}
+        visible={visible}
+        onClose={close}
+        items={[
+          ...KINDS.map((kind) => ({
+            id: kind,
+            label: label(kind),
+            selected: kind === link.kind,
+            glyph: <SocialGlyph kind={kind} size={20} color={colors.label as string} />,
+          })),
+          { id: REMOVE, label: t("remove"), icon: "trash", destructive: true, groupStart: true },
+        ]}
+        onSelect={(id) => {
+          close();
+          if (id === REMOVE) return onRemove();
+          const kind = KINDS.find((value) => value === id);
+          if (kind) onKind(kind);
+        }}
+      />
+    </>
+  );
+}
+
+const OPEN = "open";
+const RELINK = "relink";
+
+/** The linked GitHub account: managed by the account link, not typed here. */
+export interface GithubProps {
+  configured: boolean;
+  login: string | null;
+  /** Whether scanners see it (`showGithub`, part of the pending change). */
+  shown: boolean;
+  onShown: (shown: boolean) => void;
+  /** Starts GitHub's authorization; `selectAccount` lets them pick another account. */
+  onLink: (selectAccount: boolean) => void;
+  linking: boolean;
+}
+
+/**
+ * #934, #935: the linked account, with the eye that keeps it off the card and
+ * a menu to open it or link another account. Without one, a row to link it.
+ */
+function GithubRow({
+  github,
+  disabled,
+  rowStyle,
+}: {
+  github: GithubProps;
+  disabled: boolean;
+  rowStyle: object;
+}) {
+  const { t } = useLocale();
+  const { trigger, visible, anchor, open, close } = useMenuPopover();
+  const { login } = github;
+  if (!login) {
+    return (
+      <PressableFeedback
+        accessibilityRole="button"
+        disabled={disabled || github.linking}
+        onPress={() => github.onLink(false)}
+        style={rowStyle}
+      >
+        <SocialTile kind="github" />
+        <Text style={{ ...type.body, color: colors.accent }}>{t("networkingGithubLink")}</Text>
+      </PressableFeedback>
+    );
+  }
+  return (
+    <View style={rowStyle}>
+      <View ref={trigger} collapsable={false}>
+        <PressableFeedback
+          accessibilityRole="button"
+          accessibilityLabel={`GitHub, ${login}`}
+          disabled={disabled || github.linking}
+          onPress={() => {
+            void haptic("selection");
+            open();
+          }}
+          style={{
+            alignItems: "center",
+            flexDirection: "row",
+            gap: space.md,
+            minHeight: MIN_TARGET,
+          }}
+        >
+          <SocialTile kind="github" />
+          <View style={{ alignItems: "center", flexDirection: "row", gap: 3, width: KIND_WIDTH }}>
+            <Text numberOfLines={1} style={{ ...type.body, color: colors.label, flexShrink: 1 }}>
+              GitHub
+            </Text>
+            <SymbolView
+              accessible={false}
+              name="chevron.up.chevron.down"
+              size={11}
+              tintColor={colors.tertiaryLabel}
+              weight="semibold"
+            />
+          </View>
+        </PressableFeedback>
+      </View>
+      <Text
+        numberOfLines={1}
+        style={{
+          ...type.body,
+          color: colors.label,
+          flex: 1,
+          opacity: github.shown ? 1 : 0.4,
+        }}
+      >
+        {login}
+      </Text>
+      <VisibilityToggle
+        visible={github.shown}
+        label={t("networkingShowGithub")}
+        onChange={github.onShown}
+      />
+      <MenuPopover
+        align="left"
+        anchor={anchor}
+        visible={visible}
+        onClose={close}
+        items={[
+          { id: OPEN, label: t("networkingGithubOpen"), icon: "arrow.up.right" },
+          { id: RELINK, label: t("networkingGithubRelink"), icon: "arrow.triangle.2.circlepath" },
+        ]}
+        onSelect={(id) => {
+          close();
+          if (id === OPEN) void Linking.openURL(`https://github.com/${login}`);
+          else github.onLink(true);
+        }}
+      />
+    </View>
+  );
+}
+
 /** #934, #935: editable stored links; the linked GitHub account is kept separately. */
 export function SocialLinksEditor({
   links,
   disabled,
-  githubUrl,
+  github,
   onChange,
 }: {
   links: NetworkingDraft["socials"];
   disabled: boolean;
-  githubUrl?: string;
+  github?: GithubProps;
   onChange: (links: NetworkingDraft["socials"]) => void;
 }) {
   const { t } = useLocale();
   // Only a row the person just added takes focus, never rows loaded from the profile.
   const addedRef = useRef(false);
-  const label = (kind: (typeof KINDS)[number]) =>
+  const label = (kind: SocialKind) =>
     kind === "other" ? t("networkingLinkOther") : socialLabel({ kind, url: "" }, t);
+  const rowStyle = {
+    alignItems: "center" as const,
+    flexDirection: "row" as const,
+    gap: space.md,
+    minHeight: MIN_TARGET + space.xs,
+    paddingHorizontal: space.lg,
+  };
   return (
     <Section title={t("directoryLinks")}>
       {links.map((link, index) => {
@@ -58,129 +265,64 @@ export function SocialLinksEditor({
         return (
           <View key={link.id}>
             {index > 0 ? <Separator inset={ROW_TEXT_INSET} /> : null}
-            {/* Contacts-style edit row: remove, type, divider, value. */}
-            <View
-              style={{
-                alignItems: "center",
-                flexDirection: "row",
-                minHeight: MIN_TARGET,
-                paddingLeft: space.md,
-              }}
-            >
-              <PressableFeedback
-                accessibilityRole="button"
-                accessibilityLabel={`${t("remove")} ${index + 1}`}
+            <View style={rowStyle}>
+              <KindMenu
+                link={link}
+                index={index}
                 disabled={disabled}
-                hitSlop={8}
-                onPress={() => onChange(links.filter((_, i) => i !== index))}
-                style={{ marginRight: space.md }}
-              >
-                <SymbolView name="minus.circle.fill" size={22} tintColor={colors.destructive} />
-              </PressableFeedback>
-              <MenuView
-                shouldOpenOnLongPress={false}
-                actions={KINDS.map((kind) => ({
-                  id: kind,
-                  title: label(kind),
-                  state: kind === link.kind ? ("on" as const) : ("off" as const),
-                  attributes: { disabled },
-                }))}
-                onPressAction={({ nativeEvent }) => {
-                  const kind = KINDS.find((value) => value === nativeEvent.event);
-                  if (kind && !disabled)
-                    onChange(links.map((row, i) => (i === index ? retype(row, kind) : row)));
-                }}
-              >
-                <View
-                  accessible
-                  accessibilityRole="button"
-                  accessibilityLabel={`${t("networkingLinkType")} ${index + 1}`}
-                  accessibilityState={{ disabled }}
-                  style={{
-                    alignItems: "center",
-                    flexDirection: "row",
-                    gap: 2,
-                    minHeight: MIN_TARGET,
-                    width: KIND_WIDTH,
-                  }}
-                >
-                  <Text
-                    numberOfLines={1}
-                    style={{ ...type.callout, color: colors.accent, flexShrink: 1 }}
-                  >
-                    {link.kind === "github" ? "GitHub" : label(link.kind)}
-                  </Text>
-                  <SymbolView
-                    name="chevron.up.chevron.down"
-                    size={11}
-                    tintColor={colors.accent}
-                    weight="semibold"
-                  />
-                </View>
-              </MenuView>
-              <View
+                label={label}
+                onKind={(kind) =>
+                  onChange(links.map((row, i) => (i === index ? retype(row, kind) : row)))
+                }
+                onRemove={() => onChange(links.filter((_, i) => i !== index))}
+              />
+              <TextInput
+                accessibilityLabel={`${t("networkingLinkUrl")} ${index + 1}`}
+                value={prefix ? handleOf(link.url, prefix) : link.url}
+                onChangeText={(text) =>
+                  onChange(
+                    links.map((row, i) =>
+                      i === index
+                        ? {
+                            ...row,
+                            url: prefix ? urlForHandle(typedHandle(text), prefix) : text,
+                          }
+                        : row,
+                    ),
+                  )
+                }
+                autoFocus={link.url === "" && index === links.length - 1 && addedRef.current}
+                editable={!disabled}
+                maxLength={prefix ? 150 : 200}
+                keyboardType={prefix ? "default" : "url"}
+                autoCapitalize="none"
+                autoCorrect={false}
+                numberOfLines={1}
+                placeholder={prefix ? t("networkingLinkHandle") : "https://"}
+                placeholderTextColor={colors.tertiaryLabel}
                 style={{
-                  alignSelf: "stretch",
-                  backgroundColor: colors.separator,
-                  marginVertical: space.sm,
-                  width: 0.5,
+                  ...type.body,
+                  color: colors.label,
+                  flex: 1,
+                  minHeight: MIN_TARGET,
+                  padding: 0,
                 }}
               />
-              <View
-                style={{
-                  alignItems: "center",
-                  flex: 1,
-                  flexDirection: "row",
-                  paddingHorizontal: space.md,
-                }}
-              >
-                {prefix ? (
-                  <Text style={{ ...type.body, color: colors.tertiaryLabel }}>{prefix}</Text>
-                ) : null}
-                <TextInput
-                  accessibilityLabel={`${t("networkingLinkUrl")} ${index + 1}`}
-                  value={prefix ? handleOf(link.url, prefix) : link.url}
-                  onChangeText={(text) =>
-                    onChange(
-                      links.map((row, i) =>
-                        i === index
-                          ? { ...row, url: prefix ? urlForHandle(text, prefix) : text }
-                          : row,
-                      ),
-                    )
-                  }
-                  autoFocus={link.url === "" && index === links.length - 1 && addedRef.current}
-                  editable={!disabled}
-                  maxLength={prefix ? 150 : 200}
-                  keyboardType={prefix ? "default" : "url"}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  placeholder={prefix ? undefined : "https://"}
-                  placeholderTextColor={colors.tertiaryLabel}
-                  style={{
-                    ...type.body,
-                    color: colors.label,
-                    flex: 1,
-                    minHeight: MIN_TARGET,
-                    padding: 0,
-                  }}
-                />
-              </View>
             </View>
           </View>
         );
       })}
-      {githubUrl ? (
-        <DetailRow
-          icon="link"
-          label="GitHub"
-          value={displayUrl(githubUrl)}
-          onPress={() => void Linking.openURL(githubUrl)}
-        />
+      {github?.login || github?.configured ? (
+        <>
+          {links.length > 0 ? <Separator inset={ROW_TEXT_INSET} /> : null}
+          <GithubRow github={github} disabled={disabled} rowStyle={rowStyle} />
+        </>
       ) : null}
       {links.length < SOCIALS_MAX ? (
         <>
-          {links.length > 0 || githubUrl ? <Separator inset={ROW_TEXT_INSET} /> : null}
+          {links.length > 0 || github?.login || github?.configured ? (
+            <Separator inset={ROW_TEXT_INSET} />
+          ) : null}
           <PressableFeedback
             accessibilityRole="button"
             disabled={disabled}
@@ -188,15 +330,11 @@ export function SocialLinksEditor({
               addedRef.current = true;
               onChange([...links, { id: createIdempotencyKey(), kind: nextKind(links), url: "" }]);
             }}
-            style={{
-              alignItems: "center",
-              flexDirection: "row",
-              gap: space.md,
-              minHeight: MIN_TARGET,
-              paddingHorizontal: space.md,
-            }}
+            style={rowStyle}
           >
-            <SymbolView name="plus.circle.fill" size={22} tintColor={colors.success} />
+            <View style={{ alignItems: "center", width: SOCIAL_TILE_SIZE }}>
+              <SymbolView name="plus.circle.fill" size={24} tintColor={colors.success} />
+            </View>
             <Text style={{ ...type.body, color: colors.label }}>{t("networkingLinkAdd")}</Text>
           </PressableFeedback>
         </>

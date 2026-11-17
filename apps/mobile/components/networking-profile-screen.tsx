@@ -17,6 +17,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { SocialLinksEditor } from "@/components/social-links-editor";
 import { alert } from "@/lib/alert";
 import type { DirectoryEntry } from "@/lib/directory";
+import { fetchGithubAccount, type GithubAccount, linkGithubAccount } from "@/lib/github";
 import { haptic } from "@/lib/haptics";
 import type { MyHelperProfile } from "@/lib/help-desk";
 import { type MessageKey, useLocale } from "@/lib/i18n";
@@ -80,6 +81,8 @@ export default function NetworkingProfileScreen() {
   const [cvBusy, setCvBusy] = useState<"upload" | "remove" | null>(null);
   const [cvOpen, setCvOpen] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
+  const [githubAccount, setGithubAccount] = useState<GithubAccount | null>(null);
+  const [linkingGithub, setLinkingGithub] = useState(false);
   // One key per pending change set, so a retried save replays instead of re-applying.
   const idempotencyKey = useRef<string | null>(null);
   // The card omits projects while they are hidden; keep the last ones seen so
@@ -125,6 +128,31 @@ export default function NetworkingProfileScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // The linked account is read on its own: the card omits it while hidden (#934).
+  const loadGithub = useCallback(async () => {
+    try {
+      setGithubAccount(await fetchGithubAccount());
+    } catch {
+      // Without it the row is just absent; the rest of the profile still edits.
+      setGithubAccount(null);
+    }
+  }, []);
+  useEffect(() => {
+    void loadGithub();
+  }, [loadGithub]);
+
+  async function linkGithub(selectAccount: boolean) {
+    setLinkingGithub(true);
+    setFailure(null);
+    try {
+      if (await linkGithubAccount(selectAccount)) await loadGithub();
+    } catch (cause) {
+      setFailure({ message: "networkingGithubLinkError", cause: asError(cause) });
+    } finally {
+      setLinkingGithub(false);
+    }
+  }
 
   // Publishing the help desk profile (its own page) also shares this one: re-read on return.
   const settled = useRef(false);
@@ -378,7 +406,17 @@ export default function NetworkingProfileScreen() {
           linksEditor: (
             <SocialLinksEditor
               links={form.socials}
-              githubUrl={current.preview.socials.find((link) => link.kind === "github")?.url}
+              github={
+                githubAccount
+                  ? {
+                      ...githubAccount,
+                      shown: form.showGithub,
+                      onShown: (showGithub) => update({ showGithub }),
+                      onLink: (selectAccount) => void linkGithub(selectAccount),
+                      linking: linkingGithub,
+                    }
+                  : undefined
+              }
               disabled={saving}
               onChange={(socials) => update({ socials })}
             />

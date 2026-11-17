@@ -36,6 +36,8 @@ export interface MenuPopoverItem {
   id: string;
   label: string;
   icon?: string;
+  /** A custom trailing image (e.g. a network glyph); the checkmark then leads, as in UIKit. */
+  glyph?: ReactNode;
   selected?: boolean;
   destructive?: boolean;
   disabled?: boolean;
@@ -99,6 +101,7 @@ export function MenuPopover({
   const topInset = useAndroidTopInset();
   if (!visible) return null;
   const at = anchor ?? { x: windowWidth, y: topInset, width: 0, height: 44 };
+  const leadingCheck = items.some((item) => item.glyph);
 
   const left = Math.max(
     EDGE,
@@ -177,6 +180,19 @@ export function MenuPopover({
                   paddingHorizontal: space.lg,
                 }}
               >
+                {leadingCheck ? (
+                  <View style={{ alignItems: "center", width: 15 }}>
+                    {item.selected ? (
+                      <SymbolView
+                        accessible={false}
+                        name="checkmark"
+                        size={15}
+                        tintColor={colors.label}
+                        weight="semibold"
+                      />
+                    ) : null}
+                  </View>
+                ) : null}
                 <Text
                   numberOfLines={2}
                   style={{
@@ -187,7 +203,9 @@ export function MenuPopover({
                 >
                   {item.label}
                 </Text>
-                {item.selected ? (
+                {item.glyph ? (
+                  item.glyph
+                ) : item.selected && !leadingCheck ? (
                   <SymbolView
                     accessible={false}
                     name="checkmark"
