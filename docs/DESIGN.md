@@ -322,7 +322,13 @@ server substring searches use parameterized `unaccent(column) ILIKE unaccent($n)
   adjacent submenus. Below 768px, options replace the category list in the
   same panel, with a **Back** action and focus moved into the new panel.
 - Single-choice filters declare a `resetValue` and use radio items. Multiple
-  choices use checkboxes and keep the menu open while selecting.
+  choices use checkboxes and keep the menu open while selecting; every option
+  shows its box, checked or not.
+- Options mirror the values the list actually displays (same labels, same
+  status `tone` dot), never synthetic buckets that overlap each other. Offer
+  only values present in the data (plus any already selected), and give each a
+  `count` of the rows it would match under the other active categories.
+- Categories combine with AND; options inside one category combine with OR.
 - Show selected values as removable chips next to the button. Removing a chip
   clears only that value and returns focus to the trigger. The trigger count
   represents selected values; **Clear filters** resets all categories.
@@ -1054,6 +1060,9 @@ Tables and lists:
 - A table adapts to its own width, not the viewport: `DataTable` switches to
   `renderMobileRow` rows when its container is narrower than 48 rem (the
   sidebar makes a mid-width window narrower than its breakpoint suggests).
+  Those rows have no headers to click, so a table with sortable columns shows
+  a field picker plus an ascending/descending toggle above them, sharing the
+  table's persisted sort.
   A fixed-layout table keeps a minimum width (14 rem per unsized column plus
   the sized ones) and scrolls rather than letting a flexible column collapse
   under its neighbour. Size a status column for its longest translated label.

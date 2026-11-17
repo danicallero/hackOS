@@ -3,6 +3,7 @@
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
+import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { FunnelIcon } from "@phosphor-icons/react/dist/csr/Funnel";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useRef, useState } from "react";
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocale } from "@/lib/i18n";
+import { TONE_DOT, type Tone } from "@/lib/tones";
 import { cn } from "@/lib/utils";
 
 export interface FilterOption {
@@ -30,6 +32,10 @@ export interface FilterOption {
   label: string;
   /** Optional semantic CSS color for categorical identity. */
   color?: string;
+  /** Status tone, rendered with the same dot the list uses for that state. */
+  tone?: Tone;
+  /** How many records this option would match; shown at the trailing edge. */
+  count?: number;
 }
 
 export type FilterDefinition = {
@@ -240,46 +246,72 @@ export function FilterMenu({
   );
 }
 
+function OptionContent({ option }: { option: FilterOption }) {
+  return (
+    <>
+      {option.tone ? (
+        <span
+          aria-hidden="true"
+          className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[option.tone])}
+        />
+      ) : (
+        option.color && (
+          <span
+            aria-hidden="true"
+            className="size-2 shrink-0 rounded-full"
+            style={{ backgroundColor: option.color }}
+          />
+        )
+      )}
+      <span className="flex-1 wrap-break-word">{option.label}</span>
+      {option.count !== undefined && (
+        <span className="text-muted-foreground ml-2 text-xs tabular-nums">{option.count}</span>
+      )}
+    </>
+  );
+}
+
 function FilterOptions({ filter }: { filter: FilterDefinition }) {
   if (filter.type === "single") {
     return (
       <DropdownMenuRadioGroup value={filter.value} onValueChange={filter.onChange}>
         {filter.options.map((option) => (
           <DropdownMenuRadioItem key={option.value} value={option.value}>
-            {option.color && (
-              <span
-                aria-hidden="true"
-                className="size-2 shrink-0 rounded-full"
-                style={{ backgroundColor: option.color }}
-              />
-            )}
-            <span className="wrap-break-word">{option.label}</span>
+            <OptionContent option={option} />
           </DropdownMenuRadioItem>
         ))}
       </DropdownMenuRadioGroup>
     );
   }
-  return filter.options.map((option) => (
-    <DropdownMenuCheckboxItem
-      key={option.value}
-      checked={filter.value.includes(option.value)}
-      onSelect={(event) => event.preventDefault()}
-      onCheckedChange={(checked) =>
-        filter.onChange(
-          checked
-            ? [...filter.value, option.value]
-            : filter.value.filter((value) => value !== option.value),
-        )
-      }
-    >
-      {option.color && (
+  return filter.options.map((option) => {
+    const checked = filter.value.includes(option.value);
+    return (
+      <DropdownMenuCheckboxItem
+        key={option.value}
+        checked={checked}
+        // Multi-select reads as a checklist: every option shows its box, not
+        // only the selected ones, so unselected rows don't look like plain text.
+        className="pl-2 [&>span:first-child]:hidden"
+        onSelect={(event) => event.preventDefault()}
+        onCheckedChange={(next) =>
+          filter.onChange(
+            next
+              ? [...filter.value, option.value]
+              : filter.value.filter((value) => value !== option.value),
+          )
+        }
+      >
         <span
           aria-hidden="true"
-          className="size-2 shrink-0 rounded-full"
-          style={{ backgroundColor: option.color }}
-        />
-      )}
-      <span className="wrap-break-word">{option.label}</span>
-    </DropdownMenuCheckboxItem>
-  ));
+          className={cn(
+            "flex size-4 shrink-0 items-center justify-center rounded-[4px] border",
+            checked ? "border-primary bg-primary text-primary-foreground" : "border-input",
+          )}
+        >
+          {checked && <CheckIcon weight="bold" className="size-3" />}
+        </span>
+        <OptionContent option={option} />
+      </DropdownMenuCheckboxItem>
+    );
+  });
 }

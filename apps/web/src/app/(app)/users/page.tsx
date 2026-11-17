@@ -42,6 +42,14 @@ import { logisticsApi } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 import type { Language, UserListItem } from "@/lib/types";
 import { loadUserDirectory } from "@/lib/user-directory";
+import {
+  APPLICATION_FILTER_ORDER,
+  facetCounts,
+  facetOptions,
+  filterUsers,
+  NO_APPLICATION,
+  NO_ROLE,
+} from "./user-filters";
 import { UsersActions } from "./users-actions";
 
 function fullName(u: UserListItem): string {
@@ -207,7 +215,7 @@ function buildColumns(
     {
       id: "application",
       header: t("colApplication"),
-      sortValue: (u) => u.applicationStatus ?? "",
+      sortValue: (u) => APPLICATION_FILTER_ORDER.indexOf(u.applicationStatus ?? NO_APPLICATION),
       cell: (u) => (
         <StatusBadge tone={applicationStatusTone(u.applicationStatus ?? "")} className="capitalize">
           {applicationLabel(u.applicationStatus, t)}
@@ -385,11 +393,11 @@ export default function UsersPage() {
     "users-list:spot",
     [],
   );
-  const spotFilter = Array.isArray(spotSelection)
-    ? spotSelection
-    : spotSelection === "all"
-      ? []
-      : [spotSelection];
+  // Older sessions persisted synthetic buckets ("accepted_pending",
+  // "not_confirmed"); keep only real statuses so a stale value can't hide rows.
+  const spotFilter = (Array.isArray(spotSelection) ? spotSelection : [spotSelection]).filter(
+    (status) => APPLICATION_FILTER_ORDER.includes(status),
+  );
   const [visibleColumns, setVisibleColumns] = useState<Set<UserColumnId>>(DEFAULT_COLUMNS);
   const [columnsHydrated, setColumnsHydrated] = useState(false);
   const canScanPresence = useCan(CAPABILITIES.PRESENCE_SCAN);
@@ -445,33 +453,16 @@ export default function UsersPage() {
     loadPresence();
   });
 
+  const selection = { email: emailFilter, role: roleFilter, spot: spotFilter };
   const filteredUsers = useMemo(
-    () =>
-      users.filter((user) => {
-        if (emailFilter.length + roleFilter.length + spotFilter.length === 0) return true;
-        return (
-          emailFilter.includes(user.emailVerified ? "verified" : "unverified") ||
-          roleFilter.includes(user.visibleRoleName ?? "") ||
-          spotFilter.some((filter) => {
-            if (filter === "accepted_pending")
-              return ["accepted", "accepted_internal"].includes(user.applicationStatus ?? "");
-            if (filter === "not_confirmed") return user.applicationStatus !== "confirmed";
-            return user.applicationStatus === filter;
-          })
-        );
-      }),
+    () => filterUsers(users, { email: emailFilter, role: roleFilter, spot: spotFilter }),
     [users, emailFilter, roleFilter, spotFilter],
   );
   const hasFilters =
     q.trim().length > 0 || emailFilter.length > 0 || roleFilter.length > 0 || spotFilter.length > 0;
-
-  /** H8: role names are arbitrary now — the filter's option list is whatever
-   * distinct role names are actually present in the loaded page of users. */
-  const roleFilterOptions = useMemo(() => {
-    const names = new Set<string>();
-    for (const u of users) if (u.visibleRoleName) names.add(u.visibleRoleName);
-    return [...names].sort((a, b) => a.localeCompare(b));
-  }, [users]);
+  const counts = facetCounts(users, selection);
+  const roleFilterOptions = facetOptions(users, "role", roleFilter);
+  const spotFilterOptions = facetOptions(users, "spot", spotFilter);
 
   function clearUserFilters() {
     setQ("");
@@ -508,16 +499,18 @@ export default function UsersPage() {
 
   const filters: FilterDefinition[] = [
     {
-      id: "email",
-      label: t("email"),
-      icon: EnvelopeSimpleIcon,
+      id: "spot",
+      label: t("colApplication"),
+      icon: TicketIcon,
       type: "multiple",
-      value: emailFilter,
-      onChange: (values) => setEmailFilter([...values]),
-      options: [
-        { value: "verified", label: t("verified") },
-        { value: "unverified", label: t("unverified") },
-      ],
+      value: spotFilter,
+      onChange: (values) => setSpotFilter([...values]),
+      options: spotFilterOptions.map((status) => ({
+        value: status,
+        label: applicationLabel(status === NO_APPLICATION ? null : status, t),
+        tone: status === NO_APPLICATION ? "neutral" : applicationStatusTone(status),
+        count: counts.spot.get(status) ?? 0,
+      })),
     },
     {
       id: "role",
@@ -526,20 +519,32 @@ export default function UsersPage() {
       type: "multiple",
       value: roleFilter,
       onChange: (values) => setRoleFilter([...values]),
-      options: [...roleFilterOptions.map((name) => ({ value: name, label: name }))],
+      options: roleFilterOptions.map((name) => ({
+        value: name,
+        label: name === NO_ROLE ? t("roleUnassigned") : name,
+        count: counts.role.get(name) ?? 0,
+      })),
     },
     {
-      id: "spot",
-      label: t("colApplication"),
-      icon: TicketIcon,
+      id: "email",
+      label: t("email"),
+      icon: EnvelopeSimpleIcon,
       type: "multiple",
-      value: spotFilter,
-      onChange: (values) => setSpotFilter([...values]),
+      value: emailFilter,
+      onChange: (values) => setEmailFilter([...values]),
       options: [
-        { value: "confirmed", label: t("confirmed") },
-        { value: "accepted_pending", label: t("acceptedPending") },
-        { value: "declined", label: t("declined") },
-        { value: "not_confirmed", label: t("notConfirmed") },
+        {
+          value: "verified",
+          label: t("verified"),
+          tone: "success",
+          count: counts.email.get("verified") ?? 0,
+        },
+        {
+          value: "unverified",
+          label: t("unverified"),
+          tone: "warning",
+          count: counts.email.get("unverified") ?? 0,
+        },
       ],
     },
   ];
