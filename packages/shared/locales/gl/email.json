@@ -109,6 +109,14 @@
       "draftReminder3": {
         "subject": "Último lembrete sobre a túa solicitude de {{applicationName}}",
         "body": "Ola {{name}}:\n\nEsta é a última vez que che escribimos sobre isto. A túa solicitude para {{applicationName}} en {{eventName}} segue como borrador e non avaliamos borradores.\n\nSe aínda queres participar, podes presentala cando queiras:\n\n[Presentar a miña solicitude]({{applicationUrl}})\n\nNon che enviaremos máis lembretes.\n\nO equipo de {{eventName}}"
+      },
+      "confirmationReminder": {
+        "subject": "Lembra confirmar a túa praza en {{eventName}}",
+        "body": "Ola {{name}},\n\nA túa praza en {{eventName}} segue reservada, pero aínda non confirmaches a túa asistencia.{{confirmationDetails}}\n\nO equipo de {{eventName}}"
+      },
+      "confirmationLastChance": {
+        "subject": "Última oportunidade para confirmar a túa praza en {{eventName}}",
+        "body": "Ola {{name}},\n\nQuedan menos de 24 horas para confirmar a túa praza en {{eventName}}. É o último aviso que che enviaremos.{{confirmationDetails}}\n\nO equipo de {{eventName}}"
       }
     },
     "schedule": {

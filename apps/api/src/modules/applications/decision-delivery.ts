@@ -152,6 +152,20 @@ export async function enqueueDecisionNotificationRows(
   });
 }
 
+/** The confirmation deadline as written in decision and reminder emails (H14, H15). */
+export function formatConfirmationDeadline(at: Date, language: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(language, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone,
+    timeZoneName: "short",
+  }).format(at);
+}
+
 async function decisionNotificationPayload(
   client: pg.PoolClient,
   user: UserComms,
@@ -173,16 +187,7 @@ async function decisionNotificationPayload(
     if (!rows[0]) throw new NotFoundError("Confirmation token not found");
     confirmationExpiresAt = rows[0].expires_at.toISOString();
     confirmationTimeZone = await getEventTimezone(client);
-    const deadline = new Intl.DateTimeFormat(language, {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-      timeZone: confirmationTimeZone,
-      timeZoneName: "short",
-    }).format(rows[0].expires_at);
+    const deadline = formatConfirmationDeadline(rows[0].expires_at, language, confirmationTimeZone);
     decisionDetails = translateEmail("mail.application.decision.confirmationDetails", language, {
       confirmUrl: `${config.WEB_URL}/applications/confirm#token=${confirmToken}`,
       declineUrl: `${config.WEB_URL}/applications/decline#token=${confirmToken}`,

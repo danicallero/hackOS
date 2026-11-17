@@ -109,6 +109,14 @@
       "draftReminder3": {
         "subject": "Last reminder about your {{applicationName}} application",
         "body": "Hi {{name}},\n\nThis is the last time we'll write to you about this. Your application for {{applicationName}} at {{eventName}} is still a draft, and we won't evaluate drafts.\n\nIf you'd still like to take part, you can submit it whenever you're ready:\n\n[Submit my application]({{applicationUrl}})\n\nWe won't send any more reminders.\n\nThe {{eventName}} team"
+      },
+      "confirmationReminder": {
+        "subject": "Remember to confirm your spot at {{eventName}}",
+        "body": "Hi {{name}},\n\nYour spot at {{eventName}} is still reserved, but you haven’t confirmed you’re coming yet.{{confirmationDetails}}\n\nThe {{eventName}} team"
+      },
+      "confirmationLastChance": {
+        "subject": "Last chance to confirm your spot at {{eventName}}",
+        "body": "Hi {{name}},\n\nThere are less than 24 hours left to confirm your spot at {{eventName}}. This is the last reminder we’ll send.{{confirmationDetails}}\n\nThe {{eventName}} team"
       }
     },
     "schedule": {
