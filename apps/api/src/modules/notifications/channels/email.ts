@@ -60,9 +60,22 @@ function mailConfigFromEnv(): MailConfig {
   };
 }
 
-/** Account emails (`auth.*`) use their own sender so they build reputation apart from notifications. */
+/**
+ * One-to-one transactional emails: account mail (`auth.*`) and the admission
+ * decision with its confirmation link (H14, H15). They leave from their own
+ * sender so Gmail and others never learn them alongside the bulk notices
+ * (announcements, event reminders) that go out from the notifications sender
+ * and land in the Promotions tab.
+ */
+const TRANSACTIONAL_TEMPLATES = /^(auth\.|application\.decision(\.|$))/;
+
+/** Address the admission decision leaves from, shown to applicants when they submit (H12, H14). */
+export function decisionSenderAddress(mail: MailConfig = mailConfigFromEnv()): string {
+  return senderFor(mail, "application.decision").address;
+}
+
 function senderFor(mail: MailConfig, template: string | undefined) {
-  if (template?.startsWith("auth.") && mail.authFromAddress) {
+  if (template && TRANSACTIONAL_TEMPLATES.test(template) && mail.authFromAddress) {
     return { address: mail.authFromAddress, name: mail.authFromName ?? mail.fromName };
   }
   return { address: mail.fromAddress, name: mail.fromName };

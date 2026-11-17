@@ -77,6 +77,7 @@ export default function MyApplicationDetailPage() {
   const [acting, setActing] = useState(false);
   const [releaseOpen, setReleaseOpen] = useState(false);
   const [submissionNoticeOpen, setSubmissionNoticeOpen] = useState(false);
+  const [decisionSender, setDecisionSender] = useState("");
   const [privacyNotice, setPrivacyNotice] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -275,21 +276,22 @@ export default function MyApplicationDetailPage() {
       const foodIds = Array.isArray(values.food_intolerances)
         ? (values.food_intolerances as string[]).map(Number)
         : (me?.foodIntolerances ?? []);
-      const res = await api.post<{ response: MyResponseDetail; privacy_notice: string }>(
-        `/api/applications/${id}/response/submit`,
-        {
-          responses: values,
-          food_intolerances: foodIds,
-          food_intolerance_notes:
-            typeof values.food_intolerance_notes === "string"
-              ? values.food_intolerance_notes
-              : (me?.foodIntoleranceNotes ?? null),
-          shirt_size:
-            typeof values.shirt_size === "string" && values.shirt_size
-              ? values.shirt_size
-              : (me?.shirtSize ?? null),
-        },
-      );
+      const res = await api.post<{
+        response: MyResponseDetail;
+        privacy_notice: string;
+        decision_sender: string;
+      }>(`/api/applications/${id}/response/submit`, {
+        responses: values,
+        food_intolerances: foodIds,
+        food_intolerance_notes:
+          typeof values.food_intolerance_notes === "string"
+            ? values.food_intolerance_notes
+            : (me?.foodIntoleranceNotes ?? null),
+        shirt_size:
+          typeof values.shirt_size === "string" && values.shirt_size
+            ? values.shirt_size
+            : (me?.shirtSize ?? null),
+      });
       setResponse(res.response);
       hasLocalEditsRef.current = false;
       setValues(res.response.responses ?? {});
@@ -298,6 +300,7 @@ export default function MyApplicationDetailPage() {
       setFieldErrors({});
       setSaveState("saved");
       setActionError(null);
+      setDecisionSender(res.decision_sender);
       setSubmissionNoticeOpen(true);
       toast.success(t("applicationSubmitted"), { compactTitle: t("submitApplication") });
     } catch (err) {
@@ -632,7 +635,9 @@ export default function MyApplicationDetailPage() {
         footer={<Button onClick={() => setSubmissionNoticeOpen(false)}>{t("close")}</Button>}
       >
         <div className="space-y-3">
-          <p className="text-pretty text-sm">{t("applicationSubmissionNoticeDecision")}</p>
+          <p className="text-pretty text-sm">
+            {t("applicationSubmissionNoticeDecision", { sender: decisionSender })}
+          </p>
           <p className="text-muted-foreground text-pretty text-sm">
             {t("applicationSubmissionNoticeSpam")}
           </p>

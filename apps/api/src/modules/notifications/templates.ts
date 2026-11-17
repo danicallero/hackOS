@@ -161,7 +161,6 @@ function brandWrapHtml(
   </head>
   <body style="margin:0;padding:0;background:${EMAIL_CREAM};font-family:${EMAIL_FONT_STACK};-webkit-text-size-adjust:100%;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${escapeHtml(preheader)}</div>
-    <div style="display:none;max-height:0;overflow:hidden;">&#8199;&zwnj;&nbsp;&#8199;&zwnj;&nbsp;&#8199;&zwnj;&nbsp;&#8199;&zwnj;&nbsp;&#8199;&zwnj;&nbsp;</div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="email-page" style="background:${EMAIL_CREAM};">
       <tr>
         <td align="center" class="email-pad" style="padding:48px 24px;">

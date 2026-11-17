@@ -86,7 +86,7 @@
         "subject": "A decision on your application",
         "body": "Hi {{name}},\n\nWe’ve reviewed your application to {{applicationName}}.{{decisionDetails}}",
         "accepted": {
-          "subject": "Your spot at {{eventName}} is waiting for you!",
+          "subject": "Your application to {{eventName}} has been accepted",
           "heading": "We can’t wait to see you at {{eventName}}!",
           "body": "Hi {{name}},\n\nCongratulations! We’ve accepted your application for {{applicationName}} at {{eventName}}, and we’re excited to have you join us.\n\nWe’ve reserved a spot for you. All that’s left is to confirm you’re coming.{{decisionDetails}}\n\nWe can’t wait to meet you!\nThe {{eventName}} team"
         },

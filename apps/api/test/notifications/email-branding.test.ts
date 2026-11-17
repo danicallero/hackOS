@@ -68,7 +68,7 @@ describe("layout", () => {
 });
 
 describe("senders", () => {
-  it("sends account emails from the auth sender and the rest from the notifications sender", async () => {
+  it("sends account and decision emails from the transactional sender and the rest from the notifications sender", async () => {
     const mail = {
       provider: "smtp" as const,
       fromAddress: "notify@notify.example.org",
@@ -95,6 +95,34 @@ describe("senders", () => {
     const account = await waitForMessage();
     expect(account.From).toMatchObject({ Address: "no-reply@auth.example.org" });
     expect(account.ReplyTo[0]?.Address).toBe("help@example.org");
+
+    await clearMailpit();
+    await sendEmail(
+      pool,
+      userId,
+      {
+        template: "application.decision",
+        vars: {
+          name: "Who",
+          decision: "accepted",
+          applicationName: "Hackers",
+          decisionDetails: "",
+        },
+      },
+      mail,
+    );
+    const decision = await waitForMessage();
+    expect(decision.From).toMatchObject({ Address: "no-reply@auth.example.org" });
+
+    await clearMailpit();
+    await sendEmail(
+      pool,
+      userId,
+      { template: "application.draftReminder1", vars: { name: "Who" } },
+      mail,
+    );
+    const draftReminder = await waitForMessage();
+    expect(draftReminder.From).toMatchObject({ Address: "notify@notify.example.org" });
 
     await clearMailpit();
     await sendEmail(pool, userId, { template: "generic", subject: "Hi", body: "There" }, mail);
