@@ -1102,10 +1102,13 @@ they are not device screenshots or proof of native toolbar behavior.
   directions, and lands on the cell under the finger only once it arrives; a
   tap on a distant tab travels the same way. Lift, travel and landing run on
   the UI thread from shared values, and navigation waits for the arrival so
-  mounting the next screen cannot stall the travel. The lifted lens mounts per press at the
-  resting lens's size and is never faded: UIKit drops the glass effect under
-  a translucent parent, and a glass view switched to `none` and back stops
-  rendering (expo/expo#43732).
+  mounting the next screen cannot stall the travel. The lifted lens stays mounted and is
+  parked off-screen with a translate when idle, never faded or toggled through
+  React: UIKit drops the glass effect under a translucent parent, a glass view
+  switched to `none` and back stops rendering (expo/expo#43732), and a mount
+  per press arrives frames late. One spring carries the travel from touch-down
+  to release, so a tap never stops mid-flight, and the lens is clamped over
+  the bar at the first and last cells.
   A tap or held press without movement runs that cell's normal press, a drag
   only switches, while the
   separate Others circle remains its own menu (native `MenuView` on iOS; a

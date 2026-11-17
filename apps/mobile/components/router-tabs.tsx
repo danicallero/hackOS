@@ -31,14 +31,12 @@ import {
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   cancelAnimation,
-  Easing,
   runOnJS,
   type SharedValue,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
   withSpring,
-  withTiming,
 } from "react-native-reanimated";
 import { useDockBackGesture } from "@/components/app-back-gesture";
 import {
@@ -65,7 +63,18 @@ export const ROUTER_TAB_BAR_HEIGHT = TAB_BAR_HEIGHT;
 const ROUTER_TAB_BAR_HORIZONTAL_PADDING = 16;
 const TAB_SELECTION_SPRING = { damping: 20, mass: 0.8, stiffness: 220 };
 /** A tap's lens travel: lifted at the current tab, it glides and lands on the target. */
-const TAB_TRAVEL = { duration: 300, easing: Easing.bezier(0.2, 0.8, 0.2, 1) };
+/**
+ * The lens's travel to a pressed tab. One spring from touch-down to release:
+ * retargeting a spring keeps its velocity, so a tap never stops mid-flight.
+ * Near-critical, and finished once visually still so landing starts at once.
+ */
+const TAB_TRAVEL_SPRING = {
+  damping: 27,
+  mass: 0.9,
+  stiffness: 210,
+  restDisplacementThreshold: 0.5,
+  restSpeedThreshold: 12,
+};
 /** Stiff enough to stay under a dragging finger. */
 const TAB_TRACKING_SPRING = { damping: 28, mass: 0.6, stiffness: 520 };
 /** How far the pressed lens grows past the bar's top and bottom edges. */
@@ -83,6 +92,8 @@ const PRESS_LENS_SPRING = {
   restDisplacementThreshold: 0.002,
   restSpeedThreshold: 0.02,
 };
+/** Far below the window: where the idle clear lens waits, still laid out. */
+const LENS_PARKED_Y = 10000;
 /** The whole bar grows slightly while a finger is down. */
 const PRESS_BAR_GROWTH = 0.04;
 /** Horizontal travel that turns a press into a scrub. */
@@ -298,8 +309,8 @@ function RouterTabsContent({
   // H55: 0 resting, 1 lifted. Driven only from the gesture worklet, so the
   // lift, travel and landing stay on the UI thread with no React render.
   const lift = useSharedValue(0);
-  // The clear glass is mounted only while lifted (see TabPressLens).
-  const [lensMounted, setLensMounted] = useState(false);
+  // 1 while the clear lens is on screen; it is parked off-screen otherwise.
+  const lensShown = useSharedValue(0);
   const directTabCellWidth = directTabCount > 0 ? directGroupWidth / directTabCount : 0;
   const tabItemHeight = tabBarHeight - tabBarVerticalPadding;
   const tabItemVerticalInset = (tabBarHeight - tabItemHeight) / 2;
@@ -356,7 +367,7 @@ function RouterTabsContent({
         ? target
         : tracking
           ? withSpring(target, TAB_TRACKING_SPRING)
-          : withTiming(target, TAB_TRAVEL);
+          : withSpring(target, TAB_TRAVEL_SPRING);
     };
     // H55: like the system tab bar, the lens moves under the finger on touch
     // down anywhere in the group and follows it in both directions; release
@@ -379,7 +390,7 @@ function RouterTabsContent({
         // Lift where the lens rests, then glide towards the finger.
         followFinger(touch.x, false);
         lift.value = reducedMotion ? 1 : withSpring(1, PRESS_LENS_SPRING);
-        runOnJS(setLensMounted)(true);
+        lensShown.value = 1;
       })
       .onTouchesMove((event) => {
         "worklet";
@@ -420,22 +431,23 @@ function RouterTabsContent({
         if (reducedMotion) {
           selectionOffset.value = nextOffset;
           lift.value = 0;
-          runOnJS(setLensMounted)(false);
+          lensShown.value = 0;
           arrive();
         } else {
           // Arrive on the cell with the system ease-out, then land at once.
-          selectionOffset.value = withTiming(nextOffset, TAB_TRAVEL, (finished) => {
+          selectionOffset.value = withSpring(nextOffset, TAB_TRAVEL_SPRING, (finished) => {
             // An interrupting touch replaces this travel and keeps the lens up.
             if (!finished) return;
             arrive();
             lift.value = withSpring(0, PRESS_LENS_SPRING, (landed) => {
-              if (landed) runOnJS(setLensMounted)(false);
+              if (landed) lensShown.value = 0;
             });
           });
         }
       });
   }, [
     dockBackGesture,
+    lensShown,
     lift,
     commitTabSelection,
     directGroupWidth,
@@ -546,15 +558,17 @@ function RouterTabsContent({
               </TabTrigger>
             ))}
           </TabSurface>
-          {liquidGlass && lensMounted ? (
+          {liquidGlass ? (
             <TabPressLens
               barHeight={tabBarHeight}
               cellWidth={directTabCellWidth}
               colorScheme={colorScheme}
               itemHeight={tabItemHeight}
               offset={selectionOffset}
+              groupWidth={directGroupWidth}
               lift={lift}
               selectionInset={tabItemVerticalInset}
+              shown={lensShown}
             />
           ) : null}
         </Animated.View>
@@ -958,38 +972,54 @@ function TabPressLens({
   barHeight,
   cellWidth,
   colorScheme,
+  groupWidth,
   itemHeight,
   offset,
   lift,
   selectionInset,
+  shown,
 }: {
   barHeight: number;
   cellWidth: number;
   colorScheme: RouterTabsColorScheme;
+  groupWidth: number;
   itemHeight: number;
   offset: SharedValue<number>;
   lift: SharedValue<number>;
   selectionInset: number;
+  /** 1 while pressed or landing; 0 parks the lens off-screen. */
+  shown: SharedValue<number>;
 }) {
   const restingWidth = Math.max(0, cellWidth - selectionInset * 2);
   const height = barHeight + PRESS_LENS_OUTSET * 2;
   const width = cellWidth * PRESS_LENS_CELLS;
   const left = selectionInset + restingWidth / 2 - width / 2;
-  // At rest it matches the resting lens exactly, so mounting and unmounting
+  // At rest it matches the resting lens exactly, so appearing and leaving
   // are seamless; the brief non-uniform scale is hidden under that lens.
   const restScaleX = restingWidth / width;
   const restScaleY = itemHeight / height;
-  // Mounted per press and never faded: UIKit drops the glass effect under a
-  // translucent parent, and a glass view switched to `none` and back stops
-  // rendering (expo/expo#43732). It mounts and unmounts at the resting
-  // lens's size, so both edges are seamless; only the scale animates.
-  const lensStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: offset.value },
-      { scaleX: restScaleX + (1 - restScaleX) * lift.value },
-      { scaleY: restScaleY + (1 - restScaleY) * lift.value },
-    ],
-  }));
+  // Always mounted and never faded or React-toggled: UIKit drops the glass
+  // effect under a translucent parent, a glass view switched to `none` and
+  // back stops rendering (expo/expo#43732), and a mount per press arrives
+  // frames late. Off-screen parking is a plain translate on the UI thread.
+  const lensStyle = useAnimatedStyle(() => {
+    const scaleX = restScaleX + (1 - restScaleX) * lift.value;
+    // Keep the widened lens over the bar at the first and last cells.
+    const half = (width * scaleX) / 2;
+    const centre = left + width / 2 + offset.value;
+    const clamped = Math.min(
+      groupWidth + PRESS_LENS_OUTSET - half,
+      Math.max(-PRESS_LENS_OUTSET + half, centre),
+    );
+    return {
+      transform: [
+        { translateX: clamped - left - width / 2 },
+        { translateY: shown.value ? 0 : LENS_PARKED_Y },
+        { scaleX },
+        { scaleY: restScaleY + (1 - restScaleY) * lift.value },
+      ],
+    };
+  });
 
   if (cellWidth <= 0) return null;
 
