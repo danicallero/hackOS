@@ -139,6 +139,37 @@ jest.mock("@/lib/me-context", () => ({
     me: { name: "Ada", surname: "Lovelace", email: "ada@example.com", image: null },
   }),
 }));
+// The native menu: its actions render as menu items next to the trigger.
+jest.mock("@expo/ui/community/menu", () => {
+  const ReactLib = require("react");
+  const Native = jest.requireActual("react-native");
+  return {
+    MenuView: ({
+      actions,
+      children,
+      onPressAction,
+    }: {
+      actions: { id: string; title: string; subactions?: { id: string; title: string }[] }[];
+      children: unknown;
+      onPressAction: (event: { nativeEvent: { event: string } }) => void;
+    }) =>
+      ReactLib.createElement(
+        Native.View,
+        null,
+        children,
+        actions
+          .flatMap((action) => action.subactions ?? [action])
+          .map(({ id, title }) =>
+            ReactLib.createElement(Native.Pressable, {
+              key: id,
+              accessibilityRole: "menuitem",
+              accessibilityLabel: title,
+              onPress: () => onPressAction({ nativeEvent: { event: id } }),
+            }),
+          ),
+      ),
+  };
+});
 // The photo control has its own tests (profile-photo-menu.test.tsx).
 jest.mock("@/components/profile-photo-menu", () => {
   const Native = require("react-native");
@@ -340,11 +371,9 @@ describe("NetworkingProfileScreen", () => {
     // Only the handle: no address that wraps.
     expect(screen.getByLabelText("networkingLinkUrl 1").props.value).toBe("ada");
     // Switching to Instagram from the network menu keeps the handle.
-    await fireEvent.press(screen.getByRole("button", { name: "networkingLinkType 1" }));
     await fireEvent.press(screen.getByRole("menuitem", { name: "Instagram" }));
     expect(screen.getByLabelText("networkingLinkUrl 1").props.value).toBe("ada");
     await fireEvent.changeText(screen.getByLabelText("networkingLinkUrl 1"), "@lovelace");
-    await fireEvent.press(screen.getByRole("button", { name: "networkingLinkType 1" }));
     await fireEvent.press(screen.getByRole("menuitem", { name: "LinkedIn" }));
     await fireEvent.press(screen.getByRole("button", { name: "save" }));
     await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
@@ -353,7 +382,6 @@ describe("NetworkingProfileScreen", () => {
     ]);
     await fireEvent.press(await screen.findByRole("button", { name: "networkingEdit" }));
     expect(screen.getByLabelText("networkingLinkUrl 1").props.value).toBe(link.url);
-    await fireEvent.press(screen.getByRole("button", { name: "networkingLinkType 1" }));
     await fireEvent.press(screen.getByRole("menuitem", { name: "remove" }));
     expect(screen.queryByLabelText("networkingLinkUrl 1")).toBeNull();
     await fireEvent.press(screen.getByRole("button", { name: "cancel" }));
@@ -381,7 +409,7 @@ describe("NetworkingProfileScreen", () => {
     mockFetchGithubAccount.mockResolvedValue({ configured: true, login: "ada" });
     await fireEvent.press(await screen.findByRole("button", { name: "networkingGithubLink" }));
     expect(mockLinkGithubAccount).toHaveBeenCalledWith(false);
-    await fireEvent.press(await screen.findByRole("button", { name: "GitHub, ada" }));
+    expect(await screen.findByRole("button", { name: "GitHub, ada" })).toBeTruthy();
     await fireEvent.press(screen.getByRole("menuitem", { name: "networkingGithubRelink" }));
     expect(mockLinkGithubAccount).toHaveBeenLastCalledWith(true);
   });
@@ -433,8 +461,8 @@ describe("NetworkingProfileScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "save" }));
     await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
     expect(screen.getByLabelText("networkingLinkUrl 1").props.value).toBe("http://invalid.example");
-    await fireEvent.press(screen.getByRole("button", { name: "networkingLinkType 6" }));
-    await fireEvent.press(screen.getByRole("menuitem", { name: "remove" }));
+    // The sixth row's menu: its Remove is the last one rendered.
+    await fireEvent.press(screen.getAllByRole("menuitem", { name: "remove" }).at(-1)!);
     expect(screen.getByRole("button", { name: "networkingLinkAdd" })).toBeTruthy();
   });
 

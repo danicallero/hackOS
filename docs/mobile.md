@@ -794,9 +794,12 @@ they are not device screenshots or proof of native toolbar behavior.
   (network tile, network name, value), up to six. Tiles are neutral grey with a
   monochrome glyph (`components/social-glyph.tsx`, inlined Phosphor paths,
   since SF Symbols has no brand marks); the read-only card rows use the same
-  tiles. Tapping the tile or name opens the network picker, the app's
-  UIKit-style `MenuPopover` (iOS system menus only accept SF Symbols), listing
-  each network with its glyph plus a destructive Remove. A new row takes the
+  tiles. Tapping the tile or name opens the network picker, the
+  system menu (`MenuView`, Liquid Glass on iOS 26) like every other menu in the
+  app: the networks by name in an inline section (iOS menus take only SF
+  Symbols, so the glyph stays on the row's tile) and a destructive Remove
+  below. The GitHub row's menu (open, link another account) is the same
+  system menu. A new row takes the
   first unused network; LinkedIn, X and Instagram show only the handle while
   the stored link keeps the full address (a typed `@` or a pasted address is
   reduced to the handle, shared with web through

@@ -1,7 +1,7 @@
 import { handleOf, SOCIAL_HANDLE_PREFIX, urlForHandle } from "@hackos/shared/social-links";
 import { useRef } from "react";
 import { Linking, Text, TextInput, View } from "react-native";
-import { MenuPopover, useMenuPopover } from "@/components/app-menu";
+import { MenuView } from "@/components/app-menu";
 import { Section, Separator } from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { VisibilityToggle } from "@/components/profile-parts";
@@ -43,9 +43,10 @@ function typedHandle(text: string): string {
 }
 
 /**
- * The network picker: tap the tile or name to change it. The UIKit-style
- * popover rather than the system menu, because iOS menus only take SF Symbols
- * and the choices need their network glyphs (#934, #935).
+ * The network picker: the system menu (Liquid Glass on iOS 26), like every
+ * other menu in the app. iOS menus take only SF Symbols, which have no brand
+ * marks, so the networks are listed by name; the row's tile keeps the glyph
+ * (#934, #935).
  */
 function KindMenu({
   link,
@@ -63,62 +64,65 @@ function KindMenu({
   onRemove: () => void;
 }) {
   const { t } = useLocale();
-  const { trigger, visible, anchor, open, close } = useMenuPopover();
   return (
-    <>
-      <View ref={trigger} collapsable={false}>
-        <PressableFeedback
-          accessibilityRole="button"
-          accessibilityLabel={`${t("networkingLinkType")} ${index + 1}`}
-          disabled={disabled}
-          onPress={() => {
-            void haptic("selection");
-            open();
-          }}
-          style={{
-            alignItems: "center",
-            flexDirection: "row",
-            gap: space.md,
-            minHeight: MIN_TARGET,
-          }}
-        >
-          <SocialTile kind={link.kind} />
-          <View style={{ alignItems: "center", flexDirection: "row", gap: 3, width: KIND_WIDTH }}>
-            <Text numberOfLines={1} style={{ ...type.body, color: colors.label, flexShrink: 1 }}>
-              {label(link.kind)}
-            </Text>
-            <SymbolView
-              accessible={false}
-              name="chevron.up.chevron.down"
-              size={11}
-              tintColor={colors.tertiaryLabel}
-              weight="semibold"
-            />
-          </View>
-        </PressableFeedback>
-      </View>
-      <MenuPopover
-        align="left"
-        anchor={anchor}
-        visible={visible}
-        onClose={close}
-        items={[
-          ...KINDS.map((kind) => ({
+    <MenuView
+      shouldOpenOnLongPress={false}
+      actions={[
+        {
+          // An inline section, so Remove sits apart like in system menus.
+          id: "kinds",
+          title: "",
+          displayInline: true,
+          subactions: KINDS.map((kind) => ({
             id: kind,
-            label: label(kind),
-            selected: kind === link.kind,
-            glyph: <SocialGlyph kind={kind} size={20} color={colors.label as string} />,
+            title: label(kind),
+            state: kind === link.kind ? ("on" as const) : ("off" as const),
+            attributes: { disabled },
           })),
-          { id: REMOVE, label: t("remove"), icon: "trash", destructive: true, groupStart: true },
-        ]}
-        onSelect={(id) => {
-          close();
-          if (id === REMOVE) return onRemove();
-          const kind = KINDS.find((value) => value === id);
-          if (kind) onKind(kind);
-        }}
+        },
+        {
+          id: REMOVE,
+          title: t("remove"),
+          image: "trash",
+          attributes: { destructive: true, disabled },
+        },
+      ]}
+      onPressAction={({ nativeEvent }) => {
+        if (disabled) return;
+        if (nativeEvent.event === REMOVE) return onRemove();
+        const kind = KINDS.find((value) => value === nativeEvent.event);
+        if (kind) onKind(kind);
+      }}
+    >
+      <View
+        accessible
+        accessibilityRole="button"
+        accessibilityLabel={`${t("networkingLinkType")} ${index + 1}`}
+        accessibilityState={{ disabled }}
+        style={{ alignItems: "center", flexDirection: "row", gap: space.md, minHeight: MIN_TARGET }}
+      >
+        <SocialTile kind={link.kind} />
+        <KindLabel text={label(link.kind)} />
+      </View>
+    </MenuView>
+  );
+}
+
+/** A network name with the up/down chevron that marks a menu trigger. */
+function KindLabel({ text }: { text: string }) {
+  return (
+    <View style={{ alignItems: "center", flexDirection: "row", gap: 3, width: KIND_WIDTH }}>
+      <Text numberOfLines={1} style={{ ...type.body, color: colors.label, flexShrink: 1 }}>
+        {text}
+      </Text>
+      <SymbolView
+        accessible={false}
+        name="chevron.up.chevron.down"
+        size={11}
+        tintColor={colors.tertiaryLabel}
+        weight="semibold"
       />
-    </>
+    </View>
   );
 }
 
@@ -151,7 +155,6 @@ function GithubRow({
   rowStyle: object;
 }) {
   const { t } = useLocale();
-  const { trigger, visible, anchor, open, close } = useMenuPopover();
   const { login } = github;
   if (!login) {
     return (
@@ -168,15 +171,32 @@ function GithubRow({
   }
   return (
     <View style={rowStyle}>
-      <View ref={trigger} collapsable={false}>
-        <PressableFeedback
+      <MenuView
+        shouldOpenOnLongPress={false}
+        actions={[
+          {
+            id: OPEN,
+            title: t("networkingGithubOpen"),
+            image: "arrow.up.right",
+            attributes: { disabled: disabled || github.linking },
+          },
+          {
+            id: RELINK,
+            title: t("networkingGithubRelink"),
+            image: "arrow.triangle.2.circlepath",
+            attributes: { disabled: disabled || github.linking },
+          },
+        ]}
+        onPressAction={({ nativeEvent }) => {
+          if (disabled || github.linking) return;
+          if (nativeEvent.event === OPEN) void Linking.openURL(`https://github.com/${login}`);
+          else if (nativeEvent.event === RELINK) github.onLink(true);
+        }}
+      >
+        <View
+          accessible
           accessibilityRole="button"
           accessibilityLabel={`GitHub, ${login}`}
-          disabled={disabled || github.linking}
-          onPress={() => {
-            void haptic("selection");
-            open();
-          }}
           style={{
             alignItems: "center",
             flexDirection: "row",
@@ -185,20 +205,9 @@ function GithubRow({
           }}
         >
           <SocialTile kind="github" />
-          <View style={{ alignItems: "center", flexDirection: "row", gap: 3, width: KIND_WIDTH }}>
-            <Text numberOfLines={1} style={{ ...type.body, color: colors.label, flexShrink: 1 }}>
-              GitHub
-            </Text>
-            <SymbolView
-              accessible={false}
-              name="chevron.up.chevron.down"
-              size={11}
-              tintColor={colors.tertiaryLabel}
-              weight="semibold"
-            />
-          </View>
-        </PressableFeedback>
-      </View>
+          <KindLabel text="GitHub" />
+        </View>
+      </MenuView>
       <Text
         numberOfLines={1}
         style={{
@@ -214,21 +223,6 @@ function GithubRow({
         visible={github.shown}
         label={t("networkingShowGithub")}
         onChange={github.onShown}
-      />
-      <MenuPopover
-        align="left"
-        anchor={anchor}
-        visible={visible}
-        onClose={close}
-        items={[
-          { id: OPEN, label: t("networkingGithubOpen"), icon: "arrow.up.right" },
-          { id: RELINK, label: t("networkingGithubRelink"), icon: "arrow.triangle.2.circlepath" },
-        ]}
-        onSelect={(id) => {
-          close();
-          if (id === OPEN) void Linking.openURL(`https://github.com/${login}`);
-          else github.onLink(true);
-        }}
       />
     </View>
   );
