@@ -1098,21 +1098,16 @@ they are not device screenshots or proof of native toolbar behavior.
   mode keeps the clearer material. Its direct surface is one native gesture
   surface: it owns every touch from touch-down (the cells' Pressables still
   receive the touch, so they ignore press and long press while the lens is
-  shown; VoiceOver and keyboard activation still use them). On iOS 26 the lens lifts out
-  of the bar as a wider clear-glass capsule above the cells (the native glass
-  magnifies and refracts them), glides to the finger, follows it in both
-  directions, and lands on the cell under the finger only once it arrives; a
-  tap on a distant tab travels the same way. Lift, travel and landing run on
-  the UI thread from shared values, and navigation waits for the arrival so
-  mounting the next screen cannot stall the travel. The lifted lens stays mounted and is
-  parked off-screen with a translate when idle, never faded or toggled through
-  React: UIKit drops the glass effect under a translucent parent, a glass view
-  switched to `none` and back stops rendering (expo/expo#43732), and a mount
-  per press arrives frames late. One spring carries the travel from touch-down
-  to release, so a tap never stops mid-flight, and the lens is clamped over
-  the bar at the first and last cells.
-  A tap or held press without movement runs that cell's normal press, a drag
-  only switches, while the
+  shown; VoiceOver and keyboard activation still use them). The lens swells slightly with the bar while a finger is down, glides to the
+  finger, follows it in both directions, and lands on the cell under the
+  finger; a tap on a distant tab travels the same way. Lift, travel and
+  landing run on the UI thread from shared values. The released tab shows as
+  selected at once, and navigation waits for the arrival so mounting the next
+  screen cannot stall the travel. A refracting "lifted" lens like the system
+  bar's is not reachable with `expo-glass-effect` (its clear glass blurs the
+  centre); a native lens is tracked in #1360. A tap or held press
+  without movement runs that cell's normal press, a drag only switches, while
+  the
   separate Others circle remains its own menu (native `MenuView` on iOS; a
   hand-rolled card matching that look on Android — see `navigation.md`). On
   the native-search path,
