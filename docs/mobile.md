@@ -1101,9 +1101,10 @@ they are not device screenshots or proof of native toolbar behavior.
   magnifies and refracts them), glides to the finger, follows it in both
   directions, and lands on the cell under the finger only once it arrives; a
   tap on a distant tab travels the same way. Lift, travel and landing run on
-  the UI thread from shared values. The lifted lens stays mounted and only
-  fades, because a glass view switched to `none` and back stops rendering
-  (expo/expo#43732).
+  the UI thread from shared values. The lifted lens mounts per press at the
+  resting lens's size and is never faded: UIKit drops the glass effect under
+  a translucent parent, and a glass view switched to `none` and back stops
+  rendering (expo/expo#43732).
   A tap or held press without movement runs that cell's normal press, a drag
   only switches, while the
   separate Others circle remains its own menu (native `MenuView` on iOS; a

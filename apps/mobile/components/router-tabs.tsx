@@ -286,6 +286,8 @@ function RouterTabsContent({
   // H55: 0 resting, 1 lifted. Driven only from the gesture worklet, so the
   // lift, travel and landing stay on the UI thread with no React render.
   const lift = useSharedValue(0);
+  // The clear glass is mounted only while lifted (see TabPressLens).
+  const [lensMounted, setLensMounted] = useState(false);
   const directTabCellWidth = directTabCount > 0 ? directGroupWidth / directTabCount : 0;
   const tabItemHeight = tabBarHeight - tabBarVerticalPadding;
   const tabItemVerticalInset = (tabBarHeight - tabItemHeight) / 2;
@@ -361,6 +363,7 @@ function RouterTabsContent({
         // Lift where the lens rests, then glide towards the finger.
         followFinger(touch.x, TAB_TRAVEL_SPRING);
         lift.value = reducedMotion ? 1 : withSpring(1, PRESS_LENS_SPRING);
+        runOnJS(setLensMounted)(true);
       })
       .onTouchesMove((event) => {
         "worklet";
@@ -392,13 +395,17 @@ function RouterTabsContent({
         if (reducedMotion) {
           selectionOffset.value = nextOffset;
           lift.value = 0;
+          runOnJS(setLensMounted)(false);
         } else {
           selectionOffset.value = withSpring(
             nextOffset,
             scrubbed.value ? TAB_SELECTION_SPRING : TAB_TRAVEL_SPRING,
             (finished) => {
               // An interrupting touch replaces this spring and keeps the lens up.
-              if (finished) lift.value = withSpring(0, PRESS_LENS_SPRING);
+              if (!finished) return;
+              lift.value = withSpring(0, PRESS_LENS_SPRING, (landed) => {
+                if (landed) runOnJS(setLensMounted)(false);
+              });
             },
           );
         }
@@ -515,7 +522,7 @@ function RouterTabsContent({
               </TabTrigger>
             ))}
           </TabSurface>
-          {liquidGlass ? (
+          {liquidGlass && lensMounted ? (
             <TabPressLens
               barHeight={tabBarHeight}
               cellWidth={directTabCellWidth}
@@ -945,11 +952,11 @@ function TabPressLens({
   const width = Math.max(restingWidth + PRESS_LENS_SIDE_OUTSET * 2, height * PRESS_LENS_ASPECT);
   const left = selectionInset + restingWidth / 2 - width / 2;
   const restScale = itemHeight / height;
-  // The lens stays mounted as clear glass and only its wrapper fades: a
-  // glass view switched to `none` and back stops rendering (expo/expo#43732),
-  // and mounting a glass view per press would hitch the main thread.
+  // Mounted per press and never faded: UIKit drops the glass effect under a
+  // translucent parent, and a glass view switched to `none` and back stops
+  // rendering (expo/expo#43732). It mounts and unmounts at the resting
+  // lens's size, so both edges are seamless; only the scale animates.
   const lensStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(1, lift.value * 2),
     transform: [{ translateX: offset.value }, { scale: restScale + (1 - restScale) * lift.value }],
   }));
 
