@@ -1383,7 +1383,9 @@ describe("re-accept (admin)", () => {
     });
     expect(inbox.statusCode).toBe(200);
     expect(inbox.json().total).toBe(1);
-    expect(inbox.json().items[0].payload.subject).toBe("Your spot at hackOS is waiting for you!");
+    expect(inbox.json().items[0].payload.subject).toBe(
+      "Your application to hackOS has been accepted",
+    );
 
     // the new token can confirm
     const token = await latestConfirmationToken(userId);

@@ -79,7 +79,7 @@ siguiente especifica cada variable individualmente.
 | `MAIL_PROVIDER` | configuración | no | `smtp`; el transporte se mantiene explícito para el despliegue. |
 | `MAIL_FROM_ADDRESS` | configuración | sí | Remitente de los correos. |
 | `MAIL_FROM_NAME` | configuración | no | Nombre del remitente, por defecto `hackOS`. |
-| `MAIL_AUTH_FROM_ADDRESS`, `MAIL_AUTH_FROM_NAME` | configuración | no | Remitente de los correos de cuenta (`auth.*`: verificación, contraseña, invitaciones). Si están vacíos se usa `MAIL_FROM_*`. En producción usa otro subdominio que las notificaciones; ver [`email-ses.md`](./email-ses.md). |
+| `MAIL_AUTH_FROM_ADDRESS`, `MAIL_AUTH_FROM_NAME` | configuración | no | Remitente de los correos transaccionales (`auth.*`: verificación, contraseña, invitaciones; y la decisión de admisión). Si están vacíos se usa `MAIL_FROM_*`. En producción usa otro subdominio que las notificaciones; ver [`email-ses.md`](./email-ses.md). |
 | `MAIL_REPLY_TO` | configuración | no | Buzón vigilado para el `Reply-To` de todos los correos. |
 | `MAIL_SES_CONFIGURATION_SET` | configuración | no | Conjunto de configuración de Amazon SES (cabecera `X-SES-CONFIGURATION-SET`) que encamina rebotes y quejas. |
 | `SMTP_HOST`, `SMTP_PORT` | configuración | sí para SMTP | Host y puerto del relay SMTP. Por defecto usa `587` con STARTTLS; Amazon SES se configura aquí mediante su interfaz SMTP. |
