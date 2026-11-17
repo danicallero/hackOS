@@ -1,21 +1,14 @@
+import { APPLICATION_STATUS_ORDER } from "@/lib/application-workflow";
 import type { UserListItem } from "@/lib/types";
 
 /** Filter value for users without an application / without a visible role. */
 export const NO_APPLICATION = "none";
 export const NO_ROLE = "__none__";
 
-/** Application statuses in workflow order (H10-H15), matching the column labels. */
+/** No application first, then the shared workflow order (H10-H15). */
 export const APPLICATION_FILTER_ORDER: readonly string[] = [
   NO_APPLICATION,
-  "draft",
-  "review",
-  "accepted_internal",
-  "accepted",
-  "confirmed",
-  "rejected_internal",
-  "rejected",
-  "declined",
-  "expired",
+  ...APPLICATION_STATUS_ORDER,
 ];
 
 export const FACETS = ["spot", "role", "email"] as const;
