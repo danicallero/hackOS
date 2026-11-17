@@ -2,6 +2,7 @@ import { config } from "../../config.js";
 import { purgeExpiredIdempotencyKeys } from "../../lib/idempotency.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { purgeExpiredWalletAccessTokens } from "../logistics/wallet-access.js";
+import { sendDueConfirmationReminders } from "./confirmation-reminders.js";
 import { expireDueConfirmations } from "./service.js";
 
 /**
@@ -11,7 +12,8 @@ import { expireDueConfirmations } from "./service.js";
  * `expireDueConfirmations()`, which tests invoke directly instead of waiting
  * on BullMQ repeat timing.
  *
- * The same sweep drops long-expired scoped wallet tokens (issue #369): they
+ * The same sweep mails the H15 confirmation reminders
+ * (`confirmation-reminders.ts`), drops long-expired scoped wallet tokens (issue #369): they
  * are minted by the confirm this worker's window governs, so their lifecycle
  * belongs here rather than in a queue of its own. Expired `idempotency_keys`
  * rows are purged here too (issue #994).
@@ -21,6 +23,7 @@ const QUEUE_NAME = "applications-expirer";
 
 registerWorker(QUEUE_NAME, async () => {
   await expireDueConfirmations();
+  await sendDueConfirmationReminders();
   await purgeExpiredWalletAccessTokens();
   await purgeExpiredIdempotencyKeys();
 });

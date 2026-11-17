@@ -262,6 +262,8 @@ Table application_responses {
   application_form_version_id bigint [not null]
   application_id integer [not null]
   auto_accept_on_resubmit boolean [not null, default: `false`]
+  confirmation_reminder_basis "timestamp with time zone"
+  confirmation_reminder_level smallint [not null, default: `0`]
   confirmation_token_id integer
   confirmed_at "timestamp with time zone"
   created_at "timestamp with time zone" [not null, default: `now()`]

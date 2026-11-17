@@ -316,3 +316,94 @@ describe("pre-event stats (H27)", () => {
     expect(intoleranceMap[nutFree]).toBe(1);
   });
 });
+
+describe("confirmation reminders (H15)", () => {
+  const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
+
+  async function outbox(userId: number): Promise<string[]> {
+    const { rows } = await pool.query(
+      `SELECT payload->>'template' AS template FROM notification_outbox
+        WHERE user_id = $1 AND channel = 'email' ORDER BY id`,
+      [userId],
+    );
+    return rows.map((r) => r.template as string);
+  }
+
+  it("drops thresholds a short window cannot fit", async () => {
+    const { reminderThresholds } = await import(
+      "../../src/modules/applications/confirmation-reminders.js"
+    );
+    expect(reminderThresholds(168)).toEqual([84, 48, 24]);
+    expect(reminderThresholds(72)).toEqual([36, 24]);
+    expect(reminderThresholds(48)).toEqual([24]);
+    expect(reminderThresholds(96)).toEqual([48, 24]);
+  });
+
+  it("mails at half the window, 48 h and 24 h before the deadline, once each", async () => {
+    const { sendDueConfirmationReminders } = await import(
+      "../../src/modules/applications/confirmation-reminders.js"
+    );
+    const appId = await createApplication({ confirmation_window_hours: 168 });
+    const userId = await createUser({ emailVerified: true });
+    const responseId = await createResponse(userId, appId, {
+      status: "accepted",
+      decision_sent_at: hoursAgo(80),
+    });
+    // Moves the clock for the same decision: SET reads the old values, so the
+    // basis follows decision_sent_at only once a reminder recorded it.
+    const elapsed = (h: number) =>
+      pool.query(
+        `UPDATE application_responses
+            SET decision_sent_at = $2,
+                confirmation_reminder_basis = CASE
+                  WHEN confirmation_reminder_basis = decision_sent_at THEN $2
+                  ELSE confirmation_reminder_basis END
+          WHERE id = $1`,
+        [responseId, hoursAgo(h)],
+      );
+
+    expect((await sendDueConfirmationReminders()).sent).toBe(0); // 88 h left
+    await elapsed(85); // 83 h left
+    expect((await sendDueConfirmationReminders()).sent).toBe(1);
+    expect((await sendDueConfirmationReminders()).sent).toBe(0);
+    await elapsed(124); // 44 h left
+    expect((await sendDueConfirmationReminders()).sent).toBe(1);
+    await elapsed(145); // 23 h left
+    expect((await sendDueConfirmationReminders()).sent).toBe(1);
+    expect((await sendDueConfirmationReminders()).sent).toBe(0);
+    expect(await outbox(userId)).toEqual([
+      "application.confirmationReminder",
+      "application.confirmationReminder",
+      "application.confirmationLastChance",
+    ]);
+  });
+
+  it("sends only the latest reached threshold, restarts on a new decision, skips confirmed", async () => {
+    const { sendDueConfirmationReminders } = await import(
+      "../../src/modules/applications/confirmation-reminders.js"
+    );
+    const appId = await createApplication({ confirmation_window_hours: 168 });
+    const userId = await createUser({ emailVerified: true });
+    const responseId = await createResponse(userId, appId, {
+      status: "accepted",
+      decision_sent_at: hoursAgo(150), // 18 h left, worker was down
+    });
+    const confirmedUser = await createUser({ emailVerified: true });
+    await createResponse(confirmedUser, appId, {
+      status: "confirmed",
+      decision_sent_at: hoursAgo(150),
+    });
+
+    expect((await sendDueConfirmationReminders()).sent).toBe(1);
+    expect(await outbox(userId)).toEqual(["application.confirmationLastChance"]);
+    expect(await outbox(confirmedUser)).toEqual([]);
+
+    // Resent decision: new decision_sent_at restarts the series.
+    await pool.query(`UPDATE application_responses SET decision_sent_at = $2 WHERE id = $1`, [
+      responseId,
+      hoursAgo(90),
+    ]);
+    expect((await sendDueConfirmationReminders()).sent).toBe(1);
+    expect((await outbox(userId)).at(-1)).toBe("application.confirmationReminder");
+  });
+});
