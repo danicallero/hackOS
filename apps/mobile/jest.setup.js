@@ -65,6 +65,8 @@ jest.mock("react-native-gesture-handler", () => {
     "onChange",
     "onEnd",
     "onFinalize",
+    "runOnJS",
+    "onTouchesDown",
   ];
   function chainableGesture() {
     const gesture = {};

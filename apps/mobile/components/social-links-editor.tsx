@@ -1,7 +1,7 @@
 import { handleOf, SOCIAL_HANDLE_PREFIX, urlForHandle } from "@hackos/shared/social-links";
 import { useRef } from "react";
 import { Linking, Text, TextInput, View } from "react-native";
-import { MenuPopover, useMenuPopover } from "@/components/app-menu";
+import { MenuPopover, MenuTrigger, useMenuPopover } from "@/components/app-menu";
 import { Section, Separator } from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { VisibilityToggle } from "@/components/profile-parts";
@@ -63,10 +63,11 @@ function KindMenu({
   onRemove: () => void;
 }) {
   const { t } = useLocale();
-  const { trigger, visible, anchor, open, close } = useMenuPopover();
+  const popover = useMenuPopover();
+  const { visible, anchor, open, close } = popover;
   return (
     <>
-      <View ref={trigger} collapsable={false}>
+      <MenuTrigger popover={popover}>
         <PressableFeedback
           accessibilityRole="button"
           accessibilityLabel={`${t("networkingLinkType")} ${index + 1}`}
@@ -96,7 +97,7 @@ function KindMenu({
             />
           </View>
         </PressableFeedback>
-      </View>
+      </MenuTrigger>
       <MenuPopover
         align="left"
         anchor={anchor}
@@ -151,7 +152,8 @@ function GithubRow({
   rowStyle: object;
 }) {
   const { t } = useLocale();
-  const { trigger, visible, anchor, open, close } = useMenuPopover();
+  const popover = useMenuPopover();
+  const { visible, anchor, open, close } = popover;
   const { login } = github;
   if (!login) {
     return (
@@ -168,7 +170,7 @@ function GithubRow({
   }
   return (
     <View style={rowStyle}>
-      <View ref={trigger} collapsable={false}>
+      <MenuTrigger popover={popover}>
         <PressableFeedback
           accessibilityRole="button"
           accessibilityLabel={`GitHub, ${login}`}
@@ -198,7 +200,7 @@ function GithubRow({
             />
           </View>
         </PressableFeedback>
-      </View>
+      </MenuTrigger>
       <Text
         numberOfLines={1}
         style={{

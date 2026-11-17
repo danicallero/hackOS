@@ -10,6 +10,7 @@ import {
   type Ref,
   useCallback,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -22,6 +23,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { SymbolView } from "@/components/symbol";
@@ -62,15 +64,59 @@ export function useMenuPopover() {
   const trigger = useRef<View>(null);
   const [visible, setVisible] = useState(false);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
+  // Fabric's measureInWindow is relative to the React surface, which does not
+  // know where UIKit presented an iOS form sheet: inside one the trigger
+  // measures a sheet-origin too high for the Modal, which spans the real
+  // window. Gesture-handler reports touches in UIKit window coordinates, so
+  // `MenuTrigger` records the difference at touch down (#934, #935).
+  const offset = useRef({ x: 0, y: 0 });
+  const triggerGesture = useMemo(
+    () =>
+      Gesture.Manual()
+        .runOnJS(true)
+        .onTouchesDown((event) => {
+          const touch = event.allTouches[0];
+          if (Platform.OS !== "ios" || !touch) return;
+          const realX = touch.absoluteX - touch.x;
+          const realY = touch.absoluteY - touch.y;
+          trigger.current?.measureInWindow((x, y) => {
+            offset.current = { x: realX - x, y: realY - y };
+          });
+        }),
+    [],
+  );
   const open = useCallback(() => {
     setVisible(true);
-    trigger.current?.measureInWindow((x, y, width, height) => setAnchor({ x, y, width, height }));
+    trigger.current?.measureInWindow((x, y, width, height) =>
+      setAnchor({ x: x + offset.current.x, y: y + offset.current.y, width, height }),
+    );
   }, []);
   const close = useCallback(() => {
     setVisible(false);
     setAnchor(null);
   }, []);
-  return { trigger, visible, anchor, open, close };
+  return { trigger, triggerGesture, visible, anchor, open, close };
+}
+
+/**
+ * Wraps a popover's trigger so it is measured where it really is, also inside
+ * an iOS form sheet. The gesture never activates, so the trigger's own press
+ * handling and the surrounding scroll are unaffected.
+ */
+export function MenuTrigger({
+  popover,
+  children,
+}: {
+  popover: Pick<ReturnType<typeof useMenuPopover>, "trigger" | "triggerGesture">;
+  children: ReactNode;
+}) {
+  return (
+    <GestureDetector gesture={popover.triggerGesture}>
+      <View ref={popover.trigger} collapsable={false}>
+        {children}
+      </View>
+    </GestureDetector>
+  );
 }
 
 /**
