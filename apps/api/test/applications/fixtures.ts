@@ -123,10 +123,13 @@ export async function getResponse(id: number): Promise<{
   decision_sent_at: Date | null;
   confirmation_token_id: number | null;
   rejection_reason: string | null;
+  return_on_send: boolean;
+  allow_resubmit_after_close: boolean;
+  submitted_at: Date | null;
 }> {
   const { rows } = await pool.query(
     `SELECT user_id, status, confirmed_at, declined_at, decision_sent_at, confirmation_token_id,
-            rejection_reason
+            rejection_reason, return_on_send, allow_resubmit_after_close, submitted_at
      FROM application_responses WHERE id = $1`,
     [id],
   );

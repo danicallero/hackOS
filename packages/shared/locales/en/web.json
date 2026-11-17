@@ -4369,5 +4369,15 @@
   "auditPeriodLast30Days": "Last 30 days",
   "auditSearchActor": "Search by actor",
   "auditEntityHistory": "History",
-  "auditViewEntityHistory": "View every action on this entity"
+  "auditViewEntityHistory": "View every action on this entity",
+  "rejectedForResubmission": "Rejected, can resubmit",
+  "rejectedForResubmissionToast": "Rejected, can resubmit (not sent).",
+  "rejectAllowResubmit": "Reject and allow resubmission",
+  "allowResubmit": "Allow resubmission",
+  "disallowResubmit": "Don't allow resubmission",
+  "rejectionUpdated": "Rejection updated.",
+  "rejectedBefore": "Rejected before",
+  "rejectionNotNotified": "not communicated",
+  "noRejectionReason": "No reason",
+  "returnedForChanges": "Your application needs changes"
 }

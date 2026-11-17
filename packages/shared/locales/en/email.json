@@ -109,6 +109,10 @@
       "draftReminder3": {
         "subject": "Last reminder about your {{applicationName}} application",
         "body": "Hi {{name}},\n\nThis is the last time we'll write to you about this. Your application for {{applicationName}} at {{eventName}} is still a draft, and we won't evaluate drafts.\n\nIf you'd still like to take part, you can submit it whenever you're ready:\n\n[Submit my application]({{applicationUrl}})\n\nWe won't send any more reminders.\n\nThe {{eventName}} team"
+      },
+      "returned": {
+        "subject": "Your {{applicationName}} application needs changes",
+        "body": "Hi {{name}},\n\nWe've reviewed your {{applicationName}} application for {{eventName}} and, as it stands, we can't accept it.{{rejectionDetails}}\n\nWe've returned it to you as a draft so you can fix it and submit it again, even if the deadline has passed.\n\n[Review my application]({{applicationUrl}})\n\nThe {{eventName}} team"
       }
     },
     "schedule": {

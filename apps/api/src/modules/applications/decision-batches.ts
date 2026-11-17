@@ -131,8 +131,9 @@ export async function batchDecide(
   actorId: number,
   responseIds: number[],
   decision: "accepted" | "rejected",
+  returnToDraft = false,
 ): Promise<BatchResult> {
-  return runBatch(responseIds, (id) => decide(actorId, id, decision));
+  return runBatch(responseIds, (id) => decide(actorId, id, decision, returnToDraft));
 }
 
 /** Batch re-accept declined/rejected/expired responses (M2). */
@@ -211,8 +212,9 @@ export async function batchRevertDecisions(
   actorId: number,
   responseIds: number[],
   newDecision: "accepted" | "rejected" | "review",
+  returnToDraft = false,
 ): Promise<BatchResult> {
-  return runBatch(responseIds, (id) => revertDecision(actorId, id, newDecision));
+  return runBatch(responseIds, (id) => revertDecision(actorId, id, newDecision, returnToDraft));
 }
 
 // ── confirm link retrieval (H15) ────────────────────────────────────────────

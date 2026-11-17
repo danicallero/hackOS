@@ -224,7 +224,17 @@ A confirmed response keeps its application-granted role and live ticket access
 only when auto-accept is enabled; otherwise those are revoked until a later
 review and confirmation. The decision-maker can optionally allow that one
 response to resubmit after the form window closes and auto-accept that next
-submission with a fresh confirmation email. Form deletion removes its responses, reviews,
+submission with a fresh confirmation email.
+A rejection can instead be decided as **reject and allow resubmission**
+(`return_to_draft` on decide/revert/batch decide; `return_on_send`). Like any
+internal decision it stays in the outbox, its reason is editable and the
+applicant sees nothing until it is sent (individually or in a batch). Sending
+returns the response as a draft that can be resubmitted after close, emails the
+reason (`application.returned`) and shows it on the draft until resubmission.
+Every rejection a response went through before coming back as a draft (this
+one, or a rejection later returned with **Return to draft**) is kept in
+`application_response_rejections` and listed as `previous_rejections` on staff
+reads, so the re-review shows when, by whom and why it was rejected. Form deletion removes its responses, reviews,
 versions, grants and confirmation tokens transactionally; anonymous-retention
 records remain a deliberate deletion boundary. The confirmation-window expirer worker is registered in `applications/expirer.ts`;
 its transition implementation lives in `applications/expirations.ts`, not a

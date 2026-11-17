@@ -3,6 +3,7 @@
 // Applicant confirmation and outcome states (H12, H15): keep the place decision
 // separate from the editable answer form so each state remains easy to scan.
 
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { ShieldWarningIcon } from "@phosphor-icons/react/dist/csr/ShieldWarning";
 import { WalletIcon } from "@phosphor-icons/react/dist/csr/Wallet";
@@ -101,6 +102,15 @@ export function ApplicationStatusActions({
 
       {actionError && (actionError.action === "confirm" || actionError.action === "decline") && (
         <ContextualError message={actionError.message} onRetry={onRetry} />
+      )}
+      {status === "draft" && response?.rejection_reason && (
+        <Alert variant="warning" role="status">
+          <ArrowCounterClockwiseIcon aria-hidden="true" />
+          <AlertTitle>{t("returnedForChanges")}</AlertTitle>
+          <AlertDescription className="whitespace-pre-line">
+            {response.rejection_reason}
+          </AlertDescription>
+        </Alert>
       )}
       {status === "rejected" && response?.rejection_reason && (
         <Alert role="status">

@@ -301,6 +301,8 @@ export async function submitResponse(
        SET responses = $3::jsonb,
            status = $4,
            submitted_at = now(),
+           -- H14: a reject-and-return reason is for the draft only.
+           rejection_reason = NULL,
            allow_resubmit_after_close = false,
            auto_accept_on_resubmit = false
        WHERE id = $1 AND user_id = $2 RETURNING *`,

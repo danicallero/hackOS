@@ -109,6 +109,10 @@
       "draftReminder3": {
         "subject": "Último recordatorio sobre tu solicitud de {{applicationName}}",
         "body": "Hola {{name}}:\n\nEsta es la última vez que te escribimos sobre esto. Tu solicitud para {{applicationName}} en {{eventName}} sigue como borrador y no evaluamos borradores.\n\nSi aún quieres participar, puedes presentarla cuando quieras:\n\n[Presentar mi solicitud]({{applicationUrl}})\n\nNo te enviaremos más recordatorios.\n\nEl equipo de {{eventName}}"
+      },
+      "returned": {
+        "subject": "Tu solicitud de {{applicationName}} necesita cambios",
+        "body": "Hola {{name}}:\n\nHemos revisado tu solicitud de {{applicationName}} para {{eventName}} y, tal como está, no podemos aceptarla.{{rejectionDetails}}\n\nTe la hemos devuelto como borrador para que puedas corregirla y volver a presentarla, aunque el plazo ya haya cerrado.\n\n[Revisar mi solicitud]({{applicationUrl}})\n\nEl equipo de {{eventName}}"
       }
     },
     "schedule": {
