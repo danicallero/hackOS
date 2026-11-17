@@ -803,8 +803,10 @@ they are not device screenshots or proof of native toolbar behavior.
   (`social.<kind>`) in the iOS asset catalog at prebuild, and `MenuView`
   renders actions with an `assetImage` through `@expo/ui`'s SwiftUI views
   (its community menu passes only SF Symbol names); Android's popover shows
-  the same `glyph`. New marks need a native build. The GitHub row's menu (open, link another account) is the same
-  system menu. A new row takes the
+  the same `glyph`. New marks need a native build. While GitHub can be linked, the network menu also lists
+  GitHub, which starts the account link (an empty row is dropped, since
+  GitHub is not a typed address). The linked GitHub row's menu (open, hide
+  or show on the profile, link another account) is the same system menu. A new row takes the
   first unused network; LinkedIn, X and Instagram show only the handle while
   the stored link keeps the full address (a typed `@` or a pasted address is
   reduced to the handle, shared with web through

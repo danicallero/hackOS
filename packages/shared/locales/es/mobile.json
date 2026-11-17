@@ -875,6 +875,8 @@
   "networkingShowGithub": "GitHub",
   "networkingGithubLink": "Vincular GitHub",
   "networkingGithubOpen": "Abrir en GitHub",
+  "networkingGithubHide": "Ocultar en mi perfil",
+  "networkingGithubShow": "Mostrar en mi perfil",
   "networkingGithubRelink": "Vincular otra cuenta",
   "networkingGithubLinkError": "No se pudo vincular GitHub.",
   "networkingTitle": "Perfil de networking",
