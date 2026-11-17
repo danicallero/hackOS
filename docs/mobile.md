@@ -790,8 +790,11 @@ they are not device screenshots or proof of native toolbar behavior.
   on screen greyed instead of disappearing (while projects are hidden the card
   carries none, so the last ones seen, or a placeholder row, are shown greyed).
   Saving is `PUT /api/me/public-profile` under one `Idempotency-Key` per change
-  set; the response replaces the preview. Social links use type/address rows
-  in the same card, up to six; empty rows remain editable but are omitted from
+  set; the response replaces the preview. Social links use Contacts-style edit
+  rows in the same card (remove control, network menu, value), up to six; a
+  new row takes the first unused network, and LinkedIn, X and Instagram show
+  their fixed address so only the handle is typed (a pasted address is reduced
+  to the handle, shared with web through `@hackos/shared/social-links`); empty rows remain editable but are omitted from
   the save. Existing links can be changed or removed, and Cancel discards the
   draft. GitHub stays account-managed and does not count toward the six. It
   saves `socials` with the text and sends `shareCv` only when a CV exists.
@@ -1093,10 +1096,16 @@ they are not device screenshots or proof of native toolbar behavior.
   interactive `regular` material for the outer tab surface, preserving the
   visible liquid-glass rim used by the app's other floating controls; dark
   mode keeps the clearer material. Its direct surface is one native gesture
-  surface: it owns every touch from touch-down, the selection lens springs
-  under the finger and follows it in both directions, and release commits
-  the tab cell under the finger (a tap or a held press without movement runs
-  that cell's normal press, a drag only switches), while the
+  surface: it owns every touch from touch-down. On iOS 26 the lens lifts out
+  of the bar as a wider clear-glass capsule above the cells (the native glass
+  magnifies and refracts them), glides to the finger, follows it in both
+  directions, and lands on the cell under the finger only once it arrives; a
+  tap on a distant tab travels the same way. Lift, travel and landing run on
+  the UI thread from shared values. The lifted lens stays mounted and only
+  fades, because a glass view switched to `none` and back stops rendering
+  (expo/expo#43732).
+  A tap or held press without movement runs that cell's normal press, a drag
+  only switches, while the
   separate Others circle remains its own menu (native `MenuView` on iOS; a
   hand-rolled card matching that look on Android — see `navigation.md`). On
   the native-search path,
