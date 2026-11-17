@@ -12,6 +12,8 @@ export interface NetworkingProfile {
   showSurname: boolean;
   showPhoto: boolean;
   showProject: boolean;
+  /** Whether the linked GitHub account appears on the card. */
+  showGithub: boolean;
   socials: DirectoryEntry["socials"];
   headline: string | null;
   locationNote: string | null;
@@ -33,6 +35,7 @@ export interface NetworkingDraft {
   showSurname: boolean;
   showPhoto: boolean;
   showProject: boolean;
+  showGithub: boolean;
   socials: (DirectoryEntry["socials"][number] & { id: string })[];
   headline: string;
   locationNote: string;
@@ -72,6 +75,7 @@ export function draftFromProfile(profile: NetworkingProfile): NetworkingDraft {
     showSurname: profile.showSurname,
     showPhoto: profile.showPhoto,
     showProject: profile.showProject,
+    showGithub: profile.showGithub,
     socials: profile.socials.map((link) => ({ ...link, id: createIdempotencyKey() })),
     headline: profile.headline ?? "",
     locationNote: profile.locationNote ?? "",
@@ -86,6 +90,7 @@ export function sameDraft(a: NetworkingDraft, b: NetworkingDraft): boolean {
     a.showSurname === b.showSurname &&
     a.showPhoto === b.showPhoto &&
     a.showProject === b.showProject &&
+    a.showGithub === b.showGithub &&
     a.headline.trim() === b.headline.trim() &&
     a.locationNote.trim() === b.locationNote.trim() &&
     a.bio.trim() === b.bio.trim() &&
@@ -106,6 +111,7 @@ export function saveNetworkingProfile(
       showSurname: draft.showSurname,
       showPhoto: draft.showPhoto,
       showProject: draft.showProject,
+      showGithub: draft.showGithub,
       headline: draft.headline.trim() || null,
       locationNote: draft.locationNote.trim() || null,
       bio: draft.bio.trim() || null,

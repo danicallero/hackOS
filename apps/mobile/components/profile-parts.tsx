@@ -173,8 +173,11 @@ export function DetailRow({
   valueNode,
   trailing,
   dimmed = false,
+  leading,
 }: {
   icon: SymbolViewProps["name"];
+  /** Replaces the symbol, e.g. a network tile (#934, #935). */
+  leading?: ReactNode;
   label?: string;
   value: string;
   onPress?: () => void;
@@ -187,7 +190,7 @@ export function DetailRow({
 }) {
   const content = (
     <>
-      <SymbolView accessible={false} name={icon} size={20} tintColor={colors.accent} />
+      {leading ?? <SymbolView accessible={false} name={icon} size={20} tintColor={colors.accent} />}
       <View style={{ flex: 1, gap: 2, opacity: dimmed ? 0.4 : 1 }}>
         {label ? (
           <Text style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}>
