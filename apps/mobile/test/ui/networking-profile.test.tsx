@@ -415,6 +415,31 @@ describe("NetworkingProfileScreen", () => {
     expect(mockLinkGithubAccount).toHaveBeenLastCalledWith(true);
   });
 
+  it("hides and shows linked GitHub from its menu (#934)", async () => {
+    mockFetchGithubAccount.mockResolvedValue({ configured: true, login: "ada" });
+    mockApiFetch.mockResolvedValueOnce(shared);
+    await renderMobile(<NetworkingProfileScreen />);
+    await fireEvent.press(await screen.findByRole("button", { name: "networkingEdit" }));
+    expect(await screen.findByText("ada")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("menuitem", { name: "networkingGithubHide" }));
+    expect(opacityOf(screen.getByText("ada"))).toBe(0.4);
+    await fireEvent.press(screen.getByRole("menuitem", { name: "networkingGithubShow" }));
+    expect(opacityOf(screen.getByText("ada"))).toBe(1);
+  });
+
+  it("links GitHub from a new row's network menu (#934)", async () => {
+    mockFetchGithubAccount.mockResolvedValue({ configured: true, login: null });
+    mockApiFetch.mockResolvedValueOnce(shared);
+    mockLinkGithubAccount.mockResolvedValue(true);
+    await renderMobile(<NetworkingProfileScreen />);
+    await fireEvent.press(await screen.findByRole("button", { name: "networkingEdit" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "networkingLinkAdd" }));
+    await fireEvent.press(screen.getByRole("menuitem", { name: "GitHub" }));
+    expect(mockLinkGithubAccount).toHaveBeenCalledWith(false);
+    // The empty row was only a way in to the account link.
+    expect(screen.queryByLabelText("networkingLinkUrl 1")).toBeNull();
+  });
+
   it("recovers from a failed GitHub link (#934)", async () => {
     mockApiFetch.mockResolvedValueOnce(shared);
     mockLinkGithubAccount.mockRejectedValue(new Error("denied"));

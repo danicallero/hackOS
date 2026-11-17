@@ -875,6 +875,8 @@
   "networkingShowGithub": "GitHub",
   "networkingGithubLink": "Link GitHub",
   "networkingGithubOpen": "Open on GitHub",
+  "networkingGithubHide": "Hide on my profile",
+  "networkingGithubShow": "Show on my profile",
   "networkingGithubRelink": "Link another account",
   "networkingGithubLinkError": "Couldn't link GitHub.",
   "networkingTitle": "Networking profile",
