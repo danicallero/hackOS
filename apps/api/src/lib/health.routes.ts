@@ -44,23 +44,25 @@ export function registerHealthRoutes(app: FastifyInstance): void {
       config: { routeAccessPolicy: { kind: "public", anonymousCategory: "health" } },
       schema: {
         description:
-          "Bounded readiness probe. PostgreSQL is required; Valkey is ephemeral and reports a degraded 200 response so its outage does not remove a replica that can still serve durable reads. A replica draining for a rolling deployment answers 503 `draining` while it finishes in-flight requests (#1327).",
+          "Bounded readiness probe. PostgreSQL is required; Valkey is ephemeral and reports a degraded 200 response so its outage does not remove a replica that can still serve durable reads. A replica draining for a rolling deployment answers 503 `draining` while it finishes in-flight requests (#1327). `admission` reports the request-admission gate (active slots, queued requests and the age in seconds of the oldest waiting P2/P3 request) for operators; it never changes the status, so a normal burst cannot fail the probe and restart-loop the API (#1367).",
       },
     },
-    async (_req, reply) => {
+    async (req, reply) => {
       if (isDraining()) return reply.code(503).send({ status: "draining" });
+      const admission = req.server.requestAdmission.health();
       const [postgres, broker] = await Promise.allSettled([pool.query("SELECT 1"), valkey.ping()]);
       if (postgres.status === "rejected") {
         return reply.code(503).send({
           status: "unavailable",
           postgres: "down",
           valkey: broker.status === "fulfilled" ? "ok" : "down",
+          admission,
         });
       }
       if (broker.status === "rejected") {
-        return { status: "degraded", postgres: "ok", valkey: "down" };
+        return { status: "degraded", postgres: "ok", valkey: "down", admission };
       }
-      return { status: "ok", postgres: "ok", valkey: "ok" };
+      return { status: "ok", postgres: "ok", valkey: "ok", admission };
     },
   );
 
@@ -74,7 +76,8 @@ export function registerHealthRoutes(app: FastifyInstance): void {
         description:
           "Prometheus scrape endpoint (#540): pg pool saturation/wait, query " +
           "timeouts, #544 priority-lane request rate/admission wait and bounded " +
-          "best-effort queue depth, SSE connection counts by lane/topic, " +
+          "best-effort queue depth, #1367 oldest admission waiter age and " +
+          "force-released leases, SSE connection counts by lane/topic, " +
           "participant invalidation outcomes, browser refetch observations, " +
           "and Node process defaults.",
       },

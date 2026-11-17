@@ -308,6 +308,12 @@ HTTP response counters and duration histograms record the final status once in
 `onResponse`, including handled business errors (#891). Aborted connections
 release admission and the in-flight gauge without recording a completed HTTP
 response; a request disconnected while queued cancels its admission wait.
+A client that disconnects while an earlier `onRequest` hook (the session
+lookup) is still running is never admitted at all, and every lease is
+force-released after `REQUEST_ADMISSION_MAX_HOLD_MS` as defence in depth
+(#1367). `/readyz` reports the gate's state in an `admission` field without
+letting it change readiness; see
+[`request-admission.md`](./request-admission.md#client-aborts-and-leaked-leases).
 
 Participant queue invalidations are one delayed BullMQ job per current queue
 group, coalescing all affected challenge transitions in that shared queue;

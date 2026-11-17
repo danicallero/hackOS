@@ -49,7 +49,12 @@ describe("foundation", () => {
     const res = await app.inject({ method: "GET", url: "/readyz" });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ status: "degraded", postgres: "ok", valkey: "down" });
+    expect(res.json()).toEqual({
+      status: "degraded",
+      postgres: "ok",
+      valkey: "down",
+      admission: { active: 0, queued: 0, oldestBestEffortWaitSeconds: 0 },
+    });
   });
 
   it("metrics serves the Prometheus registry, unauthenticated (#540)", async () => {

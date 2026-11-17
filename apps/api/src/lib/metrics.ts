@@ -1,5 +1,5 @@
 import client from "@prometheus-io/client";
-import type { RequestLane } from "./request-lanes.js";
+import { REQUEST_LANES, type RequestLane } from "./request-lanes.js";
 
 /**
  * Shared Prometheus registry (#540). Pool and SSE modules register their own
@@ -48,6 +48,28 @@ const requestAdmissionWaitSeconds = new client.Histogram({
 export const requestAdmissionQueueSize = new client.Gauge({
   name: "hackos_http_request_admission_queue_size",
   help: "Requests waiting for an admission slot, by lane",
+  labelNames: ["lane"],
+  registers: [register],
+});
+
+let admissionOldestWaitSource: ((lane: RequestLane) => number) | null = null;
+
+/** Stalled-gate signal (#1367): sampled from the live scheduler at scrape time. */
+export const requestAdmissionOldestWaitSeconds = new client.Gauge({
+  name: "hackos_http_request_admission_oldest_wait_seconds",
+  help: "Age of the oldest request waiting for an admission slot, by lane (0 when none waits)",
+  labelNames: ["lane"],
+  registers: [register],
+  collect() {
+    for (const lane of REQUEST_LANES) {
+      this.set({ lane }, admissionOldestWaitSource?.(lane) ?? 0);
+    }
+  },
+});
+
+const requestAdmissionLeaseExpiredTotal = new client.Counter({
+  name: "hackos_http_request_admission_lease_expired_total",
+  help: "Admission leases force-released after the maximum hold time, by lane",
   labelNames: ["lane"],
   registers: [register],
 });
@@ -259,6 +281,14 @@ export function observeAdmissionWait(lane: RequestLane, seconds: number): void {
 
 export function setAdmissionQueueSize(lane: RequestLane, size: number): void {
   requestAdmissionQueueSize.set({ lane }, size);
+}
+
+export function setAdmissionOldestWaitSource(source: (lane: RequestLane) => number): void {
+  admissionOldestWaitSource = source;
+}
+
+export function observeAdmissionLeaseExpired(lane: RequestLane): void {
+  requestAdmissionLeaseExpiredTotal.inc({ lane });
 }
 
 export function observeParticipantInvalidation(
