@@ -147,31 +147,7 @@ function touchPath(path: number[], { cancel = false } = {}) {
   mockScrub.finalize?.({}, outcome === true);
 }
 
-jest.mock("react-native-reanimated", () => {
-  const ReactLib = require("react");
-  const Native = jest.requireActual("react-native");
-  return {
-    __esModule: true,
-    default: {
-      View: Native.View,
-      createAnimatedComponent: (c: unknown) => c,
-    },
-    cancelAnimation: jest.fn(),
-    runOnJS: (fn: (...args: never[]) => unknown) => fn,
-    useAnimatedStyle: (factory: () => unknown) => factory(),
-    useReducedMotion: () => false,
-    useSharedValue: (v: unknown) => ReactLib.useRef({ value: v }).current,
-    withSpring: (v: number, _config?: unknown, done?: (finished: boolean) => void) => {
-      done?.(true);
-      return v;
-    },
-    withTiming: (v: number, _config?: unknown, done?: (finished: boolean) => void) => {
-      done?.(true);
-      return v;
-    },
-    Easing: { bezier: () => (t: number) => t },
-  };
-});
+jest.mock("react-native-reanimated", () => require("./reanimated-mock").reanimatedMock());
 jest.mock("react-native-safe-area-context", () => ({
   SafeAreaProvider: ({ children }: { children: unknown }) => children,
   useSafeAreaInsets: () => ({ bottom: 34, left: 0, right: 0, top: 47 }),

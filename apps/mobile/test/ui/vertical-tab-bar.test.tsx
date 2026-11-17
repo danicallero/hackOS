@@ -48,28 +48,7 @@ jest.mock("react-native-gesture-handler", () => {
       ReactLib.createElement(Native.View, null, children),
   };
 });
-jest.mock("react-native-reanimated", () => {
-  const ReactLib = require("react");
-  const Native = jest.requireActual("react-native");
-  return {
-    __esModule: true,
-    default: { View: Native.View, createAnimatedComponent: (c: unknown) => c },
-    cancelAnimation: jest.fn(),
-    runOnJS: (fn: (...args: never[]) => unknown) => fn,
-    useAnimatedStyle: (factory: () => unknown) => factory(),
-    useReducedMotion: () => false,
-    useSharedValue: (v: unknown) => ReactLib.useRef({ value: v }).current,
-    withSpring: (v: number, _config?: unknown, done?: (finished: boolean) => void) => {
-      done?.(true);
-      return v;
-    },
-    withTiming: (v: number, _config?: unknown, done?: (finished: boolean) => void) => {
-      done?.(true);
-      return v;
-    },
-    Easing: { bezier: () => (t: number) => t },
-  };
-});
+jest.mock("react-native-reanimated", () => require("./reanimated-mock").reanimatedMock());
 
 import { screen, within } from "@testing-library/react-native";
 import type { Href } from "expo-router";
