@@ -204,6 +204,7 @@ Además de las variables de las dependencias anteriores, `api` recibe:
 | Auth y origen | `BETTER_AUTH_URL`, `WEB_URL`, `BETTER_AUTH_SECRET`, `MOBILE_APP_SCHEME`, `CORS_ORIGINS`, `TRUST_PROXY=true` |
 | Base del proceso | `NODE_ENV=production`, `WORKERS_INLINE=false`, `LOG_LEVEL` |
 | Pool PostgreSQL | `DB_POOL_MAX`, `DB_IDLE_TIMEOUT_MS`, `DB_CONNECTION_TIMEOUT_MS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` |
+| Admisión (#1367) | `REQUEST_ADMISSION_MAX_HOLD_MS` (por defecto `300000`: tiempo máximo que una petición puede retener un hueco de admisión; pasado ese plazo se libera una sola vez y se registra un `warn` con método, ruta y carril). Ver `docs/request-admission.md`. |
 | SSE | `SSE_MAX_CONNECTIONS_GLOBAL`, `SSE_MAX_CONNECTIONS_PER_TOPIC`, `SSE_MAX_CONNECTIONS_PER_CLIENT`, `SSE_WRITE_TIMEOUT_MS` |
 | Drenaje al desplegar (#1327) | `SHUTDOWN_DRAIN_TIMEOUT_MS` (por defecto `20000`: plazo para terminar peticiones en curso antes de cerrar todas las conexiones), `SSE_DRAIN_SPREAD_MS` (por defecto `5000`: ventana en la que se reparten los cierres de SSE). Su suma debe quedar por debajo del `stop_grace_period` de `api` (30 s). |
 | Scanners | `RATE_LIMIT_SCAN_MAX`, `RATE_LIMIT_SCAN_WINDOW_SECONDS`, `RATE_LIMIT_MEAL_BATCH_MAX`, `RATE_LIMIT_MEAL_BATCH_WINDOW_SECONDS`, `RATE_LIMIT_SNAPSHOT_MAX`, `RATE_LIMIT_SNAPSHOT_WINDOW_SECONDS` |

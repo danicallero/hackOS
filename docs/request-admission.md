@@ -146,6 +146,60 @@ docker compose --env-file /etc/hackos/hackos.env \
 Rerun `deploy/qualification/validate-compose.mjs` and inspect
 `validation.releaseBudgetPassed` after the change.
 
+## Client aborts and leaked leases
+
+Every finite request that receives a slot must give it back exactly once, and
+must decrement `hackos_http_requests_in_flight` exactly once. A leak is silent:
+on 2026-11-17 production leaked about one slot per hour until the 18 P2/P3
+slots were gone, and every participant and public request then waited until
+its client gave up while the probes stayed green (#1367).
+
+The hooks in `apps/api/src/lib/http-hooks.ts` release a request in these
+cases, whichever onRequest hook was awaiting when the client left:
+
+| When the client disconnects | What happens |
+| --- | --- |
+| Before admission, while an earlier async hook (the auth-context session lookup) is still running | Fastify's `onRequestAbort` hook marks the request closed; the admission hook also checks the socket state. The request is never counted in flight, never acquires a slot, and the lifecycle stops there, so its handler does not run. |
+| While queued for admission | The wait is cancelled and the request leaves the queue. If a slot is granted at the same moment, it is returned immediately and the handler does not run. |
+| During the handler | The response `close` event (or `onRequestAbort`) releases the slot and the in-flight gauge. The handler's late completion releases nothing a second time. |
+
+Aborted requests never record a completed-response metric (#891).
+
+As defence in depth, every slot has a maximum hold time,
+`REQUEST_ADMISSION_MAX_HOLD_MS` (default 300000, five minutes). A slot held
+longer is force-released once: the next waiter is admitted, the request stops
+counting in flight, `hackos_http_request_admission_lease_expired_total{lane}`
+increments and the API logs a `warn` line,
+`admission lease force-released after maximum hold time`, with the method,
+route template and lane (never the raw URL, query string or user). If that
+request does complete later, its response metric is still recorded, but it
+does not release a slot or decrement the gauge again. A force-release either
+means a new leak path or a finite request far slower than any route should
+be; both deserve an issue. Keep the value well above the slowest legitimate
+request.
+
+### Admission health and readiness
+
+`/readyz` includes an `admission` object:
+
+```json
+{ "status": "ok", "postgres": "ok", "valkey": "ok",
+  "admission": { "active": 3, "queued": 0, "oldestBestEffortWaitSeconds": 0 } }
+```
+
+`oldestBestEffortWaitSeconds` is the age of the oldest queued P2/P3 request.
+`hackos_http_request_admission_oldest_wait_seconds{lane}` exports the same age
+per lane on `/metrics`.
+
+The admission state never changes the readiness status. Docker's healthcheck
+and the rolling deploy both use `/readyz`. A threshold short enough to catch a
+stall would also trip during a legitimate burst, and marking the only replica
+unhealthy would turn a slow burst into a full outage or a restart loop. With
+the maximum hold time, a leaked slot now frees itself within minutes. A
+stalled gate shows up as a persistently high oldest-wait age, or as `active`
+pinned near `DB_POOL_MAX` while `queued` grows. Alert on those signals rather
+than failing the probe.
+
 ## Role examples
 
 The direct scheduler contract also accepts a caller-supplied role position for
@@ -169,8 +223,11 @@ route policy.
 The main metrics are low-cardinality and lane-based:
 
 - `hackos_http_requests_total`
+- `hackos_http_requests_in_flight`
 - `hackos_http_request_admission_wait_seconds`
 - `hackos_http_request_admission_queue_size`
+- `hackos_http_request_admission_oldest_wait_seconds`
+- `hackos_http_request_admission_lease_expired_total`
 
 Role IDs, user IDs, and raw role positions are deliberately not Prometheus
 labels.

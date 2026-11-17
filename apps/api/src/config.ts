@@ -213,6 +213,13 @@ const envSchema = z.object({
    */
   SHUTDOWN_DRAIN_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
   SSE_DRAIN_SPREAD_MS: z.coerce.number().int().nonnegative().default(5_000),
+  /**
+   * Longest an HTTP request may hold a request-admission slot (#1367). Past
+   * it the slot is force-released once and a warning names the route and
+   * lane, so a leak path cannot exhaust admission. Keep it well above the
+   * slowest legitimate finite request.
+   */
+  REQUEST_ADMISSION_MAX_HOLD_MS: z.coerce.number().int().positive().default(300_000),
 
   /**
    * Rows claimed per outbox-dispatcher tick (H52, plan/07 §5.4), each

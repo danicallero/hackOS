@@ -1,11 +1,27 @@
 import { TooManyRequestsError } from "./errors.js";
-import { observeAdmissionWait, setAdmissionQueueSize } from "./metrics.js";
+import {
+  observeAdmissionLeaseExpired,
+  observeAdmissionWait,
+  setAdmissionOldestWaitSource,
+  setAdmissionQueueSize,
+} from "./metrics.js";
 import type { RequestLane } from "./request-lanes.js";
 import { REQUEST_LANES, requestLaneRank } from "./request-lanes.js";
 
 export interface RequestAdmissionLease {
   readonly lane: RequestLane;
+  /** True once the lease was force-released after `maxHoldMs` (#1367). */
+  readonly expired: boolean;
+  /** Idempotent: releasing an expired or already released lease is a no-op. */
   release(): void;
+}
+
+/** Point-in-time admission state for readiness output (#1367). */
+export interface RequestAdmissionHealth {
+  active: number;
+  queued: number;
+  /** Age of the oldest queued P2/P3 request; 0 when none is waiting. */
+  oldestBestEffortWaitSeconds: number;
 }
 
 interface Waiter {
@@ -24,6 +40,14 @@ interface RequestAdmissionOptions {
   reservedHighPriority?: number;
   /** Bound best-effort waiters so participant storms can be shed safely. */
   maxBestEffortPending?: number;
+  /**
+   * Defence in depth against leaked leases (#1367): a lease held longer than
+   * this is force-released once, so a future leak path degrades capacity for
+   * a bounded time instead of accumulating. Omit to disable.
+   */
+  maxHoldMs?: number;
+  /** Called once per force-released lease, after its slot has been freed. */
+  onLeaseExpired?: (lease: RequestAdmissionLease) => void;
 }
 
 /**
@@ -36,6 +60,8 @@ export class RequestAdmission {
   private readonly maxConcurrent: number;
   private readonly reservedHighPriority: number;
   private readonly maxBestEffortPending: number;
+  private readonly maxHoldMs: number | undefined;
+  private readonly onLeaseExpired: ((lease: RequestAdmissionLease) => void) | undefined;
   private active = 0;
   private readonly waiters: Waiter[] = [];
 
@@ -55,7 +81,14 @@ export class RequestAdmission {
       1,
       options.maxBestEffortPending ?? options.maxConcurrent * 4,
     );
+    if (options.maxHoldMs !== undefined && !(options.maxHoldMs > 0)) {
+      throw new Error("Request admission maxHoldMs must be positive");
+    }
+    this.maxHoldMs = options.maxHoldMs;
+    this.onLeaseExpired = options.onLeaseExpired;
     for (const lane of REQUEST_LANES) setAdmissionQueueSize(lane, 0);
+    // One HTTP gate per process, like the queue-size gauge above.
+    setAdmissionOldestWaitSource((lane) => this.oldestWaitSeconds([lane]));
   }
 
   get activeCount(): number {
@@ -64,6 +97,25 @@ export class RequestAdmission {
 
   get queuedCount(): number {
     return this.waiters.length;
+  }
+
+  /** Age in seconds of the oldest waiter in the given lanes, or 0 (#1367). */
+  oldestWaitSeconds(lanes: readonly RequestLane[] = REQUEST_LANES): number {
+    let oldest: bigint | undefined;
+    for (const waiter of this.waiters) {
+      if (!lanes.includes(waiter.lane)) continue;
+      if (oldest === undefined || waiter.queuedAt < oldest) oldest = waiter.queuedAt;
+    }
+    if (oldest === undefined) return 0;
+    return Number(process.hrtime.bigint() - oldest) / 1_000_000_000;
+  }
+
+  health(): RequestAdmissionHealth {
+    return {
+      active: this.active,
+      queued: this.waiters.length,
+      oldestBestEffortWaitSeconds: this.oldestWaitSeconds(["P2", "P3"]),
+    };
   }
 
   /**
@@ -147,15 +199,37 @@ export class RequestAdmission {
     const waitedSeconds = Number(process.hrtime.bigint() - queuedAt) / 1_000_000_000;
     observeAdmissionWait(lane, waitedSeconds);
     let released = false;
-    return {
+    let expired = false;
+    let holdTimer: NodeJS.Timeout | undefined;
+    // Every release path funnels through here, so a slot is freed exactly
+    // once whether the request completes, aborts or outlives maxHoldMs.
+    const free = (): boolean => {
+      if (released) return false;
+      released = true;
+      if (holdTimer) clearTimeout(holdTimer);
+      this.active--;
+      this.drain();
+      return true;
+    };
+    const lease: RequestAdmissionLease = {
       lane,
+      get expired() {
+        return expired;
+      },
       release: () => {
-        if (released) return;
-        released = true;
-        this.active--;
-        this.drain();
+        free();
       },
     };
+    if (this.maxHoldMs !== undefined) {
+      holdTimer = setTimeout(() => {
+        expired = true;
+        if (!free()) return;
+        observeAdmissionLeaseExpired(lane);
+        this.onLeaseExpired?.(lease);
+      }, this.maxHoldMs);
+      holdTimer.unref();
+    }
+    return lease;
   }
 
   private drain(): void {

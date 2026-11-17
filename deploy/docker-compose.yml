@@ -144,6 +144,8 @@ x-api-env: &api-env
   # Rolling-deploy drain (#1327); keep the sum below api.stop_grace_period.
   SHUTDOWN_DRAIN_TIMEOUT_MS: "${SHUTDOWN_DRAIN_TIMEOUT_MS:-20000}"
   SSE_DRAIN_SPREAD_MS: "${SSE_DRAIN_SPREAD_MS:-5000}"
+  # Force-release a leaked request-admission slot after this hold time (#1367).
+  REQUEST_ADMISSION_MAX_HOLD_MS: "${REQUEST_ADMISSION_MAX_HOLD_MS:-300000}"
   RATE_LIMIT_SCAN_MAX: "${RATE_LIMIT_SCAN_MAX:-120}"
   RATE_LIMIT_SCAN_WINDOW_SECONDS: "${RATE_LIMIT_SCAN_WINDOW_SECONDS:-60}"
   RATE_LIMIT_MEAL_BATCH_MAX: "${RATE_LIMIT_MEAL_BATCH_MAX:-60}"

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RequestAdmission } from "../src/lib/request-admission.js";
 import {
   classifyRequestLane,
@@ -134,5 +134,82 @@ describe("event-day request lanes (#544)", () => {
     expect(metricTopicForSse("queue-review:123")).toBe("queue-review");
     expect(laneForSseTopic("user:456")).toBe("P3");
     expect(metricTopicForSse("user:456")).toBe("user");
+  });
+});
+
+describe("admission lease maximum hold time (#1367)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("force-releases a leaked lease once and admits the next waiter", async () => {
+    vi.useFakeTimers();
+    const expired: string[] = [];
+    const admission = new RequestAdmission({
+      maxConcurrent: 1,
+      reservedHighPriority: 0,
+      maxHoldMs: 1_000,
+      onLeaseExpired: (lease) => expired.push(lease.lane),
+    });
+    const leaked = await admission.acquire("P3");
+    const waiting = admission.acquire("P3");
+    expect(admission.queuedCount).toBe(1);
+
+    vi.advanceTimersByTime(999);
+    expect(admission.activeCount).toBe(1);
+    expect(leaked.expired).toBe(false);
+
+    vi.advanceTimersByTime(1);
+    expect(leaked.expired).toBe(true);
+    expect(expired).toEqual(["P3"]);
+    const next = await waiting;
+    expect(admission.activeCount).toBe(1);
+
+    // A request that completes after its lease expired must not free the
+    // slot now held by another request.
+    leaked.release();
+    leaked.release();
+    expect(admission.activeCount).toBe(1);
+    next.release();
+    expect(admission.activeCount).toBe(0);
+    vi.advanceTimersByTime(10_000);
+    expect(expired).toEqual(["P3"]);
+    expect(admission.activeCount).toBe(0);
+  });
+
+  it("does not expire a lease released before the deadline", async () => {
+    vi.useFakeTimers();
+    const onLeaseExpired = vi.fn();
+    const admission = new RequestAdmission({
+      maxConcurrent: 1,
+      maxHoldMs: 1_000,
+      onLeaseExpired,
+    });
+    const lease = await admission.acquire("P0");
+    vi.advanceTimersByTime(500);
+    lease.release();
+    vi.advanceTimersByTime(5_000);
+    expect(onLeaseExpired).not.toHaveBeenCalled();
+    expect(lease.expired).toBe(false);
+    expect(admission.activeCount).toBe(0);
+  });
+
+  it("reports the age of the oldest best-effort waiter", async () => {
+    const admission = new RequestAdmission({ maxConcurrent: 1, reservedHighPriority: 0 });
+    expect(admission.health()).toEqual({ active: 0, queued: 0, oldestBestEffortWaitSeconds: 0 });
+    const active = await admission.acquire("P0");
+    const operational = admission.acquire("P0");
+    const participant = admission.acquire("P3");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const health = admission.health();
+    expect(health.active).toBe(1);
+    expect(health.queued).toBe(2);
+    expect(health.oldestBestEffortWaitSeconds).toBeGreaterThan(0.01);
+    expect(admission.oldestWaitSeconds(["P1"])).toBe(0);
+
+    active.release();
+    (await operational).release();
+    (await participant).release();
+    expect(admission.health()).toEqual({ active: 0, queued: 0, oldestBestEffortWaitSeconds: 0 });
   });
 });
