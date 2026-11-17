@@ -408,23 +408,30 @@ function RouterTabsContent({
           : -1;
         const nextOffset = nextIndex >= 0 ? nextIndex * directTabCellWidth : restingOffset;
         // The lens stays lifted until it reaches the destination, then lands.
+        // Navigation waits for the arrival: mounting a screen mid-flight would
+        // stall the main thread that Reanimated draws the travel on.
+        const wasScrubbed = scrubbed.value;
+        const arrive = () => {
+          "worklet";
+          if (nextIndex < 0) return;
+          if (wasScrubbed) runOnJS(commitTabSelection)(nextIndex);
+          else runOnJS(pressTab)(nextIndex);
+        };
         if (reducedMotion) {
           selectionOffset.value = nextOffset;
           lift.value = 0;
           runOnJS(setLensMounted)(false);
+          arrive();
         } else {
           // Arrive on the cell with the system ease-out, then land at once.
           selectionOffset.value = withTiming(nextOffset, TAB_TRAVEL, (finished) => {
             // An interrupting touch replaces this travel and keeps the lens up.
             if (!finished) return;
+            arrive();
             lift.value = withSpring(0, PRESS_LENS_SPRING, (landed) => {
               if (landed) runOnJS(setLensMounted)(false);
             });
           });
-        }
-        if (nextIndex >= 0) {
-          if (scrubbed.value) runOnJS(commitTabSelection)(nextIndex);
-          else runOnJS(pressTab)(nextIndex);
         }
       });
   }, [

@@ -161,8 +161,14 @@ jest.mock("react-native-reanimated", () => {
     useAnimatedStyle: (factory: () => unknown) => factory(),
     useReducedMotion: () => false,
     useSharedValue: (v: unknown) => ReactLib.useRef({ value: v }).current,
-    withSpring: (v: number) => v,
-    withTiming: (v: number) => v,
+    withSpring: (v: number, _config?: unknown, done?: (finished: boolean) => void) => {
+      done?.(true);
+      return v;
+    },
+    withTiming: (v: number, _config?: unknown, done?: (finished: boolean) => void) => {
+      done?.(true);
+      return v;
+    },
     Easing: { bezier: () => (t: number) => t },
   };
 });
