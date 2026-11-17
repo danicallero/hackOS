@@ -10,7 +10,7 @@ Dos subdominios dedicados, uno por tipo de correo:
 
 | Tipo | Plantillas | Remitente |
 |---|---|---|
-| Cuenta | `auth.*` (verificar correo, restablecer contraseña, invitaciones, PIN de baja) | `no-reply@auth.hackudc.com` |
+| Transaccional | `auth.*` (verificar correo, restablecer contraseña, invitaciones, PIN de baja) `application.decision*` (admisión con enlace de confirmación) y `application.confirmation*` (recordatorios de confirmación) | `no-reply@auth.hackudc.com` |
 | Notificaciones | todo lo demás (cola, avisos, decisiones, recordatorios) | `no-reply@updates.hackudc.com` |
 
 Por qué:
@@ -24,7 +24,7 @@ Por qué:
 
 El código elige el remitente por plantilla (`senderFor` en
 `apps/api/src/modules/notifications/channels/email.ts`): si el nombre empieza
-por `auth.` y existe `MAIL_AUTH_FROM_ADDRESS`, sale por ahí; si no, por
+por `auth.`, `application.decision`, `application.confirmation` o es `application.returned` y existe `MAIL_AUTH_FROM_ADDRESS`, sale por ahí; si no, por
 `MAIL_FROM_ADDRESS`. Con las variables de cuenta vacías (staging, desarrollo)
 todo sale por el remitente normal.
 
@@ -167,6 +167,21 @@ En staging no definas `MAIL_AUTH_*`, `MAIL_REPLY_TO` ni
 - `POST /api/notifications/test-email` y su botón en Avisos.
 - Cabecera del correo en azul marino con el logo en crema (ver
   [`notifications.md`](./notifications.md)).
+
+## Pestaña Promociones de Gmail
+
+Gmail clasifica por remitente (qué suele mandar ese dominio) y por contenido.
+Los avisos masivos y los recordatorios del evento salen todos de `updates.`,
+así que Gmail aprende ese remitente como masivo. Por eso:
+
+- La decisión de admisión sale del remitente transaccional, no de `updates.`.
+- Asuntos descriptivos, sin exclamaciones ni ganchos («Tu solicitud para X ha
+  sido aceptada», no «¡Tu plaza te espera!»).
+- Sin relleno invisible tras el preheader (`&zwnj;&nbsp;…`): es la firma de las
+  herramientas de marketing.
+
+Si aun así cae en Promociones, en **Mostrar original** comprueba que el
+`From` sea `auth.` y que SPF/DKIM/DMARC pasen.
 
 ## Pendiente
 

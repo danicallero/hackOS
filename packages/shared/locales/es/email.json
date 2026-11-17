@@ -86,7 +86,7 @@
         "subject": "Una decisión sobre tu solicitud",
         "body": "Hola {{name}},\n\nHemos revisado tu solicitud a {{applicationName}}.{{decisionDetails}}",
         "accepted": {
-          "subject": "¡Tu plaza en {{eventName}} te espera!",
+          "subject": "Tu solicitud para {{eventName}} ha sido aceptada",
           "heading": "¡Te esperamos en {{eventName}}!",
           "body": "Hola {{name}},\n\n¡Enhorabuena! Hemos aceptado tu solicitud de {{applicationName}} para {{eventName}} y nos hace mucha ilusión contar contigo.\n\nTe hemos reservado una plaza. Ahora solo falta que confirmes tu asistencia.{{decisionDetails}}\n\n¡Tenemos muchas ganas de conocerte!\nEl equipo de {{eventName}}"
         },
@@ -113,6 +113,14 @@
       "returned": {
         "subject": "Tu solicitud de {{applicationName}} necesita cambios",
         "body": "Hola {{name}}:\n\nHemos revisado tu solicitud de {{applicationName}} para {{eventName}} y, tal como está, no podemos aceptarla.{{rejectionDetails}}\n\nTe la hemos devuelto como borrador para que puedas corregirla y volver a presentarla, aunque el plazo ya haya cerrado.\n\n[Revisar mi solicitud]({{applicationUrl}})\n\nEl equipo de {{eventName}}"
+      },
+      "confirmationReminder": {
+        "subject": "Recuerda confirmar tu plaza en {{eventName}}",
+        "body": "Hola {{name}},\n\nTu plaza en {{eventName}} sigue reservada, pero aún no has confirmado tu asistencia.{{confirmationDetails}}\n\nEl equipo de {{eventName}}"
+      },
+      "confirmationLastChance": {
+        "subject": "Última oportunidad para confirmar tu plaza en {{eventName}}",
+        "body": "Hola {{name}},\n\nQuedan menos de 24 horas para confirmar tu plaza en {{eventName}}. Es el último aviso que te enviaremos.{{confirmationDetails}}\n\nEl equipo de {{eventName}}"
       }
     },
     "schedule": {

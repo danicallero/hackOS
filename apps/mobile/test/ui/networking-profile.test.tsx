@@ -163,6 +163,7 @@ const profile = {
   headline: null,
   locationNote: null,
   bio: null,
+  socials: [],
   shareCv: false,
   cv: null,
   consentedAt: null,
@@ -301,10 +302,73 @@ describe("NetworkingProfileScreen", () => {
     expect(init.headers["Idempotency-Key"]).toBeTruthy();
     const body = JSON.parse(init.body);
     expect(body).toMatchObject({ shareCv: false, headline: "Rovers", directoryVisible: true });
-    expect(body).not.toHaveProperty("socials");
+    expect(body.socials).toEqual([]);
     // Back to the preview, which no longer carries the CV.
     await waitFor(() => expect(screen.queryByRole("button", { name: "save" })).toBeNull());
     expect(screen.queryByRole("button", { name: "directoryCv" })).toBeNull();
+  });
+
+  it("adds a link alongside linked GitHub, saves it, and reopens the stored editor (#935)", async () => {
+    const github = { kind: "github", url: "https://github.com/ada" };
+    const link = { kind: "website", url: "https://ada.example/" };
+    mockApiFetch
+      .mockResolvedValueOnce({ ...shared, preview: { ...shared.preview, socials: [github] } })
+      .mockResolvedValueOnce({
+        ...shared,
+        socials: [link],
+        preview: { ...shared.preview, socials: [link, github] },
+      });
+    await renderMobile(<NetworkingProfileScreen />);
+    await fireEvent.press(await screen.findByRole("button", { name: "networkingEdit" }));
+    await fireEvent.press(screen.getByRole("button", { name: "networkingLinkAdd" }));
+    expect(screen.getByLabelText("networkingLinkUrl 1")).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText("networkingLinkUrl 1"), " ada.example ");
+    await fireEvent.press(screen.getByRole("button", { name: "save" }));
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(mockApiFetch.mock.calls[1][1].body).socials).toEqual([
+      { kind: "website", url: "ada.example" },
+    ]);
+    await fireEvent.press(await screen.findByRole("button", { name: "networkingEdit" }));
+    expect(screen.getByLabelText("networkingLinkUrl 1").props.value).toBe(link.url);
+    await fireEvent.press(screen.getByRole("button", { name: "remove 1" }));
+    expect(screen.queryByLabelText("networkingLinkUrl 1")).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "cancel" }));
+    expect(screen.getByText("ada.example")).toBeTruthy();
+  });
+
+  it("keeps a blank row when another field changes and omits it from save (#935)", async () => {
+    mockApiFetch.mockResolvedValueOnce(profile).mockResolvedValueOnce(shared);
+    await renderMobile(<NetworkingProfileScreen />);
+    await fireEvent.press(await screen.findByRole("button", { name: "networkingLinkAdd" }));
+    await fireEvent.changeText(screen.getByLabelText("networkingHeadline"), "Robots");
+    expect(screen.getByLabelText("networkingLinkUrl 1")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "save" }));
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(mockApiFetch.mock.calls[1][1].body).socials).toEqual([]);
+  });
+
+  it("limits links to six and retains edits after a failed save (#935)", async () => {
+    mockApiFetch
+      .mockResolvedValueOnce({
+        ...profile,
+        socials: Array.from({ length: 6 }, (_, i) => ({
+          kind: "website",
+          url: `https://site${i}.example/`,
+        })),
+      })
+      .mockRejectedValueOnce(new Error("invalid link"));
+    await renderMobile(<NetworkingProfileScreen />);
+    await screen.findByLabelText("networkingLinkUrl 6");
+    expect(screen.queryByRole("button", { name: "networkingLinkAdd" })).toBeNull();
+    await fireEvent.changeText(
+      screen.getByLabelText("networkingLinkUrl 1"),
+      "http://invalid.example",
+    );
+    await fireEvent.press(screen.getByRole("button", { name: "save" }));
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
+    expect(screen.getByLabelText("networkingLinkUrl 1").props.value).toBe("http://invalid.example");
+    await fireEvent.press(screen.getByRole("button", { name: "remove 6" }));
+    expect(screen.getByRole("button", { name: "networkingLinkAdd" })).toBeTruthy();
   });
 
   it("keeps hidden photo and surname on screen while editing", async () => {

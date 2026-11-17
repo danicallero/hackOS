@@ -32,6 +32,7 @@ export type ProfileCardData = Pick<
  * Hidden data stays on screen, greyed, so the owner sees what is withheld.
  */
 export interface ProfileCardEdit {
+  linksEditor?: ReactNode;
   headline: string;
   bio: string;
   locationNote: string;
@@ -318,21 +319,22 @@ export function ProfileCard({
       ) : null}
       {afterBio}
 
-      {data.socials.length > 0 ? (
-        <Section title={t("directoryLinks")}>
-          {data.socials.map((link, index) => (
-            <View key={`${link.kind}-${link.url}`}>
-              {index > 0 ? <Separator inset={ROW_ICON_INSET} /> : null}
-              <DetailRow
-                icon={link.kind === "website" ? "globe" : "link"}
-                label={socialLabel(link, t)}
-                value={displayUrl(link.url)}
-                onPress={() => void Linking.openURL(link.url)}
-              />
-            </View>
-          ))}
-        </Section>
-      ) : null}
+      {edit?.linksEditor ??
+        (data.socials.length > 0 ? (
+          <Section title={t("directoryLinks")}>
+            {data.socials.map((link, index) => (
+              <View key={`${link.kind}-${link.url}`}>
+                {index > 0 ? <Separator inset={ROW_ICON_INSET} /> : null}
+                <DetailRow
+                  icon={link.kind === "website" ? "globe" : "link"}
+                  label={socialLabel(link, t)}
+                  value={displayUrl(link.url)}
+                  onPress={() => void Linking.openURL(link.url)}
+                />
+              </View>
+            ))}
+          </Section>
+        ) : null)}
 
       {rows.length > 0 ? (
         <Section>

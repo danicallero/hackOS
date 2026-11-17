@@ -441,7 +441,8 @@ the deadline. Operational queue alerts and security instructions remain precise.
 A reject-and-return (H14: an internal rejection marked to return the response
 as a draft when sent) uses `application.returned` instead: the outcome, the
 same optional `rejectionDetails` reason line, that the draft can be resubmitted
-even after the deadline, and an `applicationUrl` link to it.
+even after the deadline, and an `applicationUrl` link to it. Like the decision,
+it leaves from the transactional sender ([email-ses](email-ses.md)).
 
 `application.decision` stays the outbox template name; the renderer selects
 complete `accepted`/`rejected` subject/body variants in es/gl/en from the internal
@@ -476,6 +477,21 @@ a tick that overlaps another, or a failed one, send nothing twice.
 
 An unverified account only receives the first series. Returning a response to
 draft resets its counter.
+
+**Spot confirmation (H15).** An accepted applicant who has not confirmed gets
+up to three emails, from the `applications-expirer` sweep
+(`applications/confirmation-reminders.ts`), when the time left reaches half the
+confirmation window, 48 hours and 24 hours. The 24-hour one is
+`application.confirmationLastChance`; the others are
+`application.confirmationReminder`. Each carries the deadline and the
+confirm/decline links (the live token, else the application page). A threshold
+at or within 12 hours of the previous one is dropped, so a short window gets
+fewer emails (72 h: 36 h and 24 h; 48 h: 24 h). A sweep that fell behind sends
+only the latest threshold reached. `confirmation_reminder_level` counts what
+was sent for the decision stamped in `confirmation_reminder_basis` (migration
+`0207`); a resent or re-accepted decision has a new `decision_sent_at`, which
+restarts the series. Like the decision, these leave from the transactional
+sender ([email-ses](email-ses.md)).
 
 **"I didn't create this account"** (`/delete-account?token=…`,
 `GET/POST /api/unverified-account-removal`): the single-use token (30 days,

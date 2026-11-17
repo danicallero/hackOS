@@ -6,6 +6,7 @@ import { NotFoundError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { activeLibraryFields } from "../form-libraries/service.js";
+import { decisionSenderAddress } from "../notifications/channels/email.js";
 import { idParamSchema, saveDraftSchema, submitSchema } from "./schemas.js";
 import {
   canDeleteDraft,
@@ -145,7 +146,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Submit my response",
         description:
-          "Submits the caller's response for staff review (H12): validates the answers against the form's template and requires a verified email before accepting the submission.",
+          "Submits the caller's response for staff review (H12): validates the answers against the form's template and requires a verified email before accepting the submission. `decision_sender` is the address the decision email will come from, so the applicant can watch for it.",
         params: idParamSchema,
         body: submitSchema,
       },
@@ -159,6 +160,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
       return {
         response: maskResponse(response),
         privacy_notice: privacyNotice,
+        decision_sender: decisionSenderAddress(),
       };
     },
   );
