@@ -1109,4 +1109,57 @@ describe("Active devices (H28)", () => {
     });
     expect(after.json()).toHaveLength(1);
   });
+
+  it("lists sessions signed in more than a day ago", async () => {
+    const a = await getApp();
+    await signUp(a);
+    const here = sessionCookie(await signIn(a, SIGNUP.email, SIGNUP.password));
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE sessions SET created_at = now() - interval '3 days'`);
+
+    const list = await a.inject({
+      method: "GET",
+      url: "/api/auth/list-sessions",
+      headers: { cookie: here },
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json()).toHaveLength(1);
+  });
+
+  it("asks a stale session for the password before signing other devices out", async () => {
+    const a = await getApp();
+    await signUp(a);
+    const here = sessionCookie(await signIn(a, SIGNUP.email, SIGNUP.password));
+    const other = sessionCookie(await signIn(a, SIGNUP.email, SIGNUP.password));
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE sessions SET created_at = now() - interval '3 days'`);
+    const sessions = (
+      await a.inject({ method: "GET", url: "/api/auth/list-sessions", headers: { cookie: here } })
+    ).json() as { token: string }[];
+    const current = (
+      await a.inject({ method: "GET", url: "/api/auth/get-session", headers: { cookie: here } })
+    ).json() as { session: { token: string } };
+    const target = sessions.find((s) => s.token !== current.session.token) as { token: string };
+
+    const revoke = (payload: Record<string, unknown>, url = "/api/auth/revoke-session") =>
+      a.inject({ method: "POST", url, headers: { cookie: here }, payload });
+
+    const missing = await revoke({ token: target.token });
+    expect(missing.statusCode).toBe(400);
+    expect(missing.json().error.details.code).toBe("session_revoke_reauthentication_required");
+    const wrong = await revoke({ token: target.token, password: "not-the-password" });
+    expect(wrong.statusCode).toBe(400);
+    expect(wrong.json().error.details.code).toBe("session_revoke_reauthentication_invalid");
+    const allMissing = await revoke({}, "/api/auth/revoke-other-sessions");
+    expect(allMissing.statusCode).toBe(400);
+    expect(
+      (await a.inject({ method: "GET", url: "/api/me", headers: { cookie: other } })).statusCode,
+    ).toBe(200);
+
+    const ok = await revoke({ token: target.token, password: SIGNUP.password });
+    expect(ok.statusCode).toBe(200);
+    expect(
+      (await a.inject({ method: "GET", url: "/api/me", headers: { cookie: other } })).statusCode,
+    ).toBe(401);
+  });
 });

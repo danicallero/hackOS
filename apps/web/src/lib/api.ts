@@ -167,7 +167,13 @@ function throwApiError(res: Response, payload: unknown, fallbackMessage = "Reque
       payload,
     );
   }
-  const err = (payload as ErrorEnvelope | null | undefined)?.error;
+  // Better Auth's own routes answer a bare `{ code, message }` instead of the envelope.
+  const bare = payload as { code?: unknown; message?: unknown } | null | undefined;
+  const err =
+    (payload as ErrorEnvelope | null | undefined)?.error ??
+    (typeof bare?.code === "string"
+      ? { code: bare.code, message: typeof bare.message === "string" ? bare.message : undefined }
+      : undefined);
   const retryAfter = Number(res.headers.get("retry-after")) || undefined;
   if (isMaintenanceError(res.status, err?.code)) {
     maintenanceStore.mark(maintenancePhaseOf(err?.details));

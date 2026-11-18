@@ -4324,7 +4324,7 @@
   "signOutDevice": "Cerrar sesión en este dispositivo",
   "deviceSignedOut": "Sesión cerrada en el dispositivo",
   "devicesSignedOut": "Sesión cerrada en el resto de dispositivos",
-  "couldNotLoadDevices": "No se pudieron cargar tus dispositivos.",
+  "couldNotLoadDevicesBecause": "No se pudieron cargar tus dispositivos por el siguiente error: {reason}",
   "couldNotSignOutDevice": "No se pudo cerrar la sesión del dispositivo.",
   "unknownDevice": "Dispositivo desconocido",
   "activeDeviceSince": "Activo {when}",

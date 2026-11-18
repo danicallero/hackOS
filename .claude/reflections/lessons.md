@@ -1003,3 +1003,28 @@ Record the interaction in a release build and confirm that the destination appea
 
 ### Exceptions
 A deliberate confirmation step (an undo window, a destructive confirmation) the product asks for.
+
+## [R038] Show why a request failed; offer Retry only when retrying can help
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-11-18
+
+### Trigger
+Rendering a load or action failure (`ContextualError`, toasts, inline errors) on any surface.
+
+### Mistake
+Active devices showed a generic "Could not load your devices." with Retry for a 403 `SESSION_NOT_FRESH`, which retrying could never fix.
+
+### Lesson
+A failure states its reason. A deterministic error (4xx business, permission, validation) never offers Retry; only transient ones (network, 429, 5xx) do.
+
+### Action
+Use `apiErrorText` for the message and pass `onRetry` only when the error is transient. Call API endpoints through `api` (not ad hoc clients that drop the reason) so `ApiError` carries status and `details.code`.
+
+### Validation
+A component test renders a 4xx failure and asserts the reason is visible with no Retry, and a 5xx failure that does offer Retry.
+
+### Exceptions
+None.

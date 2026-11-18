@@ -4,11 +4,12 @@ import { fromNodeHeaders } from "better-auth/node";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
-import { ForbiddenError, TooManyRequestsError } from "../../lib/errors.js";
+import { BadRequestError, ForbiddenError, TooManyRequestsError } from "../../lib/errors.js";
 import { consumeRateLimit } from "../../lib/rate-limit.js";
 import { findReviewFixtureByEmail } from "../../lib/review-fixture-log.js";
 import { setUserIdResolver } from "../../plugins/auth-context.js";
 import { auth, getBetterAuthSessionToken } from "./auth.js";
+import { matchesCredentialPassword } from "./credential-password.js";
 import { recordReviewFixtureAuthentication } from "./review-fixture-usage.js";
 import { registerInviteRoutes } from "./routes/invites.js";
 import { registerMealPlanRoutes } from "./routes/meal-plan.js";
@@ -137,6 +138,9 @@ async function betterAuthPassthrough(
     throw new ForbiddenError("Verification requires the site origin");
   }
   await enforcePendingBetterAuthRoute(request);
+  if (request.method === "POST" && authPath && REVOKE_SESSION_PATHS.has(authPath)) {
+    await requireRevokeReauthentication(request);
+  }
 
   const isEmailSignIn =
     request.method === "POST" && request.url.split("?", 1)[0] === "/api/auth/sign-in/email";
@@ -284,6 +288,60 @@ function isPendingRecoveryRoute(method: string, path: string): boolean {
 }
 
 /** Convert Fastify's Node header map into the Fetch Headers Better Auth uses. */
+/**
+ * H28: listing devices needs only a live session. Signing other devices out
+ * needs a fresh session (signed in within REVOKE_FRESH_SECONDS, Better Auth's
+ * default freshAge) or the current password, sent as `password` in the Better
+ * Auth request body. Password attempts are rate-limited per account so a
+ * hijacked session cannot brute-force the password through this check.
+ */
+const REVOKE_FRESH_SECONDS = 24 * 60 * 60;
+const REVOKE_SESSION_PATHS = new Set([
+  "/api/auth/revoke-session",
+  "/api/auth/revoke-sessions",
+  "/api/auth/revoke-other-sessions",
+]);
+
+async function requireRevokeReauthentication(request: FastifyRequest): Promise<void> {
+  const token = await getBetterAuthSessionToken(requestHeaders(request));
+  if (!token) return; // Better Auth answers 401 for a missing session.
+  const { rows } = await pool.query<{ user_id: number; fresh: boolean }>(
+    `SELECT user_id, created_at > clock_timestamp() - make_interval(secs => $2) AS fresh
+       FROM sessions
+      WHERE token = $1 AND expires_at > clock_timestamp()`,
+    [token, REVOKE_FRESH_SECONDS],
+  );
+  const session = rows[0];
+  if (!session || session.fresh) return;
+  const userId = session.user_id;
+
+  let password: unknown;
+  try {
+    password = Buffer.isBuffer(request.body)
+      ? (JSON.parse(request.body.toString("utf8")) as { password?: unknown }).password
+      : undefined;
+  } catch {
+    password = undefined;
+  }
+  if (typeof password !== "string" || password === "") {
+    throw new BadRequestError("Re-enter your current password to continue.", {
+      code: "session_revoke_reauthentication_required",
+    });
+  }
+  const limit = await consumeRateLimit("auth-revoke-reauth", String(userId), {
+    windowSeconds: 300,
+    max: 10,
+  });
+  if (!limit.allowed) {
+    throw new TooManyRequestsError("Too many requests — try again later.", limit.retryAfterSeconds);
+  }
+  if (!(await matchesCredentialPassword(pool, userId, password))) {
+    throw new BadRequestError("The current password is incorrect.", {
+      code: "session_revoke_reauthentication_invalid",
+    });
+  }
+}
+
 function requestHeaders(request: FastifyRequest): Headers {
   const headers = new Headers();
   for (const [key, value] of Object.entries(request.headers)) {
