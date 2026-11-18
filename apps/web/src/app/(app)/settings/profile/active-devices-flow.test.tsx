@@ -13,7 +13,13 @@ vi.mock("@/lib/api", async (importOriginal) => {
 vi.mock("@/lib/auth-client", () => ({
   authClient: { getSession: async () => ({ data: { session: { token: "here" } } }) },
 }));
-vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t: (key: string) => key, language: "en" }) }));
+vi.mock("@/lib/i18n", () => ({
+  useLocale: () => ({
+    t: (key: string, vars?: Record<string, string>) =>
+      vars ? `${key}: ${Object.values(vars).join(" ")}` : key,
+    language: "en",
+  }),
+}));
 vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
 import { ApiError } from "@/lib/api";
@@ -58,9 +64,9 @@ afterEach(() => {
 
 describe("Active devices (H28)", () => {
   it("states why the list failed and offers no retry when retrying cannot help", async () => {
-    calls.get.mockRejectedValue(new ApiError(403, "unknown", "Forbidden"));
+    calls.get.mockRejectedValue(new ApiError(403, "SESSION_NOT_FRESH", "Session is not fresh"));
     await render();
-    expect(document.body.textContent).toContain("apiErrorForbidden");
+    expect(document.body.textContent).toContain("couldNotLoadDevicesBecause: Session is not fresh");
     expect(byText("retry")).toBeUndefined();
   });
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { errorReasonCopyKey } from "@hackos/shared/error-reasons";
+import commonEn from "@hackos/shared/locales/en/common.json";
 import { DesktopIcon } from "@phosphor-icons/react/dist/csr/Desktop";
 import { DeviceMobileIcon } from "@phosphor-icons/react/dist/csr/DeviceMobile";
 import { SignOutIcon } from "@phosphor-icons/react/dist/csr/SignOut";
@@ -16,6 +18,7 @@ import { apiErrorReason } from "@/lib/api-error-reason";
 import { apiErrorText } from "@/lib/api-error-text";
 import { authClient } from "@/lib/auth-client";
 import { formatEventDate } from "@/lib/datetime";
+import type { MessageKey, Translate } from "@/lib/i18n";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 
@@ -65,6 +68,18 @@ const isMobile = (userAgent: string | null | undefined) =>
 /** Only a failure that can clear on its own (network, rate limit, server) is worth retrying. */
 export function isRetryable(error: unknown): boolean {
   return !(error instanceof ApiError) || error.status === 429 || error.status >= 500;
+}
+
+/** The concrete cause of a failure: localized copy when the reason has one, else what the server said. */
+export function failureReason(error: unknown, t: Translate): string {
+  if (error instanceof ApiError) {
+    const reason = apiErrorReason(error);
+    const key = reason ? errorReasonCopyKey(reason) : null;
+    if (key && key in commonEn) return t(key as MessageKey);
+    if (error.code !== "unknown" && error.message) return error.message;
+    return apiErrorText(error, t, `HTTP ${error.status}`);
+  }
+  return error instanceof Error && error.message ? error.message : t("apiErrorServer");
 }
 
 type Revocation = { url: string; token?: string; success: string };
@@ -134,7 +149,7 @@ export function ActiveDevices() {
   if (loadError)
     return (
       <ContextualError
-        message={apiErrorText(loadError, t, t("couldNotLoadDevices"))}
+        message={t("couldNotLoadDevicesBecause", { reason: failureReason(loadError, t) })}
         onRetry={isRetryable(loadError) ? () => void load() : undefined}
       />
     );
