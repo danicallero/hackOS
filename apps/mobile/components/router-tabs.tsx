@@ -293,11 +293,6 @@ function RouterTabsContent({
   const { switchTab } = useTabTrigger({ name: directTabNames[0] ?? "" });
   const reducedMotion = useReducedMotion();
   const routeTabIndex = directTabs.findIndex((tab) => isTabActive(pathname, tab));
-  // H55: the released tab shows as selected at once; the route follows when
-  // the lens arrives (navigation is slow to commit, above all in debug).
-  // It holds only until the route changes from the one it was released on.
-  const [pendingTab, setPendingTab] = useState<{ index: number; from: number } | null>(null);
-  const pendingTabIndex = pendingTab?.from === routeTabIndex ? pendingTab.index : null;
   const selectedDirectTabIndex = routeTabIndex;
   const [directGroupWidth, setDirectGroupWidth] = useState(0);
   const selectionOffset = useSharedValue(0);
@@ -347,13 +342,11 @@ function RouterTabsContent({
   // still reach the Pressable directly.
   const tabPresses = useRef<Array<(() => void) | undefined>>([]);
   const pressTab = useCallback((index: number) => tabPresses.current[index]?.(), []);
-  // H55: show the released tab as selected in its own cheap render, then
-  // navigate on the next frame; a screen that is slow to mount never delays
-  // the bar's response.
+  // H55: navigation and feedback commit on release, without a render/frame gate.
   const releaseOnTab = useCallback(
-    (index: number, from: number, scrubbed: boolean) => {
-      if (index !== from) setPendingTab({ index, from });
-      requestAnimationFrame(() => (scrubbed ? commitTabSelection(index) : pressTab(index)));
+    (index: number, scrubbed: boolean) => {
+      if (scrubbed) commitTabSelection(index);
+      else pressTab(index);
     },
     [commitTabSelection, pressTab],
   );
@@ -425,8 +418,7 @@ function RouterTabsContent({
         const nextOffset = nextIndex >= 0 ? nextIndex * directTabCellWidth : restingOffset;
         // H55: the tab switches on release, like the system bar; the lens
         // travels and settles alongside and never holds the navigation back.
-        if (nextIndex >= 0)
-          runOnJS(releaseOnTab)(nextIndex, selectedDirectTabIndex, scrubbed.value);
+        if (nextIndex >= 0) runOnJS(releaseOnTab)(nextIndex, scrubbed.value);
         if (reducedMotion) {
           selectionOffset.value = nextOffset;
           lift.value = 0;
@@ -527,13 +519,7 @@ function RouterTabsContent({
             {directTabs.map((tab, index) => (
               <TabTrigger key={tab.name} asChild name={tab.name}>
                 <RouterTabButton
-                  activeOverride={
-                    pendingTabIndex !== null
-                      ? index === pendingTabIndex
-                      : tab.isActive
-                        ? isTabActive(pathname, tab)
-                        : undefined
-                  }
+                  activeOverride={tab.isActive ? isTabActive(pathname, tab) : undefined}
                   icon={tab.icon}
                   label={tab.label}
                   registerPress={(press) => {

@@ -4324,7 +4324,7 @@
   "signOutDevice": "Sign out of this device",
   "deviceSignedOut": "Device signed out",
   "devicesSignedOut": "Other devices signed out",
-  "couldNotLoadDevices": "Could not load your devices.",
+  "couldNotLoadDevicesBecause": "Your devices could not be loaded due to the following error: {reason}",
   "couldNotSignOutDevice": "Could not sign out the device.",
   "unknownDevice": "Unknown device",
   "activeDeviceSince": "Active {when}",

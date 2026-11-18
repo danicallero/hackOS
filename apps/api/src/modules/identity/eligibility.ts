@@ -1,5 +1,3 @@
-import { verifyPassword } from "better-auth/crypto";
-
 import type pg from "pg";
 
 import type { Queryable } from "../../db/pool.js";
@@ -7,12 +5,12 @@ import type { Queryable } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
-
 import {
   buildCertaintyWindows,
   DEFAULT_SUSPICIOUS_GAP_MS,
   type PresenceEvent,
 } from "../logistics/estimate.js";
+import { matchesCredentialPassword } from "./credential-password.js";
 
 import { userResolvesCapabilityRegardlessOfState } from "./role-authority.js";
 
@@ -238,23 +236,7 @@ export async function verifyUnverifiedSelfServicePassword(
     });
   }
 
-  const { rows } = await client.query<{ password: string }>(
-    `SELECT password
-       FROM accounts
-      WHERE user_id = $1 AND provider_id = 'credential' AND password IS NOT NULL
-      ORDER BY id ASC
-      LIMIT 1`,
-    [user.id],
-  );
-  const hash = rows[0]?.password;
-  let valid = false;
-  if (hash) {
-    try {
-      valid = await verifyPassword({ hash, password });
-    } catch {
-      valid = false;
-    }
-  }
+  const valid = await matchesCredentialPassword(client, user.id, password);
   if (!valid) {
     throw new BadRequestError("The current password is incorrect.", {
       code: "removal_reauthentication_invalid",

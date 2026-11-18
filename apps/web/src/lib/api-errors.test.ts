@@ -36,6 +36,17 @@ describe("one error path for JSON, upload and download", () => {
     }
   });
 
+  it("keeps the code and message of a Better Auth error, which has no envelope", async () => {
+    respondWith(JSON.stringify({ code: "SESSION_NOT_FRESH", message: "Session is not fresh" }), {
+      status: 403,
+    });
+    await expect(api.get("/api/auth/list-sessions")).rejects.toMatchObject({
+      status: 403,
+      code: "SESSION_NOT_FRESH",
+      message: "Session is not fresh",
+    });
+  });
+
   it("still raises an ApiError when a proxy answers with an HTML page", async () => {
     respondWith("<html>bad gateway</html>", { status: 502, statusText: "Bad Gateway" });
     await expect(apiUpload("/api/x", new FormData())).rejects.toBeInstanceOf(ApiError);

@@ -4324,7 +4324,7 @@
   "signOutDevice": "Pechar sesión neste dispositivo",
   "deviceSignedOut": "Sesión pechada no dispositivo",
   "devicesSignedOut": "Sesión pechada no resto de dispositivos",
-  "couldNotLoadDevices": "Non se puideron cargar os teus dispositivos.",
+  "couldNotLoadDevicesBecause": "Non se puideron cargar os teus dispositivos polo seguinte erro: {reason}",
   "couldNotSignOutDevice": "Non se puido pechar a sesión do dispositivo.",
   "unknownDevice": "Dispositivo descoñecido",
   "activeDeviceSince": "Activo {when}",

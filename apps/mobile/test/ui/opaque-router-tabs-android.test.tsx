@@ -228,6 +228,7 @@ jest.mock("@/theme/colors", () => ({
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import * as Native from "react-native";
 import { OpaqueRouterTabs, reselectHelpDesk } from "@/components/opaque-router-tabs";
+import { haptic } from "@/lib/haptics";
 
 const DEFAULT_PROPS = {
   capabilities: [],
@@ -499,6 +500,26 @@ describe("participant tab scrubbing", () => {
     await fireEvent(screen.getByTestId("opaque-router-tabs-direct-group"), "layout", {
       nativeEvent: { layout: { width: 400 } },
     });
+  });
+
+  it.each([
+    ["tap", [250], "press"],
+    ["scrub", [50, 250], "switch"],
+  ] as const)("commits %s navigation and feedback on release without waiting for a frame", async (_kind, path, action) => {
+    const frame = jest.spyOn(global, "requestAnimationFrame").mockImplementation(() => 1);
+    jest.mocked(haptic).mockClear();
+    try {
+      await act(async () => {
+        touchPath([...path]);
+        // Assert before React can flush another render or animation frame.
+        if (action === "press") expect(mockTriggerPress).toHaveBeenCalledWith("diary");
+        else expect(mockSwitchTab).toHaveBeenCalledWith("diary", {});
+        expect(haptic).toHaveBeenCalledTimes(1);
+      });
+      expect(frame).not.toHaveBeenCalled();
+    } finally {
+      frame.mockRestore();
+    }
   });
 
   it("selects only visible destinations across the full direct group", async () => {

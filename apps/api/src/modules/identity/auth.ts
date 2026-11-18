@@ -302,6 +302,11 @@ export const auth = betterAuth({
     },
   },
   session: {
+    // H28: Better Auth gates list-sessions behind a "fresh" session (created
+    // within freshAge, default 1 day) and 403s SESSION_NOT_FRESH otherwise,
+    // so Active devices broke for anyone signed in for more than a day. We
+    // have no re-authentication flow; revoking still requires a live session.
+    freshAge: 0,
     modelName: "sessions",
     fields: {
       userId: "user_id",
