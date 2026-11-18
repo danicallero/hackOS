@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { requestAdmissionOldestLeaseSeconds } from "../src/lib/metrics.js";
 import { RequestAdmission } from "../src/lib/request-admission.js";
 import {
   classifyRequestLane,
@@ -220,6 +221,9 @@ describe("admission lease maximum hold time (#1367)", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     const second = await admission.acquire("P0");
     expect(admission.oldestLeaseSeconds()).toBeGreaterThan(0.01);
+    // The scrape-time gauge samples the most recently built HTTP gate.
+    const sampled = (await requestAdmissionOldestLeaseSeconds.get()).values[0]!.value;
+    expect(sampled).toBeGreaterThan(0.01);
     first.release();
     expect(admission.oldestLeaseSeconds()).toBeLessThan(0.01);
     second.release();

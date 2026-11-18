@@ -80,7 +80,7 @@ export const requestAdmissionOldestWaitSeconds = new client.Gauge({
  * requests finish within seconds, so a value that keeps growing is a lease
  * nothing will release, long before the maximum hold time reclaims it.
  */
-new client.Gauge({
+export const requestAdmissionOldestLeaseSeconds = new client.Gauge({
   name: "hackos_http_request_admission_oldest_lease_seconds",
   help: "Age of the longest-held request admission lease (0 when none is held)",
   registers: [register],
