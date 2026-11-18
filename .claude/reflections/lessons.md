@@ -370,11 +370,11 @@ clear.
 Status: active
 Scope: repository
 Source: user-correction
-Date: 2026-10-04
+Date: 2026-11-18
 
 ### Trigger
-A visual element disappears or flickers during hover, especially after a prior
-attempt to fix the same interaction failed.
+A visual element disappears, flickers or stalls during interaction, especially
+after a prior attempt to fix the same interaction failed.
 
 ### Mistake
 Repeatedly adjusting overlay ordering without inspecting the actual rendered
@@ -388,6 +388,10 @@ when its automatic interaction behavior is involved.
 ### Action
 Capture the failing state, identify which property changes, and verify the
 proposed cause against runtime evidence before changing code.
+Distinguish geometric clipping from a transition freezing halfway. Correlate
+late feedback (such as a haptic) with its actual callback before attributing
+recovery to that feedback. A reference library's different rendering hierarchy
+is not evidence that hierarchy caused the reported timing failure.
 
 ### Validation
 Repeat the same pointer interaction after the change, including related entry

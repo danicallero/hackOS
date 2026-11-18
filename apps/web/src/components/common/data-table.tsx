@@ -39,6 +39,8 @@ import { useLocale } from "@/lib/i18n";
 import { normalizeSearchText } from "@/lib/search-text";
 import { cn } from "@/lib/utils";
 
+const DEFAULT_SORT = "__default";
+
 export interface Column<T> {
   id: string;
   header: React.ReactNode;
@@ -338,6 +340,11 @@ export function DataTable<T>({
   const pageCount = pageSize ? Math.max(1, Math.ceil(sorted.length / pageSize)) : 1;
   const current = Math.min(page, pageCount - 1);
   const rows = pageSize ? sorted.slice(current * pageSize, current * pageSize + pageSize) : sorted;
+
+  const sortableColumns = columns.filter((col) => col.sortValue);
+  const mobileSort = sort && sortableColumns.some((col) => col.id === sort.id) ? sort : null;
+  const columnName = (col: Column<T>) =>
+    col.sortLabel ?? (typeof col.header === "string" ? col.header : col.id);
 
   const toggleSort = (id: string) =>
     setSort((s) =>
@@ -645,11 +652,64 @@ export function DataTable<T>({
             ) : rows.length === 0 ? (
               <div className="p-4">{renderEmptyState()}</div>
             ) : (
-              <ul className="divide-border divide-y">
-                {rows.map((row) => (
-                  <li key={getRowId(row)}>{renderMobileRow(row)}</li>
-                ))}
-              </ul>
+              <>
+                {sortableColumns.length > 0 && (
+                  // Narrow lists have no column headers to click, so the same
+                  // persisted sort is exposed as a field picker + direction.
+                  <div className="flex items-center gap-2 border-b px-4 py-2">
+                    <Select
+                      value={mobileSort?.id ?? DEFAULT_SORT}
+                      onValueChange={(id) => {
+                        setSort(id === DEFAULT_SORT ? null : { id, dir: mobileSort?.dir ?? "asc" });
+                        setPage(0);
+                      }}
+                    >
+                      <SelectTrigger
+                        size="sm"
+                        aria-label={t("sortOrder")}
+                        className="min-w-0 flex-1"
+                      >
+                        <ArrowsDownUpIcon aria-hidden="true" className="text-muted-foreground" />
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={DEFAULT_SORT}>{t("defaultOrder")}</SelectItem>
+                        {sortableColumns.map((col) => (
+                          <SelectItem key={col.id} value={col.id}>
+                            {columnName(col)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {mobileSort && (
+                      <IconButton
+                        type="button"
+                        variant="outline"
+                        size="icon-sm"
+                        label={t(mobileSort.dir === "asc" ? "sortAscending" : "sortDescending")}
+                        onClick={() => {
+                          setSort({
+                            id: mobileSort.id,
+                            dir: mobileSort.dir === "asc" ? "desc" : "asc",
+                          });
+                          setPage(0);
+                        }}
+                      >
+                        {mobileSort.dir === "asc" ? (
+                          <ArrowUpIcon aria-hidden="true" />
+                        ) : (
+                          <ArrowDownIcon aria-hidden="true" />
+                        )}
+                      </IconButton>
+                    )}
+                  </div>
+                )}
+                <ul className="divide-border divide-y">
+                  {rows.map((row) => (
+                    <li key={getRowId(row)}>{renderMobileRow(row)}</li>
+                  ))}
+                </ul>
+              </>
             )}
           </div>
         )}

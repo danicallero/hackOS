@@ -44,6 +44,10 @@ vi.mock("@/lib/i18n", () => ({
         selectRow: "Select row",
         retry: "Retry",
         openRow: "Open row",
+        sortOrder: "Sort",
+        defaultOrder: "Default order",
+        sortAscending: "Ascending",
+        sortDescending: "Descending",
       };
       return Object.entries(values).reduce(
         (text, [name, value]) => text.replace(`{${name}}`, String(value)),
@@ -226,6 +230,28 @@ describe("DataTable accessibility and interactions", () => {
       "Open Ada",
     );
     expect(container.querySelector("table")).not.toBeNull();
+  });
+
+  it("lets narrow lists reverse the shared sort without column headers", async () => {
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        getRowId={(row) => row.id}
+        renderMobileRow={(row) => <span data-mobile-name>{row.name}</span>}
+      />,
+    );
+    const mobileNames = () =>
+      [...container.querySelectorAll("[data-mobile-name]")].map((node) => node.textContent);
+    expect(container.querySelector('[aria-label="Sort"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Ascending"]')).toBeNull();
+    await act(async () => (container.querySelector("th button") as HTMLButtonElement).click());
+    expect(mobileNames()).toEqual(["Ada", "Grace"]);
+    await act(async () =>
+      (container.querySelector('[aria-label="Ascending"]') as HTMLButtonElement).click(),
+    );
+    expect(mobileNames()).toEqual(["Grace", "Ada"]);
+    expect(container.querySelector('[aria-label="Descending"]')).not.toBeNull();
   });
 
   it("falls back to onRowClick when the row has no href", async () => {

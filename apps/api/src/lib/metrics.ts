@@ -27,7 +27,9 @@ export const httpRequestDurationSeconds = new client.Histogram({
   name: "hackos_http_request_duration_seconds",
   help: "HTTP request duration, by admission lane, method, route and status class",
   labelNames: ["lane", "method", "route", "status_class"],
-  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30],
+  // 3 and 7.5 split the 2-5 s and 5-10 s ranges. Each bucket adds one series
+  // per lane/method/route/status_class combination (+2 series per combination).
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 3, 5, 7.5, 10, 30],
   registers: [register],
 });
 
@@ -289,6 +291,45 @@ export function setAdmissionOldestWaitSource(source: (lane: RequestLane) => numb
 
 export function observeAdmissionLeaseExpired(lane: RequestLane): void {
   requestAdmissionLeaseExpiredTotal.inc({ lane });
+}
+
+/** Upload operations with closed label values; no file names, IDs or personal data. */
+export const UPLOAD_OPERATIONS = ["application_field", "profile_photo"] as const;
+export type UploadOperation = (typeof UPLOAD_OPERATIONS)[number];
+
+/** Upload phases, closed set. `lock_wait` isolates time spent waiting on row locks. */
+export const UPLOAD_PHASES = [
+  "receive",
+  "validate",
+  "authorize",
+  "tx_begin",
+  "lock_wait",
+  "put",
+  "audit",
+  "commit",
+  "cleanup",
+] as const;
+export type UploadPhase = (typeof UPLOAD_PHASES)[number];
+
+export const UPLOAD_OUTCOMES = ["ok", "error"] as const;
+export type UploadOutcome = (typeof UPLOAD_OUTCOMES)[number];
+
+/** Upload phase timing: 36 label combinations (2 operations × 9 phases × 2 outcomes). */
+const uploadPhaseDurationSeconds = new client.Histogram({
+  name: "hackos_upload_phase_duration_seconds",
+  help: "Upload phase duration, by operation, phase and outcome",
+  labelNames: ["operation", "phase", "outcome"],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 3, 5, 7.5, 10, 30],
+  registers: [register],
+});
+
+export function observeUploadPhase(
+  operation: UploadOperation,
+  phase: UploadPhase,
+  seconds: number,
+  outcome: UploadOutcome,
+): void {
+  uploadPhaseDurationSeconds.observe({ operation, phase, outcome }, seconds);
 }
 
 export function observeParticipantInvalidation(

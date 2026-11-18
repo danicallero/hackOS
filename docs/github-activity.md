@@ -27,8 +27,11 @@ Without them the "Link GitHub repo" button is hidden.
    which returns the App installation URL with a signed 15-minute `state` bound
    to that member and project.
 2. GitHub redirects to `GET /api/github/callback`. The API checks the state
-   against the signed-in member, exchanges the OAuth `code`, and requires the
-   resulting GitHub account to own the installation (`github_user_installations`).
+   against the signed-in member and exchanges the OAuth `code` for a user
+   access token. It uses that token to fetch the GitHub account and its
+   accessible App installations concurrently. Both reads must succeed before
+   linking, and the requested installation must belong to the resulting account
+   (`github_user_installations`).
    Nobody can bind an installation id they do not control.
 3. The project page lists the repositories the member shared with the App
    (`GET .../github/repos`) in a dropdown; choosing one calls `PUT .../github/repo`.

@@ -225,6 +225,142 @@ Interpret signals together:
 | Memory current near limit | Service RAM/working-set/cache, swap, OOM events and request latency | Treat swap as temporary; raise only the specific service after load evidence. |
 | Mail `sent` but users report no mail | Mailcow/SES bounce and deferred logs | This is provider delivery state, not an API retry problem. |
 
+### Latency and volume queries for capture routes
+
+Route labels are Fastify route templates (`req.routeOptions.url`), so the
+queries below match them exactly. Duration and response series are recorded
+only when a response completes (`onResponse`); aborted requests are not
+counted. The duration histogram starts before admission, so its p95 includes
+time spent waiting for an admission slot. It is not handler-only time, and
+percentiles must not be subtracted to infer handler time.
+
+| Capture | Route label |
+|---|---|
+| Google wallet (not login) | `/api/wallet/scoped/google/:purpose` |
+| Profile photo | `/api/me/photo` |
+| Application upload | `/api/applications/:applicationId/upload/:fieldKey` |
+| GitHub callback | `/api/github/callback` |
+
+Each query below is complete and can be pasted as is. The regex is
+`route=~"/api/wallet/scoped/google/:purpose|/api/me/photo|/api/applications/:applicationId/upload/:fieldKey|/api/github/callback"`
+(PromQL anchors it). Use a 5-minute window. Check the sample count first: a
+p95 over a handful of requests is not meaningful.
+
+- **Completed responses in the window (sample count):**
+
+  ```promql
+  sum by (route) (increase(hackos_http_responses_total{route=~"/api/wallet/scoped/google/:purpose|/api/me/photo|/api/applications/:applicationId/upload/:fieldKey|/api/github/callback"}[5m]))
+  ```
+
+- **Volume (completed responses per second):**
+
+  ```promql
+  sum by (route) (rate(hackos_http_responses_total{route=~"/api/wallet/scoped/google/:purpose|/api/me/photo|/api/applications/:applicationId/upload/:fieldKey|/api/github/callback"}[5m]))
+  ```
+
+- **p95 (interpolated within the bucket):**
+
+  ```promql
+  histogram_quantile(0.95, sum by (le, route) (rate(hackos_http_request_duration_seconds_bucket{route=~"/api/wallet/scoped/google/:purpose|/api/me/photo|/api/applications/:applicationId/upload/:fieldKey|/api/github/callback"}[5m])))
+  ```
+
+- **Average duration:**
+
+  ```promql
+  sum by (route) (rate(hackos_http_request_duration_seconds_sum{route=~"/api/wallet/scoped/google/:purpose|/api/me/photo|/api/applications/:applicationId/upload/:fieldKey|/api/github/callback"}[5m])) / sum by (route) (rate(hackos_http_request_duration_seconds_count{route=~"/api/wallet/scoped/google/:purpose|/api/me/photo|/api/applications/:applicationId/upload/:fieldKey|/api/github/callback"}[5m]))
+  ```
+
+- **Server-error share (5xx / completed):**
+
+  ```promql
+  sum by (route) (rate(hackos_http_responses_total{route=~"/api/wallet/scoped/google/:purpose|/api/me/photo|/api/applications/:applicationId/upload/:fieldKey|/api/github/callback", status_class="5xx"}[5m])) / sum by (route) (rate(hackos_http_responses_total{route=~"/api/wallet/scoped/google/:purpose|/api/me/photo|/api/applications/:applicationId/upload/:fieldKey|/api/github/callback"}[5m]))
+  ```
+
+- **HTTP status-class shares:** replace `status_class="5xx"` above with
+  `"2xx"`, `"3xx"` or `"4xx"`. These describe HTTP outcomes only. They do not
+  establish that a GitHub account was linked: the callback also redirects to
+  login or hands the flow to the mobile app before linking completes. Check
+  the application's resulting state when measuring completed links.
+
+Context for p95 from existing series, without subtraction. Compare the
+admission-wait p95 with the route p95 above; do not subtract them:
+
+```promql
+histogram_quantile(0.95, sum by (le, lane) (rate(hackos_http_request_admission_wait_seconds_bucket[5m])))
+```
+
+```promql
+max by (lane) (hackos_http_request_admission_queue_size)
+```
+
+`hackos_http_request_admission_queue_size` is a gauge by `lane` (defined in
+`apps/api/src/lib/metrics.ts`). `hackos_http_requests_in_flight` is the
+unlabelled in-flight gauge.
+
+### Histogram buckets and cardinality
+
+`hackos_http_request_duration_seconds` has buckets `3` and `7.5` added
+between the existing `2`/`5` and `5`/`10` bounds. Each bucket adds one series
+per `lane`/`method`/`route`/`status_class` combination, and `_sum` and `_count`
+stay fixed. A combination goes from 15 series (12 buckets) to 17 series
+(14 buckets), an increase of about 13% for that histogram. Check the live
+route count before deploying more buckets:
+
+```promql
+count(count by (route) (hackos_http_responses_total))
+```
+
+Rollout: a bucket change alters the histogram schema. Compute quantiles only
+over a window in which every API instance runs the new build. A window that
+spans the rollout mixes old and new bucket sets, and the quantile is biased.
+Start the window after the rollout has completed on all instances.
+
+### Upload phase histogram
+
+`hackos_upload_phase_duration_seconds` (`apps/api/src/lib/metrics.ts`) is the
+single definition for upload phase timing. Labels are closed sets, with no file
+names, IDs or personal data:
+
+- `operation`: `application_field`, `profile_photo`
+- `phase`: `receive`, `validate`, `authorize`, `tx_begin`, `lock_wait`, `put`,
+  `audit`, `commit`, `cleanup`
+- `outcome`: `ok`, `error`
+
+Callers use `observeUploadPhase(operation, phase, seconds, outcome)`. The
+exported contract is that helper, the types `UploadOperation`, `UploadPhase`
+and `UploadOutcome`, and the closed arrays `UPLOAD_OPERATIONS`, `UPLOAD_PHASES`
+and `UPLOAD_OUTCOMES` they derive from. The histogram object itself is not
+exported; callers never create or observe it directly. It has 36 label
+combinations (2 × 9 × 2) and the same bucket set as the HTTP histogram, so each
+combination adds 17 series.
+
+Phases are recorded by `apps/api/src/lib/upload-phases.ts` in the photo and
+application-upload routes; H54 locking, errors and responses are unchanged.
+A failing phase records `outcome="error"` and the original error propagates.
+
+| Phase | What it covers |
+|---|---|
+| `receive` | Reading the multipart body (client upload speed); starts after the idempotency pre-handler |
+| `validate` | Content checks (photo signature; field type/size/scope for attachments) |
+| `authorize` | Capability check before the row locks (attachments with `responseId`) |
+| `tx_begin` | Pool connection, `BEGIN` and edition scope |
+| `lock_wait` | The `FOR UPDATE` query: lock wait plus its round trip |
+| `put` | Object-store PUT, made while the row lock is held |
+| `audit` | Row update and audit insert (photo only) |
+| `commit` | `COMMIT`; the lock is released after it |
+| `cleanup` | Best-effort delete of the replaced photo after commit |
+
+Cost: one `performance.now()` pair and one histogram observation per phase,
+about 8 per request; no extra queries. `lock_wait` includes the query round
+trip, so compare it with `tx_begin` and `audit` before blaming lock
+contention. Aborted connections that never reach a phase record nothing.
+
+Example p95 per phase:
+
+```promql
+histogram_quantile(0.95, sum by (le, phase) (rate(hackos_upload_phase_duration_seconds_bucket{operation="application_field", outcome="ok"}[5m])))
+```
+
 ## Release and rollback policy
 
 The production host stores `.image-tags` as the deployed image identity and

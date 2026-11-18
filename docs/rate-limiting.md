@@ -48,6 +48,14 @@ whether the route is Better Auth's own or this app's.
 | snapshot | `GET /api/scanner/snapshot` | 20/min (default) | staff user id | `RATE_LIMIT_SNAPSHOT_MAX`, `RATE_LIMIT_SNAPSHOT_WINDOW_SECONDS` |
 | diary-scan | `POST /api/me/diary/scan` | 20/min | authenticated user id | fixed — caps badge UID enumeration through the attendee event diary (#935, [`diary.md`](./diary.md)) |
 
+**resend-verification latency floor.** Without a session,
+`better-auth@1.6.23` (`dist/api/routes/email-verification.mjs`,
+`MINIMUM_MS = 500`) holds every response to at least 500 ms so unknown and
+unverified emails can't be told apart by timing. Don't lower it. Mail goes
+through the outbox, not inline. A request with >750 ms in Better Auth or
+>100 ms in the limiter logs `resend-verification slower than the
+anti-enumeration floor` with the per-phase split.
+
 **Auth limits are fixed in code, not env-configurable.** A change to the
 security posture of login/registration/reset throttling should go through
 code review, the same way `MAIL_PROVIDER` is a deploy-time mail setting rather
