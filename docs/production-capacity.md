@@ -86,9 +86,11 @@ and TV connections. The per-topic ceiling is intentional: one public stream
 cannot consume the entire process.
 
 Finite HTTP work is admitted separately from SSE. With `DB_POOL_MAX=24`, the
-API gate allows 24 active database-backed requests, reserves 6 slots for P0/P1
-operational work, and bounds the P2/P3 waiting queue at 192. SSE does not hold
-an admission slot for its lifetime.
+API gate allows 96 active requests (`REQUEST_ADMISSION_MAX_CONCURRENT`),
+reserves 24 of them for P0/P1 operational work, bounds the P2/P3 waiting queue
+at 192 and answers a request queued for more than 10 s with 503. Postgres
+access goes through a lane-aware checkout gate of the pool's 24 connections
+that keeps 6 for P0/P1. SSE does not hold an admission slot for its lifetime.
 
 The database connection arithmetic is:
 

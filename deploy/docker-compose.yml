@@ -146,6 +146,10 @@ x-api-env: &api-env
   SSE_DRAIN_SPREAD_MS: "${SSE_DRAIN_SPREAD_MS:-5000}"
   # Force-release a leaked request-admission slot after this hold time (#1367).
   REQUEST_ADMISSION_MAX_HOLD_MS: "${REQUEST_ADMISSION_MAX_HOLD_MS:-300000}"
+  # Answer 503 + Retry-After after this long in the admission queue (#1367).
+  REQUEST_ADMISSION_MAX_WAIT_MS: "${REQUEST_ADMISSION_MAX_WAIT_MS:-10000}"
+  # Requests admitted at once; 4 x DB_POOL_MAX at the 24-connection baseline (#1367).
+  REQUEST_ADMISSION_MAX_CONCURRENT: "${REQUEST_ADMISSION_MAX_CONCURRENT:-96}"
   RATE_LIMIT_SCAN_MAX: "${RATE_LIMIT_SCAN_MAX:-120}"
   RATE_LIMIT_SCAN_WINDOW_SECONDS: "${RATE_LIMIT_SCAN_WINDOW_SECONDS:-60}"
   RATE_LIMIT_MEAL_BATCH_MAX: "${RATE_LIMIT_MEAL_BATCH_MAX:-60}"

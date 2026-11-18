@@ -2,8 +2,10 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { config } from "../config.js";
 import { pool } from "../db/pool.js";
+import { ServiceUnavailableError } from "./errors.js";
 import { httpRequestsInFlight, observeHttpRequest, observeHttpResponse } from "./metrics.js";
 import { RequestAdmission, type RequestAdmissionLease } from "./request-admission.js";
+import { getRequestContext } from "./request-context.js";
 import { classifyRequestLane, isSseRequest } from "./request-lanes.js";
 import { isProbePath, pathOf } from "./request-path.js";
 import { findReviewFixtureByUserId } from "./review-fixture-log.js";
@@ -80,14 +82,20 @@ export function registerAdmissionHooks(app: FastifyInstance): void {
   };
 
   // Event-day admission is deliberately a separate, in-process scheduler
-  // from #540's pg pool and SSE budgets. It derives its ceiling from the
-  // existing per-process pool size without changing that configuration and
-  // reserves slots for P0/P1 operational traffic when participant/public
-  // requests surge (H29, H38, H41-H42, #540, #544).
+  // from #540's pg pool and SSE budgets. It reserves slots for P0/P1
+  // operational traffic when participant/public requests surge (H29, H38,
+  // H41-H42, #540, #544). Its ceiling is independent of the pool size: the
+  // pool's own lane-aware checkout gate (db/pool.ts) orders Postgres access,
+  // so admission only bounds how much work the process takes on (#1367).
   const requestAdmission = new RequestAdmission({
-    maxConcurrent: config.dbPoolMax,
+    maxConcurrent: config.requestAdmissionMaxConcurrent,
     maxBestEffortPending: Math.max(16, config.dbPoolMax * 8),
     maxHoldMs: config.REQUEST_ADMISSION_MAX_HOLD_MS,
+    // #1367: an overloaded or stalled gate answers instead of holding the
+    // client until it gives up; clients retry after the hinted delay.
+    maxWaitMs: config.REQUEST_ADMISSION_MAX_WAIT_MS,
+    waitTimeoutError: () =>
+      new ServiceUnavailableError("The API is busy. Try again shortly.", undefined, 2),
     onLeaseExpired: (lease) => {
       const req = leaseRequests.get(lease);
       if (!req) return;
@@ -123,6 +131,10 @@ export function registerAdmissionHooks(app: FastifyInstance): void {
     const isSessionProbe = requestPath === "/api/auth/get-session";
     const lane = classifyRequestLane({ url: req.url, method: req.method, userId: req.userId });
     observeHttpRequest(lane, req.method);
+    // The pool's checkout gate orders connections by this lane, now that the
+    // user is known; probes keep the P0 set by the request-context plugin.
+    const context = getRequestContext();
+    if (context && !isProbePath(requestPath)) context.lane = lane;
     // #1367: never count or admit a request whose client is already gone.
     // Nothing can receive its response, and a handler writing to a dead
     // socket never reaches onResponse, so stop the lifecycle here.

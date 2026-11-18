@@ -80,7 +80,12 @@ export class MaintenanceError extends AppError {
 
 /** A dependent provider/credential isn't configured, e.g. Apple/Google wallet signing (H28). */
 export class ServiceUnavailableError extends AppError {
-  constructor(message: string, details?: Record<string, unknown>) {
+  constructor(
+    message: string,
+    details?: Record<string, unknown>,
+    /** Sent as `Retry-After` when set (#1367). */
+    public readonly retryAfterSeconds?: number,
+  ) {
     super(503, "service_unavailable", message, details);
   }
 }
