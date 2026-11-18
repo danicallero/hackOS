@@ -83,11 +83,10 @@ export async function exchangeUserCode(code: string) {
   const data = (await res.json()) as { access_token?: string };
   if (!res.ok || !data.access_token) throw new BadRequestError("GitHub authorization failed");
   const token = data.access_token;
-  const user = await gh<{ id: number; login: string }>("/user", token);
-  const installs = await gh<{ installations: { id: number }[] }>(
-    "/user/installations?per_page=100",
-    token,
-  );
+  const [user, installs] = await Promise.all([
+    gh<{ id: number; login: string }>("/user", token),
+    gh<{ installations: { id: number }[] }>("/user/installations?per_page=100", token),
+  ]);
   return {
     githubId: user.id,
     login: user.login,

@@ -33,6 +33,7 @@ import {
 } from "../../../lib/profile-files.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { putObject } from "../../../lib/storage.js";
+import { uploadPhaseTimer, withUploadTransaction } from "../../../lib/upload-phases.js";
 import {
   photoPublishedInDirectory,
   photoPublishedOnPublicSurface,
@@ -126,29 +127,35 @@ interface PhotoChange {
 /** Store a new photo for the subject and audit it in the same transaction (H53). */
 async function replacePhoto(req: FastifyRequest, change: PhotoChange) {
   const { actorId, subjectId, source, missing } = change;
-  const { bytes } = await readUpload(req, PHOTO_MAX_BYTES);
-  const type = sniffPhoto(bytes);
-  if (!type) throw new BadRequestError("The photo must be a PNG, JPEG or WebP image");
+  const timed = uploadPhaseTimer("profile_photo");
+  const { bytes } = await timed("receive", () => readUpload(req, PHOTO_MAX_BYTES));
+  const type = await timed("validate", () => {
+    const sniffed = sniffPhoto(bytes);
+    if (!sniffed) throw new BadRequestError("The photo must be a PNG, JPEG or WebP image");
+    return sniffed;
+  });
   const key = `${profilePrefix(subjectId)}photo/${uploadOperation(req)}.${type.ext}`;
-  const previous = await withTransaction(async (db) => {
-    const before = await lockPhotoOwner(db, subjectId, missing);
-    await putObject(key, bytes, type.contentType);
-    await db.query(`UPDATE users SET photo_key = $2, photo_updated_at = now() WHERE id = $1`, [
-      subjectId,
-      key,
-    ]);
-    await audit(db, {
-      actorId,
-      entityType: "user",
-      entityId: subjectId,
-      action: "user.photo_updated",
-      before: { hasPhoto: before !== null },
-      after: { hasPhoto: true },
-      source,
+  const previous = await withUploadTransaction("profile_photo", async (db, phase) => {
+    const before = await phase("lock_wait", () => lockPhotoOwner(db, subjectId, missing));
+    await phase("put", () => putObject(key, bytes, type.contentType));
+    await phase("audit", async () => {
+      await db.query(`UPDATE users SET photo_key = $2, photo_updated_at = now() WHERE id = $1`, [
+        subjectId,
+        key,
+      ]);
+      await audit(db, {
+        actorId,
+        entityType: "user",
+        entityId: subjectId,
+        action: "user.photo_updated",
+        before: { hasPhoto: before !== null },
+        after: { hasPhoto: true },
+        source,
+      });
     });
     return before;
   });
-  await deleteReplacedObject(req, previous !== key ? previous : null);
+  await timed("cleanup", () => deleteReplacedObject(req, previous !== key ? previous : null));
   return { image: photoUrl(subjectId, key) };
 }
 

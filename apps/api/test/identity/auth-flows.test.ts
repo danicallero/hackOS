@@ -947,6 +947,47 @@ describe("H3 resend verification rate limit", () => {
   });
 });
 
+describe("H3 resend verification anti-enumeration", () => {
+  it("reports phase timings only past the slow thresholds (H3)", async () => {
+    const { slowResendPhases } = await import(
+      "../../src/modules/identity/routes/resend-verification.js"
+    );
+    expect(slowResendPhases(5, 505)).toBeNull();
+    expect(slowResendPhases(5, 750)).toBeNull();
+    expect(slowResendPhases(5, 751)).toEqual({ rateLimitMs: 5, betterAuthMs: 751, floorMs: 500 });
+    expect(slowResendPhases(101, 500)).toEqual({
+      rateLimitMs: 101,
+      betterAuthMs: 500,
+      floorMs: 500,
+    });
+  });
+
+  it("answers unknown and unverified emails identically and within 50 ms of the 500 ms floor or above (H3)", async () => {
+    const a = await getApp();
+    await signUp(a);
+    const resend = async (email: string) => {
+      const started = performance.now();
+      const res = await a.inject({
+        method: "POST",
+        url: "/api/auth/resend-verification",
+        payload: { email },
+      });
+      return { res, ms: performance.now() - started };
+    };
+
+    const known = await resend(SIGNUP.email);
+    const unknown = await resend("nobody-here@example.com");
+
+    expect(known.res.statusCode).toBe(200);
+    expect(unknown.res.statusCode).toBe(200);
+    expect(unknown.res.json()).toEqual(known.res.json());
+    // Floor is deliberate (timing equalization); a regression that makes the
+    // unknown path fast again would reopen account enumeration.
+    expect(known.ms).toBeGreaterThanOrEqual(450);
+    expect(unknown.ms).toBeGreaterThanOrEqual(450);
+  });
+});
+
 describe("#538/#559 distributed rate limiting on Better Auth paths", () => {
   it("limits sign-in per account without consuming another account's shared-IP budget (#559)", async () => {
     const a = await getApp();

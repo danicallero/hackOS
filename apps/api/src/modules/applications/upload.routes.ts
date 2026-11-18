@@ -4,7 +4,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { pool, withTransaction } from "../../db/pool.js";
+import { pool } from "../../db/pool.js";
 import {
   getRequestAuthorizationContext,
   requireAuth,
@@ -20,6 +20,7 @@ import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { getObject, putObject } from "../../lib/storage.js";
+import { uploadPhaseTimer, withUploadTransaction } from "../../lib/upload-phases.js";
 import { type TemplateField, uploadQuerySchema } from "./schemas.js";
 
 const uploadParamsSchema = z.object({
@@ -94,12 +95,15 @@ export function registerUploadRoutes(app: FastifyInstance): void {
       const { applicationId, fieldKey } = req.params;
       const actorId = req.userId as number;
 
-      const file = await req.file();
-      if (!file) throw new BadRequestError("No file uploaded");
+      const timed = uploadPhaseTimer("application_field");
+      const { file, bytes } = await timed("receive", async () => {
+        const received = await req.file();
+        if (!received) throw new BadRequestError("No file uploaded");
+        return { file: received, bytes: await received.toBuffer() };
+      });
 
       const name = file.filename ?? "upload";
       const ext = `.${(name.split(".").pop() ?? "").toLowerCase()}`;
-      const bytes = await file.toBuffer();
 
       // A retry must address the same object, including after a connection
       // drops after MinIO accepted the bytes but before the HTTP response is
@@ -109,7 +113,7 @@ export function registerUploadRoutes(app: FastifyInstance): void {
         .update(req.idempotency?.key ?? `${Date.now()}-${Math.random()}`)
         .digest("hex")
         .slice(0, 32);
-      const key = await withTransaction(async (client) => {
+      const key = await withUploadTransaction("application_field", async (client, phase) => {
         // H54: lock the active user while validating and storing the object.
         // Removal takes the same user's row lock, so it cannot delete the
         // account between this check and putObject. The field definition must
@@ -118,15 +122,18 @@ export function registerUploadRoutes(app: FastifyInstance): void {
         const responseId = req.query.responseId;
         if (
           responseId !== undefined &&
-          !(await userHasCapability(
-            getRequestAuthorizationContext(req),
-            CAPABILITIES.APPLICATIONS_EDIT_RESPONSE,
+          !(await phase("authorize", () =>
+            userHasCapability(
+              getRequestAuthorizationContext(req),
+              CAPABILITIES.APPLICATIONS_EDIT_RESPONSE,
+            ),
           ))
         ) {
           throw new ForbiddenError("You don't have permission to edit this response");
         }
-        const { rows: responseRows } = await client.query<{ template: unknown; user_id: number }>(
-          `SELECT CASE WHEN $3::int IS NULL THEN fv.template ELSE a.template END AS template,
+        const { rows: responseRows } = await phase("lock_wait", () =>
+          client.query<{ template: unknown; user_id: number }>(
+            `SELECT CASE WHEN $3::int IS NULL THEN fv.template ELSE a.template END AS template,
                   r.user_id
              FROM application_responses r
              JOIN applications a ON a.id = r.application_id
@@ -139,43 +146,47 @@ export function registerUploadRoutes(app: FastifyInstance): void {
               AND u.account_state = 'active' AND u.anonymized_at IS NULL
             LIMIT 1
             FOR UPDATE OF u, r`,
-          [actorId, applicationId, responseId ?? null],
+            [actorId, applicationId, responseId ?? null],
+          ),
         );
-        if (!responseRows[0]) {
+        const responseRow = responseRows[0];
+        if (!responseRow) {
           throw new ForbiddenError("Create the application response before uploading a file");
         }
-        const ownerId = responseRows[0].user_id;
-        await assertFixtureSubjectScope(client, actorId, ownerId);
+        const ownerId = responseRow.user_id;
+        await phase("validate", async () => {
+          await assertFixtureSubjectScope(client, actorId, ownerId);
 
-        const template = Array.isArray(responseRows[0].template)
-          ? (responseRows[0].template as TemplateField[])
-          : [];
-        const field = template.find((candidate) => candidate.key === fieldKey);
-        if (field?.kind !== "file") {
-          throw new BadRequestError("No file field found with that key");
-        }
-        const allowedTypes = field.allowed_file_types ?? [
-          ".pdf",
-          ".doc",
-          ".docx",
-          ".png",
-          ".jpg",
-          ".jpeg",
-        ];
-        if (!allowedTypes.includes(ext)) {
-          throw new BadRequestError(
-            `File type ${ext} is not allowed. Allowed: ${allowedTypes.join(", ")}`,
-          );
-        }
-        const maxSizeMb = field.max_file_size_mb ?? 10;
-        if (bytes.length > maxSizeMb * 1024 * 1024) {
-          throw new BadRequestError(`File exceeds maximum size of ${maxSizeMb}MB`);
-        }
+          const template = Array.isArray(responseRow.template)
+            ? (responseRow.template as TemplateField[])
+            : [];
+          const field = template.find((candidate) => candidate.key === fieldKey);
+          if (field?.kind !== "file") {
+            throw new BadRequestError("No file field found with that key");
+          }
+          const allowedTypes = field.allowed_file_types ?? [
+            ".pdf",
+            ".doc",
+            ".docx",
+            ".png",
+            ".jpg",
+            ".jpeg",
+          ];
+          if (!allowedTypes.includes(ext)) {
+            throw new BadRequestError(
+              `File type ${ext} is not allowed. Allowed: ${allowedTypes.join(", ")}`,
+            );
+          }
+          const maxSizeMb = field.max_file_size_mb ?? 10;
+          if (bytes.length > maxSizeMb * 1024 * 1024) {
+            throw new BadRequestError(`File exceeds maximum size of ${maxSizeMb}MB`);
+          }
+        });
 
         // The bucket's uploads/ prefix is private (H12): store the KEY in the
         // response, not a URL. Reads are proxied by the owner-or-staff route below.
         const storageKey = `uploads/${applicationId}/${ownerId}/${fieldKey}/${operation}/${safeFilename(name)}`;
-        await putObject(storageKey, bytes, file.mimetype);
+        await phase("put", () => putObject(storageKey, bytes, file.mimetype));
         return storageKey;
       });
 
