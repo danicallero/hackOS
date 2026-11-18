@@ -220,6 +220,19 @@ const envSchema = z.object({
    * slowest legitimate finite request.
    */
   REQUEST_ADMISSION_MAX_HOLD_MS: z.coerce.number().int().positive().default(300_000),
+  /**
+   * Longest a request may wait in the admission queue before it is answered
+   * 503 with `Retry-After` (#1367), instead of holding the client until it
+   * gives up. Applies to every lane.
+   */
+  REQUEST_ADMISSION_MAX_WAIT_MS: z.coerce.number().int().positive().default(10_000),
+  /**
+   * Requests admitted at once per API process (#1367). Defaults to four times
+   * `DB_POOL_MAX`: requests also wait on Valkey, object storage and external
+   * APIs, and the pool's lane-aware checkout gate (db/pool.ts) keeps
+   * Postgres priority on its own.
+   */
+  REQUEST_ADMISSION_MAX_CONCURRENT: z.coerce.number().int().positive().optional(),
 
   /**
    * Rows claimed per outbox-dispatcher tick (H52, plan/07 §5.4), each
@@ -440,6 +453,10 @@ const parsed = envSchema
   })
   .parse(process.env);
 
+const dbPoolMax =
+  parsed.DB_POOL_MAX ??
+  (parsed.NODE_ENV === "test" ? 5 : parsed.NODE_ENV === "production" ? 24 : 20);
+
 export const config = {
   ...parsed,
   SSE_NAMESPACE: parsed.SSE_NAMESPACE ?? parsed.NODE_ENV,
@@ -454,9 +471,8 @@ export const config = {
   // unless they use implicit TLS (SMTPS) instead.
   smtpRequireTls:
     parsed.SMTP_REQUIRE_TLS ?? (parsed.NODE_ENV === "production" && !parsed.SMTP_SECURE),
-  dbPoolMax:
-    parsed.DB_POOL_MAX ??
-    (parsed.NODE_ENV === "test" ? 5 : parsed.NODE_ENV === "production" ? 24 : 20),
+  dbPoolMax,
+  requestAdmissionMaxConcurrent: parsed.REQUEST_ADMISSION_MAX_CONCURRENT ?? dbPoolMax * 4,
   trustProxy: parsed.TRUST_PROXY ?? parsed.NODE_ENV === "production",
   appleWalletConfigured: Boolean(
     parsed.APPLE_PASS_CERTIFICATE_PEM &&

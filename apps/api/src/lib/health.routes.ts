@@ -1,6 +1,6 @@
 import { MAINTENANCE_STATUS_PATH } from "@hackos/shared/maintenance";
 import type { FastifyInstance } from "fastify";
-import { pool } from "../db/pool.js";
+import { checkoutGateHealth, pool } from "../db/pool.js";
 import { getMaintenanceStatus } from "./maintenance.js";
 import { register } from "./metrics.js";
 import { refreshOperationalMetrics } from "./operational-metrics.js";
@@ -49,7 +49,11 @@ export function registerHealthRoutes(app: FastifyInstance): void {
     },
     async (req, reply) => {
       if (isDraining()) return reply.code(503).send({ status: "draining" });
-      const admission = req.server.requestAdmission.health();
+      const admission = {
+        ...req.server.requestAdmission.health(),
+        oldestLeaseSeconds: req.server.requestAdmission.oldestLeaseSeconds(),
+        dbCheckout: checkoutGateHealth(),
+      };
       const [postgres, broker] = await Promise.allSettled([pool.query("SELECT 1"), valkey.ping()]);
       if (postgres.status === "rejected") {
         return reply.code(503).send({

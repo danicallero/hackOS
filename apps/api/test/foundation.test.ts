@@ -53,7 +53,13 @@ describe("foundation", () => {
       status: "degraded",
       postgres: "ok",
       valkey: "down",
-      admission: { active: 0, queued: 0, oldestBestEffortWaitSeconds: 0 },
+      admission: {
+        active: 0,
+        queued: 0,
+        oldestBestEffortWaitSeconds: 0,
+        oldestLeaseSeconds: 0,
+        dbCheckout: { active: 0, queued: 0, oldestBestEffortWaitSeconds: 0 },
+      },
     });
   });
 

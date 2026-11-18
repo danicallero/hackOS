@@ -92,7 +92,11 @@ describe("HTTP response metrics (#891)", () => {
   it("cancels admission for a disconnected queued request", async () => {
     const { config } = await import("../src/config.js");
     const slots =
-      config.dbPoolMax - Math.min(config.dbPoolMax - 1, Math.ceil(config.dbPoolMax / 4));
+      config.requestAdmissionMaxConcurrent -
+      Math.min(
+        config.requestAdmissionMaxConcurrent - 1,
+        Math.ceil(config.requestAdmissionMaxConcurrent / 4),
+      );
     const baseline = await inFlight();
     const entered = deferred();
     const unblock = deferred();

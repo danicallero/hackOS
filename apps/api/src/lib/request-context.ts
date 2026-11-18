@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { RequestLane } from "./request-lanes.js";
 
 export interface RequestContext {
   requestId?: string;
@@ -12,6 +13,13 @@ export interface RequestContext {
   edition?: string;
   /** Closed-edition writes allowed for this request (superadmin, close/reopen). */
   editionWriteOverride?: boolean;
+  /**
+   * Priority lane (#544, #1367). `db/pool.ts` orders pooled-connection
+   * checkouts by it, so best-effort work never queues ahead of operations.
+   */
+  lane?: RequestLane;
+  /** Pooled connections this request currently holds (db/pool.ts). */
+  dbCheckouts?: number;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();

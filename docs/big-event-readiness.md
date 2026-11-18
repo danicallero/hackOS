@@ -112,14 +112,18 @@ superuser headroom. Keep `max_connections=100`; the 5 GiB Postgres limit and
 unbounded pool. Add replicas only after recomputing the same expression, and
 do not raise Postgres's own `max_connections` without that review.
 
-**Admission baseline.** With `DB_POOL_MAX=24`, the scheduler reserves
-`min(23, ceil(24 / 4)) = 6` concurrent slots from all P2/P3 traffic and allows
-`max(16, 24 × 8) = 192` queued P2/P3 requests. Those are request slots, not
-one slot per identity: SSE connections bypass admission, and P0/P1 staff
-requests can use all 24 slots and win queued work by lane rank. The six-slot
-reservation protects operational work from participant, sponsor, anonymous,
-and public bursts; it is lane-based even when a best-effort user has a
-persisted role.
+**Admission baseline.** With `DB_POOL_MAX=24`, admission allows
+`REQUEST_ADMISSION_MAX_CONCURRENT = 4 × 24 = 96` requests at once, reserves
+`min(95, ceil(96 / 4)) = 24` of them from all P2/P3 traffic and allows
+`max(16, 24 × 8) = 192` queued P2/P3 requests; a request queued longer than
+`REQUEST_ADMISSION_MAX_WAIT_MS` (10 s) is answered 503 with `Retry-After`.
+Those are request slots, not one slot per identity: SSE connections bypass
+admission, and P0/P1 staff requests can use every slot and win queued work by
+lane rank. Postgres access has its own lane-aware checkout gate of exactly
+24 connections that keeps 6 of them for P0/P1 (`docs/request-admission.md`
+§ Postgres checkout gate). Both reservations protect operational work from
+participant, sponsor, anonymous, and public bursts; they are lane-based even
+when a best-effort user has a persisted role.
 
 ### DB_POOL_MAX decision tree
 

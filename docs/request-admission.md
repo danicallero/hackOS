@@ -32,6 +32,14 @@ following before the route handler runs:
 
    1. lane rank (`P0`, then `P1`, then `P2`, then `P3`);
    2. arrival order within the same lane.
+5. A request still queued after `REQUEST_ADMISSION_MAX_WAIT_MS` (default
+   10000) leaves the queue and is answered `503 service_unavailable` with
+   `Retry-After: 2`, whatever its lane. An overloaded or stalled gate answers
+   instead of holding the client until it gives up (#1367).
+
+Once admitted, the request's database work goes through a second,
+lane-aware gate on the pool itself; see
+[Postgres checkout gate](#postgres-checkout-gate).
 
 The HTTP hook deliberately does not query PostgreSQL to calculate role priority
 before admission. That lookup would let an authenticated burst consume the
@@ -60,16 +68,23 @@ request's lane. The source of truth for the exact matcher is
 
 ## Capacity, reservation, and shedding
 
-The scheduler's maximum active work is the API process's `DB_POOL_MAX` value;
-it does not resize the PostgreSQL pool. The application default is `20` in
-development, `24` in production, and `5` in tests, unless `DB_POOL_MAX` is
-configured. The production Compose file and qualification stack set 24
-explicitly. Each API replica has its own active and waiting counts.
+The scheduler's maximum active work is `REQUEST_ADMISSION_MAX_CONCURRENT`,
+which defaults to four times the process's `DB_POOL_MAX` (96 at the
+production baseline of 24). It is deliberately larger than the pool: a
+request holds its slot for its whole lifetime, including time spent on
+Valkey, object storage, Wallet, GitHub or password hashing, none of which
+uses a database connection. Postgres access is ordered separately by the
+[checkout gate](#postgres-checkout-gate), so a larger admission ceiling does
+not let best-effort requests queue ahead of operations for connections. It
+does not resize the PostgreSQL pool either. The `DB_POOL_MAX` default is `20`
+in development, `24` in production, and `5` in tests. The production Compose
+file and qualification stack set 24 explicitly. Each API replica has its own
+active and waiting counts.
 
-The default reserved capacity is:
+The default reserved capacity, with `N = REQUEST_ADMISSION_MAX_CONCURRENT`, is:
 
 ```text
-min(DB_POOL_MAX - 1, ceil(DB_POOL_MAX / 4))
+min(N - 1, ceil(N / 4))
 ```
 
 In other words, roughly one quarter of the process's slots is protected from
@@ -94,15 +109,47 @@ The reservation works as follows:
 - No request can exceed the total active-slot limit, and no request can
   interrupt one already running.
 
-For the event-day baseline `DB_POOL_MAX=24`, the default reservation is six
-slots and the P2/P3 wait queue can hold 192 requests. P2/P3 traffic can fill at
-most 18 active slots; the remaining six stay available for P0/P1. Lane rank
-and arrival order select queued requests within the eligible capacity, and a
-participant or sponsor cannot consume the reserved P0/P1 share merely because
-they have a persisted role. The six slots are concurrent finite-request
+For the event-day baseline `DB_POOL_MAX=24`, admission allows 96 requests, the
+default reservation is 24 slots and the P2/P3 wait queue can hold 192
+requests. P2/P3 traffic can fill at most 72 active slots; the remaining 24 stay
+available for P0/P1. Lane rank and arrival order select queued requests
+within the eligible capacity, and a participant or sponsor cannot consume the
+reserved P0/P1 share merely because they have a persisted role. The reserved
+slots are concurrent finite-request
 capacity, not a one-slot-per-staff reservation. Staff P0/P1 requests use the
 protected lanes, so queued staff work wins the next available slot while the
 scheduler leaves already-running requests alone.
+
+## Postgres checkout gate
+
+pg-pool serves waiting checkouts first come, first served. On its own, a
+burst of admitted participant requests would queue ahead of a scanner for the
+same connections. `apps/api/src/db/pool.ts` therefore puts a second scheduler
+of exactly `DB_POOL_MAX` slots in front of `pool.connect()`, which also covers
+`pool.query()`, `withTransaction()` and Better Auth:
+
+- A checkout takes the lane of the request it runs for
+  (`RequestContext.lane`). The request-context plugin sets a provisional lane
+  before the auth-context session lookup and the admission hook refines it
+  once the user is known. Work outside a request, such as worker jobs, runs as
+  P1, and `/healthz`, `/readyz` and `/metrics` run as P0, so a saturated gate
+  never fails readiness.
+- The same reservation applies: with 24 connections, P2/P3 can hold at most
+  18 at once and 6 stay available for P0/P1. Waiting checkouts are served by
+  lane rank, then arrival.
+- A checkout still waiting after `DB_CONNECTION_TIMEOUT_MS` fails with
+  pg-pool's own timeout error. The API answers that error, from the gate or
+  from the pool, with `503 service_unavailable` and `Retry-After: 2` instead
+  of a 500.
+- The gate is re-entrant. A request that already holds a connection and asks
+  for another (a `pool.query()` inside a transaction, parallel reads) is
+  served as P0 and may use the reserved share. Without that, a request holding
+  a row lock could wait for a second connection behind the very requests
+  blocked on its lock, until the checkout timeout.
+
+`hackos_db_gate_wait_seconds{lane}`, `hackos_db_gate_queue_size{lane}` and
+`hackos_db_gate_timeouts_total{lane}` report the gate. `/readyz` includes its
+state as `admission.dbCheckout`.
 
 At one API and one worker, the matching database pool calculation is
 `(1 × 24) + (1 × 24) + 12 operational connections = 60`, below the stock
@@ -114,7 +161,7 @@ maintenance, administration and superuser use.
 
 Use 24 as the event-day baseline and inspect the following metrics together:
 
-1. If P2/P3 `429` rate or either lane's
+1. If P2/P3 `429`/`503` rate or either lane's
    `hackos_http_request_admission_queue_size{lane="P2"}` /
    `hackos_http_request_admission_queue_size{lane="P3"}` rises while Postgres
    connection count, pool waiting, P0/P1 latency and container memory remain
@@ -184,21 +231,61 @@ request.
 
 ```json
 { "status": "ok", "postgres": "ok", "valkey": "ok",
-  "admission": { "active": 3, "queued": 0, "oldestBestEffortWaitSeconds": 0 } }
+  "admission": { "active": 3, "queued": 0, "oldestBestEffortWaitSeconds": 0,
+                 "oldestLeaseSeconds": 0.04,
+                 "dbCheckout": { "active": 2, "queued": 0, "oldestBestEffortWaitSeconds": 0 } } }
 ```
 
 `oldestBestEffortWaitSeconds` is the age of the oldest queued P2/P3 request.
 `hackos_http_request_admission_oldest_wait_seconds{lane}` exports the same age
-per lane on `/metrics`.
+per lane on `/metrics`. `oldestLeaseSeconds` is the age of the longest-held
+admission slot, exported as
+`hackos_http_request_admission_oldest_lease_seconds`. Finite requests finish
+within seconds, so a value that keeps climbing is a slot nothing will
+release, visible long before the maximum hold time reclaims it.
 
 The admission state never changes the readiness status. Docker's healthcheck
 and the rolling deploy both use `/readyz`. A threshold short enough to catch a
 stall would also trip during a legitimate burst, and marking the only replica
 unhealthy would turn a slow burst into a full outage or a restart loop. With
-the maximum hold time, a leaked slot now frees itself within minutes. A
-stalled gate shows up as a persistently high oldest-wait age, or as `active`
-pinned near `DB_POOL_MAX` while `queued` grows. Alert on those signals rather
-than failing the probe.
+the maximum hold time, a leaked slot now frees itself within minutes, and the
+maximum wait answers queued requests with 503 instead of leaving them
+hanging. A stalled gate shows up as a persistently high oldest-wait age,
+`active` pinned near its ceiling while `queued` grows, or a stream of
+wait timeouts. Alert on those signals rather than failing the probe.
+
+### Alert rules
+
+The monitoring Prometheus lives outside this repository. These rules cover
+the signals above; route them to whoever is on call during the event:
+
+```yaml
+groups:
+  - name: hackos-admission
+    rules:
+      - alert: HackosAdmissionLeaseLeak
+        # A finite request should never hold a slot for minutes.
+        expr: hackos_http_request_admission_oldest_lease_seconds > 120
+        for: 5m
+      - alert: HackosAdmissionInFlightFloor
+        # Leaked slots raise the floor of in-flight work even when idle.
+        expr: min_over_time(hackos_http_requests_in_flight[30m]) > 5
+      - alert: HackosAdmissionQueued
+        expr: sum(hackos_http_request_admission_queue_size) > 0
+        for: 2m
+      - alert: HackosAdmissionShedding
+        expr: sum(rate(hackos_http_request_admission_wait_timeouts_total[5m])) > 0
+        for: 2m
+      - alert: HackosDbCheckoutTimeouts
+        expr: sum(rate(hackos_db_gate_timeouts_total[5m])) > 0
+        for: 2m
+      - alert: HackosParticipantTrafficStalled
+        # P3 requests arrive but none complete.
+        expr: >
+          sum(rate(hackos_http_requests_total{lane="P3"}[5m])) > 0
+          and sum(rate(hackos_http_responses_total{lane="P3"}[5m])) == 0
+        for: 3m
+```
 
 ## Role examples
 
@@ -227,7 +314,11 @@ The main metrics are low-cardinality and lane-based:
 - `hackos_http_request_admission_wait_seconds`
 - `hackos_http_request_admission_queue_size`
 - `hackos_http_request_admission_oldest_wait_seconds`
+- `hackos_http_request_admission_oldest_lease_seconds`
 - `hackos_http_request_admission_lease_expired_total`
+- `hackos_http_request_admission_wait_timeouts_total`
+- `hackos_db_gate_wait_seconds`, `hackos_db_gate_queue_size`,
+  `hackos_db_gate_timeouts_total`
 
 Role IDs, user IDs, and raw role positions are deliberately not Prometheus
 labels.
