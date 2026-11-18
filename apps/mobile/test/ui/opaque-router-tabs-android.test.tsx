@@ -5,7 +5,7 @@
  */
 
 import type React from "react";
-import { Platform } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 
 // Mocks for expo-router tab primitives used by router-tabs.tsx.
 const mockUsePathname = jest.fn(() => "/(tabs)/schedule");
@@ -70,13 +70,14 @@ jest.mock("expo-router/ui", () => {
     useTabTrigger: () => ({ switchTab: mockSwitchTab }),
   };
 });
+const mockLiquidGlassAvailable = jest.fn(() => false);
 jest.mock("expo-glass-effect", () => ({
   GlassView: ({ children }: { children: unknown }) => {
     const ReactLib = require("react");
     const Native = jest.requireActual("react-native");
-    return ReactLib.createElement(Native.View, null, children);
+    return ReactLib.createElement(Native.View, { testID: "native-tab-glass" }, children);
   },
-  isLiquidGlassAvailable: () => false,
+  isLiquidGlassAvailable: () => mockLiquidGlassAvailable(),
 }));
 type MockTouchEvent = {
   allTouches: { x: number }[];
@@ -228,6 +229,7 @@ jest.mock("@/theme/colors", () => ({
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import * as Native from "react-native";
 import { OpaqueRouterTabs, reselectHelpDesk } from "@/components/opaque-router-tabs";
+import { RouterTabs } from "@/components/router-tabs";
 
 const DEFAULT_PROPS = {
   capabilities: [],
@@ -535,5 +537,48 @@ describe("participant tab scrubbing", () => {
     await act(async () => touchPath([252, 254]));
     expect(mockTriggerPress.mock.calls.map(([name]) => name)).toEqual(["queue", "diary"]);
     expect(mockSwitchTab).not.toHaveBeenCalled();
+  });
+});
+
+describe("Liquid Glass tab composition (H55)", () => {
+  afterEach(() => mockLiquidGlassAvailable.mockReturnValue(false));
+
+  it("keeps controls and the moving lens outside the native background's content view", async () => {
+    Object.defineProperty(Platform, "OS", { configurable: true, value: "ios" });
+    mockLiquidGlassAvailable.mockReturnValue(true);
+    mockUsePathname.mockReturnValue("/(tabs)/schedule");
+    mockPrimaryTabs.mockReturnValue(["schedule", "queue", "diary", "account"]);
+    mockOverflowTabs.mockReturnValue([]);
+    await render(
+      <RouterTabs
+        tabs={["schedule", "queue", "diary", "account"].map((name) => ({
+          name,
+          href: `/${name}` as never,
+          label: name,
+          icon: null,
+        }))}
+        theme={{
+          label: "black",
+          selectedLabel: "blue",
+          selectedSurface: "white",
+          surface: "white",
+          transparent: "transparent",
+        }}
+      />,
+    );
+    await fireEvent(screen.getByTestId("router-tabs-direct-group"), "layout", {
+      nativeEvent: { layout: { width: 400 } },
+    });
+
+    const glasses = screen.getAllByTestId("native-tab-glass", { includeHiddenElements: true });
+    expect(glasses).toHaveLength(2);
+    for (const glass of glasses) expect(glass.children).toHaveLength(0);
+    let ancestor = screen.getByTestId("router-tabs-diary").parent;
+    while (ancestor) {
+      expect(StyleSheet.flatten(ancestor.props.style)?.overflow).not.toBe("hidden");
+      ancestor = ancestor.parent;
+    }
+    await act(async () => touchPath([50, 250]));
+    expect(mockSwitchTab).toHaveBeenLastCalledWith("diary", {});
   });
 });

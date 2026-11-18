@@ -24,6 +24,7 @@ import {
   Platform,
   Pressable,
   type StyleProp,
+  StyleSheet,
   Text,
   View,
   type ViewStyle,
@@ -93,6 +94,7 @@ export type RouterTabsColorScheme = "auto" | "light" | "dark";
 
 /** Props a custom tab-surface renderer must accept. */
 export interface RouterTabsSurfaceProps {
+  /** Opaque content; native glass is rendered as a background without children. */
   children?: ReactNode;
   /** Appearance used by native Liquid Glass; opaque fallbacks may ignore it. */
   colorScheme: RouterTabsColorScheme;
@@ -990,13 +992,34 @@ function TabSurface({
     borderRadius: ROUTER_TAB_BAR_HEIGHT / 2,
     boxShadow: liquidGlass ? undefined : theme.shadow,
     flexDirection: "row",
-    overflow: "hidden",
+    overflow: liquidGlass ? "visible" : "hidden",
   };
   const surfaceStyle: StyleProp<ViewStyle> = [
     baseStyle,
     !liquidGlass ? { backgroundColor: theme.surface } : undefined,
     style,
   ];
+
+  // H55: keep the travelling lens outside UIVisualEffectView.contentView.
+  // Native glass owns its corners; an RN clipping mask cuts its animated rim.
+  if (liquidGlass) {
+    const { borderRadius } = StyleSheet.flatten(surfaceStyle);
+    return (
+      <View style={[surfaceStyle, { borderWidth: 0 }]} testID={testID}>
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+          <SurfaceComponent
+            colorScheme={colorScheme}
+            isInteractive={true}
+            mode="liquid-glass"
+            reducedMotion={reducedMotion}
+            surfaceComponent={surfaceComponent}
+            style={[StyleSheet.absoluteFill, { borderRadius, borderCurve: "continuous" }]}
+          />
+        </View>
+        {children}
+      </View>
+    );
+  }
 
   return (
     <SurfaceComponent

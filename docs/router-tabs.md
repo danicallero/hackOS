@@ -487,6 +487,13 @@ the usual cause of lists ending too high.
 real Liquid Glass availability gate used by `GlassView`; it does not assume
 that an iOS runtime automatically means Liquid Glass is available.
 
+On Liquid Glass, the material is an absolute background sibling of the lens
+and controls, rather than their parent. Native glass owns its rounded corners;
+the shell must not apply an RN `overflow: hidden` mask or nest the moving glass
+lens inside another glass effect's content view. Both interfere with the rim
+while the bar scales during a tab change. Opaque surfaces retain clipping.
+Custom material adapters receive no children in Liquid Glass mode.
+
 ## Accessibility and screen readers
 
 Every direct control is a native `Pressable` with:
