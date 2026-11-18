@@ -15,7 +15,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorReason } from "@/lib/api-error-reason";
-import { apiErrorText } from "@/lib/api-error-text";
 import { authClient } from "@/lib/auth-client";
 import { formatEventDate } from "@/lib/datetime";
 import type { MessageKey, Translate } from "@/lib/i18n";
@@ -70,16 +69,20 @@ export function isRetryable(error: unknown): boolean {
   return !(error instanceof ApiError) || error.status === 429 || error.status >= 500;
 }
 
-/** The concrete cause of a failure: localized copy when the reason has one, else what the server said. */
+/**
+ * The concrete cause of a failure. Frequent causes (expired or stale session,
+ * rate limit, server or network failure, any reason with copy) are localized;
+ * anything rarer shows the server's own message verbatim.
+ */
 export function failureReason(error: unknown, t: Translate): string {
-  if (error instanceof ApiError) {
-    const reason = apiErrorReason(error);
-    const key = reason ? errorReasonCopyKey(reason) : null;
-    if (key && key in commonEn) return t(key as MessageKey);
-    if (error.code !== "unknown" && error.message) return error.message;
-    return apiErrorText(error, t, `HTTP ${error.status}`);
-  }
-  return error instanceof Error && error.message ? error.message : t("apiErrorServer");
+  if (!(error instanceof ApiError)) return t("apiErrorNetwork");
+  const reason = apiErrorReason(error)?.toLowerCase();
+  const key = reason ? errorReasonCopyKey(reason) : null;
+  if (key && key in commonEn) return t(key as MessageKey);
+  if (error.status === 401) return t("apiErrorSessionExpired");
+  if (error.status === 429) return t("apiErrorRateLimited");
+  if (error.status >= 500) return t("apiErrorServer");
+  return error.message || `HTTP ${error.status}`;
 }
 
 type Revocation = { url: string; token?: string; success: string };
@@ -133,7 +136,7 @@ export function ActiveDevices() {
         setPasswordError(t("accountRemovalPasswordInvalid"));
       } else {
         closeReauth();
-        toast.error(apiErrorText(error, t, t("couldNotSignOutDevice")), t("activeDevicesTitle"));
+        toast.error(failureReason(error, t), t("couldNotSignOutDevice"));
       }
     } finally {
       setBusy(false);

@@ -23,7 +23,7 @@ vi.mock("@/lib/i18n", () => ({
 vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
 import { ApiError } from "@/lib/api";
-import { ActiveDevices } from "./active-devices";
+import { ActiveDevices, failureReason } from "./active-devices";
 
 const SESSIONS = [
   { token: "here", userAgent: null, updatedAt: "2026-11-18T10:00:00Z" },
@@ -66,8 +66,24 @@ describe("Active devices (H28)", () => {
   it("states why the list failed and offers no retry when retrying cannot help", async () => {
     calls.get.mockRejectedValue(new ApiError(403, "SESSION_NOT_FRESH", "Session is not fresh"));
     await render();
-    expect(document.body.textContent).toContain("couldNotLoadDevicesBecause: Session is not fresh");
+    expect(document.body.textContent).toContain(
+      "couldNotLoadDevicesBecause: apiError_session_not_fresh",
+    );
     expect(byText("retry")).toBeUndefined();
+  });
+
+  it("localizes frequent causes and quotes the server for the rest", () => {
+    const t = (key: string) => key;
+    expect(failureReason(new ApiError(401, "UNAUTHORIZED", "Unauthorized"), t)).toBe(
+      "apiErrorSessionExpired",
+    );
+    expect(failureReason(new ApiError(429, "unknown", "Too many requests"), t)).toBe(
+      "apiErrorRateLimited",
+    );
+    expect(failureReason(new TypeError("Failed to fetch"), t)).toBe("apiErrorNetwork");
+    expect(failureReason(new ApiError(403, "SOMETHING_RARE", "Something rare happened"), t)).toBe(
+      "Something rare happened",
+    );
   });
 
   it("offers a retry when the server failed", async () => {
