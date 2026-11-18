@@ -1,15 +1,26 @@
 import type { FastifyInstance } from "fastify";
+import { POOL_CONNECT_TIMEOUT_MESSAGE } from "../db/pool.js";
 import { dbTimeoutsTotal, isTimeoutError } from "./db-errors.js";
 import { editionClosedFromDatabase } from "./edition.js";
-import { AppError } from "./errors.js";
+import { AppError, ServiceUnavailableError } from "./errors.js";
 
 /** Map AppError, validation and unexpected failures to the `{ error: { code, message } }` envelope. */
 export function registerErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((rawErr, req, reply) => {
     // The edition write guard trigger (migration 1001) is a business error.
-    const err = editionClosedFromDatabase(rawErr) ?? rawErr;
+    let err = editionClosedFromDatabase(rawErr) ?? rawErr;
+    // #1367: no pooled connection freed up in time. That is overload, not a
+    // bug: answer 503 with a retry hint instead of a 500.
+    if (err instanceof Error && err.message === POOL_CONNECT_TIMEOUT_MESSAGE) {
+      req.log.warn({ err }, "database connection checkout timed out");
+      err = new ServiceUnavailableError("The API is busy. Try again shortly.", undefined, 2);
+    }
     if (err instanceof AppError) {
-      if (err.statusCode === 429 && "retryAfterSeconds" in err && err.retryAfterSeconds) {
+      if (
+        (err.statusCode === 429 || err.statusCode === 503) &&
+        "retryAfterSeconds" in err &&
+        err.retryAfterSeconds
+      ) {
         reply.header("retry-after", String(err.retryAfterSeconds));
       }
       return reply.code(err.statusCode).send({

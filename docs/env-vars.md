@@ -204,7 +204,7 @@ Además de las variables de las dependencias anteriores, `api` recibe:
 | Auth y origen | `BETTER_AUTH_URL`, `WEB_URL`, `BETTER_AUTH_SECRET`, `MOBILE_APP_SCHEME`, `CORS_ORIGINS`, `TRUST_PROXY=true` |
 | Base del proceso | `NODE_ENV=production`, `WORKERS_INLINE=false`, `LOG_LEVEL` |
 | Pool PostgreSQL | `DB_POOL_MAX`, `DB_IDLE_TIMEOUT_MS`, `DB_CONNECTION_TIMEOUT_MS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` |
-| Admisión (#1367) | `REQUEST_ADMISSION_MAX_HOLD_MS` (por defecto `300000`: tiempo máximo que una petición puede retener un hueco de admisión; pasado ese plazo se libera una sola vez y se registra un `warn` con método, ruta y carril). Ver `docs/request-admission.md`. |
+| Admisión (#1367) | `REQUEST_ADMISSION_MAX_HOLD_MS` (por defecto `300000`: tiempo máximo que una petición puede retener un hueco de admisión; pasado ese plazo se libera una sola vez y se registra un `warn` con método, ruta y carril), `REQUEST_ADMISSION_MAX_WAIT_MS` (por defecto `10000`: tiempo máximo en la cola de admisión; pasado ese plazo la petición recibe `503` con `Retry-After: 2`), `REQUEST_ADMISSION_MAX_CONCURRENT` (por defecto `4 × DB_POOL_MAX`, `96` en Compose: peticiones admitidas a la vez; el acceso a Postgres lo ordena aparte la compuerta de conexiones del pool). Ver `docs/request-admission.md`. |
 | SSE | `SSE_MAX_CONNECTIONS_GLOBAL`, `SSE_MAX_CONNECTIONS_PER_TOPIC`, `SSE_MAX_CONNECTIONS_PER_CLIENT`, `SSE_WRITE_TIMEOUT_MS` |
 | Drenaje al desplegar (#1327) | `SHUTDOWN_DRAIN_TIMEOUT_MS` (por defecto `20000`: plazo para terminar peticiones en curso antes de cerrar todas las conexiones), `SSE_DRAIN_SPREAD_MS` (por defecto `5000`: ventana en la que se reparten los cierres de SSE). Su suma debe quedar por debajo del `stop_grace_period` de `api` (30 s). |
 | Scanners | `RATE_LIMIT_SCAN_MAX`, `RATE_LIMIT_SCAN_WINDOW_SECONDS`, `RATE_LIMIT_MEAL_BATCH_MAX`, `RATE_LIMIT_MEAL_BATCH_WINDOW_SECONDS`, `RATE_LIMIT_SNAPSHOT_MAX`, `RATE_LIMIT_SNAPSHOT_WINDOW_SECONDS` |
@@ -343,10 +343,11 @@ El baseline operativo es 24; usa estas señales para decidir:
 3. OOM de Postgres: reduce pool o concurrencia y rehace el presupuesto de
    memoria antes de tocar `max_connections`.
 4. Espera P0/P1 mientras P2/P3 se degrada: conserva 24 y revisa el camino
-   prioritario. El scheduler reserva 6 slots concurrentes para proteger de
-   todo tráfico P2/P3, incluso usuarios autenticados, y limita su cola a
-   `max(16, 24 × 8) = 192`; no es una reserva de un slot por persona de staff
-   ni preempción de peticiones activas.
+   prioritario. La admisión reserva 24 de sus 96 slots y la compuerta de
+   conexiones 6 de las 24 para proteger de todo tráfico P2/P3, incluso
+   usuarios autenticados, y la cola P2/P3 se limita a `max(16, 24 × 8) = 192`;
+   no es una reserva de un slot por persona de staff ni preempción de
+   peticiones activas.
 
 La red `private`, la red de salida `egress`, sus alias de servicio y las rutas
 internas de Postgres, Valkey y MinIO también son parte fija del contrato. Sólo

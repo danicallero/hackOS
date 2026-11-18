@@ -212,4 +212,66 @@ describe("admission lease maximum hold time (#1367)", () => {
     (await participant).release();
     expect(admission.health()).toEqual({ active: 0, queued: 0, oldestBestEffortWaitSeconds: 0 });
   });
+
+  it("tracks the age of the longest-held lease", async () => {
+    const admission = new RequestAdmission({ maxConcurrent: 2 });
+    expect(admission.oldestLeaseSeconds()).toBe(0);
+    const first = await admission.acquire("P3");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const second = await admission.acquire("P0");
+    expect(admission.oldestLeaseSeconds()).toBeGreaterThan(0.01);
+    first.release();
+    expect(admission.oldestLeaseSeconds()).toBeLessThan(0.01);
+    second.release();
+    expect(admission.oldestLeaseSeconds()).toBe(0);
+  });
+});
+
+describe("admission maximum wait (#1367)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("rejects a waiter after the maximum wait and never admits it later", async () => {
+    vi.useFakeTimers();
+    const admission = new RequestAdmission({
+      maxConcurrent: 1,
+      reservedHighPriority: 0,
+      maxWaitMs: 1_000,
+      waitTimeoutError: (lane) => new Error(`busy ${lane}`),
+    });
+    const active = await admission.acquire("P3");
+    const waiting = admission.acquire("P3");
+    const outcome = waiting.then(
+      () => "admitted",
+      (err: Error) => err.message,
+    );
+    vi.advanceTimersByTime(999);
+    expect(admission.queuedCount).toBe(1);
+    vi.advanceTimersByTime(1);
+    expect(await outcome).toBe("busy P3");
+    expect(admission.queuedCount).toBe(0);
+
+    // The slot freed afterwards goes to nobody; the gate is idle again.
+    active.release();
+    expect(admission.activeCount).toBe(0);
+  });
+
+  it("does not time out a waiter admitted before the deadline", async () => {
+    vi.useFakeTimers();
+    const admission = new RequestAdmission({
+      maxConcurrent: 1,
+      reservedHighPriority: 0,
+      maxWaitMs: 1_000,
+    });
+    const active = await admission.acquire("P0");
+    const waiting = admission.acquire("P0");
+    vi.advanceTimersByTime(500);
+    active.release();
+    const next = await waiting;
+    vi.advanceTimersByTime(5_000);
+    expect(admission.activeCount).toBe(1);
+    next.release();
+    expect(admission.activeCount).toBe(0);
+  });
 });

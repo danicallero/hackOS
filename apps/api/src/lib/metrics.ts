@@ -54,7 +54,13 @@ export const requestAdmissionQueueSize = new client.Gauge({
   registers: [register],
 });
 
-let admissionOldestWaitSource: ((lane: RequestLane) => number) | null = null;
+/** Live scheduler state sampled at scrape time (#1367). */
+export interface AdmissionGaugeSource {
+  oldestWaitSeconds(lanes: readonly RequestLane[]): number;
+  oldestLeaseSeconds(): number;
+}
+
+let admissionSource: AdmissionGaugeSource | null = null;
 
 /** Stalled-gate signal (#1367): sampled from the live scheduler at scrape time. */
 export const requestAdmissionOldestWaitSeconds = new client.Gauge({
@@ -64,8 +70,22 @@ export const requestAdmissionOldestWaitSeconds = new client.Gauge({
   registers: [register],
   collect() {
     for (const lane of REQUEST_LANES) {
-      this.set({ lane }, admissionOldestWaitSource?.(lane) ?? 0);
+      this.set({ lane }, admissionSource?.oldestWaitSeconds([lane]) ?? 0);
     }
+  },
+});
+
+/**
+ * Leak signal (#1367): the age of the longest-held admission lease. Finite
+ * requests finish within seconds, so a value that keeps growing is a lease
+ * nothing will release, long before the maximum hold time reclaims it.
+ */
+new client.Gauge({
+  name: "hackos_http_request_admission_oldest_lease_seconds",
+  help: "Age of the longest-held request admission lease (0 when none is held)",
+  registers: [register],
+  collect() {
+    this.set(admissionSource?.oldestLeaseSeconds() ?? 0);
   },
 });
 
@@ -75,6 +95,64 @@ const requestAdmissionLeaseExpiredTotal = new client.Counter({
   labelNames: ["lane"],
   registers: [register],
 });
+
+const requestAdmissionWaitTimeoutsTotal = new client.Counter({
+  name: "hackos_http_request_admission_wait_timeouts_total",
+  help: "Requests answered 503 after waiting the maximum time for an admission slot, by lane",
+  labelNames: ["lane"],
+  registers: [register],
+});
+
+const dbGateWaitSeconds = new client.Histogram({
+  name: "hackos_db_gate_wait_seconds",
+  help: "Time a pooled-connection checkout waited for its lane's turn, by lane",
+  labelNames: ["lane"],
+  buckets: [0, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10],
+  registers: [register],
+});
+
+const dbGateQueueSize = new client.Gauge({
+  name: "hackos_db_gate_queue_size",
+  help: "Pooled-connection checkouts waiting for their lane's turn, by lane",
+  labelNames: ["lane"],
+  registers: [register],
+});
+
+const dbGateTimeoutsTotal = new client.Counter({
+  name: "hackos_db_gate_timeouts_total",
+  help: "Pooled-connection checkouts that timed out waiting for their lane's turn, by lane",
+  labelNames: ["lane"],
+  registers: [register],
+});
+
+/** Where a `RequestAdmission` scheduler reports (HTTP admission or the DB gate). */
+export interface AdmissionMetrics {
+  wait(lane: RequestLane, seconds: number): void;
+  queueSize(lane: RequestLane, size: number): void;
+  leaseExpired(lane: RequestLane): void;
+  waitTimedOut(lane: RequestLane): void;
+  /** Registers the scheduler whose state the scrape-time gauges sample. */
+  attach(source: AdmissionGaugeSource): void;
+}
+
+export const httpAdmissionMetrics: AdmissionMetrics = {
+  wait: (lane, seconds) => requestAdmissionWaitSeconds.observe({ lane }, seconds),
+  queueSize: (lane, size) => requestAdmissionQueueSize.set({ lane }, size),
+  leaseExpired: (lane) => requestAdmissionLeaseExpiredTotal.inc({ lane }),
+  waitTimedOut: (lane) => requestAdmissionWaitTimeoutsTotal.inc({ lane }),
+  attach: (source) => {
+    // One HTTP gate per process.
+    admissionSource = source;
+  },
+};
+
+export const dbGateMetrics: AdmissionMetrics = {
+  wait: (lane, seconds) => dbGateWaitSeconds.observe({ lane }, seconds),
+  queueSize: (lane, size) => dbGateQueueSize.set({ lane }, size),
+  leaseExpired: () => {},
+  waitTimedOut: (lane) => dbGateTimeoutsTotal.inc({ lane }),
+  attach: () => {},
+};
 
 const participantInvalidationsTotal = new client.Counter({
   name: "hackos_queue_participant_invalidations_total",
@@ -275,22 +353,6 @@ export function observeHttpResponse(
   };
   httpResponsesTotal.inc(labels);
   httpRequestDurationSeconds.observe(labels, durationSeconds);
-}
-
-export function observeAdmissionWait(lane: RequestLane, seconds: number): void {
-  requestAdmissionWaitSeconds.observe({ lane }, seconds);
-}
-
-export function setAdmissionQueueSize(lane: RequestLane, size: number): void {
-  requestAdmissionQueueSize.set({ lane }, size);
-}
-
-export function setAdmissionOldestWaitSource(source: (lane: RequestLane) => number): void {
-  admissionOldestWaitSource = source;
-}
-
-export function observeAdmissionLeaseExpired(lane: RequestLane): void {
-  requestAdmissionLeaseExpiredTotal.inc({ lane });
 }
 
 /** Upload operations with closed label values; no file names, IDs or personal data. */

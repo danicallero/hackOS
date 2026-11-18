@@ -288,7 +288,7 @@ contenedor.
 | `minio` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_BROWSER=off` |
 | `minio-init` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` |
 | `migrate` | `NODE_ENV`, `DATABASE_URL`, `BETTER_AUTH_SECRET` |
-| `api` | base de datos, Valkey, auth, URLs públicas, almacenamiento, Wallet, Live Activities (APNs), traducción, SSE, drenaje al desplegar, retención máxima de admisión (`REQUEST_ADMISSION_MAX_HOLD_MS`), rate limits y fixtures API-only |
+| `api` | base de datos, Valkey, auth, URLs públicas, almacenamiento, Wallet, Live Activities (APNs), traducción, SSE, drenaje al desplegar, admisión (`REQUEST_ADMISSION_MAX_HOLD_MS`, `REQUEST_ADMISSION_MAX_WAIT_MS`, `REQUEST_ADMISSION_MAX_CONCURRENT`), rate limits y fixtures API-only |
 | `worker` | base de datos, Valkey, `SSE_NAMESPACE`, auth/URLs necesarias para enlaces, almacenamiento, correo, Wallet, Live Activities (APNs) y tuning del worker |
 | `web` | sólo `API_DOMAIN`, `WEB_DOMAIN` y la configuración pública `ANDROID_APP_CERT_SHA256` |
 | `proxy` | sólo su configuración de Caddy, con `PROXY_TRUSTED_PROXIES` |
@@ -374,9 +374,13 @@ usan 48 conexiones de pool. Con 12 conexiones operativas reservadas para
 migración, mantenimiento, administración y superusuario, el cálculo es
 `(1 × 24) + (1 × 24) + 12 = 60 < max_connections=100`. Mantén el valor stock
 de `max_connections` y repite el cálculo antes de añadir réplicas o subir el
-pool. El scheduler deriva 6 slots reservados para trabajo P0/P1 y limita la
-cola pendiente P2/P3 a `max(16, 24 × 8) = 192`; son slots de peticiones finitas,
-no conexiones SSE ni un slot por miembro del staff.
+pool. La admisión acepta `REQUEST_ADMISSION_MAX_CONCURRENT=96` peticiones a la
+vez (4 × 24), reserva 24 para trabajo P0/P1, limita la cola pendiente P2/P3 a
+`max(16, 24 × 8) = 192` y responde `503` con `Retry-After` a lo que espere más
+de `REQUEST_ADMISSION_MAX_WAIT_MS` (10 s). El acceso a Postgres pasa además por
+una compuerta de 24 conexiones ordenada por carril que guarda 6 para P0/P1.
+Son slots de peticiones finitas, no conexiones SSE ni un slot por miembro del
+staff.
 
 ### Árbol de decisión de `DB_POOL_MAX`
 
@@ -394,7 +398,7 @@ estado OOM de los contenedores:
    `max_connections` hasta rehacer el presupuesto de memoria y pasar
    qualification.
 4. Si P0/P1 espera mientras P2/P3 es rechazado, conserva 24 y revisa la ruta
-   operativa; los 6 slots reservados protegen trabajo prioritario de todo
+   operativa; los slots y conexiones reservados protegen trabajo prioritario de todo
    tráfico P2/P3, incluso usuarios autenticados, pero no preemptan una
    petición ya ejecutándose.
 

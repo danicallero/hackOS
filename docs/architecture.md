@@ -311,8 +311,12 @@ response; a request disconnected while queued cancels its admission wait.
 A client that disconnects while an earlier `onRequest` hook (the session
 lookup) is still running is never admitted at all, and every lease is
 force-released after `REQUEST_ADMISSION_MAX_HOLD_MS` as defence in depth
-(#1367). `/readyz` reports the gate's state in an `admission` field without
-letting it change readiness; see
+(#1367). A request queued longer than `REQUEST_ADMISSION_MAX_WAIT_MS` is
+answered 503 with `Retry-After`, and pooled-connection checkouts pass a
+lane-aware gate of the pool's size, so admission can admit more requests than
+there are connections without best-effort work queueing ahead of operations
+for Postgres. `/readyz` reports both gates in an `admission` field without
+letting them change readiness; see
 [`request-admission.md`](./request-admission.md#client-aborts-and-leaked-leases).
 
 Participant queue invalidations are one delayed BullMQ job per current queue
