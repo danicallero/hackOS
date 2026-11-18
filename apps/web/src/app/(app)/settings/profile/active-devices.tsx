@@ -4,10 +4,16 @@ import { DesktopIcon } from "@phosphor-icons/react/dist/csr/Desktop";
 import { DeviceMobileIcon } from "@phosphor-icons/react/dist/csr/DeviceMobile";
 import { SignOutIcon } from "@phosphor-icons/react/dist/csr/SignOut";
 import { useCallback, useEffect, useState } from "react";
+import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { IconButton } from "@/components/common/icon-button";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ApiError, api } from "@/lib/api";
+import { apiErrorReason } from "@/lib/api-error-reason";
+import { apiErrorText } from "@/lib/api-error-text";
 import { authClient } from "@/lib/auth-client";
 import { formatEventDate } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
@@ -56,45 +62,82 @@ export function deviceName(userAgent: string | null | undefined): string {
 const isMobile = (userAgent: string | null | undefined) =>
   /iPhone|iPad|Android|Expo|okhttp|CFNetwork|^hackOS\b/i.test(userAgent ?? "");
 
+/** Only a failure that can clear on its own (network, rate limit, server) is worth retrying. */
+export function isRetryable(error: unknown): boolean {
+  return !(error instanceof ApiError) || error.status === 429 || error.status >= 500;
+}
+
+type Revocation = { url: string; token?: string; success: string };
+
 /** The sessions signed in to this account: this one first, each other one can be closed. */
 export function ActiveDevices() {
   const { t, language } = useLocale();
   const [sessions, setSessions] = useState<DeviceSession[] | null>(null);
   const [current, setCurrent] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  // H28: a session older than a day re-authenticates before signing others out.
+  const [reauth, setReauth] = useState<Revocation | null>(null);
+  const [password, setPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setFailed(false);
-    const [list, active] = await Promise.all([authClient.listSessions(), authClient.getSession()]);
-    if (list.error || !list.data) {
-      setFailed(true);
-      return;
+    setLoadError(null);
+    try {
+      const [list, active] = await Promise.all([
+        api.get<DeviceSession[]>("/api/auth/list-sessions", { cache: "no-store" }),
+        authClient.getSession(),
+      ]);
+      setCurrent(active.data?.session.token ?? null);
+      setSessions(list);
+    } catch (error) {
+      setLoadError(error);
     }
-    setCurrent(active.data?.session.token ?? null);
-    setSessions(list.data as DeviceSession[]);
   }, []);
 
   useEffect(() => {
-    void load().catch(() => setFailed(true));
+    void load();
   }, [load]);
 
-  async function revoke(run: () => Promise<{ error: unknown }>, success: string) {
+  async function revoke(revocation: Revocation, withPassword?: string) {
     setBusy(true);
     try {
-      const { error } = await run();
-      if (error) throw error;
-      toast.success(success, { compactTitle: t("activeDevicesTitle") });
+      await api.post(revocation.url, {
+        ...(revocation.token ? { token: revocation.token } : {}),
+        ...(withPassword ? { password: withPassword } : {}),
+      });
+      closeReauth();
+      toast.success(revocation.success, { compactTitle: t("activeDevicesTitle") });
       await load();
-    } catch {
-      toast.error(t("couldNotSignOutDevice"), t("activeDevicesTitle"));
+    } catch (error) {
+      const reason = apiErrorReason(error);
+      if (reason === "session_revoke_reauthentication_required") {
+        setReauth(revocation);
+        if (withPassword !== undefined) setPasswordError(t("accountRemovalPasswordRequired"));
+      } else if (reason === "session_revoke_reauthentication_invalid") {
+        setPasswordError(t("accountRemovalPasswordInvalid"));
+      } else {
+        closeReauth();
+        toast.error(apiErrorText(error, t, t("couldNotSignOutDevice")), t("activeDevicesTitle"));
+      }
     } finally {
       setBusy(false);
     }
   }
 
-  if (failed)
-    return <ContextualError message={t("couldNotLoadDevices")} onRetry={() => void load()} />;
+  function closeReauth() {
+    setReauth(null);
+    setPassword("");
+    setPasswordError(null);
+  }
+
+  if (loadError)
+    return (
+      <ContextualError
+        message={apiErrorText(loadError, t, t("couldNotLoadDevices"))}
+        onRetry={isRetryable(loadError) ? () => void load() : undefined}
+      />
+    );
   if (!sessions) return null;
   const ordered = [...sessions].sort(
     (a, b) => Number(b.token === current) - Number(a.token === current),
@@ -129,10 +172,11 @@ export function ActiveDevices() {
                   label={t("signOutDevice")}
                   disabled={busy}
                   onClick={() =>
-                    void revoke(
-                      () => authClient.revokeSession({ token: session.token }),
-                      t("deviceSignedOut"),
-                    )
+                    void revoke({
+                      url: "/api/auth/revoke-session",
+                      token: session.token,
+                      success: t("deviceSignedOut"),
+                    })
                   }
                 >
                   <SignOutIcon />
@@ -147,11 +191,47 @@ export function ActiveDevices() {
           variant="outline"
           size="sm"
           disabled={busy}
-          onClick={() => void revoke(() => authClient.revokeOtherSessions(), t("devicesSignedOut"))}
+          onClick={() =>
+            void revoke({ url: "/api/auth/revoke-other-sessions", success: t("devicesSignedOut") })
+          }
         >
           {t("signOutOtherDevices")}
         </Button>
       )}
+      <AlertModal
+        open={reauth !== null}
+        onOpenChange={(open) => !open && closeReauth()}
+        title={t("accountRemovalPasswordTitle")}
+        description={t("accountRemovalPasswordDescription")}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("signOut")}
+        pending={busy}
+        confirmDisabled={password === ""}
+        onConfirm={() => reauth && void revoke(reauth, password)}
+      >
+        <div className="space-y-2">
+          <Label htmlFor="revoke-session-password">{t("accountRemovalPasswordLabel")}</Label>
+          <Input
+            id="revoke-session-password"
+            aria-describedby={passwordError ? "revoke-session-password-error" : undefined}
+            aria-invalid={passwordError ? true : undefined}
+            autoComplete="current-password"
+            autoFocus
+            maxLength={128}
+            onChange={(event) => {
+              setPassword(event.target.value);
+              setPasswordError(null);
+            }}
+            type="password"
+            value={password}
+          />
+          {passwordError ? (
+            <p id="revoke-session-password-error" role="alert" className="text-destructive text-sm">
+              {passwordError}
+            </p>
+          ) : null}
+        </div>
+      </AlertModal>
     </div>
   );
 }

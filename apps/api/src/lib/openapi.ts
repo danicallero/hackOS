@@ -236,14 +236,15 @@ function withAuthDocs(openapiObject: Record<string, unknown>): Record<string, un
     tags: ["auth"],
     summary: "List my signed-in devices",
     description:
-      "Every active session of the authenticated user (token, user agent, last activity), for the Active devices list in Profile and account.",
+      "Every active session of the authenticated user (token, user agent, last activity), for the Active devices list in Profile and account. Needs only a valid session, however old.",
     security: [{ sessionToken: [] }, { bearerToken: [] }],
   });
 
   addAuthOperation(paths, "/api/auth/revoke-session", "post", {
     tags: ["auth"],
     summary: "Sign out one device",
-    description: "Revokes one of the authenticated user's sessions, identified by its `token`.",
+    description:
+      "Revokes one of the authenticated user's sessions, identified by its `token`. A session signed in more than 24 hours ago must also send the current `password`; without it the call answers 400 `session_revoke_reauthentication_required`, and a wrong one 400 `session_revoke_reauthentication_invalid`.",
     security: [{ sessionToken: [] }, { bearerToken: [] }],
     requestBody: {
       required: true,
@@ -252,7 +253,7 @@ function withAuthDocs(openapiObject: Record<string, unknown>): Record<string, un
           schema: {
             type: "object",
             required: ["token"],
-            properties: { token: { type: "string" } },
+            properties: { token: { type: "string" }, password: { type: "string" } },
           },
         },
       },
@@ -262,8 +263,17 @@ function withAuthDocs(openapiObject: Record<string, unknown>): Record<string, un
   addAuthOperation(paths, "/api/auth/revoke-other-sessions", "post", {
     tags: ["auth"],
     summary: "Sign out every other device",
-    description: "Revokes all of the authenticated user's sessions except the current one.",
+    description:
+      "Revokes all of the authenticated user's sessions except the current one. A session signed in more than 24 hours ago must also send the current `password`; without it the call answers 400 `session_revoke_reauthentication_required`, and a wrong one 400 `session_revoke_reauthentication_invalid`.",
     security: [{ sessionToken: [] }, { bearerToken: [] }],
+    requestBody: {
+      required: false,
+      content: {
+        "application/json": {
+          schema: { type: "object", properties: { password: { type: "string" } } },
+        },
+      },
+    },
   });
 
   addAuthOperation(paths, "/api/auth/request-password-reset", "post", {
