@@ -353,16 +353,24 @@ Reduced motion changes animation, not information architecture or navigation.
 
 ### Finger scrub
 
-The direct group is wrapped in one `react-native-gesture-handler` pan gesture.
-The gesture activates only after a small horizontal movement and fails for a
-primarily vertical movement, allowing the individual `TabTrigger` pressables
-to keep ordinary taps. Once active:
+The direct group uses one `react-native-gesture-handler` manual gesture that
+owns touches from touch-down. Small movements remain taps; crossing the
+horizontal scrub threshold turns the interaction into a scrub. The gesture
+invokes the registered `TabTrigger` press for taps, while cell pressables stand
+down to avoid duplicate navigation. VoiceOver and keyboard activation still
+reach those pressables directly. During a scrub:
 
 1. the native regular frosted selection pill, or opaque fallback lens, follows the
    finger continuously on a Reanimated worklet;
 2. no route changes while the finger is moving;
 3. the final x-coordinate is converted to a direct-cell index on release; and
 4. navigation commits once to the tab under the finger.
+
+Tap and scrub release callbacks invoke navigation and selection feedback
+immediately on reaching JS. There is no provisional-selection render,
+`requestAnimationFrame`, or spring-completion gate before committing. The
+UI-thread lens animation settles independently. A delayed haptic therefore
+marks delayed callback execution; it is not an animation-completion signal.
 
 The pill/lens is inset evenly on all four sides of its cell. The full cell
 remains the hit target, so the visual padding does not make a tab harder to
@@ -486,13 +494,6 @@ the usual cause of lists ending too high.
 `expo-glass-effect` is the material seam. The reusable shell checks the same
 real Liquid Glass availability gate used by `GlassView`; it does not assume
 that an iOS runtime automatically means Liquid Glass is available.
-
-On Liquid Glass, the material is an absolute background sibling of the lens
-and controls, rather than their parent. Native glass owns its rounded corners;
-the shell must not apply an RN `overflow: hidden` mask or nest the moving glass
-lens inside another glass effect's content view. Both interfere with the rim
-while the bar scales during a tab change. Opaque surfaces retain clipping.
-Custom material adapters receive no children in Liquid Glass mode.
 
 ## Accessibility and screen readers
 

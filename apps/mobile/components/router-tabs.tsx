@@ -24,7 +24,6 @@ import {
   Platform,
   Pressable,
   type StyleProp,
-  StyleSheet,
   Text,
   View,
   type ViewStyle,
@@ -94,7 +93,6 @@ export type RouterTabsColorScheme = "auto" | "light" | "dark";
 
 /** Props a custom tab-surface renderer must accept. */
 export interface RouterTabsSurfaceProps {
-  /** Opaque content; native glass is rendered as a background without children. */
   children?: ReactNode;
   /** Appearance used by native Liquid Glass; opaque fallbacks may ignore it. */
   colorScheme: RouterTabsColorScheme;
@@ -295,11 +293,6 @@ function RouterTabsContent({
   const { switchTab } = useTabTrigger({ name: directTabNames[0] ?? "" });
   const reducedMotion = useReducedMotion();
   const routeTabIndex = directTabs.findIndex((tab) => isTabActive(pathname, tab));
-  // H55: the released tab shows as selected at once; the route follows when
-  // the lens arrives (navigation is slow to commit, above all in debug).
-  // It holds only until the route changes from the one it was released on.
-  const [pendingTab, setPendingTab] = useState<{ index: number; from: number } | null>(null);
-  const pendingTabIndex = pendingTab?.from === routeTabIndex ? pendingTab.index : null;
   const selectedDirectTabIndex = routeTabIndex;
   const [directGroupWidth, setDirectGroupWidth] = useState(0);
   const selectionOffset = useSharedValue(0);
@@ -349,13 +342,11 @@ function RouterTabsContent({
   // still reach the Pressable directly.
   const tabPresses = useRef<Array<(() => void) | undefined>>([]);
   const pressTab = useCallback((index: number) => tabPresses.current[index]?.(), []);
-  // H55: show the released tab as selected in its own cheap render, then
-  // navigate on the next frame; a screen that is slow to mount never delays
-  // the bar's response.
+  // H55: navigation and feedback commit on release, without a render/frame gate.
   const releaseOnTab = useCallback(
-    (index: number, from: number, scrubbed: boolean) => {
-      if (index !== from) setPendingTab({ index, from });
-      requestAnimationFrame(() => (scrubbed ? commitTabSelection(index) : pressTab(index)));
+    (index: number, scrubbed: boolean) => {
+      if (scrubbed) commitTabSelection(index);
+      else pressTab(index);
     },
     [commitTabSelection, pressTab],
   );
@@ -427,8 +418,7 @@ function RouterTabsContent({
         const nextOffset = nextIndex >= 0 ? nextIndex * directTabCellWidth : restingOffset;
         // H55: the tab switches on release, like the system bar; the lens
         // travels and settles alongside and never holds the navigation back.
-        if (nextIndex >= 0)
-          runOnJS(releaseOnTab)(nextIndex, selectedDirectTabIndex, scrubbed.value);
+        if (nextIndex >= 0) runOnJS(releaseOnTab)(nextIndex, scrubbed.value);
         if (reducedMotion) {
           selectionOffset.value = nextOffset;
           lift.value = 0;
@@ -529,13 +519,7 @@ function RouterTabsContent({
             {directTabs.map((tab, index) => (
               <TabTrigger key={tab.name} asChild name={tab.name}>
                 <RouterTabButton
-                  activeOverride={
-                    pendingTabIndex !== null
-                      ? index === pendingTabIndex
-                      : tab.isActive
-                        ? isTabActive(pathname, tab)
-                        : undefined
-                  }
+                  activeOverride={tab.isActive ? isTabActive(pathname, tab) : undefined}
                   icon={tab.icon}
                   label={tab.label}
                   registerPress={(press) => {
@@ -992,34 +976,13 @@ function TabSurface({
     borderRadius: ROUTER_TAB_BAR_HEIGHT / 2,
     boxShadow: liquidGlass ? undefined : theme.shadow,
     flexDirection: "row",
-    overflow: liquidGlass ? "visible" : "hidden",
+    overflow: "hidden",
   };
   const surfaceStyle: StyleProp<ViewStyle> = [
     baseStyle,
     !liquidGlass ? { backgroundColor: theme.surface } : undefined,
     style,
   ];
-
-  // H55: keep the travelling lens outside UIVisualEffectView.contentView.
-  // Native glass owns its corners; an RN clipping mask cuts its animated rim.
-  if (liquidGlass) {
-    const { borderRadius } = StyleSheet.flatten(surfaceStyle);
-    return (
-      <View style={[surfaceStyle, { borderWidth: 0 }]} testID={testID}>
-        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <SurfaceComponent
-            colorScheme={colorScheme}
-            isInteractive={true}
-            mode="liquid-glass"
-            reducedMotion={reducedMotion}
-            surfaceComponent={surfaceComponent}
-            style={[StyleSheet.absoluteFill, { borderRadius, borderCurve: "continuous" }]}
-          />
-        </View>
-        {children}
-      </View>
-    );
-  }
 
   return (
     <SurfaceComponent
