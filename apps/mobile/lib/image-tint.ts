@@ -1,10 +1,12 @@
 import { logoTouchesEdge, pickDominantColor } from "@hackos/shared/image-color";
 import { File, Paths } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import { strFromU8 } from "fflate";
 import { useEffect, useState } from "react";
 import { InteractionManager } from "react-native";
 import { apiImageSource } from "./directory";
 import { decodePngRgba } from "./png-pixels";
+import { isSvg, svgTintSource } from "./svg-tint";
 
 const SAMPLE = 24;
 
@@ -18,18 +20,26 @@ let sampleSequence = 0;
 
 /**
  * Download the image, let the platform scale it to 24x24 as a PNG and read its
- * colour and edges. The original and the thumbnail are cache files removed
+ * colour and edges. An SVG is read through `svgTintSource`: its embedded
+ * raster, else its paint colours. The original and the thumbnail are cache files removed
  * straight away, so a hidden photo is not left on disk.
  */
 async function decodeImageTint(uri: string): Promise<ImageReading | null> {
   const source = apiImageSource(uri);
   const response = await fetch(source.uri, { headers: source.headers });
   if (!response.ok) return null;
+  let bytes: Uint8Array = new Uint8Array(await response.arrayBuffer());
+  if (isSvg(bytes)) {
+    const svg = svgTintSource(strFromU8(bytes));
+    if (!svg) return null;
+    if (svg.kind === "paint") return { color: pickDominantColor(svg.rgba), bleed: false };
+    bytes = svg.bytes;
+  }
   sampleSequence += 1;
   const original = new File(Paths.cache, `tint-${sampleSequence}`);
   let thumbnail: File | null = null;
   try {
-    original.write(new Uint8Array(await response.arrayBuffer()));
+    original.write(bytes);
     const image = await ImageManipulator.manipulate(original.uri)
       .resize({ width: SAMPLE, height: SAMPLE })
       .renderAsync();
