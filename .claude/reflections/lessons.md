@@ -1031,3 +1031,32 @@ A component test renders a 4xx failure and asserts the reason is visible with no
 
 ### Exceptions
 None.
+
+## [R039] Check static image imports without generated Next declarations
+
+Status: active
+Scope: module:web
+Source: user-correction
+Date: 2026-11-19
+
+### Trigger
+Adding static image imports to the web client.
+
+### Mistake
+Local typechecking passed because next dev had created the ignored next-env.d.ts;
+CI ran tsc before Next and could not resolve the PNG modules.
+
+### Lesson
+A local development server can supply untracked declarations that a clean CI
+checkout does not have.
+
+### Action
+Keep the official Next static-image type reference in tracked source. Validate
+source typechecking without next-env.d.ts or generated .next types.
+
+### Validation
+Run the source typecheck without generated declarations, then the normal CI
+workspace typecheck; confirm the remote check passes on the pushed commit.
+
+### Exceptions
+None.
