@@ -323,8 +323,8 @@ need the reader's diary entry.
 The profile hero (H48) blurs the person's photo behind the header, using the
 avatar's own URL and plain request (no CORS fetch), so the private photo is
 loaded and cached only as the avatar already is: enlarged and blurred until no
-shape survives, under a 35% veil of the page colour and fading into the page
-(`HeroBleed` `ambient`, as on the project record). Without a photo it keeps the
+shape survives, under the veil and fade of the project record's `AmbientBackdrop`
+(see [`projects.md`](./projects.md) § Project surfaces). Without a photo it keeps the
 single-colour wash (`photoColor` when the API sends one, else blue). Company rows use the dark
 logo variant on dark backgrounds, including the helper affiliation row. Back links
 follow the shared in-app history stack, so profiles and companies return to their

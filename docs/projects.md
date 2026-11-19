@@ -289,21 +289,26 @@ complete challenge list only when it exceeds the visible preview.
 
 The project record's top (`ProjectRecordHero` over `HeroBleed`, H18/H48) takes
 its colours from the cover gallery (the images of the first form field that has
-any). The photo the carousel shows is drawn behind the header, enlarged 1.4× and
-blurred (72 px, saturation 1.3) until no shape survives, under a 35% veil of
-the page background and masked into the page from 60% to 100% of its height.
-When the carousel advances, the backdrop cross-fades to the new photo (instant
-under reduced motion). The backdrop renders the carousel's own thumbnail URLs
-with the same credentials, so it adds no downloads. `ProjectAmbientProvider`
-(`components/projects/project-ambient.tsx`) wraps the gallery record and the
-project editor so the carousel can report its visible photo; carousels outside
-it (judging panel) report nothing. Content after the hero is positioned above
-the fixed backdrop (`surfaces.css`) so the photo never covers it. A project
-without photos keeps the blue wash. Person and company profiles use the
-same `ambient` layers with the avatar or shown logo. On phones, where the
-sidebar button floats over the canvas, every `HeroBleed` page gives its first
-row (the back link) that button's top offset and height, so the title starts
-below it (`surfaces.css`).
+any). `AmbientBackdrop` (`components/common/ambient-backdrop.tsx`) draws the
+photo the carousel shows behind the header, enlarged 1.4× and blurred (72 px)
+until no shape survives, under a veil of the page background (65% light, 55%
+dark). It spans the window width (behind the floating sidebar) from the top of
+the page to the bottom of the hero, scrolls with it, and is masked into the
+page from 60% to 100% of its height, so the content after the hero always sits
+on the plain page. Over the backdrop the hero's muted text uses the foreground
+token. Measured on saturated red, yellow, purple and cyan, near-white and
+near-black photos in both themes, the back link, headline, website and status
+stay at or above 4.5:1 and titles above 3:1. When the carousel advances, the
+backdrop cross-fades to the new photo (instant under reduced motion). It renders
+the carousel's own thumbnail URLs with the same credentials, so it adds no
+downloads. `ProjectAmbientProvider` (`components/projects/project-ambient.tsx`)
+wraps the gallery record and the project editor so the carousel can report its
+visible photo; carousels outside it (judging panel) report nothing. A project
+without photos keeps the blue wash. Person and company profiles use the same
+backdrop with the avatar or shown logo. On phones, where the sidebar button
+floats over the canvas, every `HeroBleed` page gives its first row (the back
+link) that button's top offset and height, so the title starts below it
+(`surfaces.css`).
 
 Deletion is available from the record to staff with `projects:edit`, or to a sole
 active participant member while the API permits editing or submission withdrawal.

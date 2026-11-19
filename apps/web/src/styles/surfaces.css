@@ -73,10 +73,12 @@ body:has([data-hero-bleed]) [data-slot="sidebar-inner"] {
   backdrop-filter: blur(24px);
 }
 
-/* The ambient photo is nearly opaque: the page content after the hero paints
-   above its fixed layer instead of under it (H18, H48). */
-[data-hero-bleed]:has([data-hero-ambient]) ~ * {
-  position: relative;
+/* Muted text cannot reach 4.5:1 over every photo under the veil (measured on
+   saturated, near-white and near-black images): over an ambient backdrop the
+   hero's secondary text (back link, headline, website) uses the foreground. */
+[data-hero-bleed]:has(> [data-hero-ambient]) > [data-hero-content] {
+  --muted-foreground: var(--foreground);
+  --color-muted-foreground: var(--foreground);
 }
 
 /* On phones the back link shares the row with the floating sidebar button. */
