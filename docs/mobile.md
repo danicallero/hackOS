@@ -652,9 +652,9 @@ external submission path remains in the native client.
 The reusable `DynamicForm` consumes `TemplateField` and `FormSection` from
 `@hackos/shared/forms`, the application/project schema. File fields use the
 system document picker; a file answer is one attachment row (thumbnail or
-document icon, name, type and size) that opens the in-app viewer
-(`components/file-viewer.tsx`: photos with pinch zoom, PDFs in the system
-viewer, Share in the header). Photo fields (`images`, project form
+document icon, name, type and size, with a spinner while it downloads) that opens the in-app viewer
+(`components/file-viewer.tsx`: photos with pinch zoom, PDFs in Quick Look on
+iOS and as rendered pages on Android, Share in the header). Photo fields (`images`, project form
 only, up to `MAX_IMAGES_PER_FIELD`) open the system photo picker with
 multi-select; each photo is re-encoded on device as a JPEG of at most 2048 px
 (HEIC never reaches the API) and uploaded one by one with its own
@@ -1510,21 +1510,22 @@ the real cutout: `adb shell cmd overlay enable
 com.android.internal.emulation.pixel_9` plus `adb shell wm size 1080x2424`;
 the emulator reports the hole to apps but does not paint it black), and with Remove animations on (plain circle collapse, no
 neck). On a device without a cutout the plain collapse must be unchanged.
-The CV route needs the session, so it is
-downloaded with the session cookie (`expo-file-system`) into the cache and shown
-in the in-app viewer (`components/cv-viewer.tsx`, a CV-worded wrapper of the
-shared `components/file-viewer.tsx`): a page-sheet modal titled
-with the person's name and a circular close button shows the download, then the
-PDF opens in the system viewer through the local `modules/file-preview` module:
-Quick Look on iOS (paging, zoom, search and its own Share; closing it closes the
-sheet too) and the device's PDF app on Android (an `ACTION_VIEW` chooser on the
-file's content URI). The app bundles no PDF renderer, which keeps the binary
-small. Where no viewer is available (Expo Go, a development client built before
-the module, an Android device without a PDF app), the sheet stays with the file
-name and Share in its header. A CV that is gone or no
-longer shared (404) shows "Profile not available"; any other failure offers
-Retry. **Native dependency:** `modules/file-preview` needs a rebuilt development
-client and store build. The
+The CV route needs the session, so `useCvViewer` (`components/cv-viewer.tsx`,
+the CV wording over `usePrivateFile` in `components/file-viewer.tsx`) downloads
+it with the session cookie (`expo-file-system`) into its own cache directory,
+under the real file name, while the CV button shows its busy state; nothing
+opens in between. On iOS the PDF then opens straight in Quick Look through the
+local `modules/file-preview` module (paging, zoom, search and its own Share,
+titled with the person's name). On Android the same module renders the pages
+with the platform `PdfRenderer` into a cache directory and the viewer sheet
+shows them in a scroll (title, close, Share in the header); the pages are
+deleted when the sheet closes. The app bundles no PDF engine, which keeps the
+binary small. Where the module is missing (Expo Go, a development client built
+before it) or the PDF cannot be rendered, the sheet shows the file name and
+Share. A CV that is gone or no longer shared (404) opens the sheet with
+"Profile not available"; any other failure offers Retry, which opens Quick Look
+once the download succeeds. **Native dependency:** `modules/file-preview`
+needs a rebuilt development client and store build. The
 app does not show the user's own
 CV anywhere yet, so the viewer has one caller. A hidden profile and a person the reader may not open both answer 404
 and show one "Profile not available" state. Photos are authenticated API

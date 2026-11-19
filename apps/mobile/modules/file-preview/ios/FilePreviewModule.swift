@@ -8,12 +8,12 @@ public class FilePreviewModule: Module {
   public func definition() -> ModuleDefinition {
     Name("FilePreview")
 
-    AsyncFunction("preview") { (url: URL, promise: Promise) in
+    AsyncFunction("preview") { (url: URL, title: String, promise: Promise) in
       guard url.isFileURL, let presenter = self.appContext?.utilities?.currentViewController() else {
         promise.reject("ERR_FILE_PREVIEW", "A local file and a visible screen are required")
         return
       }
-      let source = PreviewSource(url: url) { promise.resolve(nil) }
+      let source = PreviewSource(item: PreviewItem(url: url, title: title)) { promise.resolve(nil) }
       let controller = QLPreviewController()
       controller.dataSource = source
       controller.delegate = source
@@ -24,20 +24,31 @@ public class FilePreviewModule: Module {
   }
 }
 
+/// Quick Look titles the file with this, not the cache file's name.
+private final class PreviewItem: NSObject, QLPreviewItem {
+  let previewItemURL: URL?
+  let previewItemTitle: String?
+
+  init(url: URL, title: String) {
+    previewItemURL = url
+    previewItemTitle = title
+  }
+}
+
 private final class PreviewSource: NSObject, QLPreviewControllerDataSource, QLPreviewControllerDelegate {
   static var key = 0
-  private let url: URL
+  private let item: PreviewItem
   private var onClose: (() -> Void)?
 
-  init(url: URL, onClose: @escaping () -> Void) {
-    self.url = url
+  init(item: PreviewItem, onClose: @escaping () -> Void) {
+    self.item = item
     self.onClose = onClose
   }
 
   func numberOfPreviewItems(in controller: QLPreviewController) -> Int { 1 }
 
   func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
-    url as NSURL
+    item
   }
 
   func previewControllerDidDismiss(_ controller: QLPreviewController) {

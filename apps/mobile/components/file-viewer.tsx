@@ -1,9 +1,8 @@
-import { File, Paths } from "expo-file-system";
+import { Directory, File, Paths } from "expo-file-system";
 import { Image } from "expo-image";
 import * as Sharing from "expo-sharing";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, ScrollView, Text, View } from "react-native";
-import { AppActivityIndicator } from "@/components/app-activity-indicator";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { PixelRatio, Platform, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { SheetModal } from "@/components/app-sheet";
 import { EmptyState, FloatingGlassButton } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -11,121 +10,194 @@ import { getCurrentSessionCookie } from "@/lib/api";
 import { apiAssetUrl } from "@/lib/directory";
 import { editionHeaders } from "@/lib/edition";
 import { useLocale } from "@/lib/i18n";
-import filePreview from "@/modules/file-preview";
+import filePreview, { type RenderedPdf } from "@/modules/file-preview";
 import { colors } from "@/theme/colors";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } from "@/theme/dynamic-type";
 import { type } from "@/theme/tokens";
 
+/** A private API file to show: its route, the name it is saved and shared as, and its type. */
+export interface PrivateFile {
+  /** Root-relative API route. */
+  path: string;
+  fileName: string;
+  mimeType: string;
+  /** The viewer's title. */
+  title: string;
+}
+
 type ViewerState =
   | { status: "loading" }
-  | { status: "ready"; uri: string }
+  | { status: "ready"; uri: string; pdf: RenderedPdf | null }
   | { status: "missing" }
   | { status: "error" };
 
 const HEADER_HEIGHT = 76;
+const PAGE_GAP = 12;
 
 /** A cache file name that keeps the extension Quick Look and Share rely on. */
-export function cacheFileName(name: string) {
-  return `viewer-${name.replace(/[^a-zA-Z0-9._-]/g, "_") || "file"}`;
+function safeFileName(name: string) {
+  return name.replace(/[^a-zA-Z0-9._-]/g, "_") || "file";
 }
 
 /**
- * In-app viewer for private API files (#935, H16). The route needs the
- * session, so the file is downloaded with the session cookie into the cache
- * and shown locally: photos fill the sheet with pinch zoom, PDFs scroll with
- * `react-native-pdf`, anything else offers Share. A file that is gone or no
- * longer visible answers 404/403 and shows `missingTitle`.
+ * Downloads a private file with the session into its own cache directory, so
+ * Quick Look and Share see the real file name. A route answering 404/403
+ * means the file is gone or no longer visible.
  */
-export function FileViewer({
-  visible,
-  title,
-  path,
-  fileName,
-  mimeType,
-  onClose,
+async function downloadPrivateFile(file: PrivateFile): Promise<ViewerState> {
+  const url = apiAssetUrl(file.path);
+  const headers = { Cookie: getCurrentSessionCookie(), ...editionHeaders() };
+  try {
+    const directory = new Directory(Paths.cache, "viewer");
+    if (!directory.exists) directory.create({ intermediates: true, idempotent: true });
+    const destination = new File(directory, safeFileName(file.fileName));
+    if (destination.exists) destination.delete();
+    const downloaded = await File.downloadFileAsync(url, destination, {
+      headers,
+      idempotent: true,
+    });
+    return { status: "ready", uri: downloaded.uri, pdf: null };
+  } catch {
+    // The download error does not carry the status; ask the route itself.
+    const status = await fetch(url, { method: "HEAD", headers }).then(
+      (response) => response.status,
+      () => 0,
+    );
+    return { status: status === 404 || status === 403 ? "missing" : "error" };
+  }
+}
+
+function deleteDirectory(uri: string | undefined) {
+  if (!uri) return;
+  try {
+    const directory = new Directory(uri);
+    if (directory.exists) directory.delete();
+  } catch {
+    // The system clears the cache eventually.
+  }
+}
+
+/**
+ * Opens private API files (#935, H16). The caller's button shows `pending`
+ * while the file downloads with the session; then a PDF opens straight in
+ * Quick Look on iOS, or as pages rendered by the system PdfRenderer in the
+ * viewer sheet on Android. Photos fill the sheet with pinch zoom, anything
+ * else (or a PDF no viewer can show) offers Share, and a failure opens the
+ * sheet with the reason. The app bundles no PDF engine.
+ */
+export function usePrivateFile({
   errorMessage,
   missingTitle,
   shareLabel,
   testID = "file-viewer",
 }: {
-  visible: boolean;
-  title: string;
-  /** Root-relative API route. */
-  path: string;
-  fileName: string;
-  mimeType: string;
-  onClose: () => void;
   errorMessage: string;
   missingTitle: string;
   shareLabel: string;
   testID?: string;
+}): { open: (file: PrivateFile) => void; pending: string | null; viewer: ReactNode } {
+  const { width } = useWindowDimensions();
+  const [shown, setShown] = useState<{ file: PrivateFile; state: ViewerState } | null>(null);
+  const [pending, setPending] = useState<string | null>(null);
+  const request = useRef(0);
+  const pageDirectory = useRef<string | undefined>(undefined);
+
+  const load = useCallback(
+    async (file: PrivateFile, inSheet: boolean) => {
+      const id = ++request.current;
+      if (inSheet) setShown({ file, state: { status: "loading" } });
+      else setPending(file.path);
+      let state = await downloadPrivateFile(file);
+      if (id !== request.current) return;
+      const isPdf = file.mimeType === "application/pdf";
+      if (state.status === "ready" && isPdf && filePreview) {
+        if (Platform.OS === "ios") {
+          setPending(null);
+          setShown(null);
+          try {
+            await filePreview.preview(state.uri, file.title);
+            return;
+          } catch {
+            // Falls through to the sheet's Share.
+          }
+        } else {
+          try {
+            const pdf = await filePreview.renderPdf(
+              state.uri,
+              Math.round(width * PixelRatio.get()),
+            );
+            if (id !== request.current) return deleteDirectory(pdf.directory);
+            pageDirectory.current = pdf.directory;
+            state = { ...state, pdf };
+          } catch {
+            // A PDF the renderer cannot read keeps Share.
+          }
+        }
+      }
+      if (id !== request.current) return;
+      setPending(null);
+      setShown({ file, state });
+    },
+    [width],
+  );
+
+  const open = useCallback(
+    (file: PrivateFile) => {
+      if (pending) return;
+      void load(file, false);
+    },
+    [load, pending],
+  );
+
+  const close = useCallback(() => {
+    request.current += 1;
+    deleteDirectory(pageDirectory.current);
+    pageDirectory.current = undefined;
+    setShown(null);
+  }, []);
+
+  useEffect(() => () => deleteDirectory(pageDirectory.current), []);
+
+  const viewer = shown ? (
+    <FileViewerSheet
+      file={shown.file}
+      state={shown.state}
+      onClose={close}
+      onRetry={() => void load(shown.file, true)}
+      errorMessage={errorMessage}
+      missingTitle={missingTitle}
+      shareLabel={shareLabel}
+      testID={testID}
+    />
+  ) : null;
+  return { open, pending, viewer };
+}
+
+function FileViewerSheet({
+  file,
+  state,
+  onClose,
+  onRetry,
+  errorMessage,
+  missingTitle,
+  shareLabel,
+  testID,
+}: {
+  file: PrivateFile;
+  state: ViewerState;
+  onClose: () => void;
+  onRetry: () => void;
+  errorMessage: string;
+  missingTitle: string;
+  shareLabel: string;
+  testID: string;
 }) {
   const { t } = useLocale();
-  const [state, setState] = useState<ViewerState>({ status: "loading" });
+  const { width } = useWindowDimensions();
   const [shareError, setShareError] = useState<Error | null>(null);
   const [sharing, setSharing] = useState(false);
-  const request = useRef(0);
-  const previewed = useRef<string | null>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-  const isPdf = mimeType === "application/pdf";
-  const isImage = mimeType.startsWith("image/");
-
-  const load = useCallback(async () => {
-    const id = ++request.current;
-    previewed.current = null;
-    setState({ status: "loading" });
-    const url = apiAssetUrl(path);
-    const cookie = getCurrentSessionCookie();
-    try {
-      const destination = new File(Paths.cache, cacheFileName(fileName));
-      if (destination.exists) destination.delete();
-      const file = await File.downloadFileAsync(url, destination, {
-        headers: { Cookie: cookie, ...editionHeaders() },
-        idempotent: true,
-      });
-      if (id === request.current) setState({ status: "ready", uri: file.uri });
-    } catch {
-      // The download error does not carry the status; ask the route itself
-      // whether the file is gone (404) or the request just failed.
-      const status = await fetch(url, {
-        method: "HEAD",
-        headers: { Cookie: cookie, ...editionHeaders() },
-      }).then(
-        (response) => response.status,
-        () => 0,
-      );
-      if (id === request.current) {
-        setState({ status: status === 404 || status === 403 ? "missing" : "error" });
-      }
-    }
-  }, [path, fileName]);
-
-  useEffect(() => {
-    if (visible) void load();
-    else request.current += 1;
-  }, [visible, load]);
-
-  // A downloaded PDF goes to the system viewer once; the sheet stays behind it
-  // as the fallback (file name and Share) if no viewer can open it.
-  useEffect(() => {
-    if (!isPdf || state.status !== "ready" || !filePreview) return;
-    if (previewed.current === state.uri) return;
-    previewed.current = state.uri;
-    const uri = state.uri;
-    const shown =
-      Platform.OS === "ios"
-        ? filePreview.preview(uri).then(() => true)
-        : filePreview.open(new File(uri).contentUri, mimeType, title);
-    shown.then(
-      (closed) => {
-        if (closed) onCloseRef.current();
-      },
-      () => {
-        // The Share fallback stays on screen.
-      },
-    );
-  }, [isPdf, state, mimeType, title]);
+  const isPdf = file.mimeType === "application/pdf";
+  const isImage = file.mimeType.startsWith("image/");
 
   async function share() {
     if (sharing || state.status !== "ready") return;
@@ -134,9 +206,9 @@ export function FileViewer({
     try {
       if (!(await Sharing.isAvailableAsync())) throw new Error(errorMessage);
       await Sharing.shareAsync(state.uri, {
-        mimeType,
+        mimeType: file.mimeType,
         ...(isPdf ? { UTI: "com.adobe.pdf" } : {}),
-        dialogTitle: title,
+        dialogTitle: file.title,
       });
     } catch (cause) {
       setShareError(cause instanceof Error ? cause : new Error(String(cause)));
@@ -145,18 +217,8 @@ export function FileViewer({
     }
   }
 
-  const failure = (
-    <View style={{ padding: 16 }}>
-      <RequestFeedback
-        error={new Error("File download failed")}
-        message={errorMessage}
-        onRetry={() => void load()}
-      />
-    </View>
-  );
-
   return (
-    <SheetModal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <SheetModal visible animationType="slide" onRequestClose={onClose}>
       <View testID={testID} style={{ backgroundColor: colors.background, flex: 1 }}>
         <View
           style={{
@@ -174,14 +236,31 @@ export function FileViewer({
             minimumFontScale={CHROME_MIN_FONT_SCALE}
             style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "600" }}
           >
-            {title}
+            {file.title}
           </Text>
         </View>
         {shareError ? (
           <RequestFeedback error={shareError} onRetry={() => void share()} retrying={sharing} />
         ) : null}
         <View style={{ flex: 1 }}>
-          {state.status === "ready" && isImage ? (
+          {state.status === "ready" && state.pdf ? (
+            <ScrollView
+              testID={`${testID}-pdf`}
+              maximumZoomScale={4}
+              minimumZoomScale={1}
+              contentContainerStyle={{ gap: PAGE_GAP, paddingBottom: 32 }}
+            >
+              {state.pdf.pages.map((page, index) => (
+                <Image
+                  key={page.uri}
+                  source={{ uri: page.uri }}
+                  accessibilityLabel={`${file.title} ${index + 1}/${state.pdf?.pages.length}`}
+                  contentFit="contain"
+                  style={{ aspectRatio: page.width / page.height, width }}
+                />
+              ))}
+            </ScrollView>
+          ) : state.status === "ready" && isImage ? (
             <ScrollView
               testID={`${testID}-image`}
               maximumZoomScale={4}
@@ -193,17 +272,23 @@ export function FileViewer({
             >
               <Image
                 source={{ uri: state.uri }}
-                accessibilityLabel={title}
+                accessibilityLabel={file.title}
                 contentFit="contain"
                 style={{ flex: 1, minHeight: 320 }}
               />
             </ScrollView>
           ) : state.status === "ready" ? (
-            <EmptyState icon="doc" title={fileName} />
+            <EmptyState icon="doc" title={file.fileName} />
           ) : state.status === "missing" ? (
             <EmptyState icon="doc.text" title={missingTitle} />
           ) : state.status === "error" ? (
-            failure
+            <View style={{ padding: 16 }}>
+              <RequestFeedback
+                error={new Error("File download failed")}
+                message={errorMessage}
+                onRetry={onRetry}
+              />
+            </View>
           ) : (
             <RequestFeedback loading />
           )}

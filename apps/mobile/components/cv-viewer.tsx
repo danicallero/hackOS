@@ -1,37 +1,25 @@
-import { FileViewer } from "@/components/file-viewer";
+import { usePrivateFile } from "@/components/file-viewer";
 import { cvFileName } from "@/lib/directory";
 import { useLocale } from "@/lib/i18n";
 
 /**
- * In-app CV viewer (#935): the shared private-file viewer with the profile's
- * CV wording. A CV that is gone or no longer shared shows "not available".
+ * Opens a CV (#935) through the shared private-file opener with the profile's
+ * CV wording: the CV button shows `opening` while it downloads, then the PDF
+ * opens. A CV that is gone or no longer shared shows "not available".
  */
-export function CvViewer({
-  visible,
-  title,
-  cvPath,
-  onClose,
-}: {
-  visible: boolean;
-  /** The person's name. */
-  title: string;
-  /** Root-relative API route, e.g. `/api/directory/7/cv`. */
-  cvPath: string;
-  onClose: () => void;
-}) {
+export function useCvViewer() {
   const { t } = useLocale();
-  return (
-    <FileViewer
-      visible={visible}
-      title={title}
-      path={cvPath}
-      fileName={cvFileName(title)}
-      mimeType="application/pdf"
-      onClose={onClose}
-      errorMessage={t("directoryCvError")}
-      missingTitle={t("directoryPersonNotFound")}
-      shareLabel={t("directoryCvShare")}
-      testID="cv-viewer"
-    />
-  );
+  const file = usePrivateFile({
+    errorMessage: t("directoryCvError"),
+    missingTitle: t("directoryPersonNotFound"),
+    shareLabel: t("directoryCvShare"),
+    testID: "cv-viewer",
+  });
+  return {
+    /** `title` is the person's name; `cvPath` the root-relative CV route. */
+    open: (title: string, cvPath: string) =>
+      file.open({ path: cvPath, fileName: cvFileName(title), mimeType: "application/pdf", title }),
+    opening: file.pending !== null,
+    viewer: file.viewer,
+  };
 }

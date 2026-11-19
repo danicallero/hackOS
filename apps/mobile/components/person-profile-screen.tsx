@@ -6,7 +6,7 @@ import Animated, { FadeIn, runOnJS, useAnimatedReaction } from "react-native-rea
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActivityLinkSection } from "@/components/activity-link-rows";
 import { AppRefreshControl } from "@/components/app-refresh-control";
-import { CvViewer } from "@/components/cv-viewer";
+import { useCvViewer } from "@/components/cv-viewer";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { FavouriteStar } from "@/components/favourite-star";
 import { FloatingBackButton } from "@/components/floating-back-button";
@@ -98,7 +98,7 @@ export function PersonProfileScreen({
   const [entry, setEntry] = useState<DiaryEntry | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState<"star" | "remove" | "note" | null>(null);
-  const [cvOpen, setCvOpen] = useState(false);
+  const cv = useCvViewer();
   const [editingNote, setEditingNote] = useState(false);
   const requestId = useRef(0);
   // Opened without a scan (a speaker or representative), there is no CV, star or note.
@@ -243,14 +243,7 @@ export function PersonProfileScreen({
           }}
         />
       ) : null}
-      {person?.cvUrl && showCv ? (
-        <CvViewer
-          visible={cvOpen}
-          title={person.displayName}
-          cvPath={person.cvUrl}
-          onClose={() => setCvOpen(false)}
-        />
-      ) : null}
+      {cv.viewer}
       <DiaryNoteEditor
         visible={editingNote && entry !== null}
         initialNote={entry?.note ?? null}
@@ -365,8 +358,10 @@ export function PersonProfileScreen({
                       icon="doc.text"
                       label={t("directoryCv")}
                       title={t("directoryCv")}
-                      busy={false}
-                      onPress={() => setCvOpen(true)}
+                      busy={cv.opening}
+                      onPress={() => {
+                        if (person.cvUrl) cv.open(person.displayName, person.cvUrl);
+                      }}
                     />
                   ) : null}
                 </View>

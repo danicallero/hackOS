@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
 import { FieldLibraryPicker } from "@/components/field-library-picker";
-import { FileViewer } from "@/components/file-viewer";
+import { usePrivateFile } from "@/components/file-viewer";
 import { Section, Separator, ToggleRow } from "@/components/native-ui";
 import { loadingImageStyle, useApiImage } from "@/components/person-avatar";
 import { PhotoCarousel } from "@/components/photo-carousel";
@@ -61,7 +61,11 @@ export function DynamicForm({
   uploading?: string | null;
 }) {
   const { t, language } = useLocale();
-  const [viewing, setViewing] = useState<ProjectFile | null>(null);
+  const viewer = usePrivateFile({
+    errorMessage: t("projectFileError"),
+    missingTitle: t("projectFileMissing"),
+    shareLabel: t("projectShareFile"),
+  });
   const [carousel, setCarousel] = useState<{ photos: ProjectFile[]; index: number } | null>(null);
   const fileFor = (key: unknown) =>
     typeof key === "string" ? files.find((entry) => entry.objectKey === key) : undefined;
@@ -157,7 +161,15 @@ export function DynamicForm({
           {file ? (
             <Attachment
               file={file}
-              onOpen={() => setViewing(file)}
+              opening={viewer.pending === file.url}
+              onOpen={() =>
+                viewer.open({
+                  path: file.url,
+                  fileName: file.fileName,
+                  mimeType: file.mimeType,
+                  title: file.fileName,
+                })
+              }
               onRemove={readOnly || disabled ? undefined : () => onChange?.(item.key, null)}
               removeLabel={t("projectRemoveFile")}
             />
@@ -379,19 +391,7 @@ export function DynamicForm({
   };
   return (
     <>
-      {viewing ? (
-        <FileViewer
-          visible
-          title={viewing.fileName}
-          path={viewing.url}
-          fileName={viewing.fileName}
-          mimeType={viewing.mimeType}
-          onClose={() => setViewing(null)}
-          errorMessage={t("projectFileError")}
-          missingTitle={t("projectFileMissing")}
-          shareLabel={t("projectShareFile")}
-        />
-      ) : null}
+      {viewer.viewer}
       {carousel ? (
         <PhotoCarousel
           photos={carousel.photos}
@@ -502,11 +502,14 @@ function Thumbnail({
 /** A file answer as one attachment row: preview, name, type and size; tap to view. */
 function Attachment({
   file,
+  opening,
   onOpen,
   onRemove,
   removeLabel,
 }: {
   file: ProjectFile;
+  /** The file is downloading before it opens. */
+  opening: boolean;
   onOpen: () => void;
   onRemove?: () => void;
   removeLabel: string;
@@ -518,6 +521,8 @@ function Attachment({
         feedback="opacity"
         accessibilityRole="button"
         accessibilityLabel={`${file.fileName}, ${fileSummary(file)}`}
+        accessibilityState={{ busy: opening }}
+        disabled={opening}
         onPress={onOpen}
         style={{ alignItems: "center", flex: 1, flexDirection: "row", gap: 12 }}
       >
@@ -533,6 +538,7 @@ function Attachment({
             {fileSummary(file)}
           </Text>
         </View>
+        {opening ? <AppActivityIndicator color={colors.secondaryLabel} /> : null}
       </PressableFeedback>
       {onRemove ? (
         <Pressable
