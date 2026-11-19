@@ -405,12 +405,12 @@ interaction still needs runtime verification.
 ## [R016] Verify that interaction feedback is perceptible
 
 Status: active
-Scope: module:web
+Scope: repository
 Source: user-correction
-Date: 2026-10-05
+Date: 2026-11-19
 
 ### Trigger
-Designing or changing hover, pressed, or other visual action states.
+Designing or changing visual intensity, including image backgrounds and action states.
 
 ### Mistake
 The primary button changed color on hover and passed text-contrast checks, but
@@ -421,7 +421,7 @@ Legible labels and different CSS values do not establish a perceptible state
 change. Interaction feedback must remain visible in the actual interface.
 
 ### Action
-Compare default, hover and pressed states in a running browser, in both themes.
+Compare the final composited result against the reference in both themes; native materials and extra veils can compound until an image becomes imperceptible. Compare default, hover and pressed states in a running browser when applicable.
 Inspect computed paint values and side-by-side captures; strengthen feedback
 when the difference is barely visible while preserving text contrast.
 

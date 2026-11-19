@@ -1331,8 +1331,8 @@ first project image) with `ImageHero`: the image itself, enlarged and softly blu
 while retaining broad logo shapes (iOS `BlurView` with a full-strength
 ultra-thin material matching the appearance, Android a 32 pt style `filter` blur;
 below Android 12 the single-colour wash), under a veil of the page colour
-(`ambientVeil`: 65% light, 55% dark, the values measured on the web hero so
-text over the image meets WCAG AA; the profile headline uses the label colour
+(`ambientVeil`: 20% light, 45% dark, accounting for the native material
+already adding its own wash; the profile headline uses the label colour
 there instead of grey) and masked to fade into the page, so each side keeps its own
 colour and labels keep the page's colour. It is the same request as the avatar
 or logo on the page: iOS blurs the rendered backdrop, so SVG logos and
