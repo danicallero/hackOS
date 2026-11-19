@@ -772,7 +772,7 @@ describe("profile avatar placeholder", () => {
     expect(screen.getByText("AH", { includeHiddenElements: true })).toBeTruthy();
   });
 
-  it("keeps the account initials visible when no photo exists", async () => {
+  it("keeps the assigned mascot visible when no photo exists", async () => {
     const controller = {
       anchorFrame: { left: 100, top: 220, width: 96, height: 96 },
       hostOrigin: { x: 0, y: 0 },
@@ -783,19 +783,15 @@ describe("profile avatar placeholder", () => {
     } as unknown as ProfileAvatarCollapseController;
 
     await renderMobile(
-      <ProfileAvatarCollapse
-        controller={controller}
-        image={null}
-        name="Admin HackOS"
-        size={96}
-        variant="account"
-      />,
+      <ProfileAvatarCollapse controller={controller} image={null} name="Admin HackOS" size={96} />,
     );
 
     expect(
       screen.getByTestId("profile-avatar-collapse-mask", { includeHiddenElements: true }),
     ).toBeTruthy();
-    expect(screen.getByText("AH", { includeHiddenElements: true })).toBeTruthy();
+    expect(
+      screen.getByTestId("profile-avatar-content-image", { includeHiddenElements: true }),
+    ).toBeTruthy();
   });
 
   describe("handover after the carry", () => {
@@ -822,7 +818,6 @@ describe("profile avatar placeholder", () => {
             image={null}
             name="Admin HackOS"
             size={96}
-            variant="account"
           />
         </>,
       );
@@ -1310,7 +1305,6 @@ describe("android hole-punch gooey overlay", () => {
         image={null}
         name="Admin HackOS"
         size={96}
-        variant="account"
       />,
     );
   };
@@ -1330,7 +1324,9 @@ describe("android hole-punch gooey overlay", () => {
     expect(gooey.props.holeDiameter).toBe(36);
     expect(gooey.props.holeX).toBe(200 - 152 + 24);
     expect(gooey.props.holeY).toBe(25 - 7 + 24);
-    expect(screen.getByText("AH", { includeHiddenElements: true })).toBeTruthy();
+    expect(
+      screen.getByTestId("profile-avatar-content-image", { includeHiddenElements: true }),
+    ).toBeTruthy();
   });
 
   it("draws no overlay on Android without a hole punch, leaving the avatar in the content", async () => {

@@ -54,6 +54,7 @@ export default function TabLayout() {
         capabilities={capabilities}
         hasQueueItems={me.hasQueueItems}
         account={{
+          userId: me.id,
           name: [me.name, me.surname].filter(Boolean).join(" ") || me.email,
           image: me.image,
         }}

@@ -42,7 +42,9 @@
     "./phone": "./src/phone.ts",
     "./idempotency": "./src/idempotency.ts",
     "./projects": "./src/projects.ts",
-    "./youtube": "./src/youtube.ts"
+    "./youtube": "./src/youtube.ts",
+    "./mascot-avatars": "./src/mascot-avatars.ts",
+    "./assets/avatars/*": "./assets/avatars/*"
   },
   "scripts": {
     "build": "tsc --noEmit",

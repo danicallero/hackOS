@@ -1,6 +1,7 @@
 "use client";
 
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { mascotAvatarChoice } from "@hackos/shared/mascot-avatars";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import Link from "next/link";
 import { useEffect, useMemo } from "react";
@@ -258,7 +259,7 @@ export function PersonProfile({
   return (
     <>
       <HeroBleed
-        color={entry.photoColor}
+        color={entry.photoColor ?? mascotAvatarChoice(entry.userId).background}
         ambient={photo ? { urls: [photo], active: photo } : undefined}
       >
         <div className="flex items-center justify-between gap-3">
@@ -267,11 +268,10 @@ export function PersonProfile({
         </div>
         <header className="flex flex-col items-center gap-3 pt-6 text-center sm:flex-row sm:items-center sm:gap-6 sm:text-left">
           <UserAvatar
+            userId={entry.userId}
             name={entry.displayName}
             image={entry.photoUrl}
             className="size-28 shrink-0 shadow-md ring-4 ring-background/70 sm:size-32"
-            fallbackClassName="text-3xl"
-            showInitials
             decorative
             presenceLabel={present ? t("helpDeskPresent") : undefined}
           />

@@ -127,11 +127,11 @@ export default function HelpdeskPage() {
   const identity = (helper: HelperCard) => (
     <div className="flex min-w-0 items-center gap-3">
       <UserAvatar
+        userId={helper.userId}
         name={helper.displayName}
         image={helper.photoUrl}
         decorative
         className="size-8 shrink-0"
-        showInitials
         presenceLabel={helper.present ? t("helpDeskPresent") : undefined}
       />
       <div className="min-w-0">

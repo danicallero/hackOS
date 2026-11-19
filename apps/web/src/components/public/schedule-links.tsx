@@ -46,13 +46,12 @@ export function SpeakerStack({
     >
       {shown.map((s, i) => (
         <UserAvatar
+          userId={s.userId}
           key={s.userId}
           name={s.name}
           image={s.avatarUrl}
           className="relative size-7 ring-2 ring-background"
           style={{ zIndex: shown.length - i + 1 }}
-          fallbackClassName={cn("text-[0.625rem] leading-none tracking-tight", i > 0 && "pl-2")}
-          showInitials
           decorative
         />
       ))}
@@ -179,11 +178,10 @@ export function ScheduleLinksDetail({ item }: { item: Links }) {
                     className="-mx-1 flex min-w-0 items-center gap-2 px-1 py-1"
                   >
                     <UserAvatar
+                      userId={s.userId}
                       name={s.name}
                       image={s.avatarUrl}
                       className="size-8"
-                      fallbackClassName="text-xs"
-                      showInitials
                       decorative
                     />
                     <span className="min-w-0">

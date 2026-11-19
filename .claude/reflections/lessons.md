@@ -917,7 +917,7 @@ see) hides those fields, but keeps the same component and layout.
 Status: active
 Scope: repository
 Source: user-correction
-Date: 2026-11-10
+Date: 2026-11-19
 
 ### Trigger
 Designing a new branded output (share card, poster, certificate, email block)
@@ -944,7 +944,10 @@ Look at the real rendered artifact (e.g. screenshot of the Wallet pass), copy
 its structure and proportions, and reuse the shared primitives (Button,
 DropdownMenu, toast, Skeleton) instead of custom panels. Keep one preview, one
 primary action and move secondary actions into a menu. Ship only assets taken
-from the repo (copy them under a namespaced public folder) and say which.
+from the repo or explicitly supplied by the user and say which. For variants
+of existing mascots, first compose their original pixels with crop, scale,
+rotation and background; do not interpret “generate variants” as permission to
+redraw established characters with image generation.
 
 ### Validation
 Show before/after screenshots of the real component and an exported image
@@ -1025,6 +1028,35 @@ Use `apiErrorText` for the message and pass `onRetry` only when the error is tra
 
 ### Validation
 A component test renders a 4xx failure and asserts the reason is visible with no Retry, and a 5xx failure that does offer Retry.
+
+### Exceptions
+None.
+
+## [R039] Check static image imports without generated Next declarations
+
+Status: active
+Scope: module:web
+Source: user-correction
+Date: 2026-11-19
+
+### Trigger
+Adding static image imports to the web client.
+
+### Mistake
+Local typechecking passed because next dev had created the ignored next-env.d.ts;
+CI ran tsc before Next and could not resolve the PNG modules.
+
+### Lesson
+A local development server can supply untracked declarations that a clean CI
+checkout does not have.
+
+### Action
+Keep the official Next static-image type reference in tracked source. Validate
+source typechecking without next-env.d.ts or generated .next types.
+
+### Validation
+Run the source typecheck without generated declarations, then the normal CI
+workspace typecheck; confirm the remote check passes on the pushed commit.
 
 ### Exceptions
 None.

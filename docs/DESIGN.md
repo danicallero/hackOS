@@ -541,14 +541,13 @@ ordinary text, not status pills; reserve badges for meaningful changing state.
   do not solve categorisation with repeated heavy dividers or all-caps labels.
   In the collapsed icon rail the labels reduce to non-interactive separators
   and every destination remains directly reachable.
-- The footer is an account utility row: identity is text-first (name and email,
-  no fabricated initials or fallback avatar). When the person has uploaded an
-  account photo it leads the row as a small `UserAvatar`, and the account menu
-  header repeats it; without one the row stays text only. The appearance
+- The footer is an account utility row: identity combines name/email with a small `UserAvatar`, repeated in the
+  account menu header. When no account photo is available, use the shared
+  deterministic HackUDC mascot and its independently selected background. The appearance
   control sits at the row's trailing edge. The account menu contains Profile,
   the quick language switcher, and Sign out. On the icon rail, text can hide
-  but the account action remains a labelled control: the photo when there is
-  one, otherwise the user icon.
+  but the account action remains a labelled control, showing the same photo
+  or deterministic mascot.
 
 ```tsx
 <SectionCard
@@ -1077,11 +1076,10 @@ Tables and lists:
   text. Use wrapping or clamping when the column allows it. Row actions stay in
   a stable trailing column. Primary create actions for a table align to that
   trailing edge, close to the side-panel origin.
-- User tables stay text-first when no profile image exists; do not synthesize
-  initials into avatar circles, which adds height without adding identity.
-  A real account photo leads the name cell (`UserAvatar`, decorative beside
-  the visible name). Initials belong only where the photo itself is the
-  subject, such as the photo editor and the mobile Account header.
+- User tables keep the visible name as the identity label. A small `UserAvatar`
+  leads the name cell, decorative beside the text: the real account photo when
+  available, otherwise the same deterministic HackUDC mascot and background used
+  in profiles, mobile and social sharing. Keep its size consistent across rows.
 - An inline-editable grid navigates like a spreadsheet: arrows move between
   cells, Tab/Enter commit and move, Escape reverts — and both the row-selection
   checkbox and the row actions are cells too, so nothing in a row needs a

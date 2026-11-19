@@ -1325,6 +1325,14 @@ or the offline notice with Reconnect) replaces the placeholders; Retry appears
 only when retrying can help (offline, 429, 5xx). Without a seed the full-page
 error stays, and 404/403 still shows "Profile not available".
 
+**Default person avatars (#934, H55).** `UserAvatar`, `PersonAvatar` and the
+native profile-avatar morph use the same transparent mascot composition and
+background as the web, selected by the person's id through
+`@hackos/shared/mascot-avatars`. The photo editor, account tab, diary, helper,
+speaker and team-member surfaces pass this id; a real photo replaces the mascot
+once loaded. A no-photo person header uses the assigned avatar background colour. Missing or unavailable people keep their generic symbol. Assets,
+selection algorithm and regeneration are documented in [`directory.md`](./directory.md#default-avatars-934-h55).
+
 **Image heroes (H44, H45, H48).** Person, company, challenge and project
 pages wash their header in their image (photo, logo, the company's logo, the
 first project image) with `ImageHero`: the image itself, enlarged and blurred
@@ -1401,7 +1409,7 @@ layer lifetime. The canvas converges to the cutout's lower edge as in Swift's
 backing follows mask progress, with the separate `-0.25 + progress * 1.55`
 fade curve and the radial gradient stops from `DynamicIslandBlurNode`.
 The React Native cover currently uses dark paint rather than UIKit's animated
-native blur. Static photos and initials share the mask; optional live avatar
+native blur. Static photos and deterministic mascots share the mask; optional live avatar
 children remain inside it.
 On iOS, the target uses window-space safe-area geometry because UIKit does not
 expose the Dynamic Island frame to apps. The hardware island is 126 x 37.33 pt

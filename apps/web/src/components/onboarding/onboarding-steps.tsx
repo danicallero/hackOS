@@ -344,6 +344,7 @@ export function ShareCard({
         hideTitle={hideTitle}
         event={event}
         attendee={{
+          userId: me.id,
           displayName: [me.name, me.surname].filter(Boolean).join(" "),
           roleLabel: me.visibleRoleName ?? undefined,
           photoUrl: me.image,

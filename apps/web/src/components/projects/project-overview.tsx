@@ -70,14 +70,15 @@ export function ProjectOverview({
                 .filter((member) => member.status !== "declined" && member.name)
                 .map((member) => (
                   <li key={member.userId} className="flex items-center gap-3 py-3">
-                    {member.photoUrl && (
+                    {
                       <UserAvatar
+                        userId={member.userId}
                         name={`${member.name ?? ""} ${member.surname ?? ""}`.trim()}
-                        image={assetUrl(member.photoUrl)}
+                        image={member.photoUrl ? assetUrl(member.photoUrl) : null}
                         className="size-10"
                         decorative
                       />
-                    )}
+                    }
                     <span className="min-w-0 flex-1 wrap-anywhere">
                       {`${member.name ?? ""} ${member.surname ?? ""}`.trim()}
                     </span>

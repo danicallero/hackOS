@@ -85,15 +85,12 @@ describe("UserMenu account photo (#934)", () => {
     expect(trigger().getAttribute("aria-label")).toBe("Lucía lucia@example.com");
   });
 
-  it("stays text-first without a photo: no initials avatar is fabricated", async () => {
+  it("uses the assigned mascot without a photo", async () => {
     await act(async () => root.render(<UserMenu />));
-    expect(trigger().querySelector('[data-slot="avatar"]')).toBeNull();
+    expect(trigger().querySelector('[data-slot="avatar-fallback"] img')).not.toBeNull();
     // H55: the visible name/email must also occur, with spacing, in the accessible name.
     expect(trigger().textContent).toBe("Lucía lucia@example.com");
-    // The icon only appears on the collapsed rail, where the text is hidden.
-    expect(trigger().querySelector("svg")?.getAttribute("class")).toContain(
-      "group-data-[collapsible=icon]:block",
-    );
+    expect(trigger().querySelector("img")?.getAttribute("alt")).toBe("");
 
     session.me.name = null;
     await act(async () => root.render(<UserMenu />));
@@ -102,7 +99,11 @@ describe("UserMenu account photo (#934)", () => {
 
     const user = userEvent.setup();
     await act(async () => user.click(trigger()));
-    expect(document.querySelector('[role="menu"] [data-slot="avatar"]')).toBeNull();
+    expect(
+      document
+        .querySelector('[role="menu"] [data-slot="avatar-fallback"] img')
+        ?.getAttribute("src"),
+    ).toBe(trigger().querySelector("img")?.getAttribute("src"));
   });
 
   it("repeats the photo with the full name in the open menu", async () => {

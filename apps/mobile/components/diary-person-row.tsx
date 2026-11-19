@@ -23,6 +23,7 @@ const MENU_ONLY_WIDTH = 44;
  */
 export function DiaryPersonRow({
   name,
+  userId,
   photoUrl,
   headline,
   detail,
@@ -37,6 +38,7 @@ export function DiaryPersonRow({
   testID,
 }: {
   name: string;
+  userId?: number;
   photoUrl: string | null;
   headline?: string | null;
   detail?: string | null;
@@ -60,11 +62,11 @@ export function DiaryPersonRow({
       {href ? (
         <Link.AppleZoom>
           <View>
-            <PersonAvatar size={48} name={available ? name : null} uri={photoUrl} />
+            <PersonAvatar userId={userId} size={48} name={available ? name : null} uri={photoUrl} />
           </View>
         </Link.AppleZoom>
       ) : (
-        <PersonAvatar size={48} name={available ? name : null} uri={photoUrl} />
+        <PersonAvatar userId={userId} size={48} name={available ? name : null} uri={photoUrl} />
       )}
       <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
         <Text

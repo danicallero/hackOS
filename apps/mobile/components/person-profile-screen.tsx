@@ -37,8 +37,8 @@ import type { DiaryEntry } from "@/lib/diary";
 import type { DirectoryEntry } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
 import { availabilityDays, type HelperDetail } from "@/lib/help-desk";
-import { NO_PHOTO_TINT } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
+import { mascotBackgroundRgb } from "@/lib/mascot-avatar";
 import { safeBack } from "@/lib/navigation";
 import { isTransientError } from "@/lib/offline-error";
 import {
@@ -259,8 +259,9 @@ export function PersonProfileScreen({
   // H61: only the help desk shows a helper's role; the seed carries it until the helper loads.
   const roleName =
     helper?.visibleRoleName ?? (person || source !== "helpDesk" ? null : seed?.roleName);
-  // H44/H48: the photo's own colours behind the header; blue without a photo.
-  const nameColor = useImageHeroForeground(shown?.photoUrl, dark, NO_PHOTO_TINT);
+  // H44/H48: the photo's colours, or the same colour as the assigned mascot.
+  const noPhotoTint = mascotBackgroundRgb(shown?.userId, shown?.displayName);
+  const nameColor = useImageHeroForeground(shown?.photoUrl, dark, noPhotoTint);
 
   // Reopening this person, or a company listed here, starts from what is known now.
   useEffect(() => {
@@ -322,12 +323,7 @@ export function PersonProfileScreen({
         }
       >
         {shown ? (
-          <ImageHero
-            uri={shown.photoUrl}
-            dark={dark}
-            fallback={NO_PHOTO_TINT}
-            testID="person-hero"
-          />
+          <ImageHero uri={shown.photoUrl} dark={dark} fallback={noPhotoTint} testID="person-hero" />
         ) : null}
         {loadError && state.status === "ready" ? (
           <RequestFeedback
@@ -392,7 +388,12 @@ export function PersonProfileScreen({
               avatar={
                 <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={avatarSize}>
                   <Link.AppleZoomTarget>
-                    <PersonAvatar size={avatarSize} name={shown.displayName} uri={shown.photoUrl} />
+                    <PersonAvatar
+                      userId={shown.userId}
+                      size={avatarSize}
+                      name={shown.displayName}
+                      uri={shown.photoUrl}
+                    />
                   </Link.AppleZoomTarget>
                 </ProfileAvatarCollapseAnchor>
               }
@@ -572,11 +573,11 @@ export function PersonProfileScreen({
       </Animated.ScrollView>
       {shown ? (
         <ProfileAvatarCollapse
+          userId={shown.userId}
           controller={avatarCollapse}
           image={shown.photoUrl}
           name={shown.displayName}
           size={avatarSize}
-          variant="person"
         />
       ) : null}
       {roleName ? (

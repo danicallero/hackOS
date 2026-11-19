@@ -1,3 +1,4 @@
+import { mascotAvatarChoice } from "@hackos/shared/mascot-avatars";
 import MaskedView from "@react-native-masked-view/masked-view";
 import * as Device from "expo-device";
 import { Image } from "expo-image";
@@ -16,7 +17,6 @@ import {
   type LayoutChangeEvent,
   Platform,
   type ScrollView,
-  Text,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -31,9 +31,8 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 import { loadingImageStyle, useApiImage } from "@/components/person-avatar";
-import { avatarInitials } from "@/components/user-avatar";
-import { diaryInitials } from "@/lib/diary";
 import { haptic } from "@/lib/haptics";
+import { mascotAvatar } from "@/lib/mascot-avatar";
 import {
   PROFILE_AVATAR_COLLAPSE_DISTANCE,
   PROFILE_AVATAR_MERGE_PROGRESS,
@@ -47,7 +46,6 @@ import {
   profileAvatarContentFrame,
   profileAvatarContentRadii,
   profileAvatarCoverOpacity,
-  profileAvatarMaskFrame,
   profileAvatarMinContentHeight,
   profileAvatarMorphPath,
   profileAvatarRestingOffsetBound,
@@ -64,7 +62,6 @@ import { ProfileGooeyView } from "@/modules/profile-gooey";
 import { colors } from "@/theme/colors";
 
 type ProfileAvatarFrame = ProfileCameraCutoutFrame;
-type AvatarVariant = "account" | "person";
 
 export type ProfileAvatarCollapseController = ReturnType<typeof useProfileAvatarCollapse>;
 
@@ -599,8 +596,8 @@ function ProfileAvatarMorph({
   controller,
   image,
   name,
+  userId,
   size,
-  variant,
   collapseDistance = PROFILE_AVATAR_COLLAPSE_DISTANCE,
   persist = false,
   children,
@@ -610,16 +607,19 @@ function ProfileAvatarMorph({
   /** The signed-in person's own photo: kept on disk to show offline. */
   persist?: boolean;
   name: string;
+  userId?: string | number;
   size: number;
-  variant: AvatarVariant;
   collapseDistance?: number;
   /** Optional live avatar content (video, rings or overlays), inside the same mask. */
   children?: ReactNode;
 }) {
   const photo = useApiImage(image, persist);
   // The photo layers render once it has loaded (then from the memory cache);
-  // until then a hidden loader fetches it and the initials stay (#934).
-  const source = photo.loaded ? (photo.props?.source ?? null) : null;
+  // until then a hidden loader fetches it and the mascot stays (#934).
+  const source = photo.loaded
+    ? (photo.props?.source ?? mascotAvatar(userId, name))
+    : mascotAvatar(userId, name);
+  const mascotGround = mascotAvatarChoice(userId, name).background;
   const loader =
     photo.props && !photo.loaded ? (
       <Image {...photo.props} style={[{ height: size, width: size }, loadingImageStyle]} />
@@ -699,24 +699,7 @@ function ProfileAvatarMorph({
     const frame = profileAvatarContentFrame(size, from, localTarget, progress);
     return { ...frame, ...profileAvatarContentRadii(frame, progress) };
   }, [size, localStart, localTarget, carry, distance]);
-  const initialsStyle = useAnimatedStyle(() => {
-    const { shift, progress: p } = profileAvatarCarry(scrollOffset.value, carry, distance);
-    const from = { ...localStart, top: localStart.top - shift };
-    const frame = profileAvatarMaskFrame(size, from, localTarget, p);
-    // Centred where the photo would be, on the clip's blob (#935).
-    const content = profileAvatarContentFrame(size, from, localTarget, p);
-    return {
-      left: content.left + content.width / 2 - frame.width / 2,
-      top:
-        content.top +
-        content.height -
-        Math.min(content.width, content.height) / 2 -
-        frame.height / 2,
-      width: frame.width,
-      height: frame.height,
-      transform: [{ scale: 1 - p * 0.5 }],
-    };
-  }, [size, localStart, localTarget, carry, distance]);
+
   const coverStyle = useAnimatedStyle(() => {
     const p = profileAvatarCarry(scrollOffset.value, carry, distance).progress;
     return { opacity: profileAvatarCoverOpacity(p) };
@@ -741,9 +724,6 @@ function ProfileAvatarMorph({
     return { opacity: Math.min(1, Math.max(0, (p - 0.35) / 0.45)) };
   }, [carry, distance]);
   if (!anchorFrame || simple) return null;
-  const fallbackColor = variant === "account" ? colors.accent : colors.accentSurface;
-  const initialsColor = variant === "account" ? colors.accentText : colors.onAccentSurface;
-  const initials = variant === "account" ? avatarInitials(name) : diaryInitials(name);
   if (gooey && AnimatedProfileGooeyView) {
     return (
       <Animated.View
@@ -761,6 +741,7 @@ function ProfileAvatarMorph({
           holeDiameter={Math.min(gooeyHole.width, gooeyHole.height)}
           style={absoluteFill}
         >
+          {loader}
           {/* Laid out once at the expanded frame; the native view scales it. */}
           <View
             collapsable={false}
@@ -774,29 +755,19 @@ function ProfileAvatarMorph({
               overflow: "hidden",
               alignItems: "center",
               justifyContent: "center",
-              backgroundColor: source || children ? colors.elevatedSurface : fallbackColor,
+              backgroundColor: photo.loaded || children ? colors.elevatedSurface : mascotGround,
             }}
           >
-            {children ??
-              (source ? (
-                <Image
-                  accessible={false}
-                  source={source}
-                  cachePolicy={persist ? "disk" : "memory"}
-                  contentFit="cover"
-                  style={{ height: size, width: size, borderRadius: size / 2 }}
-                />
-              ) : (
-                <>
-                  <Text
-                    accessible={false}
-                    style={{ color: initialsColor, fontSize: size * 0.36, fontWeight: "700" }}
-                  >
-                    {initials}
-                  </Text>
-                  {loader}
-                </>
-              ))}
+            {children ?? (
+              <Image
+                testID="profile-avatar-content-image"
+                accessible={false}
+                source={source}
+                cachePolicy={persist ? "disk" : "memory"}
+                contentFit="cover"
+                style={{ height: size, width: size, borderRadius: size / 2 }}
+              />
+            )}
           </View>
         </AnimatedProfileGooeyView>
       </Animated.View>
@@ -823,62 +794,47 @@ function ProfileAvatarMorph({
           </Svg>
         }
       >
+        {loader}
         <View
           style={[
             absoluteFill,
-            { backgroundColor: source || children ? colors.elevatedSurface : fallbackColor },
+            { backgroundColor: photo.loaded || children ? colors.elevatedSurface : mascotGround },
           ]}
         />
-        {children || source ? (
-          <Animated.View style={[{ position: "absolute", overflow: "hidden" }, contentStyle]}>
-            {children ?? (
-              <>
+        <Animated.View style={[{ position: "absolute", overflow: "hidden" }, contentStyle]}>
+          {children ?? (
+            <>
+              <Image
+                accessible={false}
+                testID="profile-avatar-content-image"
+                source={source}
+                cachePolicy={persist ? "disk" : "memory"}
+                contentFit="cover"
+                style={{ height: "100%", width: "100%" }}
+              />
+              <Animated.View style={[absoluteFill, softBlurStyle]}>
                 <Image
                   accessible={false}
+                  blurRadius={6}
                   source={source}
                   cachePolicy={persist ? "disk" : "memory"}
                   contentFit="cover"
-                  style={{ height: "100%", width: "100%" }}
+                  style={absoluteFill}
                 />
-                <Animated.View style={[absoluteFill, softBlurStyle]}>
-                  <Image
-                    accessible={false}
-                    blurRadius={6}
-                    source={source}
-                    cachePolicy={persist ? "disk" : "memory"}
-                    contentFit="cover"
-                    style={absoluteFill}
-                  />
-                </Animated.View>
-                <Animated.View style={[absoluteFill, strongBlurStyle]}>
-                  <Image
-                    accessible={false}
-                    blurRadius={18}
-                    source={source}
-                    cachePolicy={persist ? "disk" : "memory"}
-                    contentFit="cover"
-                    style={absoluteFill}
-                  />
-                </Animated.View>
-              </>
-            )}
-          </Animated.View>
-        ) : (
-          <Animated.View
-            style={[
-              { position: "absolute", alignItems: "center", justifyContent: "center" },
-              initialsStyle,
-            ]}
-          >
-            <Animated.Text
-              accessible={false}
-              style={{ color: initialsColor, fontSize: size * 0.36, fontWeight: "700" }}
-            >
-              {initials}
-            </Animated.Text>
-            {loader}
-          </Animated.View>
-        )}
+              </Animated.View>
+              <Animated.View style={[absoluteFill, strongBlurStyle]}>
+                <Image
+                  accessible={false}
+                  blurRadius={18}
+                  source={source}
+                  cachePolicy={persist ? "disk" : "memory"}
+                  contentFit="cover"
+                  style={absoluteFill}
+                />
+              </Animated.View>
+            </>
+          )}
+        </Animated.View>
         <Animated.View style={[absoluteFill, { backgroundColor: "#000" }, blackStyle]} />
         <Animated.View style={[absoluteFill, { backgroundColor: "#000" }, coverStyle]} />
         <Animated.View

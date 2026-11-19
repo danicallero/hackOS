@@ -1,3 +1,4 @@
+import { mascotAvatarChoice } from "@hackos/shared/mascot-avatars";
 import { Image, type ImageProps } from "expo-image";
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -7,6 +8,7 @@ import { useColorScheme } from "@/components/useColorScheme";
 import { diaryInitials } from "@/lib/diary";
 import { apiImageSource } from "@/lib/directory";
 import { prefetchImageTint, useImageBleed } from "@/lib/image-tint";
+import { mascotAvatar } from "@/lib/mascot-avatar";
 import { colors } from "@/theme/colors";
 import { motion } from "@/theme/tokens";
 
@@ -78,7 +80,7 @@ export function useFallbackFade(loaded: boolean) {
 }
 
 /**
- * A directory photo, initials or a placeholder symbol (#934). Initials show
+ * A directory photo, assigned mascot or a placeholder symbol (#934). Mascots show
  * until the authenticated photo arrives, then cross-fade into it. Person
  * photos are round and cropped; sponsor logos keep their shape inside a
  * rounded tile.
@@ -86,12 +88,14 @@ export function useFallbackFade(loaded: boolean) {
 export function PersonAvatar({
   size,
   name,
+  userId,
   uri,
   kind = "person",
   logoNegativeUrl,
   testID,
 }: {
   size: number;
+  userId?: string | number;
   name?: string | null;
   uri: string | null;
   kind?: "person" | "sponsor";
@@ -134,7 +138,19 @@ export function PersonAvatar({
           fallbackFade,
         ]}
       >
-        {name ? (
+        {kind === "person" && name ? (
+          <Image
+            testID={testID ? `${testID}-mascot` : undefined}
+            source={mascotAvatar(userId, name)}
+            accessible={false}
+            contentFit="cover"
+            style={{
+              height: size,
+              width: size,
+              backgroundColor: mascotAvatarChoice(userId, name).background,
+            }}
+          />
+        ) : name ? (
           <Text
             accessible={false}
             style={{ color: colors.onAccentSurface, fontSize: size * 0.36, fontWeight: "600" }}

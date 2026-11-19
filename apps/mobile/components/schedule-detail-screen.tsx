@@ -386,6 +386,7 @@ export function ScheduleDetailScreen({
                     inset={0}
                     items={(detailItem?.speakers ?? []).map((speaker) => ({
                       key: String(speaker.userId),
+                      userId: speaker.userId,
                       name: speaker.name,
                       firstName: speaker.firstName,
                       surname: speaker.surname,

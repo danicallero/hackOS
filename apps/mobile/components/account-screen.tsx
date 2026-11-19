@@ -337,6 +337,7 @@ export default function AccountScreen() {
         <View style={{ alignItems: "center", gap: 12, paddingVertical: 10 }}>
           <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={avatarSize}>
             <ProfilePhotoMenu
+              userId={me.id}
               testID="account-avatar"
               name={fullName}
               image={me.image}
@@ -591,12 +592,12 @@ export default function AccountScreen() {
       </Animated.ScrollView>
       <AndroidStatusBarScrim />
       <ProfileAvatarCollapse
+        userId={me.id}
         controller={avatarCollapse}
         image={me.image}
         persist
         name={fullName}
         size={avatarSize}
-        variant="account"
       />
       <AccountWalletOverlay wallet={wallet} />
     </View>
