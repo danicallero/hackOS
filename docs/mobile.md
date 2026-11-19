@@ -653,8 +653,8 @@ The reusable `DynamicForm` consumes `TemplateField` and `FormSection` from
 `@hackos/shared/forms`, the application/project schema. File fields use the
 system document picker; a file answer is one attachment row (thumbnail or
 document icon, name, type and size) that opens the in-app viewer
-(`components/file-viewer.tsx`: photos with pinch zoom, PDFs via
-`react-native-pdf`, Share in the header). Photo fields (`images`, project form
+(`components/file-viewer.tsx`: photos with pinch zoom, PDFs in the system
+viewer, Share in the header). Photo fields (`images`, project form
 only, up to `MAX_IMAGES_PER_FIELD`) open the system photo picker with
 multi-select; each photo is re-encoded on device as a JPEG of at most 2048 px
 (HEIC never reaches the API) and uploaded one by one with its own
@@ -1267,7 +1267,7 @@ never slides behind the clock.
 **Company screen (H44, H45, H59).** `app/companies/[id].tsx`
 (`components/company-profile-screen.tsx`) reads `GET /api/enterprises/:id/profile`
 and follows Apple Music's artist page: a tinted gradient hero (CSS
-`experimental_backgroundImage`; `heroTint` in `lib/hero-tint.ts` tints it with the colour of the logo shown (`useCompanyLogoTint`: the negative logo in dark mode, falling back to the positive logo's colour when the negative is white or mono and has none), computed on the device by `lib/image-tint.ts` (Skia draws the logo at 24x24, `pickDominantColor` ignores transparent and near-white/black pixels and favours saturated buckets; nothing is stored server-side), darkened in dark mode,
+`experimental_backgroundImage`; `heroTint` in `lib/hero-tint.ts` tints it with the colour of the logo shown (`useCompanyLogoTint`: the negative logo in dark mode, falling back to the positive logo's colour when the negative is white or mono and has none), computed on the device by `lib/image-tint.ts` (`expo-image-manipulator` scales the logo to a 24x24 PNG in the cache, `lib/png-pixels.ts` decodes its RGBA with `fflate`, `pickDominantColor` ignores transparent and near-white/black pixels and favours saturated buckets; nothing is stored server-side), darkened in dark mode,
 neutral grey when null, and picks the white or black foreground for the name by
 luminance), the logo in a rounded
 card with a soft shadow (the negative logo in dark mode when present; artwork
@@ -1514,15 +1514,17 @@ The CV route needs the session, so it is
 downloaded with the session cookie (`expo-file-system`) into the cache and shown
 in the in-app viewer (`components/cv-viewer.tsx`, a CV-worded wrapper of the
 shared `components/file-viewer.tsx`): a page-sheet modal titled
-with the person's name, a circular close button, and pages that scroll with
-pinch and double-tap zoom, rendered by the native `react-native-pdf` (with its
-peer `react-native-blob-util`). Share stays in the viewer header for anyone who
-wants the file. The native reader is imported only when the CV viewer opens, so
-Expo Go or a development client missing the native module does not block profile
-screens; that viewer shows the normal CV error instead. A CV that is gone or no
+with the person's name and a circular close button shows the download, then the
+PDF opens in the system viewer through the local `modules/file-preview` module:
+Quick Look on iOS (paging, zoom, search and its own Share; closing it closes the
+sheet too) and the device's PDF app on Android (an `ACTION_VIEW` chooser on the
+file's content URI). The app bundles no PDF renderer, which keeps the binary
+small. Where no viewer is available (Expo Go, a development client built before
+the module, an Android device without a PDF app), the sheet stays with the file
+name and Share in its header. A CV that is gone or no
 longer shared (404) shows "Profile not available"; any other failure offers
-Retry. **Native dependency:** adding `react-native-pdf` means the development
-client and store builds must be rebuilt; Jest mocks it in `jest.setup.js`. The
+Retry. **Native dependency:** `modules/file-preview` needs a rebuilt development
+client and store build. The
 app does not show the user's own
 CV anywhere yet, so the viewer has one caller. A hidden profile and a person the reader may not open both answer 404
 and show one "Profile not available" state. Photos are authenticated API
@@ -1532,8 +1534,7 @@ cache key tagged with the session — and every caller keeps
 `cachePolicy="memory"`, so a photo is never written to disk and one hidden later
 is gone after the next launch. The fallback (initials or symbol) stays until the
 photo has drawn. Public sponsor logos use `expo-image`'s default disk cache.
-Skia, which decodes bytes itself, still reads photos through `loadApiImage`
-(an in-memory data URI cache). **Native dependency:** `expo-image` needs a
+**Native dependency:** `expo-image` needs a
 rebuilt development client and store build.
 
 **Companies** is a sticker album (`components/company-album.tsx`) from
@@ -1571,32 +1572,23 @@ a transparent full-screen `Modal` (or, for a QR scan, an overlay inside the
 scanner's own modal, which stays up until the result arrives so the animation
 starts at once instead of waiting for the camera to slide away) where the viewer's photo (from `useMeContext`)
 and the scanned person's slide in from opposite edges (a 0.85 s ease-in that keeps accelerating until they meet, which
-starts after about 0.2 s, once the overlay and canvas have painted) and fuse like metaballs
-(`components/connection-celebration-skia.tsx`, `@shopify/react-native-skia`): the
-two accent blobs behind the photos go through a Skia blur plus an alpha-threshold
-`ColorMatrix` layer, so a neck of goo stretches between them and settles into a
-shared accent rim as the photos overlap with a single spring overshoot (damping ratio about 0.6, no repeated wobble). Then a ring,
+starts after about 0.2 s, once the overlay has painted) and meet with a
+single spring overshoot (damping ratio about 0.6, no repeated wobble). Then a ring,
 ten particles in the accent color burst from the join (about
 3.2 s; a tap skips it). The ring and particles stay hidden until the burst.
 The new person joins the list, and their profile (`/people/[id]`) opens, only
 once the overlay covers the screen (about 0.2 s in, or on an earlier skip), so
 the card never shows before the animation and the profile is already open
-underneath when it fades. The photo routes are authenticated, so
-the bytes come from `loadApiImage` (session cookie) and are decoded with
-`Skia.Image.MakeImageFromEncoded`; until they arrive, or without a photo, the
-circle shows initials. Frames are driven by Reanimated shared values that Skia
-reads directly, so they stay on the UI thread. Skia paints with color strings,
-so the scene carries the light/dark systemBlue and ground hex values instead of
-the dynamic `colors` tokens. Where Skia cannot load (web) or throws while
-rendering (an error boundary), the earlier Reanimated version plays instead: the
-same beats as spring transforms with a squash, no goo. Skia is a native module
-(no config plugin; the `ios/`/`android/` projects are generated), so adding it
-needed a new native build, not an OTA update. Haptics through
+underneath when it fades. The photos are the usual `UserAvatar` (initials until
+the authenticated photo draws), and every beat is a Reanimated transform driven
+by shared values, so the frames stay on the UI thread. (An earlier version drew
+a gooey metaball merge with Skia; it was removed because that one effect added
+several megabytes of native graphics library to every build.) Haptics through
 `lib/haptics.ts`: light and medium as the photos approach, success at the
 merge (the lib has no user setting; it is best-effort and silent where there is
 no engine). A tap anywhere skips it; it never outlasts its timer. Under
 reduced motion it is a 1.1 s crossfade of the two photos and the glyph, with no
-Skia canvas, travel, ring or particles and only the success haptic. It announces
+travel, ring or particles and only the success haptic. It announces
 `diaryConnected` ("You are now connected with {name}") to screen readers and
 labels the overlay with it. The API reports `created` only as the status code
 (201 vs 200), which `apiFetch` does not expose, so "new" is decided against the
@@ -2948,8 +2940,7 @@ rendered through `renderMobile`, including the shared H4 sign-in contract.
 `GestureHandlerRootView` and a `SafeAreaProvider` with fixed test insets, so
 components using `useSafeAreaInsets()` or gesture-handler's
 `GestureDetector`/`Swipeable` don't need a per-test workaround. `jest.setup.js`
-mocks `react-native-reanimated`, `react-native-worklets`, `@shopify/react-native-skia`
-(a plain-view `Canvas`, drawing primitives render nothing) and
+mocks `react-native-reanimated`, `react-native-worklets` and
 `react-native-gesture-handler` at the root — real gesture recognition and
 worklet scheduling aren't meaningful under jest, so `Gesture`/`GestureDetector`
 are no-op pass-throughs and `Swipeable` renders its `renderLeftActions`/

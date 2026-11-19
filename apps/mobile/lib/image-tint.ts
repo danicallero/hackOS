@@ -1,8 +1,10 @@
 import { logoTouchesEdge, pickDominantColor } from "@hackos/shared/image-color";
-import { AlphaType, ColorType, Skia } from "@shopify/react-native-skia";
+import { File, Paths } from "expo-file-system";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { useEffect, useState } from "react";
 import { InteractionManager } from "react-native";
 import { apiImageSource } from "./directory";
+import { decodePngRgba } from "./png-pixels";
 
 const SAMPLE = 24;
 
@@ -12,34 +14,37 @@ export interface ImageReading {
   bleed: boolean;
 }
 
-/** Download the image, draw it at 24x24 with Skia and read its colour and edges. */
+let sampleSequence = 0;
+
+/**
+ * Download the image, let the platform scale it to 24x24 as a PNG and read its
+ * colour and edges. The original and the thumbnail are cache files removed
+ * straight away, so a hidden photo is not left on disk.
+ */
 async function decodeImageTint(uri: string): Promise<ImageReading | null> {
   const source = apiImageSource(uri);
   const response = await fetch(source.uri, { headers: source.headers });
   if (!response.ok) return null;
-  const data = Skia.Data.fromBytes(new Uint8Array(await response.arrayBuffer()));
-  const image = Skia.Image.MakeImageFromEncoded(data);
-  const surface = Skia.Surface.Make(SAMPLE, SAMPLE);
-  if (!image || !surface) return null;
-  surface
-    .getCanvas()
-    .drawImageRect(
-      image,
-      { x: 0, y: 0, width: image.width(), height: image.height() },
-      { x: 0, y: 0, width: SAMPLE, height: SAMPLE },
-      Skia.Paint(),
-    );
-  surface.flush();
-  const pixels = surface.makeImageSnapshot().readPixels(0, 0, {
-    width: SAMPLE,
-    height: SAMPLE,
-    colorType: ColorType.RGBA_8888,
-    alphaType: AlphaType.Unpremul,
-  });
-  // Unpremul RGBA_8888 reads back as bytes; floats would mean a different format.
-  return pixels && !(pixels instanceof Float32Array)
-    ? { color: pickDominantColor(pixels), bleed: logoTouchesEdge(pixels, SAMPLE, SAMPLE) }
-    : null;
+  sampleSequence += 1;
+  const original = new File(Paths.cache, `tint-${sampleSequence}`);
+  let thumbnail: File | null = null;
+  try {
+    original.write(new Uint8Array(await response.arrayBuffer()));
+    const image = await ImageManipulator.manipulate(original.uri)
+      .resize({ width: SAMPLE, height: SAMPLE })
+      .renderAsync();
+    thumbnail = new File((await image.saveAsync({ format: SaveFormat.PNG })).uri);
+    const { width, height, rgba } = decodePngRgba(await thumbnail.bytes());
+    return { color: pickDominantColor(rgba), bleed: logoTouchesEdge(rgba, width, height) };
+  } finally {
+    for (const file of [original, thumbnail]) {
+      try {
+        if (file?.exists) file.delete();
+      } catch {
+        // A leftover cache file is cleared by the system.
+      }
+    }
+  }
 }
 
 type Listener = () => void;

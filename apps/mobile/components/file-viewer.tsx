@@ -2,7 +2,7 @@ import { File, Paths } from "expo-file-system";
 import { Image } from "expo-image";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { Platform, ScrollView, Text, View } from "react-native";
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
 import { SheetModal } from "@/components/app-sheet";
 import { EmptyState, FloatingGlassButton } from "@/components/native-ui";
@@ -11,6 +11,7 @@ import { getCurrentSessionCookie } from "@/lib/api";
 import { apiAssetUrl } from "@/lib/directory";
 import { editionHeaders } from "@/lib/edition";
 import { useLocale } from "@/lib/i18n";
+import filePreview from "@/modules/file-preview";
 import { colors } from "@/theme/colors";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } from "@/theme/dynamic-type";
 import { type } from "@/theme/tokens";
@@ -22,7 +23,6 @@ type ViewerState =
   | { status: "error" };
 
 const HEADER_HEIGHT = 76;
-type PdfComponent = typeof import("react-native-pdf")["default"];
 
 /** A cache file name that keeps the extension Quick Look and Share rely on. */
 export function cacheFileName(name: string) {
@@ -64,14 +64,16 @@ export function FileViewer({
   const [state, setState] = useState<ViewerState>({ status: "loading" });
   const [shareError, setShareError] = useState<Error | null>(null);
   const [sharing, setSharing] = useState(false);
-  const [Pdf, setPdf] = useState<PdfComponent | null>(null);
-  const [pdfReaderUnavailable, setPdfReaderUnavailable] = useState(false);
   const request = useRef(0);
+  const previewed = useRef<string | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const isPdf = mimeType === "application/pdf";
   const isImage = mimeType.startsWith("image/");
 
   const load = useCallback(async () => {
     const id = ++request.current;
+    previewed.current = null;
     setState({ status: "loading" });
     const url = apiAssetUrl(path);
     const cookie = getCurrentSessionCookie();
@@ -104,18 +106,26 @@ export function FileViewer({
     else request.current += 1;
   }, [visible, load]);
 
+  // A downloaded PDF goes to the system viewer once; the sheet stays behind it
+  // as the fallback (file name and Share) if no viewer can open it.
   useEffect(() => {
-    if (!visible || !isPdf) return;
-    try {
-      const module = require("react-native-pdf") as { default: PdfComponent };
-      setPdf(() => module.default);
-      setPdfReaderUnavailable(false);
-    } catch {
-      // Expo Go and stale development clients may not contain the native PDF
-      // module. Keep routes usable and show the error only when it is opened.
-      setPdfReaderUnavailable(true);
-    }
-  }, [visible, isPdf]);
+    if (!isPdf || state.status !== "ready" || !filePreview) return;
+    if (previewed.current === state.uri) return;
+    previewed.current = state.uri;
+    const uri = state.uri;
+    const shown =
+      Platform.OS === "ios"
+        ? filePreview.preview(uri).then(() => true)
+        : filePreview.open(new File(uri).contentUri, mimeType, title);
+    shown.then(
+      (closed) => {
+        if (closed) onCloseRef.current();
+      },
+      () => {
+        // The Share fallback stays on screen.
+      },
+    );
+  }, [isPdf, state, mimeType, title]);
 
   async function share() {
     if (sharing || state.status !== "ready") return;
@@ -140,7 +150,7 @@ export function FileViewer({
       <RequestFeedback
         error={new Error("File download failed")}
         message={errorMessage}
-        onRetry={pdfReaderUnavailable ? undefined : () => void load()}
+        onRetry={() => void load()}
       />
     </View>
   );
@@ -171,28 +181,7 @@ export function FileViewer({
           <RequestFeedback error={shareError} onRetry={() => void share()} retrying={sharing} />
         ) : null}
         <View style={{ flex: 1 }}>
-          {isPdf && pdfReaderUnavailable ? (
-            failure
-          ) : state.status === "ready" && isPdf ? (
-            Pdf ? (
-              <Pdf
-                source={{ uri: state.uri }}
-                trustAllCerts={false}
-                enableDoubleTapZoom
-                minScale={1}
-                maxScale={4}
-                spacing={12}
-                fitPolicy={0}
-                onError={() => setState({ status: "error" })}
-                renderActivityIndicator={() => (
-                  <AppActivityIndicator color={colors.secondaryLabel} />
-                )}
-                style={{ backgroundColor: colors.background, flex: 1 }}
-              />
-            ) : (
-              <RequestFeedback loading />
-            )
-          ) : state.status === "ready" && isImage ? (
+          {state.status === "ready" && isImage ? (
             <ScrollView
               testID={`${testID}-image`}
               maximumZoomScale={4}

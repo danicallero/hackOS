@@ -1,8 +1,7 @@
-import { Component, type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import {
   AccessibilityInfo,
   Modal,
-  Platform,
   Pressable,
   Text,
   useWindowDimensions,
@@ -40,24 +39,10 @@ export interface ConnectionCelebrationSelf {
   image: string | null;
 }
 
-/**
- * The Skia gooey merge, or null where Skia cannot load (web, a build without
- * the native module): the Reanimated version below then plays instead.
- */
-const MergeCanvas: typeof import("./connection-celebration-skia").ConnectionMergeCanvas | null =
-  (() => {
-    if (Platform.OS === "web") return null;
-    try {
-      return require("./connection-celebration-skia").ConnectionMergeCanvas;
-    } catch {
-      return null;
-    }
-  })();
-
 const AVATAR = 92;
 const OVERLAP = AVATAR * 0.3;
 const PARTICLES = 10;
-/** Lets the overlay and the Skia canvas paint before the photos move. */
+/** Lets the overlay paint before the photos move. */
 const FADE_IN_MS = 140;
 const ENTER_DELAY_MS = 220;
 const ENTER_MS = 850;
@@ -67,13 +52,10 @@ const REDUCED_MS = 1600;
 
 /**
  * #935: the moment two people connect. A full-screen overlay where both photos
- * fly in, fuse like metaballs with an elastic spring (Skia blur + alpha
- * threshold), and burst into a ring and particles (about 3.2 s).
- * Everything is a shared-value driven, so the frames run on the UI thread. If
- * Skia is unavailable or throws, the same beats play as Reanimated transforms
- * with a squash instead of the goo. Under reduced motion it is a short
- * crossfade with no travel, ring or particles and no canvas. Tapping anywhere
- * skips it.
+ * fly in, meet with an elastic pop and burst into a ring and particles (about
+ * 3.2 s). Everything is driven by shared values, so the frames run on the UI
+ * thread. Under reduced motion it is a short crossfade with no travel, ring or
+ * particles. Tapping anywhere skips it.
  */
 export function ConnectionCelebration({
   target,
@@ -252,38 +234,12 @@ function Celebration({
             width: "100%",
           }}
         >
-          {!reduceMotion && MergeCanvas ? (
-            <MergeBoundary
-              fallback={
-                <SpringStage
-                  reduceMotion={false}
-                  self={self}
-                  target={target}
-                  stage={{ left, right, ring, burst }}
-                />
-              }
-            >
-              <MergeCanvas
-                width={width}
-                height={AVATAR * 3.4}
-                avatar={AVATAR}
-                travel={travel}
-                apart={apart}
-                approach={approach}
-                pop={pop}
-                burst={burst}
-                self={{ name: self.name, image: self.image }}
-                other={{ name: target.name, image: target.photoUrl }}
-              />
-            </MergeBoundary>
-          ) : (
-            <SpringStage
-              reduceMotion={reduceMotion}
-              self={self}
-              target={target}
-              stage={{ left, right, ring, burst }}
-            />
-          )}
+          <SpringStage
+            reduceMotion={reduceMotion}
+            self={self}
+            target={target}
+            stage={{ left, right, ring, burst }}
+          />
         </View>
         <Text
           accessible={false}
@@ -340,23 +296,9 @@ function Particle({ index, burst }: { index: number; burst: SharedValue<number> 
   );
 }
 
-/** Falls back to the Reanimated stage if the canvas throws while rendering. */
-class MergeBoundary extends Component<
-  { children: ReactNode; fallback: ReactNode },
-  { failed: boolean }
-> {
-  state = { failed: false };
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-  render() {
-    return this.state.failed ? this.props.fallback : this.props.children;
-  }
-}
-
 type AnimatedStyle = ReturnType<typeof useAnimatedStyle<ViewStyle>>;
 
-/** The photos, ring and particles as Reanimated transforms (no Skia). */
+/** The photos, ring and particles as Reanimated transforms. */
 function SpringStage({
   reduceMotion,
   self,

@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
-import { Alert, Linking } from "react-native";
+import { Alert, Linking, Platform } from "react-native";
 import { PersonProfileScreen } from "@/components/person-profile-screen";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { DiaryEntry } from "@/lib/diary";
@@ -23,7 +23,23 @@ jest.mock("expo-file-system", () => ({
       return mockDownload(...args);
     }
     exists = false;
+    contentUri: string;
+    constructor(uri: string) {
+      this.contentUri = `content://cache/${String(uri).split("/").pop()}`;
+    }
     delete() {}
+  },
+}));
+// The system viewer (#935): Quick Look on iOS, the device's PDF app on Android.
+const mockFilePreview = {
+  preview: jest.fn(),
+  open: jest.fn(),
+};
+let mockFilePreviewAvailable = true;
+jest.mock("@/modules/file-preview", () => ({
+  __esModule: true,
+  get default() {
+    return mockFilePreviewAvailable ? mockFilePreview : null;
   },
 }));
 const mockShare = jest.fn();
@@ -109,6 +125,9 @@ beforeEach(() => {
   diary = [entry];
   mockDownload.mockReset().mockResolvedValue({ uri: "file:///cache/ana-souto-cv.pdf" });
   mockShare.mockReset().mockResolvedValue(undefined);
+  mockFilePreviewAvailable = true;
+  mockFilePreview.preview.mockReset().mockResolvedValue(undefined);
+  mockFilePreview.open.mockReset().mockResolvedValue(true);
   jest.mocked(apiFetch).mockReset();
   jest.mocked(apiFetch).mockImplementation(async (path: string, init?: RequestInit) => {
     if (path === "/api/directory/101") {
@@ -257,12 +276,16 @@ it("opens a listed project and a challenge gallery from the profile (H18)", asyn
   });
 });
 
-it("opens the CV in the in-app viewer after downloading it with the session", async () => {
-  mockDownload.mockResolvedValue({ uri: "file:///cache/ana-souto-cv.pdf" });
+it("opens the CV in Quick Look after downloading it with the session, then closes", async () => {
+  let closeQuickLook: () => void = () => undefined;
+  mockFilePreview.preview.mockImplementation(
+    () => new Promise<void>((resolve) => (closeQuickLook = resolve)),
+  );
   await renderMobile(<PersonProfileScreen />);
   await fireEvent.press(await screen.findByRole("button", { name: "directoryCv" }));
-  const pdf = await screen.findByTestId("cv-viewer-pdf");
-  expect(pdf.props.source).toEqual({ uri: "file:///cache/ana-souto-cv.pdf" });
+  await waitFor(() =>
+    expect(mockFilePreview.preview).toHaveBeenCalledWith("file:///cache/ana-souto-cv.pdf"),
+  );
   expect(mockDownload).toHaveBeenCalledWith(
     "https://api.test/api/directory/101/cv",
     expect.anything(),
@@ -270,13 +293,43 @@ it("opens the CV in the in-app viewer after downloading it with the session", as
   );
   // Nothing is shared until the reader asks for the file.
   expect(mockShare).not.toHaveBeenCalled();
-  await fireEvent.press(screen.getByRole("button", { name: "directoryCvShare" }));
+  expect(screen.getByTestId("cv-viewer")).toBeTruthy();
+  await act(async () => closeQuickLook());
+  await waitFor(() => expect(screen.queryByTestId("cv-viewer")).toBeNull());
+  expect(mockFilePreview.preview).toHaveBeenCalledTimes(1);
+});
+
+it("hands the CV to the Android PDF viewer through a content URI", async () => {
+  const platform = Platform.OS;
+  Platform.OS = "android";
+  try {
+    await renderMobile(<PersonProfileScreen />);
+    await fireEvent.press(await screen.findByRole("button", { name: "directoryCv" }));
+    await waitFor(() =>
+      expect(mockFilePreview.open).toHaveBeenCalledWith(
+        "content://cache/ana-souto-cv.pdf",
+        "application/pdf",
+        "Ana Souto",
+      ),
+    );
+    await waitFor(() => expect(screen.queryByTestId("cv-viewer")).toBeNull());
+  } finally {
+    Platform.OS = platform;
+  }
+});
+
+it("keeps Share when no viewer can open the CV", async () => {
+  mockFilePreviewAvailable = false;
+  await renderMobile(<PersonProfileScreen />);
+  await fireEvent.press(await screen.findByRole("button", { name: "directoryCv" }));
+  await fireEvent.press(await screen.findByRole("button", { name: "directoryCvShare" }));
   await waitFor(() =>
     expect(mockShare).toHaveBeenCalledWith(
       "file:///cache/ana-souto-cv.pdf",
       expect.objectContaining({ mimeType: "application/pdf" }),
     ),
   );
+  expect(screen.getByTestId("cv-viewer")).toBeTruthy();
 });
 
 it("shows the not-available state when the CV is gone", async () => {
@@ -285,7 +338,7 @@ it("shows the not-available state when the CV is gone", async () => {
   await renderMobile(<PersonProfileScreen />);
   await fireEvent.press(await screen.findByRole("button", { name: "directoryCv" }));
   expect(await screen.findByText("directoryPersonNotFound")).toBeTruthy();
-  expect(screen.queryByTestId("cv-viewer-pdf")).toBeNull();
+  expect(mockFilePreview.preview).not.toHaveBeenCalled();
   expect(screen.queryByRole("button", { name: "directoryCvShare" })).toBeNull();
   expect(fetchSpy).toHaveBeenCalledWith(
     "https://api.test/api/directory/101/cv",
@@ -302,7 +355,9 @@ it("offers a retry when the CV download fails for another reason", async () => {
   expect(await screen.findByText("directoryCvError")).toBeTruthy();
   mockDownload.mockResolvedValue({ uri: "file:///cache/ana-souto-cv.pdf" });
   await fireEvent.press(screen.getByRole("button", { name: "retry" }));
-  expect(await screen.findByTestId("cv-viewer-pdf")).toBeTruthy();
+  await waitFor(() =>
+    expect(mockFilePreview.preview).toHaveBeenCalledWith("file:///cache/ana-souto-cv.pdf"),
+  );
   fetchSpy.mockRestore();
 });
 
