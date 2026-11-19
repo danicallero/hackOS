@@ -4,7 +4,7 @@ describe("hero tint", () => {
   it("fades the logo colour to transparent in both schemes", () => {
     for (const dark of [false, true]) {
       expect(heroTint("#3366cc", dark).gradient).toMatch(
-        /^linear-gradient\(to bottom, rgba\(\d+,\d+,\d+,0\.\d+\) 0%, rgba\(\d+,\d+,\d+,0\) 100%\)$/,
+        /^linear-gradient\(to bottom, rgba\(\d+,\d+,\d+,0\.\d+\) 0%, rgba\(\d+,\d+,\d+,0\.\d+\) 45%, rgba\(\d+,\d+,\d+,0\) 100%\)$/,
       );
     }
   });

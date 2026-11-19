@@ -73,6 +73,8 @@ const ANDROID_SYMBOL_NAMES = {
   "eye.slash": "visibility_off",
   "exclamationmark.arrow.circlepath": "sync_problem",
   "exclamationmark.circle.fill": "error",
+  lifepreserver: "support",
+  "lifepreserver.fill": "support",
   "wifi.slash": "wifi_off",
   "exclamationmark.triangle": "warning",
   "exclamationmark.triangle.fill": "warning",

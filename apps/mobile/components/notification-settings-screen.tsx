@@ -8,7 +8,7 @@ import { AppRefreshControl } from "@/components/app-refresh-control";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import {
   InfoRow,
-  LegacyHeaderIconButton,
+  LegacyGlassIconButton,
   Section,
   Separator,
   ToggleRow,
@@ -382,7 +382,7 @@ export function AnnouncementsManageScreen() {
     if (glassAvailable) return;
     navigation.setOptions({
       headerRight: () => (
-        <LegacyHeaderIconButton
+        <LegacyGlassIconButton
           icon="plus"
           accessibilityLabel={t("announcementAdd")}
           onPress={() => setFormOpen("create")}

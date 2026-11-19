@@ -15,7 +15,7 @@ import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import {
   AndroidStatusBarScrim,
   EmptyState,
-  LegacyHeaderIconButton,
+  LegacyBackButton,
   LegacyScreenHeader,
   Section,
   Separator,
@@ -236,13 +236,7 @@ export function StandsScreen() {
       <LegacyScreenHeader
         actions={null}
         cancelLabel={t("cancel")}
-        leading={
-          <LegacyHeaderIconButton
-            icon="chevron.left"
-            accessibilityLabel={t("back")}
-            onPress={() => safeBack(router, "/(tabs)/others/account")}
-          />
-        }
+        leading={<LegacyBackButton onPress={() => safeBack(router, "/(tabs)/others/account")} />}
         onCloseSearch={() => {
           setSearchOpen(false);
           setQuery("");
