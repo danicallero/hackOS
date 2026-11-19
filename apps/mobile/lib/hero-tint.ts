@@ -50,3 +50,12 @@ export function heroTint(
     foreground,
   };
 }
+
+/**
+ * The veil over an ambient (blurred photo) hero (H44): the page's light or
+ * dark ground at partial strength, so the photo's colours show while the
+ * page's own label colours stay readable on it.
+ */
+export function ambientVeil(dark: boolean): string {
+  return dark ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.35)";
+}

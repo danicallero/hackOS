@@ -265,22 +265,29 @@ export function useProfileAvatarCollapse(
   // it lands bakes the scrolled distance into the anchor, drawing the mask
   // away from the hidden avatar (#935). Measure only once the offset has held
   // still for a frame, and retry if it moved before the result arrived.
+  // A pull-down bounce moves the content (and stretches the photo) while the
+  // clamped scroll offset stays 0, so a measurement taken then saves the anchor
+  // too low and too big: the avatar stayed below its slot and its photo shrank
+  // inside the mask. Wait until the content is back at or above its rest.
   const measureAnchor = useCallback(
     function measure() {
       if (measureFrame.current !== null) cancelAnimationFrame(measureFrame.current);
       const offset = scrollOffset.value;
+      const raw = contentOffset.value;
       measureFrame.current = requestAnimationFrame(() => {
         measureFrame.current = null;
         const host = hostRef.current;
         const anchor = anchorRef.current;
         if (!host || !anchor || !host.measureInWindow || !anchor.measureInWindow) return;
-        if (scrollOffset.value !== offset) {
+        const moved = () =>
+          contentOffset.value !== raw || contentOffset.value < restingOffset.value - 0.5;
+        if (moved()) {
           measure();
           return;
         }
         host.measureInWindow((hostX, hostY) => {
           anchor.measureInWindow((x, y, width, height) => {
-            if (scrollOffset.value !== offset) {
+            if (moved()) {
               measure();
               return;
             }
@@ -302,7 +309,7 @@ export function useProfileAvatarCollapse(
         });
       });
     },
-    [scrollOffset, updateNameBoundary],
+    [contentOffset, restingOffset, scrollOffset, updateNameBoundary],
   );
 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);

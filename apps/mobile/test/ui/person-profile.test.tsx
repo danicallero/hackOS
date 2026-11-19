@@ -178,24 +178,24 @@ it("shows the whole profile with the saved note", async () => {
   expect(open).toHaveBeenCalledWith("https://github.com/ana");
 });
 
-it("tints the hero from the photo's colour (H48)", async () => {
-  mockTint = "#3366cc";
+it("draws the photo itself behind the header (H44, H48)", async () => {
   await renderMobile(<PersonProfileScreen />);
   await screen.findByText("Ana Souto");
-  expect(screen.getByTestId("person-hero").props.style.experimental_backgroundImage).toContain(
-    "rgba(51,102,204,0.8)",
+  expect(JSON.stringify(screen.getByTestId("person-hero-image").props.source)).toContain(
+    String(profile.photoUrl),
   );
 });
 
-it("waits for the photo's colour, and is blue without a photo (H48)", async () => {
-  await renderMobile(<PersonProfileScreen />);
-  await screen.findByText("Ana Souto");
-  expect(screen.queryByTestId("person-hero")).toBeNull();
-  mockTint = "#3366cc";
+it("is blue without a photo (H48)", async () => {
   personResult = { ...profile, photoUrl: null };
   await renderMobile(<PersonProfileScreen />);
-  expect(screen.getByTestId("person-hero").props.style.experimental_backgroundImage).toContain(
-    "rgba(0,122,255,0.8)",
+  await screen.findByText("Ana Souto");
+  expect(screen.getByTestId("person-hero").props.style).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        experimental_backgroundImage: expect.stringContaining("rgba(0,122,255,0.8)"),
+      }),
+    ]),
   );
 });
 
