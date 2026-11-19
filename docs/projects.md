@@ -287,6 +287,19 @@ shows the same draft/submitted states as project records. Gallery cards link
 the project name, show actual cover images and team names, and disclose the
 complete challenge list only when it exceeds the visible preview.
 
+The project record's top (`ProjectRecordHero` over `HeroBleed`, H18/H48) takes
+its colours from the cover gallery (the images of the first form field that has
+any). The photo the carousel shows is drawn behind the header, enlarged 1.4× and
+blurred (72 px, saturation 1.3) until no shape survives, under a 35% veil of
+the page background and masked into the page from 60% to 100% of its height.
+When the carousel advances, the backdrop cross-fades to the new photo (instant
+under reduced motion). The backdrop renders the carousel's own thumbnail URLs
+with the same credentials, so it adds no downloads. `ProjectAmbientProvider`
+(`components/projects/project-ambient.tsx`) wraps the gallery record and the
+project editor so the carousel can report its visible photo; carousels outside
+it (judging panel) report nothing. A project without photos keeps the blue
+wash.
+
 Deletion is available from the record to staff with `projects:edit`, or to a sole
 active participant member while the API permits editing or submission withdrawal.
 It uses the existing audited DELETE endpoints; the server retains its phase,

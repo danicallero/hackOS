@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import type { NativeProject } from "@/lib/native-projects";
 import { cn } from "@/lib/utils";
+import { useAmbientReporter } from "./project-ambient";
 
 type ProjectFile = NonNullable<NativeProject["files"]>[number];
 
@@ -37,6 +38,13 @@ export function ProjectCarousel({
   const [index, setIndex] = useState(0);
   const [open, setOpen] = useState(false);
   const current = images[open ? index : 0];
+  const report = useAmbientReporter();
+  const fieldKey = images[index]?.fieldKey;
+  const objectKey = images[index]?.objectKey;
+  // The record hero's ambient backdrop follows the visible photo (H48).
+  useEffect(() => {
+    if (report && fieldKey && objectKey) report({ fieldKey, objectKey });
+  }, [report, fieldKey, objectKey]);
   return (
     <div
       className={cn(
