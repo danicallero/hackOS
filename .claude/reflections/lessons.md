@@ -917,7 +917,7 @@ see) hides those fields, but keeps the same component and layout.
 Status: active
 Scope: repository
 Source: user-correction
-Date: 2026-11-10
+Date: 2026-11-19
 
 ### Trigger
 Designing a new branded output (share card, poster, certificate, email block)
@@ -944,7 +944,10 @@ Look at the real rendered artifact (e.g. screenshot of the Wallet pass), copy
 its structure and proportions, and reuse the shared primitives (Button,
 DropdownMenu, toast, Skeleton) instead of custom panels. Keep one preview, one
 primary action and move secondary actions into a menu. Ship only assets taken
-from the repo (copy them under a namespaced public folder) and say which.
+from the repo or explicitly supplied by the user and say which. For variants
+of existing mascots, first compose their original pixels with crop, scale,
+rotation and background; do not interpret “generate variants” as permission to
+redraw established characters with image generation.
 
 ### Validation
 Show before/after screenshots of the real component and an exported image

@@ -148,7 +148,7 @@ export interface OpaqueRouterTabsProps {
   capabilities: string[];
   hasQueueItems: boolean;
   /** The signed-in person; their account photo replaces the Account symbol (#934). */
-  account?: { name: string; image: string | null };
+  account?: { userId?: number; name: string; image: string | null };
 }
 
 /** Matches the 22pt tab symbols; the ring adds a 1pt gap and a 2pt stroke. */
@@ -158,12 +158,14 @@ const OVERFLOW_AVATAR_INSET = 14;
 
 /** The account photo as a tab icon; the selected tab adds a ring in the tab tint. */
 function AccountTabAvatar({
+  userId,
   name,
   image,
   ringColor,
 }: {
+  userId?: number;
   name: string;
-  image: string;
+  image: string | null;
   ringColor: string | null;
 }) {
   return (
@@ -179,6 +181,7 @@ function AccountTabAvatar({
       }}
     >
       <UserAvatar
+        userId={userId}
         testID="account-tab-avatar"
         name={name}
         image={image}
@@ -191,13 +194,15 @@ function AccountTabAvatar({
 
 /** The account photo inside the separated overflow circle, ringed in the tab tint. */
 function OverflowAccountAvatar({
+  userId,
   name,
   image,
   size,
   ringColor,
 }: {
+  userId?: number;
   name: string;
-  image: string;
+  image: string | null;
   size: number;
   ringColor: string;
 }) {
@@ -214,6 +219,7 @@ function OverflowAccountAvatar({
       }}
     >
       <UserAvatar
+        userId={userId}
         testID="account-overflow-avatar"
         name={name}
         image={image}
@@ -268,15 +274,27 @@ export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: Opaqu
     const { icon, selectedIcon } = definition;
     const accountImage = key === "account" ? account?.image : null;
 
-    if (account && accountImage) {
+    if (key === "account" && account) {
       return {
         href: definition.href,
-        icon: <AccountTabAvatar name={account.name} image={accountImage} ringColor={null} />,
+        icon: (
+          <AccountTabAvatar
+            userId={account.userId}
+            name={account.name}
+            image={accountImage ?? null}
+            ringColor={null}
+          />
+        ),
         isActive: isAccountPath,
         label: t(definition.labelKey),
         name: definition.triggerName,
         selectedIcon: (
-          <AccountTabAvatar name={account.name} image={accountImage} ringColor={tabSelectedColor} />
+          <AccountTabAvatar
+            userId={account.userId}
+            name={account.name}
+            image={accountImage ?? null}
+            ringColor={tabSelectedColor}
+          />
         ),
         testID: `opaque-tab-${key}`,
       };
@@ -429,11 +447,12 @@ function OverflowTriggerIcon({
   circleSize: number;
   iconColor: string;
 }) {
-  if (activeOverflowId === "account" && account?.image) {
+  if (activeOverflowId === "account" && account) {
     // The circle is large, so the ringed photo sits inset in it rather than
     // shrinking to a tab-icon size.
     return (
       <OverflowAccountAvatar
+        userId={account.userId}
         name={account.name}
         image={account.image}
         size={Math.round(circleSize - OVERFLOW_AVATAR_INSET * 2)}

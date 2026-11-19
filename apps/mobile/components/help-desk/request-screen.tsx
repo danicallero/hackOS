@@ -214,6 +214,7 @@ export function HelpRequestScreen() {
                     {request.requesterProfile.displayName}
                   </Text>
                   <PersonAvatar
+                    userId={request.requesterProfile.userId}
                     size={28}
                     name={request.requesterProfile.displayName}
                     uri={request.requesterProfile.photoUrl}
@@ -290,6 +291,7 @@ export function HelpRequestScreen() {
                   }}
                 >
                   <PersonAvatar
+                    userId={helper?.userId}
                     size={40}
                     name={helper?.displayName}
                     uri={helper?.photoUrl ?? null}

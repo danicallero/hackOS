@@ -1,40 +1,26 @@
+import { mascotAvatarChoice } from "@hackos/shared/mascot-avatars";
 import { Image } from "expo-image";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 import { loadingImageStyle, useApiImage } from "@/components/person-avatar";
+import { mascotAvatar } from "@/lib/mascot-avatar";
 import { colors } from "@/theme/colors";
 
 /**
- * Up to two initials: first and last word, or the first letters of one word.
- * With a separate surname, the first letter of the name plus that of the surname.
- */
-export function avatarInitials(name: string, surname?: string | null): string {
-  const last = surname?.trim();
-  const first = name.trim();
-  if (last && first) return `${Array.from(first)[0]}${Array.from(last)[0]}`.toUpperCase();
-  const parts = name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => Array.from(part));
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).join("").toUpperCase();
-  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-}
-
-/**
- * A person's account photo, or their initials when there is none or it cannot
+ * A person's account photo, or their assigned mascot when there is none or it cannot
  * load. Decorative by default: callers show the name beside it.
  */
 export function UserAvatar({
   name,
   surname,
+  userId,
   image,
   size = 40,
   persist = false,
   testID,
 }: {
+  userId?: string | number;
   name: string;
-  /** Surname on its own, when known: initials are then name + surname. */
+  /** Surname on its own, used with the name when no user id is available. */
   surname?: string | null;
   /** Authenticated photo route from the API, or null. */
   image: string | null | undefined;
@@ -44,8 +30,10 @@ export function UserAvatar({
   testID?: string;
 }) {
   // The photo route is private: it is fetched with the session, and the
-  // initials stay until it arrives or when it cannot load (#934).
+  // mascot stays until it arrives or when it cannot load (#934).
   const photo = useApiImage(image, persist);
+  const displayName = [name, surname].filter(Boolean).join(" ");
+  const fallback = mascotAvatarChoice(userId, displayName);
 
   return (
     <View
@@ -54,7 +42,7 @@ export function UserAvatar({
       importantForAccessibility="no-hide-descendants"
       style={{
         alignItems: "center",
-        backgroundColor: photo.loaded ? colors.elevatedSurface : colors.accent,
+        backgroundColor: photo.loaded ? colors.elevatedSurface : fallback.background,
         borderCurve: "continuous",
         borderRadius: size / 2,
         height: size,
@@ -64,15 +52,13 @@ export function UserAvatar({
       }}
     >
       {photo.loaded ? null : (
-        <Text
-          style={{
-            color: colors.accentText,
-            fontSize: Math.round(size * 0.36),
-            fontWeight: "700",
-          }}
-        >
-          {avatarInitials(name, surname)}
-        </Text>
+        <Image
+          testID={testID ? `${testID}-mascot` : undefined}
+          source={mascotAvatar(userId, displayName)}
+          accessible={false}
+          contentFit="cover"
+          style={{ height: size, width: size, backgroundColor: fallback.background }}
+        />
       )}
       {photo.props ? (
         <Image

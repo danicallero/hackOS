@@ -1,14 +1,13 @@
 "use client";
 import { handleOf, SOCIAL_HANDLE_PREFIX, urlForHandle } from "@hackos/shared/social-links";
-
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useId, useState } from "react";
 import { IconButton } from "@/components/common/icon-button";
+import { UserAvatar } from "@/components/common/user-avatar";
 import { CvViewer } from "@/components/profile/cv-viewer";
 import { SOCIAL_ICON, SocialLinks } from "@/components/profile/social-links";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,7 +23,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import {
-  apiAssetUrl,
   type DirectoryEntry,
   SOCIAL_KINDS,
   SOCIAL_LABEL,
@@ -33,7 +31,6 @@ import {
   type SocialLink,
 } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
-import { initials } from "@/lib/initials";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -576,10 +573,13 @@ export function DirectoryCard({ entry }: { entry: DirectoryEntry }) {
   const { t } = useLocale();
   return (
     <article className="flex min-w-0 gap-3 rounded-surface border border-border/60 p-4">
-      <Avatar className="size-10 shrink-0">
-        {entry.photoUrl && <AvatarImage src={apiAssetUrl(entry.photoUrl)} alt="" />}
-        <AvatarFallback>{initials(entry.displayName)}</AvatarFallback>
-      </Avatar>
+      <UserAvatar
+        userId={entry.userId}
+        name={entry.displayName}
+        image={entry.photoUrl}
+        className="size-10 shrink-0"
+        decorative
+      />
       <div className="min-w-0 flex-1 space-y-1">
         <p className="font-medium wrap-anywhere">{entry.displayName}</p>
         {entry.headline && <p className="text-sm wrap-anywhere">{entry.headline}</p>}

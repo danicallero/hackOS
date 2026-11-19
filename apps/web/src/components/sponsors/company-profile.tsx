@@ -170,10 +170,10 @@ export function CompanyView({ company, context }: { company: Company; context: R
                     className="button-interaction -mx-1 flex min-w-0 items-center gap-3 rounded-sm px-1 py-1 hover:bg-muted"
                   >
                     <UserAvatar
+                      userId={person.userId}
                       name={person.name}
                       image={person.avatarUrl}
                       className="size-10"
-                      showInitials
                       decorative
                     />
                     <span className="min-w-0 truncate text-sm font-medium">{person.name}</span>

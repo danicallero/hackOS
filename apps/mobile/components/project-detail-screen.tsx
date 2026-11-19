@@ -358,7 +358,12 @@ function ProjectMembers({ project }: { project: NativeProject }) {
               paddingVertical: 8,
             }}
           >
-            <PersonAvatar size={40} name={member.name ?? "?"} uri={member.photoUrl ?? null} />
+            <PersonAvatar
+              userId={member.userId}
+              size={40}
+              name={member.name ?? "?"}
+              uri={member.photoUrl ?? null}
+            />
             <Text style={{ color: colors.label, flex: 1, fontSize: type.body.fontSize }}>
               {member.name}
             </Text>

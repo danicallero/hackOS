@@ -5,10 +5,9 @@ import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Column } from "@/components/common/data-table";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { apiAssetUrl } from "@/lib/directory";
+import { UserAvatar } from "@/components/common/user-avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { type I18nText, pickText, type Translate, useLocale } from "@/lib/i18n";
-import { initials } from "@/lib/initials";
 import { getPublicChallenges } from "@/lib/public-content";
 import { cn } from "@/lib/utils";
 
@@ -35,10 +34,13 @@ interface ChallengeOption {
 function Person({ entry }: { entry: DirectoryEntry }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <Avatar size="lg">
-        {entry.photoUrl && <AvatarImage src={apiAssetUrl(entry.photoUrl)} alt="" />}
-        <AvatarFallback>{initials(entry.displayName)}</AvatarFallback>
-      </Avatar>
+      <UserAvatar
+        userId={entry.userId}
+        name={entry.displayName}
+        image={entry.photoUrl}
+        className="size-10 shrink-0"
+        decorative
+      />
       <div className="min-w-0">
         <p className="wrap-break-word font-medium">{entry.displayName}</p>
         {entry.headline && (

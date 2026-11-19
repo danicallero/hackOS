@@ -15,11 +15,13 @@ import { colors } from "@/theme/colors";
  */
 export function ProfilePhotoMenu({
   name,
+  userId,
   image,
   size,
   testID,
 }: {
   name: string;
+  userId?: number;
   image: string | null | undefined;
   size: number;
   testID?: string;
@@ -68,7 +70,7 @@ export function ProfilePhotoMenu({
         accessibilityState={{ busy, disabled: busy }}
         style={{ height: size, width: size }}
       >
-        <UserAvatar testID={testID} name={name} image={image} size={size} persist />
+        <UserAvatar userId={userId} testID={testID} name={name} image={image} size={size} persist />
         {busy ? (
           <View
             testID="profile-photo-pending"

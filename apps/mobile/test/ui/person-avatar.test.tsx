@@ -70,15 +70,15 @@ it("preserves cropped person photos", async () => {
   expect(StyleSheet.flatten(image.props.style).width).toBe(40);
 });
 
-it("dissolves the photo over its initials from the shared in-memory request (#935)", async () => {
+it("dissolves the photo over its mascot from the shared in-memory request (#935)", async () => {
   const view = await renderMobile(
     <PersonAvatar testID="avatar" size={40} name="Iria Test" uri="/api/users/9/photo?v=1" />,
   );
   const image = view.getByTestId("avatar-image", { includeHiddenElements: true });
-  // Visible from the start, so expo-image's own transition fades it in over the initials.
+  // The photo dissolves over the assigned fallback.
   expect(StyleSheet.flatten(image.props.style).opacity).toBeUndefined();
   expect(image.props.transition).toEqual({ duration: IMAGE_FADE_MS });
   expect(image.props.cachePolicy).toBe("memory");
   expect(JSON.stringify(image.props.source)).toContain("https://api.test/api/users/9/photo?v=1");
-  expect(view.getByText("IT")).toBeTruthy();
+  expect(view.getByTestId("avatar-mascot")).toBeTruthy();
 });

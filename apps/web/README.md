@@ -802,6 +802,10 @@ cannot confirm, decline or verify an account.
 
 ## Personal profile layout (H6/H7/H8)
 
+Person avatars use `UserAvatar` with the stable user id. Without a loaded photo,
+it renders the shared transparent HackUDC mascot and its deterministic background;
+the social-sharing canvas uses the same choice. See [default avatars](../../docs/directory.md#default-avatars-934-h55).
+
 The profile uses the content canvas with two equal columns from the `xl`
 breakpoint: personal details and their save footer beside email and password
 settings. Narrower viewports stack these sections. Assigned roles occupy a

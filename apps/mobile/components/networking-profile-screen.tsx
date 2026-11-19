@@ -371,7 +371,12 @@ export default function NetworkingProfileScreen() {
             helperProfile ? <HelperCompany helper={helperProfile.preview} /> : undefined
           }
           avatar={
-            <PersonAvatar size={AVATAR_SIZE} name={preview.displayName} uri={preview.photoUrl} />
+            <PersonAvatar
+              userId={preview.userId}
+              size={AVATAR_SIZE}
+              name={preview.displayName}
+              uri={preview.photoUrl}
+            />
           }
           actions={actions}
         />
@@ -396,7 +401,12 @@ export default function NetworkingProfileScreen() {
         avatar={
           <View style={{ height: AVATAR_SIZE, width: AVATAR_SIZE }}>
             <View style={{ opacity: form.showPhoto ? 1 : 0.4 }}>
-              <ProfilePhotoMenu name={fullName} image={me?.image} size={AVATAR_SIZE} />
+              <ProfilePhotoMenu
+                userId={me?.id}
+                name={fullName}
+                image={me?.image}
+                size={AVATAR_SIZE}
+              />
             </View>
             <View style={{ position: "absolute", right: -6, top: -6 }}>
               <VisibilityToggle

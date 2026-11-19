@@ -298,6 +298,7 @@ export function DiaryScreen() {
         metEntry.current = entry;
         celebrations.current += 1;
         setCelebration({
+          userId: entry.person.userId,
           key: celebrations.current,
           name: entry.person.displayName,
           photoUrl: entry.person.photoUrl,
@@ -465,6 +466,7 @@ export function DiaryScreen() {
     const person = entry.person;
     return (
       <DiaryPersonRow
+        userId={person?.userId}
         testID={`diary-entry-${entry.id}`}
         name={person?.displayName ?? t("diaryUnavailablePerson")}
         available={person !== null}
@@ -644,6 +646,7 @@ export function DiaryScreen() {
     </ScrollView>
   );
   const celebrationSelf = {
+    userId: me?.id,
     name: [me?.name, me?.surname].filter(Boolean).join(" ") || (me?.email ?? ""),
     image: me?.image ?? null,
   };

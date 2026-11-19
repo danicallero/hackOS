@@ -304,9 +304,11 @@ describe("OpaqueRouterTabs — account photo (#934)", () => {
     expect(photo.props.cachePolicy).toBe("disk");
   });
 
-  it("keeps the Account symbol without a photo", async () => {
+  it("shows the assigned account mascot without a photo", async () => {
     await render(<OpaqueRouterTabs {...DEFAULT_PROPS} account={{ name: "Ada", image: null }} />);
-    expect(screen.getByTestId("symbol-account_circle")).toBeTruthy();
+    expect(
+      screen.getByTestId("account-tab-avatar-mascot", { includeHiddenElements: true }),
+    ).toBeTruthy();
   });
 
   describe("when Account sits behind Others", () => {

@@ -7,6 +7,7 @@ import { colors, type } from "@/theme";
 
 export interface AvatarRowItem {
   key: string;
+  userId?: number;
   name: string;
   /** Given name and surname on their own, for initials. */
   firstName?: string;
@@ -51,6 +52,7 @@ export function AvatarRow({
               <View>
                 {kind === "person" ? (
                   <UserAvatar
+                    userId={item.userId}
                     name={item.firstName ?? item.name}
                     surname={item.surname}
                     image={item.uri}

@@ -7,13 +7,13 @@ import { renderMobile } from "./render";
 jest.mock("@/lib/api", () => ({ getCurrentSessionCookie: () => "session=abc" }));
 jest.mock("@/lib/env", () => ({ API_URL: "https://api.test/" }));
 
-const { UserAvatar, avatarInitials } =
+const { UserAvatar } =
   require("@/components/user-avatar") as typeof import("@/components/user-avatar");
 
 const loadEvent = { nativeEvent: { cacheType: "none", source: { url: "", width: 1, height: 1 } } };
 
 describe("UserAvatar (#934)", () => {
-  it("loads the private photo route with the session, in memory only, behind the initials", async () => {
+  it("loads the private photo route with the session, in memory only, behind the mascot", async () => {
     await renderMobile(
       <UserAvatar testID="avatar" name="Ada Lovelace" image="/api/users/7/photo?v=abc" />,
     );
@@ -31,35 +31,23 @@ describe("UserAvatar (#934)", () => {
     // The cache key tags the session without carrying the cookie.
     expect(photo.props.source[0].cacheKey).not.toContain("session=abc");
     expect(photo.props.cachePolicy).toBe("memory");
-    // Initials stay until the photo has drawn.
-    expect(screen.getByText("AL", { includeHiddenElements: true })).toBeTruthy();
+    // The assigned mascot stays until the photo has drawn.
+    expect(screen.getByTestId("avatar-mascot", { includeHiddenElements: true })).toBeTruthy();
 
     await act(async () => fireEvent(photo, "load", loadEvent));
-    expect(screen.queryByText("AL", { includeHiddenElements: true })).toBeNull();
+    expect(screen.queryByTestId("avatar-mascot", { includeHiddenElements: true })).toBeNull();
     expect(screen.getByTestId("avatar-photo", { includeHiddenElements: true })).toBe(photo);
   });
 
-  it("shows initials without a photo and when the photo fails to load", async () => {
+  it("shows a mascot without a photo and when the private photo fails to load", async () => {
     await renderMobile(<UserAvatar testID="avatar" name="Ada Lovelace" image={null} />);
-    expect(screen.getByText("AL", { includeHiddenElements: true })).toBeTruthy();
+    expect(screen.getByTestId("avatar-mascot", { includeHiddenElements: true })).toBeTruthy();
     expect(screen.queryByTestId("avatar-photo", { includeHiddenElements: true })).toBeNull();
 
     await renderMobile(<UserAvatar testID="broken" name="Grace" image="/api/users/8/photo" />);
     const photo = screen.getByTestId("broken-photo", { includeHiddenElements: true });
     await act(async () => fireEvent(photo, "error", { nativeEvent: { error: "404" } }));
-    expect(screen.getByText("GR", { includeHiddenElements: true })).toBeTruthy();
+    expect(screen.getByTestId("broken-mascot", { includeHiddenElements: true })).toBeTruthy();
     expect(screen.queryByTestId("broken-photo", { includeHiddenElements: true })).toBeNull();
-  });
-
-  it("derives initials from the first and last words", () => {
-    expect(avatarInitials("María José del Río")).toBe("MR");
-    expect(avatarInitials("  ")).toBe("?");
-    expect(avatarInitials("Ñandú")).toBe("ÑA");
-  });
-
-  it("uses the given name and surname when both are known", () => {
-    expect(avatarInitials("Laura", "Domínguez Ruiz")).toBe("LD");
-    expect(avatarInitials("María José", "del Río")).toBe("MD");
-    expect(avatarInitials("Laura", null)).toBe("LA");
   });
 });

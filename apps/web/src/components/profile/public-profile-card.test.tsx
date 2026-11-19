@@ -644,7 +644,7 @@ describe("DirectoryCard", () => {
   it("shows only the name when nothing else is public", () => {
     act(() => root.render(<DirectoryCard entry={entry} />));
     expect(container.querySelector("ul")).toBeNull();
-    expect(container.textContent).toBe("MFMaría José F.");
+    expect(container.textContent).toBe("María José F.");
   });
 
   it("lists one or many challenges under the project", () => {

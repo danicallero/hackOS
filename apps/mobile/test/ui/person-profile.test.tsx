@@ -1,3 +1,4 @@
+import { mascotAvatarChoice } from "@hackos/shared/mascot-avatars";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { Alert, Linking, Platform } from "react-native";
 import { PersonProfileScreen } from "@/components/person-profile-screen";
@@ -190,14 +191,16 @@ it("draws the photo itself behind the header (H44, H48)", async () => {
   );
 });
 
-it("is blue without a photo (H48)", async () => {
+it("uses the assigned mascot background without a photo (H48)", async () => {
   personResult = { ...profile, photoUrl: null };
+  const hex = mascotAvatarChoice(profile.userId).background;
+  const rgb = [1, 3, 5].map((start) => Number.parseInt(hex.slice(start, start + 2), 16));
   await renderMobile(<PersonProfileScreen />);
   await screen.findByText("Ana Souto");
   expect(screen.getByTestId("person-hero").props.style).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
-        experimental_backgroundImage: expect.stringContaining("rgba(0,122,255,0.8)"),
+        experimental_backgroundImage: expect.stringContaining(`rgba(${rgb.join(",")},0.8)`),
       }),
     ]),
   );

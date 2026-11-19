@@ -556,6 +556,7 @@ export function CompanyProfileScreen() {
                     <AvatarRow
                       items={profile.representatives.map((person) => ({
                         key: String(person.userId),
+                        userId: person.userId,
                         name: person.name,
                         firstName: person.firstName,
                         surname: person.surname,

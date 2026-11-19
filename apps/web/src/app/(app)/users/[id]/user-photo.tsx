@@ -5,20 +5,19 @@ import { CameraIcon } from "@phosphor-icons/react/dist/csr/Camera";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import { Spinner } from "@/components/common/spinner";
+import { UserAvatar } from "@/components/common/user-avatar";
 import { usePhotoUpload } from "@/components/profile/use-photo-upload";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { apiAssetUrl } from "@/lib/directory";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import type { UserDetail } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { fullName, userInitials } from "./shared";
+import { fullName } from "./shared";
 
 const AVATAR = "size-14 ring-1 ring-border sm:size-16";
 
@@ -33,10 +32,7 @@ export function UserPhoto({ user, onChanged }: { user: UserDetail; onChanged: ()
   const { input, pick, remove, pending } = usePhotoUpload(`/api/users/${user.id}/photo`, onChanged);
 
   const avatar = (
-    <Avatar className={AVATAR}>
-      {user.image && <AvatarImage src={apiAssetUrl(user.image)} alt={fullName(user)} />}
-      <AvatarFallback className="text-lg">{userInitials(user)}</AvatarFallback>
-    </Avatar>
+    <UserAvatar userId={user.id} name={fullName(user)} image={user.image} className={AVATAR} />
   );
   if (!canWrite) return avatar;
 

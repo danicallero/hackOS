@@ -491,14 +491,15 @@ export function ProjectEditor({
                       .filter((member) => member.status !== "declined")
                       .map((member) => (
                         <li className="flex items-center gap-3 py-3" key={member.userId}>
-                          {member.photoUrl && (
+                          {
                             <UserAvatar
+                              userId={member.userId}
                               name={member.name ?? ""}
                               image={member.photoUrl}
                               className="size-8"
                               decorative
                             />
-                          )}
+                          }
                           <span className="mr-auto min-w-0 flex-1 wrap-anywhere">
                             {member.name}
                           </span>

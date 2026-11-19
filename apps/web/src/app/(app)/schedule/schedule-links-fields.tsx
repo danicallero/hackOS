@@ -127,11 +127,10 @@ export function ScheduleLinksFields({
                               label={t("dragToReorderAria", { name })}
                             />
                             <UserAvatar
+                              userId={id}
                               name={name}
                               image={speaker?.avatarUrl}
                               className="size-6"
-                              fallbackClassName="text-[0.625rem]"
-                              showInitials
                               decorative
                             />
                             <span className="min-w-0 flex-1 truncate px-1 text-sm">{name}</span>
