@@ -18,6 +18,7 @@ import { apiFetch } from "@/lib/api";
 import { NO_PHOTO_TINT } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
 import { safeBack, transparentDetailHeaderOptions } from "@/lib/navigation";
+import { seedCompanies } from "@/lib/profile-seed";
 import { type ChallengeDetail, fetchChallengeDetail, type GalleryPage } from "@/lib/projects";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { colors, type } from "@/theme";
@@ -98,6 +99,10 @@ export function ChallengeDetailBody({
     };
   }, [challenge.id, onOpenProjects]);
   const company = challenge.company;
+  // The company's page opens on its logo and name (H44, #935), from memory only.
+  useEffect(() => {
+    if (company) seedCompanies([{ id: company.id, name: company.name, logoUrl: company.logoUrl }]);
+  }, [company]);
   return (
     <>
       {showTitle ? (

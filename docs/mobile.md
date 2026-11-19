@@ -1304,6 +1304,27 @@ shows every company they belong to (`enterprises`, one row each, opening its
 company screen with the same zoom) and Talks (`activities`) when the API sends
 them, and a challenge's company row opens the company screen.
 
+**Opening a profile (H44, H55, H63, #935).** Person profiles (diary, help desk
+helper, requester) and the company screen never open on a blank loading screen.
+Lists that link to them (the diary's people, the Companies album, the help desk
+Helpers list and request rows, schedule speakers and companies, a challenge's
+company, a company's Representatives, a person's companies) write what their
+row shows into `lib/profile-seed.ts`: a memory-only LRU (300 entries) of
+id, name, photo/logo, headline and help desk role, keyed by user, company or,
+for a requester, request id. A loaded profile seeds itself and the people or
+companies it lists. Nothing there is written to disk, and `useMe` clears it
+with `clearProfileSeeds` on sign-out and session loss, next to
+`clearPersistedPhotos`. On open, the screen draws the seeded header (avatar or
+logo, name, headline, hero, a helper's role badge) on the first frame and grey
+section placeholders below (`components/skeleton.tsx`: `SkeletonGroup` breathes
+gently, static under Reduce Motion; `SkeletonSection` has a `Section`'s shape);
+the loaded sections then fade in (`RevealView`). Without a seed (a deep link)
+the placeholders include the avatar and name. If the load fails with a seed, the
+header stays and a compact notice ("Couldn't load the rest of this profile.",
+or the offline notice with Reconnect) replaces the placeholders; Retry appears
+only when retrying can help (offline, 429, 5xx). Without a seed the full-page
+error stays, and 404/403 still shows "Profile not available".
+
 **Image heroes (H44, H45, H48).** Person, company, challenge and project
 pages wash their header in their image (photo, logo, the company's logo, the
 first project image) with `ImageHero`: the image itself, enlarged and blurred
@@ -1551,8 +1572,13 @@ routes: `useApiImage` (`components/person-avatar.tsx`) hands `expo-image` the
 `apiImageSource` from `lib/directory.ts` — the session cookie as a header and a
 cache key tagged with the session — and every caller keeps
 `cachePolicy="memory"`, so a photo is never written to disk and one hidden later
-is gone after the next launch. The fallback (initials or symbol) stays until the
-photo has drawn. Public sponsor logos use `expo-image`'s default disk cache.
+is gone after the next launch. The fallback (initials or symbol) sits under the
+photo, which dissolves in over it (`transition`, `IMAGE_FADE_MS`, instant under
+Reduce Motion) while the fallback fades out (`useFallbackFade`), so initials
+never jump to the photo. List rows, the profile avatar and its hero all ask for
+the same `apiImageSource` (same cache key, memory policy), so a photo a list
+drew is reused when its profile opens. Public sponsor logos use `expo-image`'s
+default disk cache.
 **Native dependency:** `expo-image` needs a
 rebuilt development client and store build.
 

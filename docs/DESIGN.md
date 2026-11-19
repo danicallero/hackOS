@@ -1128,7 +1128,10 @@ Forms:
 
 Loading / empty / error:
 
-- Loading uses structural skeletons matching the layout they replace.
+- Loading uses structural skeletons matching the layout they replace. On
+  mobile, `components/skeleton.tsx` draws them as `Section`-shaped grey blocks
+  that breathe gently (static under Reduce Motion) and the real content fades
+  in; what a list already knew (a name, a photo) renders instead of a skeleton.
 - A failed region keeps its error and retry in that region; toasts are never
   the only channel for a critical failure.
 - An empty state adds an action only when the page has no other way out — if a

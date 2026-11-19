@@ -1,6 +1,6 @@
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type LayoutChangeEvent, Text, View } from "react-native";
 import Animated, { runOnJS, useAnimatedReaction } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -23,6 +23,12 @@ import {
 import { ProfileCard } from "@/components/profile-card";
 import { NoteRow, QuickAction } from "@/components/profile-parts";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import {
+  RevealView,
+  SkeletonGroup,
+  SkeletonProfileHeader,
+  SkeletonSection,
+} from "@/components/skeleton";
 import { SymbolView } from "@/components/symbol";
 import { useColorScheme } from "@/components/useColorScheme";
 import { alert } from "@/lib/alert";
@@ -34,6 +40,14 @@ import { availabilityDays, type HelperDetail } from "@/lib/help-desk";
 import { NO_PHOTO_TINT } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
 import { safeBack } from "@/lib/navigation";
+import { isTransientError } from "@/lib/offline-error";
+import {
+  type PersonSeed,
+  personSeed,
+  requesterSeed,
+  seedCompanies,
+  seedPeople,
+} from "@/lib/profile-seed";
 import { reportContent } from "@/lib/reports";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import { isPadIdiom } from "@/lib/tabs";
@@ -43,6 +57,19 @@ import { useParticipantLayout } from "@/theme/layout-participant";
 const notFound = () => new ApiError("Person not found", 404, "not_found");
 const profileUserId = (value: DirectoryEntry | HelperDetail<DirectoryEntry>) =>
   "profile" in value ? value.profile.userId : value.userId;
+/** A list's seed as the header's data: identity only, every section still empty. */
+const seedEntry = (seed: PersonSeed): DirectoryEntry => ({
+  userId: seed.userId,
+  displayName: seed.displayName,
+  photoUrl: seed.photoUrl,
+  headline: seed.headline ?? null,
+  bio: null,
+  locationNote: null,
+  socials: [],
+  cvUrl: null,
+  projects: [],
+  challenges: [],
+});
 
 type State =
   | { status: "loading" }
@@ -101,11 +128,18 @@ export function PersonProfileScreen({
   // button hidden, so these screens always draw their own glass circle.
   const floatingBack = true;
 
-  const load = useCallback(async () => {
+  // What the list that opened this page already knew (memory only, #935): the
+  // header draws from it on the first frame while the rest loads.
+  const seed = useMemo(
+    () => (source === "requester" ? requesterSeed(userId) : personSeed(userId)),
+    [source, userId],
+  );
+
+  const load = useCallback(async (): Promise<boolean> => {
     const request = ++requestId.current;
     if (!Number.isSafeInteger(userId) || userId <= 0) {
       setState({ status: "missing" });
-      return;
+      return true;
     }
     // H63: a published helper opens the same profile, read through the help
     // desk (publication is the consent), plus their schedule and presence.
@@ -120,7 +154,7 @@ export function PersonProfileScreen({
           : apiFetch<DirectoryEntry>(`/api/directory/${userId}`),
       apiFetch<{ items: DiaryEntry[] }>("/api/me/diary"),
     ]);
-    if (request !== requestId.current) return;
+    if (request !== requestId.current) return true;
     if (diary.status === "fulfilled") {
       const personId = person.status === "fulfilled" ? profileUserId(person.value) : userId;
       setEntry(
@@ -137,17 +171,19 @@ export function PersonProfileScreen({
           ? { status: "ready", person: value.profile, helper: value }
           : { status: "ready", person: value, helper: null },
       );
-    } else if (
+      return true;
+    }
+    if (
       person.reason instanceof ApiError &&
       (person.reason.status === 404 || person.reason.status === 403)
     ) {
       setState({ status: "missing" });
-    } else {
-      const error =
-        person.reason instanceof Error ? person.reason : new Error(String(person.reason));
-      setLoadError(error);
-      setState((current) => (current.status === "ready" ? current : { status: "error", error }));
+      return true;
     }
+    const error = person.reason instanceof Error ? person.reason : new Error(String(person.reason));
+    setLoadError(error);
+    setState((current) => (current.status === "ready" ? current : { status: "error", error }));
+    return false;
   }, [userId, source]);
 
   useEffect(() => {
@@ -216,8 +252,29 @@ export function PersonProfileScreen({
   const goBack = () => safeBack(router, "/");
   const person = state.status === "ready" ? state.person : null;
   const helper = state.status === "ready" ? state.helper : null;
+  // The header: the loaded profile, else the list's seed while it loads or failed.
+  const shown =
+    person ??
+    (seed && (state.status === "loading" || state.status === "error") ? seedEntry(seed) : null);
+  // H61: only the help desk shows a helper's role; the seed carries it until the helper loads.
+  const roleName =
+    helper?.visibleRoleName ?? (person || source !== "helpDesk" ? null : seed?.roleName);
   // H44/H48: the photo's own colours behind the header; blue without a photo.
-  const nameColor = useImageHeroForeground(person?.photoUrl, dark, NO_PHOTO_TINT);
+  const nameColor = useImageHeroForeground(shown?.photoUrl, dark, NO_PHOTO_TINT);
+
+  // Reopening this person, or a company listed here, starts from what is known now.
+  useEffect(() => {
+    if (!person) return;
+    seedPeople([
+      {
+        userId: person.userId,
+        displayName: person.displayName,
+        photoUrl: person.photoUrl,
+        headline: person.headline,
+      },
+    ]);
+    seedCompanies(person.enterprises ?? []);
+  }, [person]);
 
   return (
     <View ref={avatarCollapse.hostRef} onLayout={avatarCollapse.onHostLayout} style={{ flex: 1 }}>
@@ -225,8 +282,8 @@ export function PersonProfileScreen({
       {process.env.EXPO_OS === "ios" ? (
         <Stack.Screen
           options={{
-            title: titleShown && person ? person.displayName : "",
-            headerTitle: titleShown && person ? person.displayName : "",
+            title: titleShown && shown ? shown.displayName : "",
+            headerTitle: titleShown && shown ? shown.displayName : "",
             headerBackVisible: !floatingBack,
             scrollEdgeEffects: { top: titleShown ? "soft" : "hidden" },
           }}
@@ -255,7 +312,7 @@ export function PersonProfileScreen({
           flexGrow: 1,
           gap: 24,
           // A short profile still scrolls to the collapsed avatar (#935).
-          minHeight: person ? avatarCollapse.contentMinHeight : undefined,
+          minHeight: shown ? avatarCollapse.contentMinHeight : undefined,
           paddingBottom: Math.max(40, tabBarBottomInset + 24),
           ...readable.content,
           paddingTop: insets.top + (usesCustomAndroidHeader ? 64 : 52),
@@ -264,27 +321,58 @@ export function PersonProfileScreen({
           <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
         }
       >
-        {person ? (
+        {shown ? (
           <ImageHero
-            uri={person.photoUrl}
+            uri={shown.photoUrl}
             dark={dark}
             fallback={NO_PHOTO_TINT}
             testID="person-hero"
           />
         ) : null}
         {loadError && state.status === "ready" ? (
-          <RequestFeedback error={loadError} onRetry={() => void load()} retrying={refreshing} />
+          <RequestFeedback
+            error={loadError}
+            onRetry={isTransientError(loadError) ? () => load() : undefined}
+            retrying={refreshing}
+          />
         ) : null}
-        {state.status === "loading" ? (
-          <RequestFeedback loading />
-        ) : state.status === "error" ? (
-          <RequestFeedback error={state.error} onRetry={() => void load()} />
-        ) : state.status === "missing" || !person ? (
+        {state.status === "missing" ? (
           <EmptyState icon="person.crop.circle" title={t("directoryPersonNotFound")} />
+        ) : !shown ? (
+          state.status === "error" ? (
+            <RequestFeedback
+              error={state.error}
+              onRetry={isTransientError(state.error) ? () => load() : undefined}
+            />
+          ) : (
+            // Opened without a list behind it (a deep link): the page's shape, not a spinner.
+            <SkeletonGroup testID="person-profile-skeleton">
+              <SkeletonProfileHeader size={avatarSize} />
+              <SkeletonSection rows={3} />
+              <SkeletonSection title rows={2} />
+            </SkeletonGroup>
+          )
         ) : (
           <>
             <ProfileCard
+              placeholder={
+                person ? undefined : state.status === "error" ? (
+                  // Keep the header the list gave us; only the rest failed.
+                  <RequestFeedback
+                    error={state.error}
+                    message={t("profileRestError")}
+                    onRetry={isTransientError(state.error) ? () => load() : undefined}
+                  />
+                ) : (
+                  <SkeletonGroup testID="person-profile-skeleton">
+                    <SkeletonSection rows={3} />
+                    <SkeletonSection title rows={2} />
+                  </SkeletonGroup>
+                )
+              }
+              revealBody
               beforeKnowledge={
+                person &&
                 helper?.affiliation &&
                 !(person.enterprises ?? []).some(
                   (company) => company.name === helper.affiliation,
@@ -292,7 +380,7 @@ export function PersonProfileScreen({
                   <HelperCompany helper={helper} />
                 ) : undefined
               }
-              data={person}
+              data={shown}
               nameColor={nameColor}
               onNameLayout={(event: LayoutChangeEvent) => {
                 avatarCollapse.onNameLayout(event);
@@ -303,11 +391,7 @@ export function PersonProfileScreen({
               avatar={
                 <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={avatarSize}>
                   <Link.AppleZoomTarget>
-                    <PersonAvatar
-                      size={avatarSize}
-                      name={person.displayName}
-                      uri={person.photoUrl}
-                    />
+                    <PersonAvatar size={avatarSize} name={shown.displayName} uri={shown.photoUrl} />
                   </Link.AppleZoomTarget>
                 </ProfileAvatarCollapseAnchor>
               }
@@ -335,7 +419,7 @@ export function PersonProfileScreen({
                       onPress={() => setEditingNote(true)}
                     />
                   ) : null}
-                  {person.cvUrl && showCv ? (
+                  {person?.cvUrl && showCv ? (
                     <QuickAction
                       icon="doc.text"
                       label={t("directoryCv")}
@@ -361,136 +445,140 @@ export function PersonProfileScreen({
               }
             />
 
-            {(person.enterprises ?? []).length > 0 ? (
-              <Section>
-                {(person.enterprises ?? []).map((company, index) => (
-                  <View key={company.id}>
-                    {index > 0 ? <Separator inset={68} /> : null}
-                    <Link href={`/companies/${company.id}`} asChild>
-                      <PressableFeedback
-                        feedback="row"
-                        accessibilityRole="button"
-                        accessibilityLabel={company.name}
-                        style={{
-                          alignItems: "center",
-                          flexDirection: "row",
-                          gap: 12,
-                          minHeight: 60,
-                          paddingHorizontal: 16,
-                          paddingVertical: 8,
-                        }}
-                      >
-                        <Link.AppleZoom>
-                          <View>
-                            <PersonAvatar
-                              size={40}
-                              kind="sponsor"
-                              name={company.name}
-                              uri={company.logoUrl}
-                              logoNegativeUrl={company.logoNegativeUrl}
+            {person ? (
+              <RevealView>
+                {(person.enterprises ?? []).length > 0 ? (
+                  <Section>
+                    {(person.enterprises ?? []).map((company, index) => (
+                      <View key={company.id}>
+                        {index > 0 ? <Separator inset={68} /> : null}
+                        <Link href={`/companies/${company.id}`} asChild>
+                          <PressableFeedback
+                            feedback="row"
+                            accessibilityRole="button"
+                            accessibilityLabel={company.name}
+                            style={{
+                              alignItems: "center",
+                              flexDirection: "row",
+                              gap: 12,
+                              minHeight: 60,
+                              paddingHorizontal: 16,
+                              paddingVertical: 8,
+                            }}
+                          >
+                            <Link.AppleZoom>
+                              <View>
+                                <PersonAvatar
+                                  size={40}
+                                  kind="sponsor"
+                                  name={company.name}
+                                  uri={company.logoUrl}
+                                  logoNegativeUrl={company.logoNegativeUrl}
+                                />
+                              </View>
+                            </Link.AppleZoom>
+                            <Text
+                              numberOfLines={1}
+                              style={{
+                                color: colors.label,
+                                flex: 1,
+                                fontSize: type.body.fontSize,
+                                fontWeight: "600",
+                              }}
+                            >
+                              {company.name}
+                            </Text>
+                            <SymbolView
+                              name="chevron.right"
+                              size={13}
+                              tintColor={colors.tertiaryLabel}
+                              accessible={false}
                             />
-                          </View>
-                        </Link.AppleZoom>
-                        <Text
-                          numberOfLines={1}
-                          style={{
-                            color: colors.label,
-                            flex: 1,
-                            fontSize: type.body.fontSize,
-                            fontWeight: "600",
-                          }}
-                        >
-                          {company.name}
-                        </Text>
-                        <SymbolView
-                          name="chevron.right"
-                          size={13}
-                          tintColor={colors.tertiaryLabel}
-                          accessible={false}
-                        />
-                      </PressableFeedback>
-                    </Link>
-                  </View>
-                ))}
-              </Section>
-            ) : null}
-
-            <ActivityLinkSection title={t("personTalks")} items={person.activities ?? []} />
-
-            {helper ? (
-              <Section title={t("helpSchedule")} footer={t("helpScheduleNote")}>
-                {helper.challenges.length > 0 ? (
-                  <InfoRow
-                    label={t("helpChallengeAlerts")}
-                    value={helper.challenges.map((challenge) => challenge.name).join(", ")}
-                  />
+                          </PressableFeedback>
+                        </Link>
+                      </View>
+                    ))}
+                  </Section>
                 ) : null}
-                <View style={{ padding: 16 }}>
-                  <HelperPresence helper={helper} />
-                </View>
-                {availabilityDays(helper.availability, language).map((day) => (
-                  <View key={day.key}>
-                    <Separator inset={16} />
-                    <InfoRow
-                      label={day.label}
-                      value={day.ranges.map((range) => range.label).join(", ")}
-                    />
-                  </View>
-                ))}
-              </Section>
-            ) : null}
 
-            {entry ? (
-              <Section>
-                <PressableFeedback
-                  feedback="row"
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: busy !== null, busy: busy === "remove" }}
-                  disabled={busy !== null}
-                  onPress={confirmRemove}
-                  style={{
-                    alignItems: "center",
-                    minHeight: 50,
-                    justifyContent: "center",
-                    paddingHorizontal: 16,
-                  }}
-                >
-                  <Text style={{ color: colors.destructive, fontSize: type.callout.fontSize }}>
-                    {t("diaryRemoveFromDiary")}
-                  </Text>
-                </PressableFeedback>
-              </Section>
+                <ActivityLinkSection title={t("personTalks")} items={person.activities ?? []} />
+
+                {helper ? (
+                  <Section title={t("helpSchedule")} footer={t("helpScheduleNote")}>
+                    {helper.challenges.length > 0 ? (
+                      <InfoRow
+                        label={t("helpChallengeAlerts")}
+                        value={helper.challenges.map((challenge) => challenge.name).join(", ")}
+                      />
+                    ) : null}
+                    <View style={{ padding: 16 }}>
+                      <HelperPresence helper={helper} />
+                    </View>
+                    {availabilityDays(helper.availability, language).map((day) => (
+                      <View key={day.key}>
+                        <Separator inset={16} />
+                        <InfoRow
+                          label={day.label}
+                          value={day.ranges.map((range) => range.label).join(", ")}
+                        />
+                      </View>
+                    ))}
+                  </Section>
+                ) : null}
+
+                {entry ? (
+                  <Section>
+                    <PressableFeedback
+                      feedback="row"
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: busy !== null, busy: busy === "remove" }}
+                      disabled={busy !== null}
+                      onPress={confirmRemove}
+                      style={{
+                        alignItems: "center",
+                        minHeight: 50,
+                        justifyContent: "center",
+                        paddingHorizontal: 16,
+                      }}
+                    >
+                      <Text style={{ color: colors.destructive, fontSize: type.callout.fontSize }}>
+                        {t("diaryRemoveFromDiary")}
+                      </Text>
+                    </PressableFeedback>
+                  </Section>
+                ) : null}
+                <Section>
+                  <PressableFeedback
+                    feedback="row"
+                    accessibilityRole="button"
+                    onPress={() => reportContent({ userId: person.userId }, t)}
+                    style={{
+                      alignItems: "center",
+                      minHeight: 50,
+                      justifyContent: "center",
+                      paddingHorizontal: 16,
+                    }}
+                  >
+                    <Text style={{ color: colors.destructive, fontSize: type.callout.fontSize }}>
+                      {t("reportContent")}
+                    </Text>
+                  </PressableFeedback>
+                </Section>
+              </RevealView>
             ) : null}
-            <Section>
-              <PressableFeedback
-                feedback="row"
-                accessibilityRole="button"
-                onPress={() => reportContent({ userId: person.userId }, t)}
-                style={{
-                  alignItems: "center",
-                  minHeight: 50,
-                  justifyContent: "center",
-                  paddingHorizontal: 16,
-                }}
-              >
-                <Text style={{ color: colors.destructive, fontSize: type.callout.fontSize }}>
-                  {t("reportContent")}
-                </Text>
-              </PressableFeedback>
-            </Section>
           </>
         )}
       </Animated.ScrollView>
-      {person ? (
+      {shown ? (
         <ProfileAvatarCollapse
           controller={avatarCollapse}
-          image={person.photoUrl}
-          name={person.displayName}
+          image={shown.photoUrl}
+          name={shown.displayName}
           size={avatarSize}
           variant="person"
         />
       ) : null}
-      {helper?.visibleRoleName ? (
+      {roleName ? (
         // H61: drawn over the screen on iOS too: an item in the native bar makes the whole bar
         // take touches, so the floating back circle under it stopped responding.
         <View
@@ -504,7 +592,7 @@ export function PersonProfileScreen({
             top: insets.top + 8,
           }}
         >
-          <StatusPill tone="accent">{helper.visibleRoleName}</StatusPill>
+          <StatusPill tone="accent">{roleName}</StatusPill>
         </View>
       ) : null}
     </View>

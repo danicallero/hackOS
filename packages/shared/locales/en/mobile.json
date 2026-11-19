@@ -54,6 +54,7 @@
   "retry": "Retry",
   "requestError": "Couldn't load this information. Try again.",
   "requestServerError": "The server is temporarily unavailable. Try again in a moment.",
+  "profileRestError": "Couldn't load the rest of this profile.",
   "requestUnavailable": "This information isn't available for this account yet.",
   "requestSessionExpired": "Your session is no longer valid. Sign out and sign in again.",
   "sessionRestoringTitle": "Opening hackOS",
