@@ -40,6 +40,25 @@ describe("screen tab titles", () => {
     expect(document.head.querySelectorAll("title")).toHaveLength(1);
   });
 
+  it("lets a record title override its mounted section header without competing writes", async () => {
+    act(() =>
+      root.render(
+        <>
+          <PageHeader title="Roles" />
+          <PageHeader title="Organizer" />
+        </>,
+      ),
+    );
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(document.title).toBe("Organizer | hackOS");
+    document.title = "Late metadata";
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(document.title).toBe("Organizer | hackOS");
+    act(() => root.render(<PageHeader title="Roles" />));
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(document.title).toBe("Roles | hackOS");
+  });
+
   it("identifies sibling destinations while retaining the shared visible heading", () => {
     act(() => root.render(<PageHeader title="Home" tabTitle="Inbox" />));
     expect(document.title).toBe("Inbox | hackOS");

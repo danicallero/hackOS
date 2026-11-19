@@ -2,14 +2,19 @@
 
 import { useEffect } from "react";
 
+const mountedTitles: { title: string }[] = [];
+let fallbackTitle = "";
+
 /** H49/H55: reuse localized screen copy while retaining Next's single metadata title tag. */
 export function PageTitle({ title }: { title: string }) {
   useEffect(() => {
-    const previous = document.title;
+    if (mountedTitles.length === 0) fallbackTitle = document.title;
     const label = title.trim();
     const current = label && label !== "hackOS" ? `${label} | hackOS` : "hackOS";
+    const entry = { title: current };
+    mountedTitles.push(entry);
     const applyTitle = () => {
-      if (document.title !== current) document.title = current;
+      if (mountedTitles.at(-1) === entry && document.title !== current) document.title = current;
     };
     applyTitle();
     // H49/H55: streamed route metadata can arrive after this screen's effect.
@@ -31,7 +36,9 @@ export function PageTitle({ title }: { title: string }) {
     });
     return () => {
       observer.disconnect();
-      document.title = previous;
+      const wasActive = mountedTitles.at(-1) === entry;
+      mountedTitles.splice(mountedTitles.indexOf(entry), 1);
+      if (wasActive) document.title = mountedTitles.at(-1)?.title ?? fallbackTitle;
     };
   }, [title]);
   return null;

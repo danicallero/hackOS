@@ -1029,7 +1029,9 @@ for routes, authorization, save ownership and validation.
 Use `tabTitle` when sibling destinations share a visible heading (Home uses
 Event, Schedule or Inbox). Embedded specimens (`headingLevel={2}`) do not set
 a title. `PageTitle` retains ownership while mounted if Next.js streams route
-metadata after hydration, and releases that ownership on unmount. Screens
+metadata after hydration, and releases that ownership on unmount. When a record
+header mounts alongside a section header, the last mounted title owns the tab
+until it unmounts; other mounted titles do not compete with it. Screens
 without `PageHeader`, such as authentication, use `PageTitle`
 with their localized screen or status heading. Avoid imperative `document.title`
 writes in embedded content: the containing screen owns its title.
