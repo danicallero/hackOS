@@ -11,14 +11,7 @@ import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { FavouriteStar } from "@/components/favourite-star";
 import { FloatingBackButton } from "@/components/floating-back-button";
 import { HelperCompany, HelperPresence } from "@/components/help-desk/rows";
-import {
-  AndroidStatusBarScrim,
-  EmptyState,
-  InfoRow,
-  Section,
-  Separator,
-  StatusPill,
-} from "@/components/native-ui";
+import { EmptyState, InfoRow, Section, Separator, StatusPill } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import {
@@ -504,9 +497,6 @@ export function PersonProfileScreen({
           </>
         )}
       </Animated.ScrollView>
-      {/* Keeps scrolled content out from behind the clock; the floating back
-          button and the masked avatar stay above it. */}
-      <AndroidStatusBarScrim />
       {person ? (
         <ProfileAvatarCollapse
           controller={avatarCollapse}

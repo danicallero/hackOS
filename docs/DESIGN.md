@@ -1576,7 +1576,9 @@ architecture: [`mobile.md`](./mobile.md).**
   opaque compact app bar, or pad the scroll content by the full header height
   yourself. Header-less Android tab screens draw edge-to-edge under a
   transparent status bar, so they need `AndroidStatusBarScrim` (`native-ui`) to
-  keep scrolled rows from sliding behind the clock.
+  keep scrolled rows from sliding behind the clock. Person and company profiles
+  are the exception: their tinted hero runs to the top edge and content scrolls
+  under the status bar with no band, as on iOS.
 - **Sheets, menus, alerts, switches, spinners and pickers are drawn Apple-style
   on Android, one shared implementation each** (H55, H59). Use `SheetModal`
   (`app-sheet.tsx`: scrim, 22 pt top corners, grabber, top edge below the status

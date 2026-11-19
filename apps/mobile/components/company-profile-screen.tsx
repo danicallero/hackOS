@@ -18,7 +18,7 @@ import { Desaturate } from "@/components/company-album";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { FavouriteStar } from "@/components/favourite-star";
 import { FloatingBackButton } from "@/components/floating-back-button";
-import { AndroidStatusBarScrim, EmptyState, Section, Separator } from "@/components/native-ui";
+import { EmptyState, Section, Separator } from "@/components/native-ui";
 import { loadingImageStyle, useApiImage } from "@/components/person-avatar";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { NoteRow, QuickAction } from "@/components/profile-parts";
@@ -609,7 +609,6 @@ export function CompanyProfileScreen() {
           patchEntry({ note });
         }}
       />
-      <AndroidStatusBarScrim />
     </View>
   );
 }
