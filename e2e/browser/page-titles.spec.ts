@@ -19,6 +19,11 @@ test("updates tab text during client-side navigation", async ({ page }) => {
   await page.goto("/login");
   const original = await page.getByRole("heading", { level: 1 }).innerText();
   await expect(page).toHaveTitle(`${original} | hackOS`);
+  // H49/H55: reproduce metadata resolving after the client screen has mounted.
+  await page.evaluate(() => {
+    document.title = "hackOS — Hackathon management";
+  });
+  await expect(page).toHaveTitle(`${original} | hackOS`);
   await page.locator('a[href^="/signup"]').click();
   await expect(page).toHaveURL(/\/signup/);
   await expect(page).toHaveTitle(

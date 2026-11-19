@@ -1028,6 +1028,8 @@ for routes, authorization, save ownership and validation.
 ` | hackOS`; loaded record names and language changes update it automatically.
 Use `tabTitle` when sibling destinations share a visible heading (Home uses
 Event, Schedule or Inbox). Embedded specimens (`headingLevel={2}`) do not set
-a title. Screens without `PageHeader`, such as authentication, use `PageTitle`
+a title. `PageTitle` retains ownership while mounted if Next.js streams route
+metadata after hydration, and releases that ownership on unmount. Screens
+without `PageHeader`, such as authentication, use `PageTitle`
 with their localized screen or status heading. Avoid imperative `document.title`
 writes in embedded content: the containing screen owns its title.

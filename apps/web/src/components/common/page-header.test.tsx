@@ -18,6 +18,18 @@ afterEach(() => {
 });
 
 describe("screen tab titles", () => {
+  it("retains the screen title when metadata arrives late and releases it on unmount", async () => {
+    act(() => root.render(<PageHeader title="Inbox" />));
+    document.title = "hackOS — Hackathon management";
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(document.title).toBe("Inbox | hackOS");
+    expect(document.querySelectorAll("title")).toHaveLength(1);
+    act(() => root.render(null));
+    document.title = "Next destination";
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(document.title).toBe("Next destination");
+  });
+
   it("follows loaded record names and language changes without accumulating titles", () => {
     act(() => root.render(<PageHeader title="Projects" />));
     expect(document.title).toBe("Projects | hackOS");
