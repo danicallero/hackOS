@@ -21,7 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useLiveQuery } from "@/hooks/use-live-query";
 import { api, isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { precomputeLogoColor, useLogoColor } from "@/lib/company";
+import { precomputeLogoColor } from "@/lib/company";
 import { eventDateFormat } from "@/lib/datetime";
 import { apiAssetUrl, type DirectoryEntry, personCompanies } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
@@ -121,9 +121,9 @@ export function PersonProfile({
   const { t } = useLocale();
   const { nameOf } = useChallengeNames();
   const { language } = useLocale();
-  const photoColor = useLogoColor(entry.photoUrl ? apiAssetUrl(entry.photoUrl) : null, {
-    credentials: true,
-  });
+  // The avatar's own URL and request (no CORS), so the private photo is fetched
+  // and cached only as the avatar already is (H48, #934).
+  const photo = entry.photoUrl ? apiAssetUrl(entry.photoUrl) : null;
   const companies = useMemo(() => personCompanies(entry), [entry]);
   useEffect(() => {
     for (const c of companies) precomputeLogoColor(c.logoUrl);
@@ -257,7 +257,10 @@ export function PersonProfile({
 
   return (
     <>
-      <HeroBleed color={entry.photoColor ?? photoColor}>
+      <HeroBleed
+        color={entry.photoColor}
+        ambient={photo ? { urls: [photo], active: photo } : undefined}
+      >
         <div className="flex items-center justify-between gap-3">
           {context}
           {visibleRole && <Badge variant="secondary">{visibleRole}</Badge>}

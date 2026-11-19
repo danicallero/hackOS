@@ -81,12 +81,12 @@ function sampleLogo(img: HTMLImageElement): LogoAnalysis {
 
 const inFlight = new Map<string, Promise<LogoAnalysis>>();
 
-function readLogo(url: string, credentials = false): Promise<LogoAnalysis> {
+function readLogo(url: string): Promise<LogoAnalysis> {
   const pending = inFlight.get(url);
   if (pending) return pending;
   const promise = new Promise<LogoAnalysis>((resolve) => {
     const img = new Image();
-    img.crossOrigin = credentials ? "use-credentials" : "anonymous";
+    img.crossOrigin = "anonymous";
     img.onload = () => resolve(sampleLogo(img));
     img.onerror = () => resolve(UNREADABLE);
     img.src = url;
@@ -111,7 +111,7 @@ export function precomputeLogoColor(url: string | null | undefined): void {
 }
 
 /** Cached analysis of an image URL; undefined until read. */
-function useLogoAnalysis(url: string | null | undefined, credentials = false) {
+function useLogoAnalysis(url: string | null | undefined) {
   const [analysis, setAnalysis] = useState<{ url: string; value: LogoAnalysis } | null>(() => {
     const cached = url ? analysisCache.get(url) : undefined;
     return url && cached ? { url, value: cached } : null;
@@ -120,23 +120,15 @@ function useLogoAnalysis(url: string | null | undefined, credentials = false) {
     if (!url) return;
     let cancelled = false;
     const cached = analysisCache.get(url);
-    void (cached ? Promise.resolve(cached) : readLogo(url, credentials)).then((value) => {
+    void (cached ? Promise.resolve(cached) : readLogo(url)).then((value) => {
       if (!cancelled)
         setAnalysis((current) => (current?.value === value ? current : { url, value }));
     });
     return () => {
       cancelled = true;
     };
-  }, [url, credentials]);
+  }, [url]);
   return analysis && analysis.url === url ? analysis.value : undefined;
-}
-
-/** Client-side hero colour of an image URL, cached per URL (`credentials` for authenticated API assets); null until read or when unavailable (nothing is stored server-side). */
-export function useLogoColor(
-  url: string | null | undefined,
-  options?: { credentials?: boolean },
-): string | null {
-  return useLogoAnalysis(url, options?.credentials ?? false)?.color ?? null;
 }
 
 /** True once a logo is known to run into its own edges, so its tile adds the margin (H44). */

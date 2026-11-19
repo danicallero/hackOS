@@ -41,6 +41,7 @@ import { useSessionContext } from "@/lib/session";
 import { DeleteProjectAction } from "./delete-project-action";
 import { GithubActivity } from "./github-activity";
 import { GithubLink } from "./github-link";
+import { ProjectAmbientProvider } from "./project-ambient";
 import { ProjectChallenges } from "./project-challenges";
 import { ProjectOverview } from "./project-overview";
 import { ProjectRecordHero } from "./project-record-hero";
@@ -288,7 +289,7 @@ export function ProjectEditor({
     </Button>
   ) : undefined;
   return (
-    <>
+    <ProjectAmbientProvider>
       <ProjectRecordHero
         management={staff}
         name={name || project.name}
@@ -709,6 +710,6 @@ export function ProjectEditor({
           disabled={busy || draft.state === "saving"}
         />
       </PageLayout>
-    </>
+    </ProjectAmbientProvider>
   );
 }

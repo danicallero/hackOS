@@ -1,7 +1,7 @@
 import { expect, shellUser, test } from "./fixtures";
 
-// H44, H63: shared profiles retain their origin and sample private photos.
-test("company representative photo tint and return navigation", async ({ page }, info) => {
+// H44, H63: shared profiles retain their origin and show private photos behind the hero.
+test("company representative photo hero and return navigation", async ({ page }, info) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
@@ -71,13 +71,11 @@ test("company representative photo tint and return navigation", async ({ page },
   await expect(page).toHaveURL(/people\/42\?company=7/);
   const back = page.locator("[data-back-link]");
   await expect(back).toHaveText("GPUL");
-  await expect
-    .poll(() =>
-      page
-        .locator("[data-hero-bleed] > [aria-hidden]")
-        .evaluate((el) => (el as HTMLElement).style.backgroundImage),
-    )
-    .toContain("#b87532");
+  // H48: the photo itself, blurred behind the hero (the avatar's own request).
+  await expect(page.locator("[data-hero-ambient] img[data-active]")).toHaveAttribute(
+    "src",
+    /\/api\/users\/42\/photo/,
+  );
   await page.screenshot({ path: info.outputPath("person-company.png"), fullPage: true });
   await back.click();
   await expect(page).toHaveURL(/companies\/7$/);

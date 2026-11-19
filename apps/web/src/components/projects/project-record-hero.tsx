@@ -4,15 +4,16 @@ import { usePathname } from "next/navigation";
 import { BackLink } from "@/components/common/back-link";
 import { HeroBleed } from "@/components/common/hero-bleed";
 import { PageTitle } from "@/components/common/page-title";
-import { useLogoColor } from "@/lib/company";
 import { useLocale } from "@/lib/i18n";
 import type { NativeProject } from "@/lib/native-projects";
+import { useAmbientActive } from "./project-ambient";
 import { projectGallery } from "./project-carousel";
 
 /**
- * Tinted top of a project record (H47, H48): back link, title, state and
- * actions on a wash taken from the project's first image, blue when it has
- * none or the colour cannot be read. Place it outside `PageLayout`.
+ * Top of a project record (H18, H47, H48): back link, title, state and actions
+ * over an ambient backdrop of the cover photo the gallery shows (the first
+ * until the carousel moves, inside `ProjectAmbientProvider`), or the blue wash
+ * when the project has no photos. Place it outside `PageLayout`.
  */
 export function ProjectRecordHero({
   name,
@@ -31,15 +32,30 @@ export function ProjectRecordHero({
 }) {
   const { t } = useLocale();
   const inGallery = usePathname().startsWith("/gallery");
-  const cover = projectGallery(files)?.images[0];
-  // Project assets are authenticated API paths: the sampler sends cookies.
-  const color = useLogoColor(cover ? assetUrl(cover.thumbnailUrl ?? cover.url) : null, {
-    credentials: true,
-  });
+  const gallery = projectGallery(files);
+  const active = useAmbientActive();
+  const cover =
+    (active?.fieldKey === gallery?.fieldKey &&
+      gallery?.images.find((image) => image.objectKey === active?.objectKey)) ||
+    gallery?.images[0];
+  // The carousel's own thumbnail URLs, so the backdrop reuses its requests.
+  const thumb = (image: NonNullable<typeof cover>) => assetUrl(image.thumbnailUrl ?? image.url);
   const backHref = management ? "/projects" : inGallery ? "/gallery" : "/my-project?view=all";
   const backLabel = t(management ? "manageProjects" : inGallery ? "projectGallery" : "myProjects");
   return (
-    <HeroBleed color={color} contentClassName="max-w-6xl">
+    <HeroBleed
+      color={null}
+      ambient={
+        gallery && cover
+          ? {
+              urls: gallery.images.map(thumb),
+              active: thumb(cover),
+              crossOrigin: "use-credentials",
+            }
+          : undefined
+      }
+      contentClassName="max-w-6xl"
+    >
       <BackLink href={backHref} label={backLabel} />
       <header className="space-y-4 pt-2">
         <div className="flex items-start justify-between gap-4">

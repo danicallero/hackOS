@@ -320,8 +320,12 @@ open it; the API answers the same 404 to anyone else. A person opened without
 a diary entry shows no CV row, favourite star, note or remove action: those
 need the reader's diary entry.
 
-The profile hero samples the authenticated photo at its absolute API URL with
-credentials, using the same photo as the avatar. Company rows use the dark
+The profile hero (H48) blurs the person's photo behind the header, using the
+avatar's own URL and plain request (no CORS fetch), so the private photo is
+loaded and cached only as the avatar already is: enlarged and blurred until no
+shape survives, under the veil and fade of the project record's `AmbientBackdrop`
+(see [`projects.md`](./projects.md) § Project surfaces). Without a photo it keeps the
+single-colour wash (`photoColor` when the API sends one, else blue). Company rows use the dark
 logo variant on dark backgrounds, including the helper affiliation row. Back links
 follow the shared in-app history stack, so profiles and companies return to their
 actual origin. Company representative links also carry `?company=<id>` as the

@@ -143,26 +143,19 @@ describe("PersonDetail (#934, #935)", () => {
     expect(container.querySelector("a[href='/companies/7']")).not.toBeNull();
   });
 
-  it("samples the authenticated API photo with credentials", async () => {
-    const images: HTMLImageElement[] = [];
-    const OriginalImage = globalThis.Image;
-    vi.stubGlobal(
-      "Image",
-      class extends OriginalImage {
-        constructor() {
-          super();
-          images.push(this);
-        }
-      },
-    );
-    try {
-      person = entry({ photoUrl: "/api/users/42/photo?v=color-test" });
-      await render();
-      const sampled = images.find((image) => image.crossOrigin === "use-credentials");
-      expect(sampled?.src).toBe(`${API_URL}/api/users/42/photo?v=color-test`);
-    } finally {
-      vi.unstubAllGlobals();
-    }
+  it("blurs the avatar's own photo request behind the hero (H48)", async () => {
+    person = entry({ photoUrl: "/api/users/42/photo?v=ambient-test" });
+    await render();
+    const layer = container.querySelector("[data-hero-ambient] img[data-active]");
+    expect(layer?.getAttribute("src")).toBe(`${API_URL}/api/users/42/photo?v=ambient-test`);
+    // Same no-CORS request as the avatar, so the private photo is not fetched twice.
+    expect(layer?.hasAttribute("crossorigin")).toBe(false);
+  });
+
+  it("keeps the single-colour wash without a photo", async () => {
+    await render();
+    expect(container.querySelector("[data-hero-bleed]")).not.toBeNull();
+    expect(container.querySelector("[data-hero-ambient]")).toBeNull();
   });
 
   it("lists every project and work group the person is in", async () => {

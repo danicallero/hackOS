@@ -862,10 +862,13 @@ marks the live activity (red "Now") and the next one, offers a day strip, a
 company filter, search over speaker and company names, and opens
 `/timetable?activity=ID` (read once on mount, never written back). The company
 page (`/companies/:id`, `components/sponsors/company-profile.tsx`) reads
-`GET /api/enterprises/:id/profile`; its hero tint is computed in the browser
-from the logo shown (`useCompanyLogoColor` in `lib/company.ts`: the negative logo in
-dark mode, falling back to the positive logo's colour when the negative is white or
-mono; cached per URL, neutral when the canvas is tainted). The description is the
+`GET /api/enterprises/:id/profile`; its hero blurs the logo the tile shows
+behind the header (H44, H48: the negative logo in dark mode, from the same URLs
+and plain requests as `SponsorLogo`), with the veil and fade of `HeroBleed`
+`ambient`; without a logo it keeps the blue wash. The challenge page's hero
+still tints from the logo colour (`useCompanyLogoColor` in `lib/company.ts`: the
+negative logo in dark mode, falling back to the positive logo's colour when the
+negative is white or mono; cached per URL, neutral when the canvas is tainted). The description is the
 viewer's language from `descriptionTranslations`, else `description`
 (`companyDescription`); the enterprise editor edits it with `MultilingualInput`. `/people/:userId` lists the person's companies and talks;
 the CV stays scan-only. Tolerates both the legacy single-company and the
