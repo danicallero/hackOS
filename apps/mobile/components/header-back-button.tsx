@@ -1,9 +1,10 @@
 import { useNavigation, useRoute, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import type { ReactNode } from "react";
-import { Pressable } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
+import { LegacyBackButton } from "@/components/native-ui";
 import { SymbolView } from "@/components/symbol";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -20,6 +21,14 @@ import { colors } from "@/theme/colors";
  */
 export function HeaderBackButton({ onPress }: { onPress: () => void }) {
   const { t } = useLocale();
+  // H55: Android bars have no platter, so the glass circle is drawn, as `AndroidStackBack`.
+  if (process.env.EXPO_OS === "android") {
+    return (
+      <View style={{ marginRight: 12 }}>
+        <LegacyBackButton onPress={onPress} />
+      </View>
+    );
+  }
   return (
     <Pressable
       accessibilityLabel={t("back")}
