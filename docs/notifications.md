@@ -382,8 +382,9 @@ inline, resolved colors rather than CSS variables.
 - **Dark:** neutral near-black `#0E0F11`, cream text and logo. Not navy: a full
   navy canvas was heavy to read. The action inverts to a cream button.
 - **Actions:** ink button with cream text (the brand's primary action), 8px
-  radius. Red is not used for actions. The decline link of an acceptance stays
-  a quiet underlined link.
+  radius. Red is not used for actions. The decline action in acceptance and
+  confirmation-reminder emails uses a secondary outlined button, with a
+  transparent background in both themes.
 - **Codes:** a line that is only 4–8 digits (the account-removal PIN) renders as
   a framed monospace code instead of a sentence.
 
@@ -433,9 +434,16 @@ acknowledges disappointment and welcomes interest in future editions without
 inventing a reason, waiting list or promise of a place. When the reviewer
 recorded a rejection reason (`application_responses.rejection_reason`, H14),
 the `rejectionDetails` variable inserts it as a "Reason" line; it is empty
-otherwise and for payloads queued before the field existed. Acceptance celebrates
-with congratulations and a personal welcome, then explains that a place is
-reserved pending confirmation, how to decline and the automatic release at
+otherwise and for payloads queued before the field existed. Acceptance states
+the decision and pending confirmation directly, with the recipient, application
+and event names supplied as variables. Its heading names
+confirmation. Confirmation reminders state the pending action and exact expiry,
+without promotional welcomes or “last chance” subjects. Verification and draft
+reminder subjects likewise describe the pending task. The pre-event reminder
+subject identifies the ticket and retains the QR and official Wallet artwork.
+These content changes reduce promotional wording; they do not guarantee a Gmail
+category or replace SPF/DKIM/DMARC and sender reputation checks. Both acceptance
+and confirmation reminders explain how to decline and the automatic release at
 the deadline. Operational queue alerts and security instructions remain precise.
 
 A reject-and-return (H14: an internal rejection marked to return the response
