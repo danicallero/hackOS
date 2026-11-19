@@ -20,7 +20,6 @@ import {
   type CompanyProfile as Company,
   companyDescription,
   fetchCompanyProfile,
-  useCompanyLogoColor,
 } from "@/lib/company";
 import { eventDateFormat } from "@/lib/datetime";
 import { socialLinkText } from "@/lib/directory";
@@ -70,7 +69,10 @@ export function CompanyProfile({ id }: { id: number }) {
 export function CompanyView({ company, context }: { company: Company; context: React.ReactNode }) {
   const { t, language } = useLocale();
   const [expanded, setExpanded] = useState(false);
-  const logoColor = useCompanyLogoColor(company);
+  // The logo the tile shows (the negative in dark mode), from the same URLs and
+  // requests as `SponsorLogo`, blurred behind the hero (H44, H48).
+  const logo = company.logoUrl;
+  const darkLogo = company.logoNegativeUrl ?? logo;
   const { data: event } = useServerResource(["public", "event"], () => getPublicEvent());
   const zone = event?.timezone;
   const clock = eventDateFormat(language, "clock", zone);
@@ -80,7 +82,15 @@ export function CompanyView({ company, context }: { company: Company; context: R
 
   return (
     <>
-      <HeroBleed color={logoColor} className="space-y-5">
+      <HeroBleed
+        color={null}
+        ambient={
+          logo && darkLogo
+            ? { urls: [...new Set([logo, darkLogo])], active: logo, activeDark: darkLogo }
+            : undefined
+        }
+        className="space-y-5"
+      >
         {context}
         <header className="flex flex-col items-center gap-4 pt-4 text-center sm:flex-row sm:gap-8 sm:text-left">
           <div className="flex size-28 shrink-0 items-center justify-center rounded-surface bg-white p-4 shadow-md sm:size-44 dark:bg-card">

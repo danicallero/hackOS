@@ -87,6 +87,12 @@ body:has([data-hero-bleed]) [data-slot="sidebar-inner"] {
   [data-app-main] [data-hero-bleed] {
     padding-top: 0.75rem;
   }
+  /* The hero's first row matches the floating button (`top-3`, compact control
+     height), so the title below starts clear of it (H48). */
+  [data-app-main] [data-hero-content] > :first-child {
+    min-height: var(--control-height-compact);
+    margin-block: 0;
+  }
   [data-app-main] [data-hero-bleed] [data-back-link] {
     padding-left: 3rem;
   }

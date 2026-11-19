@@ -299,7 +299,11 @@ with the same credentials, so it adds no downloads. `ProjectAmbientProvider`
 project editor so the carousel can report its visible photo; carousels outside
 it (judging panel) report nothing. Content after the hero is positioned above
 the fixed backdrop (`surfaces.css`) so the photo never covers it. A project
-without photos keeps the blue wash.
+without photos keeps the blue wash. Person and company profiles use the
+same `ambient` layers with the avatar or shown logo. On phones, where the
+sidebar button floats over the canvas, every `HeroBleed` page gives its first
+row (the back link) that button's top offset and height, so the title starts
+below it (`surfaces.css`).
 
 Deletion is available from the record to staff with `projects:edit`, or to a sole
 active participant member while the API permits editing or submission withdrawal.

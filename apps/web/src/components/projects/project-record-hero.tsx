@@ -46,7 +46,13 @@ export function ProjectRecordHero({
     <HeroBleed
       color={null}
       ambient={
-        gallery && cover ? { urls: gallery.images.map(thumb), active: thumb(cover) } : undefined
+        gallery && cover
+          ? {
+              urls: gallery.images.map(thumb),
+              active: thumb(cover),
+              crossOrigin: "use-credentials",
+            }
+          : undefined
       }
       contentClassName="max-w-6xl"
     >
