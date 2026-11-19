@@ -123,9 +123,11 @@ export function HelpPage({
         : {}),
     });
   }, [navigation, fixedTitle, title, glass, showBack, onClose, searchPlaceholder, onSearchChange]);
-  // A sheet's transparent bar does not inset its scroll view: start below the bar, scroll under it.
+  // A sheet's transparent bar does not inset its scroll view, nor does any
+  // transparent bar on Android (no automatic content inset): start below the
+  // bar, scroll under it (H61).
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
-  const sheetTop = onClose ? headerHeight : 0;
+  const sheetTop = onClose || process.env.EXPO_OS === "android" ? headerHeight : 0;
   // Only a user pull spins the control; background revalidation stays silent.
   const [pulling, setPulling] = useState(false);
   const page = (
