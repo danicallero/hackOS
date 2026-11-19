@@ -54,6 +54,7 @@
   "retry": "Reintentar",
   "requestError": "Non se puido cargar esta información. Téntao de novo.",
   "requestServerError": "O servidor non está dispoñible temporalmente. Proba de novo nun momento.",
+  "profileRestError": "Non se puido cargar o resto do perfil.",
   "requestUnavailable": "Esta información aínda non está dispoñible para esta conta.",
   "requestSessionExpired": "A túa sesión xa non é válida. Pecha sesión e volve entrar.",
   "sessionRestoringTitle": "Abrindo hackOS",

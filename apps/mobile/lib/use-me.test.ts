@@ -31,6 +31,7 @@ jest.mock("expo-network", () => ({
 }));
 
 import { ApiError, apiFetch, getCurrentSessionCookie } from "./api";
+import { clearProfileSeeds, personSeed, seedPeople } from "./profile-seed";
 import { profileCacheKeyForSession, useMe } from "./use-me";
 
 const mockApiFetch = apiFetch as jest.Mock;
@@ -308,6 +309,20 @@ describe("useMe offline fallback", () => {
       await userAFetch.promise;
     });
     expect(result.current.me?.id).toBe(2);
+  });
+
+  it("forgets other people's profile seeds on sign-out (#935)", async () => {
+    clearProfileSeeds();
+    mockApiFetch.mockResolvedValue({ id: 1, capabilities: [] });
+    const { result } = await renderHook(() => useMe(true));
+    await waitFor(() => expect(result.current.me?.id).toBe(1));
+    seedPeople([{ userId: 7, displayName: "Iria Test", photoUrl: null }]);
+    expect(personSeed(7)?.displayName).toBe("Iria Test");
+
+    await act(async () => {
+      result.current.clear();
+    });
+    expect(personSeed(7)).toBeNull();
   });
 
   it("does not restore account A's offline profile under account B's session", async () => {

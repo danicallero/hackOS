@@ -57,5 +57,7 @@ export function heroTint(
  * page's own label colours stay readable on it.
  */
 export function ambientVeil(dark: boolean): string {
-  return dark ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.35)";
+  // Measured (#1384) so text over the image meets WCAG AA on saturated, near-white and
+  // near-black images alike.
+  return dark ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.65)";
 }

@@ -25,6 +25,7 @@ import { eventZoneHint, formatEventTime, useEventTimeZone } from "@/lib/event-ti
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { safeBack } from "@/lib/navigation";
+import { seedCompanies, seedPeople } from "@/lib/profile-seed";
 import {
   type AdminScheduleItem,
   collapseBlankLines,
@@ -183,6 +184,19 @@ export function ScheduleDetailScreen({
   const detailItem = adminItem
     ? { ...adminItem, ...resolveScheduleText(adminItem, language) }
     : item;
+  // A speaker's or company's page opens on what these rows show (#935), from memory only.
+  const speakers = detailItem?.speakers;
+  const companies = detailItem?.enterprises;
+  useEffect(() => {
+    seedPeople(
+      (speakers ?? []).map((speaker) => ({
+        userId: speaker.userId,
+        displayName: speaker.name,
+        photoUrl: speaker.avatarUrl,
+      })),
+    );
+    seedCompanies(companies ?? []);
+  }, [speakers, companies]);
   const staffItem = adminItem ?? (item?.notes !== undefined ? item : null);
   const staffOnly = (staffItem?.audiences ?? []).length === 0;
   const showStaffVisibility = Boolean(staffItem && !staffOnly);

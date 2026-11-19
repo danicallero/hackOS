@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { type LayoutChangeEvent, Linking, Text, TextInput, View } from "react-native";
 import { Section, Separator } from "@/components/native-ui";
 import { DetailRow, VisibilityToggle } from "@/components/profile-parts";
+import { RevealView } from "@/components/skeleton";
 import { SOCIAL_TILE_SIZE, SocialTile } from "@/components/social-glyph";
 import { type DirectoryEntry, displayUrl, socialLabel } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
@@ -59,7 +60,8 @@ export interface ProfileCardEdit {
  * shared by the diary's person screen and the owner's own preview/editor so
  * both always lay out the same card. `avatar` is the caller's avatar (it owns
  * the collapse animation or the photo menu); `actions` is the tile row and
- * `afterBio` the reader's note section.
+ * `afterBio` the reader's note section. `placeholder` stands in for
+ * everything below the header while only a list's seed is known (#935).
  */
 export function ProfileCard({
   data,
@@ -69,16 +71,25 @@ export function ProfileCard({
   beforeKnowledge,
   identityAccessory,
   nameColor,
+  onImageHero = false,
   onNameLayout,
   edit,
+  placeholder,
+  revealBody = false,
 }: {
   data: ProfileCardData;
   avatar: ReactNode;
   actions?: ReactNode;
   afterBio?: ReactNode;
+  /** Shown instead of the body (skeletons, a load failure) while it is not known yet. */
+  placeholder?: ReactNode;
+  /** Fade the body in when it replaces `placeholder`. */
+  revealBody?: boolean;
   /** Optional feature metadata above knowledge, within the same public profile. */
   beforeKnowledge?: ReactNode;
   identityAccessory?: ReactNode;
+  /** Over an image hero the headline uses the label colour: muted grey fails contrast there. */
+  onImageHero?: boolean;
   /** Name colour over a tinted hero; defaults to the label colour. */
   nameColor?: string;
   onNameLayout?: (event: LayoutChangeEvent) => void;
@@ -208,70 +219,68 @@ export function ProfileCard({
     }
   }
 
-  return (
-    <>
-      <View style={{ alignItems: "center", gap: 14 }}>
-        {identityAccessory ? (
-          <View style={{ position: "absolute", right: 0, top: 0 }}>{identityAccessory}</View>
-        ) : null}
-        {avatar}
-        <View
-          onLayout={onNameLayout}
-          style={{ alignItems: "center", gap: 4, paddingHorizontal: 8 }}
-        >
-          <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
-            <Text
-              selectable
-              accessibilityRole="header"
-              style={{
-                color: nameColor ?? colors.label,
-                fontSize: type.title.fontSize,
-                fontWeight: "700",
-                textAlign: "center",
-              }}
-            >
-              {data.displayName}
-            </Text>
-            {edit ? (
-              <VisibilityToggle
-                visible={edit.surnameShared}
-                label={t("networkingShowSurname")}
-                onChange={edit.onSurnameShared}
-              />
-            ) : null}
-          </View>
+  const header = (
+    <View style={{ alignItems: "center", gap: 14 }}>
+      {identityAccessory ? (
+        <View style={{ position: "absolute", right: 0, top: 0 }}>{identityAccessory}</View>
+      ) : null}
+      {avatar}
+      <View onLayout={onNameLayout} style={{ alignItems: "center", gap: 4, paddingHorizontal: 8 }}>
+        <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
+          <Text
+            selectable
+            accessibilityRole="header"
+            style={{
+              color: nameColor ?? colors.label,
+              fontSize: type.title.fontSize,
+              fontWeight: "700",
+              textAlign: "center",
+            }}
+          >
+            {data.displayName}
+          </Text>
           {edit ? (
-            <TextInput
-              accessibilityLabel={t("networkingHeadline")}
-              maxLength={edit.headlineMax}
-              onChangeText={edit.onHeadline}
-              placeholder={t("networkingHeadline")}
-              placeholderTextColor={colors.tertiaryLabel}
-              style={{
-                color: colors.secondaryLabel,
-                fontSize: type.callout.fontSize,
-                lineHeight: 21,
-                minWidth: 160,
-                textAlign: "center",
-              }}
-              value={edit.headline}
+            <VisibilityToggle
+              visible={edit.surnameShared}
+              label={t("networkingShowSurname")}
+              onChange={edit.onSurnameShared}
             />
-          ) : headline ? (
-            <Text
-              selectable
-              style={{
-                color: colors.secondaryLabel,
-                fontSize: type.callout.fontSize,
-                lineHeight: 21,
-                textAlign: "center",
-              }}
-            >
-              {headline}
-            </Text>
           ) : null}
         </View>
+        {edit ? (
+          <TextInput
+            accessibilityLabel={t("networkingHeadline")}
+            maxLength={edit.headlineMax}
+            onChangeText={edit.onHeadline}
+            placeholder={t("networkingHeadline")}
+            placeholderTextColor={colors.tertiaryLabel}
+            style={{
+              color: colors.secondaryLabel,
+              fontSize: type.callout.fontSize,
+              lineHeight: 21,
+              minWidth: 160,
+              textAlign: "center",
+            }}
+            value={edit.headline}
+          />
+        ) : headline ? (
+          <Text
+            selectable
+            style={{
+              color: onImageHero ? colors.label : colors.secondaryLabel,
+              fontSize: type.callout.fontSize,
+              lineHeight: 21,
+              textAlign: "center",
+            }}
+          >
+            {headline}
+          </Text>
+        ) : null}
       </View>
-
+    </View>
+  );
+  const body = (
+    <>
       {actions}
 
       {bio || edit ? (
@@ -350,6 +359,12 @@ export function ProfileCard({
           ))}
         </Section>
       ) : null}
+    </>
+  );
+  return (
+    <>
+      {header}
+      {placeholder ?? (revealBody ? <RevealView>{body}</RevealView> : body)}
     </>
   );
 }

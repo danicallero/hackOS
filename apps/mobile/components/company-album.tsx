@@ -14,6 +14,7 @@ import {
 } from "@/lib/diary-sponsors";
 import { useLocale } from "@/lib/i18n";
 import { useImageBleed } from "@/lib/image-tint";
+import { seedCompanies } from "@/lib/profile-seed";
 import { colors, radius, type } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
 
@@ -37,6 +38,17 @@ export function CompanyAlbum({
 }) {
   const { t } = useLocale();
   const readable = useParticipantLayout("list");
+  // A company's page opens on its logo and name (H44, #935), from memory only.
+  useEffect(() => {
+    seedCompanies(
+      collection.items.map((item) => ({
+        id: item.enterpriseId,
+        name: item.name,
+        logoUrl: item.logoUrl,
+        logoNegativeUrl: item.logoNegativeUrl,
+      })),
+    );
+  }, [collection.items]);
   if (collection.items.length === 0) {
     return <EmptyState icon="building.2" title={t("diaryCompaniesEmpty")} />;
   }

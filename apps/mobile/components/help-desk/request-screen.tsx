@@ -15,6 +15,7 @@ import { ApiError } from "@/lib/api";
 import type { DirectoryEntry } from "@/lib/directory";
 import { type HelpRequest, helpMutation, type MeetingMode, shortMoment } from "@/lib/help-desk";
 import { useLocale } from "@/lib/i18n";
+import { seedPeople, seedRequester } from "@/lib/profile-seed";
 import { useHelpResource } from "@/lib/use-help-resource";
 import { colors, space, type } from "@/theme";
 import { HelpInput, HelpPage } from "./primitives";
@@ -181,12 +182,22 @@ export function HelpRequestScreen() {
                   feedback="row"
                   accessibilityRole="button"
                   accessibilityLabel={`${t("helpRequestedBy")}, ${request.requesterProfile.displayName}`}
-                  onPress={() =>
+                  onPress={() => {
+                    const profile = request.requesterProfile;
+                    // The profile opens on what this row shows (#935), from memory only.
+                    if (profile) {
+                      seedRequester(request.id, {
+                        userId: profile.userId,
+                        displayName: profile.displayName,
+                        photoUrl: profile.photoUrl,
+                        headline: profile.headline,
+                      });
+                    }
                     router.push({
                       pathname: "/(tabs)/help-desk/requester/[id]",
                       params: { id: request.id },
-                    })
-                  }
+                    });
+                  }}
                   style={{
                     alignItems: "center",
                     flexDirection: "row",
@@ -254,13 +265,21 @@ export function HelpRequestScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={helper?.displayName ?? t("helpHelper")}
                   disabled={!helper}
-                  onPress={() =>
-                    helper &&
+                  onPress={() => {
+                    if (!helper) return;
+                    seedPeople([
+                      {
+                        userId: helper.userId,
+                        displayName: helper.displayName,
+                        photoUrl: helper.photoUrl,
+                        roleName: helper.visibleRoleName,
+                      },
+                    ]);
                     router.push({
                       pathname: "/(tabs)/help-desk/helper/[id]",
                       params: { id: helper.userId },
-                    })
-                  }
+                    });
+                  }}
                   style={{
                     alignItems: "center",
                     flexDirection: "row",

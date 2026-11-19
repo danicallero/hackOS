@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { FilterMenu } from "@/components/filter-menu";
 import { EmptyState, Section, Separator } from "@/components/native-ui";
@@ -7,6 +7,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { canBrowseHelpDesk, filterHelpers, type HelperCard } from "@/lib/help-desk";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import { seedPeople } from "@/lib/profile-seed";
 import { useHelpResource } from "@/lib/use-help-resource";
 import { HelpPage, HelpText } from "./primitives";
 import { HelperRow } from "./rows";
@@ -23,6 +24,18 @@ export function HelpersScreen() {
   const [roles, setRoles] = useState<string[]>([]);
   const [topicIds, setTopicIds] = useState<number[]>([]);
   const all = result.data?.helpers ?? [];
+  // A helper's page opens on what this row already shows (H63, #935), from memory only.
+  useEffect(() => {
+    seedPeople(
+      (result.data?.helpers ?? []).map((helper) => ({
+        userId: helper.userId,
+        displayName: helper.displayName,
+        photoUrl: helper.photoUrl,
+        headline: helper.headline,
+        roleName: helper.visibleRoleName,
+      })),
+    );
+  }, [result.data]);
   const helpers = result.data
     ? filterHelpers(all, { query, kinds: [], roles, topicIds })
     : undefined;
