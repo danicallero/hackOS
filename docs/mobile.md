@@ -1330,7 +1330,9 @@ pages wash their header in their image (photo, logo, the company's logo, the
 first project image) with `ImageHero`: the image itself, enlarged and blurred
 until no shape survives (iOS `blurRadius` 180, Android a style `filter` blur;
 below Android 12 the single-colour wash), under a veil of the page colour
-(`ambientVeil`) and masked to fade into the page, so each side keeps its own
+(`ambientVeil`: 65% light, 55% dark, the values measured on the web hero so
+text over the image meets WCAG AA; the profile headline uses the label colour
+there instead of grey) and masked to fade into the page, so each side keeps its own
 colour and labels keep the page's colour. It is the same request as the avatar
 or logo on the page: iOS blurs the copy already in memory, Android blurs the
 untransformed image instead of fetching a transformed one, and private photos

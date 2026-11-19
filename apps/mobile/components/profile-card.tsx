@@ -71,6 +71,7 @@ export function ProfileCard({
   beforeKnowledge,
   identityAccessory,
   nameColor,
+  onImageHero = false,
   onNameLayout,
   edit,
   placeholder,
@@ -87,6 +88,8 @@ export function ProfileCard({
   /** Optional feature metadata above knowledge, within the same public profile. */
   beforeKnowledge?: ReactNode;
   identityAccessory?: ReactNode;
+  /** Over an image hero the headline uses the label colour: muted grey fails contrast there. */
+  onImageHero?: boolean;
   /** Name colour over a tinted hero; defaults to the label colour. */
   nameColor?: string;
   onNameLayout?: (event: LayoutChangeEvent) => void;
@@ -264,7 +267,7 @@ export function ProfileCard({
           <Text
             selectable
             style={{
-              color: colors.secondaryLabel,
+              color: onImageHero ? colors.label : colors.secondaryLabel,
               fontSize: type.callout.fontSize,
               lineHeight: 21,
               textAlign: "center",

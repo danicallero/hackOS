@@ -382,6 +382,7 @@ export function PersonProfileScreen({
               }
               data={shown}
               nameColor={nameColor}
+              onImageHero={Boolean(shown?.photoUrl)}
               onNameLayout={(event: LayoutChangeEvent) => {
                 avatarCollapse.onNameLayout(event);
                 const { y, height } = event.nativeEvent.layout;
