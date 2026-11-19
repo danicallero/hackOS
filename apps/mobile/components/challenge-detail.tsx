@@ -2,8 +2,10 @@ import { Link, useLocalSearchParams, useNavigation, useRouter } from "expo-route
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { Linking, ScrollView, Text, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { SheetModal } from "@/components/app-sheet";
+import { FloatingBackButton } from "@/components/floating-back-button";
 import { EntryBackToolbar } from "@/components/header-back-button";
 import { EmptyState, FloatingGlassButton, Section, Separator } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
@@ -16,7 +18,7 @@ import { apiFetch } from "@/lib/api";
 import { heroTint, NO_PHOTO_TINT } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
 import { useImageTint } from "@/lib/image-tint";
-import { transparentDetailHeaderOptions } from "@/lib/navigation";
+import { safeBack, transparentDetailHeaderOptions } from "@/lib/navigation";
 import { type ChallengeDetail, fetchChallengeDetail, type GalleryPage } from "@/lib/projects";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { colors, type } from "@/theme";
@@ -215,10 +217,18 @@ export function ChallengeDetailScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const { challenge, error, load } = useChallenge(id);
+  const insets = useSafeAreaInsets();
+  // Android has no transparent bar that floats over the hero: the screen draws
+  // its own back circle, like the company page (H44), and clears the status bar.
+  const android = process.env.EXPO_OS === "android";
   useLayoutEffect(() => {
     // The title is drawn over the hero, so the bar stays transparent and empty.
-    navigation.setOptions(transparentDetailHeaderOptions);
-  }, [navigation]);
+    navigation.setOptions(
+      android
+        ? { ...transparentDetailHeaderOptions, headerShown: false }
+        : transparentDetailHeaderOptions,
+    );
+  }, [navigation, android]);
   const dark = useColorScheme() === "dark";
   // Tinted from the company logo's colour, blue without a usable logo; a logo whose colour is still loading keeps the plain background.
   const logoTint = useImageTint(challenge?.company?.logoUrl);
@@ -245,6 +255,7 @@ export function ChallengeDetailScreen() {
           paddingVertical: 16,
           ...readable.content,
           paddingBottom: 32,
+          ...(android ? { paddingTop: insets.top + 64 } : null),
         }}
         style={{ backgroundColor: colors.background }}
       >
@@ -276,6 +287,7 @@ export function ChallengeDetailScreen() {
     <>
       <EntryBackToolbar fallback="/(tabs)/queue" />
       {body}
+      {android ? <FloatingBackButton onPress={() => safeBack(router, "/(tabs)/queue")} /> : null}
     </>
   );
 }

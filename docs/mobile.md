@@ -1304,7 +1304,12 @@ from the item's optional `speakers` and `enterprises`. A person's profile
 shows every company they belong to (`enterprises`, one row each, opening its
 company screen with the same zoom) and Talks (`activities`) when the API sends
 them, tints its hero from the photo's dominant colour (same `useImageTint` and
-`heroTint`; no photo or no usable colour keeps the plain background), and a challenge's company row opens the company screen.
+`heroTint`; no photo or no usable colour keeps the plain background), and a challenge's company row opens the company screen. Every hero is 620pt tall and starts 300pt above the content to cover the
+pull-down bounce; `heroTint` holds full strength over that first 45% so the
+tint is strongest at the screen's top edge, then fades. On Android the
+challenge page (`components/challenge-detail.tsx`) hides the native bar and
+draws the company page's `FloatingBackButton`, padding its content below the
+status bar.
 
 `app/people/[id].tsx` (`components/person-profile-screen.tsx`) is a saved
 person's full profile from `GET /api/directory/:userId` (the only directory
