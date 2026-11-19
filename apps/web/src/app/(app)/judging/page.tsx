@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { IconButton } from "@/components/common/icon-button";
+import { PageTitle } from "@/components/common/page-title";
 import { Spinner } from "@/components/common/spinner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useLiveQuery } from "@/hooks/use-live-query";
@@ -369,6 +370,7 @@ export default function QueuePage() {
       data-judging-page
     >
       {/* The fixed workspace has no room for a PageHeader; the destination still needs its h1 (#1176). */}
+      <PageTitle title={t("judging")} />
       <h1 className="sr-only">{t("judging")}</h1>
       <JudgingTopBar
         rooms={rooms}

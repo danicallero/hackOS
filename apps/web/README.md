@@ -1021,3 +1021,13 @@ page (`RequestHelpAction`); the
 old `/help-desk/profile` route redirects there and stays reachable for accepted
 mentors before confirmation. See [web help desk](../../docs/help-desk-web.md)
 for routes, authorization, save ownership and validation.
+
+## Browser tab titles
+
+`PageHeader` sets the browser title to its localized heading followed by
+` | hackOS`; loaded record names and language changes update it automatically.
+Use `tabTitle` when sibling destinations share a visible heading (Home uses
+Event, Schedule or Inbox). Embedded specimens (`headingLevel={2}`) do not set
+a title. Screens without `PageHeader`, such as authentication, use `PageTitle`
+with their localized screen or status heading. Avoid imperative `document.title`
+writes in embedded content: the containing screen owns its title.

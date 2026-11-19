@@ -15,6 +15,7 @@ import { z } from "zod";
 import { ActionGroup } from "@/components/common/action-group";
 import { AlertModal } from "@/components/common/alert-modal";
 import { DrilldownBackButton } from "@/components/common/drilldown-back-button";
+import { PageTitle } from "@/components/common/page-title";
 import {
   PermissionStateControl,
   permissionStateMessageKey,
@@ -222,6 +223,7 @@ export function RoleEditor({
 
   const roleHeader = (
     <div className="flex flex-wrap items-center gap-2">
+      <PageTitle title={role.name} />
       <h1 className="type-page-title text-balance">{role.name}</h1>
       {isProtected && (
         <StatusBadge

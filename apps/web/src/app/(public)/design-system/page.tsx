@@ -7,6 +7,7 @@ import { ActionGroup } from "@/components/common/action-group";
 import { DataTable } from "@/components/common/data-table";
 import { IconButton } from "@/components/common/icon-button";
 import { Modal } from "@/components/common/modal";
+import { PageTitle } from "@/components/common/page-title";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -59,6 +60,7 @@ export default function DesignSystemPage() {
         tabIndex={-1}
         className="mx-auto max-w-5xl space-y-6 px-4 py-6 outline-none sm:px-6"
       >
+        <PageTitle title={t("designSystemTitle")} />
         <h1 className="type-page-title">{t("designSystemTitle")}</h1>
         <SectionCard title={t("designSystemLiveActions")} variant="plain">
           <ActionGroup data-live-actions>

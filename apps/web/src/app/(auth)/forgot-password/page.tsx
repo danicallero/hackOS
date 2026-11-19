@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { PageTitle } from "@/components/common/page-title";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
@@ -69,6 +70,7 @@ function ForgotPasswordForm() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
+          <PageTitle title={t("checkEmail")} />
           <h1 ref={confirmationHeading} tabIndex={-1} className="type-page-title text-balance">
             {t("checkEmail")}
           </h1>
@@ -89,6 +91,7 @@ function ForgotPasswordForm() {
   return (
     <Card>
       <CardHeader>
+        <PageTitle title={t("resetPassword")} />
         <h1 className="type-page-title text-balance">{t("resetPassword")}</h1>
       </CardHeader>
       <CardContent>

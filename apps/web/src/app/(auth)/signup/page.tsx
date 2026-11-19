@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { PageTitle } from "@/components/common/page-title";
 import { PasswordInput } from "@/components/common/password-input";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -173,6 +174,7 @@ function SignUpInner() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
+          <PageTitle title={t("checkInbox")} />
           <h1 ref={confirmationHeading} tabIndex={-1} className="type-page-title text-balance">
             {t("checkInbox")}
           </h1>
@@ -211,6 +213,7 @@ function SignUpInner() {
   return (
     <Card>
       <CardHeader>
+        <PageTitle title={t("createYourAccount")} />
         <h1 className="type-page-title text-balance">{t("createYourAccount")}</h1>
       </CardHeader>
       <CardContent>

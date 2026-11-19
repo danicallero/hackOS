@@ -5,13 +5,13 @@ import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOu
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect } from "react";
 import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { HeroBleed } from "@/components/common/hero-bleed";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
+import { PageTitle } from "@/components/common/page-title";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
@@ -81,12 +81,9 @@ export default function PublicChallengePage() {
     logoNegativeUrl: challenge?.enterprise.logoNegativeUrl,
   });
 
-  useEffect(() => {
-    if (challenge) document.title = displayText(challenge.title, language);
-  }, [challenge, language]);
-
   return (
     <>
+      {challenge && <PageTitle title={displayText(challenge.title, language)} />}
       {challenge ? (
         <HeroBleed color={logoColor}>
           <BackLink

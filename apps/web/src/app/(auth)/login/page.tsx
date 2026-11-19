@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
+import { PageTitle } from "@/components/common/page-title";
 import { PasswordInput } from "@/components/common/password-input";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -125,6 +126,7 @@ function LoginInner() {
   return (
     <Card>
       <CardHeader>
+        <PageTitle title={t("signIn")} />
         <h1 className="type-page-title text-balance">{t("signIn")}</h1>
       </CardHeader>
       <CardContent>

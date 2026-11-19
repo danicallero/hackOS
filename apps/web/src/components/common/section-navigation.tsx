@@ -130,9 +130,19 @@ function HomeNavigation() {
 /** Shared parent headers keep the same title, width and navigation tracks on sibling routes. */
 export function HomeSectionHeader() {
   const { t } = useLocale();
+  const pathname = usePathname();
   return (
     <div className="space-y-(--page-section-gap)">
-      <PageHeader title={t("home")} />
+      <PageHeader
+        title={t("home")}
+        tabTitle={t(
+          pathname === "/timetable"
+            ? "schedule"
+            : pathname === "/inbox"
+              ? "inbox"
+              : "eventInformation",
+        )}
+      />
       <HomeNavigation />
     </div>
   );

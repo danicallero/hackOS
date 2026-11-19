@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { PageTitle } from "@/components/common/page-title";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -106,6 +107,7 @@ function VerifyEmailInner() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
+          <PageTitle title={t("verifyEmail")} />
           <h1 className="type-page-title text-balance">{t("verifyEmail")}</h1>
         </CardHeader>
         <CardContent>
@@ -125,6 +127,7 @@ function VerifyEmailInner() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
+          <PageTitle title={t("emailVerified")} />
           <h1 className="type-page-title text-balance">{t("emailVerified")}</h1>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 text-center">
@@ -145,6 +148,7 @@ function VerifyEmailInner() {
   return (
     <Card>
       <CardHeader className="items-center justify-items-center text-center">
+        <PageTitle title={t("verifyEmail")} />
         <h1 className="type-page-title text-balance">{t("verifyEmail")}</h1>
         <CardDescription>{t("verificationInstructions")}</CardDescription>
       </CardHeader>
@@ -215,6 +219,7 @@ function PendingVerification({ email, next }: { email: string; next: string }) {
   return (
     <Card>
       <CardHeader className="items-center justify-items-center text-center">
+        <PageTitle title={t("verifyEmail")} />
         <h1 className="type-page-title text-balance">{t("verifyEmail")}</h1>
         <CardDescription>{t("verifyPendingBody", { email })}</CardDescription>
       </CardHeader>
