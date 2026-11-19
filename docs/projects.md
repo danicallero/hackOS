@@ -297,8 +297,9 @@ under reduced motion). The backdrop renders the carousel's own thumbnail URLs
 with the same credentials, so it adds no downloads. `ProjectAmbientProvider`
 (`components/projects/project-ambient.tsx`) wraps the gallery record and the
 project editor so the carousel can report its visible photo; carousels outside
-it (judging panel) report nothing. A project without photos keeps the blue
-wash.
+it (judging panel) report nothing. Content after the hero is positioned above
+the fixed backdrop (`surfaces.css`) so the photo never covers it. A project
+without photos keeps the blue wash.
 
 Deletion is available from the record to staff with `projects:edit`, or to a sole
 active participant member while the API permits editing or submission withdrawal.

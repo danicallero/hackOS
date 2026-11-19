@@ -73,6 +73,12 @@ body:has([data-hero-bleed]) [data-slot="sidebar-inner"] {
   backdrop-filter: blur(24px);
 }
 
+/* The ambient photo is nearly opaque: the page content after the hero paints
+   above its fixed layer instead of under it (H18, H48). */
+[data-hero-bleed]:has([data-hero-ambient]) ~ * {
+  position: relative;
+}
+
 /* On phones the back link shares the row with the floating sidebar button. */
 [data-hero-bleed] [data-back-link] {
   min-height: 2.5rem;
