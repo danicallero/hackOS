@@ -1579,6 +1579,14 @@ architecture: [`mobile.md`](./mobile.md).**
   keep scrolled rows from sliding behind the clock. Person and company profiles
   are the exception: their tinted hero runs to the top edge and content scrolls
   under the status bar with no band, as on iOS.
+- **One Android header look.** Every Android bar leads with the 44pt glass
+  back circle and a bold 22pt title on the page colour, with no Material arrow
+  or elevation: `nativeStackScreenOptions` gives native bars this through
+  `AndroidStackBack` (so a screen that needs the default back passes
+  `nativeStackScreenOptions.headerLeft`, never `headerLeft: undefined`, and
+  keeps `headerBackVisible` iOS-only), and the drawn headers use
+  `LegacyBackButton` / `AndroidDetailHeader`. Bar icon actions sit in the same
+  glass circle (`LegacyGlassIconButton`), never bare.
 - **Sheets, menus, alerts, switches, spinners and pickers are drawn Apple-style
   on Android, one shared implementation each** (H55, H59). Use `SheetModal`
   (`app-sheet.tsx`: scrim, 22 pt top corners, grabber, top edge below the status

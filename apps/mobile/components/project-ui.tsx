@@ -257,7 +257,12 @@ export function CircleButton({
       onPress={onPress}
       style={{
         alignItems: "center",
-        backgroundColor: active ? colors.accent : filled ? colors.elevatedSurface : undefined,
+        // H55: Android bars have no glass platter behind their items, so the circle is drawn.
+        backgroundColor: active
+          ? colors.accent
+          : filled || process.env.EXPO_OS === "android"
+            ? colors.elevatedSurface
+            : undefined,
         borderRadius: size / 2,
         height: size,
         justifyContent: "center",

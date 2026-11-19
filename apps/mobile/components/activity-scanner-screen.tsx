@@ -637,25 +637,24 @@ export function ActivityScannerScreen({
       {glassAvailable || embedded ? null : (
         <View
           testID={UI_TEST_IDS.scanner.result}
+          // H55: the bold leading title every Android bar uses, beside the back circle.
           style={{
-            alignSelf: "center",
-            borderRadius: radius.full,
             height: 44,
             justifyContent: "center",
             left: 72,
-            paddingHorizontal: 16,
             position: "absolute",
             right: 140,
             top: insets.top,
           }}
         >
           <Text
+            accessibilityRole="header"
             selectable
             numberOfLines={1}
             maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
             adjustsFontSizeToFit
             minimumFontScale={CHROME_MIN_FONT_SCALE}
-            style={{ ...type.callout, color: colors.label, fontWeight: "700", textAlign: "center" }}
+            style={{ ...type.title2, color: colors.label }}
           >
             {activityName}
           </Text>

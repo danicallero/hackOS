@@ -679,6 +679,20 @@ export function LegacyHeaderIconButton({
   );
 }
 
+/** A bar action in the same 44pt glass circle as {@link LegacyBackButton} (H55). */
+export function LegacyGlassIconButton(props: Parameters<typeof LegacyHeaderIconButton>[0]) {
+  return (
+    <GlassView
+      colorScheme="auto"
+      glassEffectStyle="regular"
+      isInteractive
+      style={{ borderRadius: radius.full, height: 44, width: 44 }}
+    >
+      <LegacyHeaderIconButton {...props} />
+    </GlassView>
+  );
+}
+
 /** The circular glass back control shared by every Android custom header. */
 export function LegacyBackButton({ onPress }: { onPress: () => void }) {
   const { t } = useLocale();

@@ -1,6 +1,7 @@
 import type { Href, ImperativeRouter } from "expo-router";
-import { useMemo } from "react";
+import { createElement, useMemo } from "react";
 import { Platform } from "react-native";
+import { AndroidStackBack } from "@/components/android-stack-back";
 import { useSideRegion } from "@/lib/side-region";
 import { useSideInsets } from "@/lib/vertical-bar-edge";
 import { colors } from "@/theme/colors";
@@ -18,6 +19,17 @@ export const nativeStackScreenOptions = {
   fullScreenGestureEnabled: true,
   headerBackButtonDisplayMode: "minimal",
   headerBackButtonMenuEnabled: false,
+  // H55: Android draws its bar like `AndroidDetailHeader` (glass back circle,
+  // bold title on the page colour, no Material elevation), so native-bar
+  // screens match the ones that draw their own header.
+  ...(process.env.EXPO_OS === "android"
+    ? {
+        headerLeft: (props: { canGoBack?: boolean }) => createElement(AndroidStackBack, props),
+        headerShadowVisible: false,
+        headerStyle: { backgroundColor: colors.background },
+        headerTitleStyle: { color: colors.label, fontSize: 22, fontWeight: "700" as const },
+      }
+    : {}),
 } as const;
 
 /**

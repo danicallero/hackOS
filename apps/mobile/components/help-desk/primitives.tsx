@@ -107,7 +107,8 @@ export function HelpPage({
     navigation.setOptions({
       ...fixedScrollHeaderOptions(title, glass),
       // A tab root has nothing to go back to; a pushed page keeps the native back item.
-      headerBackVisible: showBack && !onClose,
+      // Android draws its glass back circle as `headerLeft` instead (H55).
+      headerBackVisible: process.env.EXPO_OS === "ios" && showBack && !onClose,
       ...(searchPlaceholder !== undefined && onSearchChange && helpSearchSurface() === "native"
         ? {
             headerSearchBarOptions: {
@@ -173,7 +174,8 @@ export function HelpPage({
               : onClose || inlineTitle
                 ? { title, headerLargeTitle: false }
                 : barTitle),
-            headerBackVisible: showBack && !onClose,
+            // Android draws its glass back circle as `headerLeft` instead (H55).
+            headerBackVisible: process.env.EXPO_OS === "ios" && showBack && !onClose,
             headerTransparent: true,
             headerShadowVisible: false,
             headerLargeTitleShadowVisible: false,
@@ -197,7 +199,7 @@ export function HelpPage({
             ...(onClose && !glass
               ? {
                   headerLeft: () => (
-                    <CircleButton icon="xmark" label={t("cancel")} onPress={onClose} />
+                    <CircleButton icon="xmark" label={t("cancel")} size={48} onPress={onClose} />
                   ),
                 }
               : {}),
@@ -233,7 +235,12 @@ export function HelpPage({
                             menu.items.find((item) => item.id === nativeEvent.event)?.onPress()
                           }
                         >
-                          <CircleButton icon="gearshape" label={menu.label} onPress={() => {}} />
+                          <CircleButton
+                            icon="gearshape"
+                            label={menu.label}
+                            size={48}
+                            onPress={() => {}}
+                          />
                         </MenuView>
                       ) : null}
                       {action ? (
@@ -242,6 +249,7 @@ export function HelpPage({
                           label={action.label}
                           prominent={action.icon === "checkmark"}
                           disabled={action.disabled}
+                          size={48}
                           onPress={action.onPress}
                         />
                       ) : null}
