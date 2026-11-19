@@ -1123,7 +1123,7 @@ describe("confirm / decline (H15)", () => {
     const details = outbox[0].payload.vars.decisionDetails;
     expect(details).toMatch(/http:\/\/localhost:3001\/applications\/confirm#token=/);
     expect(details).toMatch(/http:\/\/localhost:3001\/applications\/decline#token=/);
-    expect(details).toMatch(/please let us know/);
+    expect(details).toMatch(/you can decline your spot/);
   });
 
   it("batch decide + batch send processes multiple responses", async () => {
@@ -1844,10 +1844,10 @@ describe("decision pool", () => {
 
 describe("email confirmation deadline", () => {
   it.each([
-    ["es", "¡Enhorabuena!", "Confirma tu plaza antes del", "Confirmar mi plaza"],
-    ["gl", "Parabéns!", "Confirma a túa praza antes do", "Confirmar a miña praza"],
-    ["en", "Congratulations!", "Confirm your spot before", "Confirm my spot"],
-  ])("localizes acceptance, exact expiry and action links in %s (H14/H15)", async (language, welcome, deadline, action) => {
+    ["es", "ha sido aceptada", "Confirma tu plaza antes del", "Confirmar mi plaza"],
+    ["gl", "foi aceptada", "Confirma a túa praza antes do", "Confirmar a miña praza"],
+    ["en", "has been accepted", "Confirm your spot before", "Confirm my spot"],
+  ])("localizes acceptance, exact expiry and action links in %s (H14/H15)", async (language, outcome, deadline, action) => {
     const a = await getApp();
     await pool.query(
       "INSERT INTO event_config (id, name, timezone) VALUES (1, 'HackUDC 2027', 'Europe/Madrid')",
@@ -1875,7 +1875,7 @@ describe("email confirmation deadline", () => {
       "../../src/modules/notifications/templates.js"
     );
     const rendered = renderEmailTemplate(rows[0].payload, normalizeLanguage(language));
-    expect(rendered.text).toContain(welcome);
+    expect(rendered.text).toContain(outcome);
     expect(rows[0].payload.vars.eventName).toBe("HackUDC 2027");
     expect(rows[0].payload.vars.applicationName).toBe("Participants");
     expect(rendered.subject).toContain("HackUDC 2027");

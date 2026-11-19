@@ -3,9 +3,9 @@
     "footer": "Se non esperabas este correo, podes ignoralo e non premer ningunha ligazón.\n\nEsta é unha mensaxe automática.\nPara contactar coa organización, escribe a {{contactEmail}}.",
     "event": {
       "reminder": {
-        "subject": "Vémonos en {{eventName}}!",
-        "heading": "Xa queda menos para {{eventName}}",
-        "body": "Ola {{name}},\n\n{{eventName}} comeza o {{eventDate}}. Vémonos ás {{checkInTime}} para o check-in.\n\nNon esquezas levar a túa entrada: podes amosar o QR deste correo ao chegar ou gardala na túa carteira.\n\n[Engadir a Apple Wallet]({{appleUrl}})\n\n[Engadir a Google Wallet]({{googleUrl}})\n\nTamén tes a túa entrada dispoñible no teu perfil:\n\n[Ver a miña entrada]({{walletUrl}})\n\nTemos ganas de verte!\nO equipo de {{eventName}}",
+        "subject": "A túa entrada para {{eventName}}",
+        "heading": "A túa entrada para {{eventName}}",
+        "body": "Ola {{name}},\n\n{{eventName}} comeza o {{eventDate}}. Vémonos ás {{checkInTime}} para o check-in.\n\nNon esquezas levar a túa entrada: podes amosar o QR deste correo ao chegar ou gardala na túa carteira.\n\n[Engadir a Apple Wallet]({{appleUrl}})\n\n[Engadir a Google Wallet]({{googleUrl}})\n\nTamén tes a túa entrada dispoñible no teu perfil:\n\n[Ver a miña entrada]({{walletUrl}})\n\nO equipo de {{eventName}}",
         "ticketAlt": "QR da túa entrada"
       }
     },
@@ -39,11 +39,11 @@
         "body": "Ola {{name}}:\n\nCreaches unha conta de hackOS con este enderezo, pero aínda non a verificaches. Ata que o fagas, non poderás enviar solicitudes, consultar información nin tomar decisións na plataforma.\n\n[Confirmar correo]({{verifyUrl}})\n\nA ligazón funciona durante tres días. Se caducou, podes pedir unha nova desde hackOS.\n\nNon creaches ti esta conta? Podes borrala: [Borrar esta conta]({{deleteUrl}}). Se a conta ten contrasinal, terás que introducilo para confirmalo."
       },
       "verifyReminder2": {
-        "subject": "Lembrete: o teu correo de hackOS segue sen verificar",
+        "subject": "Verificación pendente do teu correo de hackOS",
         "body": "Ola {{name}}:\n\nEscribímosche de novo porque a túa conta de hackOS segue co correo sen verificar. Sen verificalo non podes enviar solicitudes, consultar información nin usar a plataforma.\n\n[Confirmar correo]({{verifyUrl}})\n\nA ligazón funciona durante tres días. Se caducou, podes pedir unha nova desde hackOS.\n\nNon creaches ti esta conta? Podes borrala: [Borrar esta conta]({{deleteUrl}}). Se a conta ten contrasinal, terás que introducilo para confirmalo."
       },
       "verifyReminder3": {
-        "subject": "Último lembrete: verifica o teu correo de hackOS",
+        "subject": "Verificación do correo de hackOS: último recordatorio",
         "body": "Ola {{name}}:\n\nEste é o último lembrete que che enviamos. A túa conta de hackOS segue sen verificar, así que non podes enviar solicitudes, consultar información nin usar a plataforma.\n\nSe queres conservala, verifícaa agora:\n\n[Confirmar correo]({{verifyUrl}})\n\nA ligazón funciona durante tres días. Se caducou, podes pedir unha nova desde hackOS.\n\nNon creaches ti esta conta? Podes borrala: [Borrar esta conta]({{deleteUrl}}). Se a conta ten contrasinal, terás que introducilo para confirmalo."
       }
     },
@@ -87,15 +87,15 @@
         "body": "Ola {{name}},\n\nRevisamos a túa solicitude a {{applicationName}}.{{decisionDetails}}",
         "accepted": {
           "subject": "A túa solicitude para {{eventName}} foi aceptada",
-          "heading": "Agardámoste en {{eventName}}!",
-          "body": "Ola {{name}},\n\nParabéns! Aceptamos a túa solicitude de {{applicationName}} para {{eventName}} e fainos moita ilusión contar contigo.\n\nReservámosche unha praza. Agora só falta que confirmes a túa asistencia.{{decisionDetails}}\n\nTemos moitas ganas de coñecerte!\nO equipo de {{eventName}}"
+          "heading": "Confirma a túa praza en {{eventName}}",
+          "body": "Ola {{name}},\n\nA túa solicitude de {{applicationName}} para {{eventName}} foi aceptada. Reservámosche unha praza pendente de confirmar a túa asistencia.{{decisionDetails}}\n\nO equipo de {{eventName}}"
         },
         "rejected": {
           "subject": "Sobre a túa solicitude de {{applicationName}} para {{eventName}}",
           "body": "Ola {{name}},\n\nLamentablemente, a túa solicitude de {{applicationName}} para {{eventName}} non foi seleccionada nesta ocasión. Sabemos que non é a nova que agardabas.{{rejectionDetails}}\n\nGrazas polo teu interese e polo tempo que dedicaches á túa solicitude. Agardamos verte en próximas edicións.\n\nUn saúdo,\nO equipo de organización"
         },
         "rejectionDetails": "\n\nMotivo: {{reason}}",
-        "confirmationDetails": "\n\n{{deadlineNotice}}\n\n[Confirmar a miña praza]({{confirmUrl}})\n\nSe ao final non podes vir, avísanos para que outra persoa poida aproveitar a túa praza:\n\n[Renunciar á miña praza]({{declineUrl}})\n\nSe pasa o prazo sen que confirmes, a praza liberarase automaticamente.",
+        "confirmationDetails": "\n\n{{deadlineNotice}}\n\n[Confirmar a miña praza]({{confirmUrl}})\n\nSe non podes asistir, podes renunciar á túa praza:\n\n[Renunciar á miña praza]({{declineUrl}})\n\nSe pasa o prazo sen que confirmes, a praza liberarase automaticamente.",
         "confirmationDeadline": "Confirma a túa praza antes do {{deadline}}."
       },
       "draftReminder1": {
@@ -107,7 +107,7 @@
         "body": "Ola {{name}}:\n\nLembrámosche que a túa solicitude para {{applicationName}} en {{eventName}} segue como borrador.\n\nSe non a presentas, non poderemos avaliala e non poderás participar en {{eventName}}.\n\n[Presentar a miña solicitude]({{applicationUrl}})\n\nO equipo de {{eventName}}"
       },
       "draftReminder3": {
-        "subject": "Último lembrete sobre a túa solicitude de {{applicationName}}",
+        "subject": "A túa solicitude de {{applicationName}} segue sen presentar",
         "body": "Ola {{name}}:\n\nEsta é a última vez que che escribimos sobre isto. A túa solicitude para {{applicationName}} en {{eventName}} segue como borrador e non avaliamos borradores.\n\nSe aínda queres participar, podes presentala cando queiras:\n\n[Presentar a miña solicitude]({{applicationUrl}})\n\nNon che enviaremos máis lembretes.\n\nO equipo de {{eventName}}"
       },
       "returned": {
@@ -115,12 +115,12 @@
         "body": "Ola {{name}}:\n\nRevisamos a túa solicitude de {{applicationName}} para {{eventName}} e, tal como está, non podemos aceptala.{{rejectionDetails}}\n\nDevolvémoscha como borrador para que poidas corrixila e presentala de novo, aínda que o prazo xa pechase.\n\n[Revisar a miña solicitude]({{applicationUrl}})\n\nO equipo de {{eventName}}"
       },
       "confirmationReminder": {
-        "subject": "Lembra confirmar a túa praza en {{eventName}}",
-        "body": "Ola {{name}},\n\nA túa praza en {{eventName}} segue reservada, pero aínda non confirmaches a túa asistencia.{{confirmationDetails}}\n\nO equipo de {{eventName}}"
+        "subject": "Confirmación pendente para {{eventName}}",
+        "body": "Ola {{name}},\n\nA túa praza en {{eventName}} segue pendente de confirmación.{{confirmationDetails}}\n\nO equipo de {{eventName}}"
       },
       "confirmationLastChance": {
-        "subject": "Última oportunidade para confirmar a túa praza en {{eventName}}",
-        "body": "Ola {{name}},\n\nQuedan menos de 24 horas para confirmar a túa praza en {{eventName}}. É o último aviso que che enviaremos.{{confirmationDetails}}\n\nO equipo de {{eventName}}"
+        "subject": "Confirmación de praza en {{eventName}}: quedan menos de 24 horas",
+        "body": "Ola {{name}},\n\nQuedan menos de 24 horas para confirmar a túa praza en {{eventName}}. Este é o último recordatorio.{{confirmationDetails}}\n\nO equipo de {{eventName}}"
       }
     },
     "schedule": {

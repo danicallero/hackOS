@@ -230,7 +230,7 @@ exports of the supplied edition SVGs (`public/email/hackudc-2027{,-dark}.*`);
 the app keeps its hackOS product wordmark. Rockwell headings, sans body
 text, pill actions and 8px surfaces retain the edition geometry. The acceptance
 heading names confirmation, the primary button confirms, and declining is a
-secondary text link. Copy leads with the outcome, shows the exact localized
+secondary outlined button. Copy leads with the outcome, shows the exact localized
 expiry in the event timezone before the action, then gives consequences or
 security notes. See [`notifications.md`](./notifications.md#transactional-email-theme-h7-h52).
 

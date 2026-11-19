@@ -180,6 +180,12 @@ así que Gmail aprende ese remitente como masivo. Por eso:
 - Sin relleno invisible tras el preheader (`&zwnj;&nbsp;…`): es la firma de las
   herramientas de marketing.
 
+La aceptación y los recordatorios usan asuntos operativos, nombres variables y
+plazos explícitos; confirmar es la acción primaria y renunciar tiene un botón
+secundario con borde. Esto reduce el tono promocional, pero no garantiza la
+pestaña Principal: Gmail decide la categoría para cada destinatario.
+[Guía de Google para remitentes](https://support.google.com/mail/answer/81126).
+
 Si aun así cae en Promociones, en **Mostrar original** comprueba que el
 `From` sea `auth.` y que SPF/DKIM/DMARC pasen.
 
