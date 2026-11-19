@@ -1,4 +1,9 @@
+import { TAB_DEFINITIONS } from "@/components/opaque-router-tabs";
 import { androidSymbolName } from "@/components/symbol";
+import { OVERFLOW_TAB_ICON } from "@/lib/overflow-tabs";
+
+// The tab bar reaches the auth client, whose ESM build Jest does not load here.
+jest.mock("@/lib/auth-client", () => ({}));
 
 describe("Android symbol aliases (H55)", () => {
   it.each([
@@ -23,6 +28,14 @@ describe("Android symbol aliases (H55)", () => {
     expect(androidSymbolName("rectangle.3.group")).toBe("dashboard");
     expect(androidSymbolName("wallet.pass")).toBe("account_balance_wallet");
     expect(androidSymbolName("person.2.crop.square.stack")).toBe("contacts");
+  });
+
+  it("maps every tab and overflow icon, so no tab renders blank on Android", () => {
+    const icons = [
+      ...Object.values(TAB_DEFINITIONS).flatMap((tab) => [tab.icon, tab.selectedIcon]),
+      ...Object.values(OVERFLOW_TAB_ICON),
+    ].filter((icon): icon is string => Boolean(icon));
+    expect(icons.filter((icon) => !androidSymbolName(icon))).toEqual([]);
   });
 
   it("covers the diary favourite toggle", () => {

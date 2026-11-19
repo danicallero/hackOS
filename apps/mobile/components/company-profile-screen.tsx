@@ -411,7 +411,12 @@ export function CompanyProfileScreen() {
                   feedback="opacity"
                   accessibilityRole="link"
                   onPress={() => void Linking.openURL(site)}
-                  style={{ alignSelf: "flex-start", flexDirection: "row", gap: 6 }}
+                  style={{
+                    alignItems: "center",
+                    alignSelf: "flex-start",
+                    flexDirection: "row",
+                    gap: 6,
+                  }}
                 >
                   <SymbolView name="globe" size={16} tintColor={colors.accent} accessible={false} />
                   <Text style={{ color: colors.accent, fontSize: type.callout.fontSize }}>

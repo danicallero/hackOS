@@ -65,7 +65,7 @@ interface TabDefinition {
 }
 
 /** H55 app adapter: capability-aware destinations for the reusable tab shell. */
-const TAB_DEFINITIONS: Record<TabKey, TabDefinition> = {
+export const TAB_DEFINITIONS: Record<TabKey, TabDefinition> = {
   schedule: {
     href: "/(tabs)/schedule",
     icon: "calendar",
