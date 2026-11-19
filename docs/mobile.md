@@ -1327,15 +1327,17 @@ error stays, and 404/403 still shows "Profile not available".
 
 **Image heroes (H44, H45, H48).** Person, company, challenge and project
 pages wash their header in their image (photo, logo, the company's logo, the
-first project image) with `ImageHero`: the image itself, enlarged and blurred
-until no shape survives (iOS `blurRadius` 180, Android a style `filter` blur;
+first project image) with `ImageHero`: the image itself, enlarged and softly blurred
+while retaining broad logo shapes (iOS `BlurView` with a full-strength
+ultra-thin material matching the appearance, Android a 32 pt style `filter` blur;
 below Android 12 the single-colour wash), under a veil of the page colour
 (`ambientVeil`: 65% light, 55% dark, the values measured on the web hero so
 text over the image meets WCAG AA; the profile headline uses the label colour
 there instead of grey) and masked to fade into the page, so each side keeps its own
 colour and labels keep the page's colour. It is the same request as the avatar
-or logo on the page: iOS blurs the copy already in memory, Android blurs the
-untransformed image instead of fetching a transformed one, and private photos
+or logo on the page: iOS blurs the rendered backdrop, so SVG logos and
+raster photos have the same blur regardless of their source resolution;
+Android blurs the untransformed image instead of fetching a transformed one, and private photos
 stay in memory only (#934). Without an image the hero is `heroTint`'s wash
 (blue for people, projects and challenges, grey for an uncollected company).
 Every hero is 620pt tall and starts 300pt above the content to cover the
