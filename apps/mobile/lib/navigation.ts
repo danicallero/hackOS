@@ -5,6 +5,7 @@ import { AndroidStackBack } from "@/components/android-stack-back";
 import { useSideRegion } from "@/lib/side-region";
 import { useSideInsets } from "@/lib/vertical-bar-edge";
 import { colors } from "@/theme/colors";
+import { type } from "@/theme/tokens";
 
 /**
  * Shared `screenOptions` for every native Stack. iOS 26 draws a chevron-only
@@ -27,7 +28,11 @@ export const nativeStackScreenOptions = {
         headerLeft: (props: { canGoBack?: boolean }) => createElement(AndroidStackBack, props),
         headerShadowVisible: false,
         headerStyle: { backgroundColor: colors.background },
-        headerTitleStyle: { color: colors.label, fontSize: 22, fontWeight: "700" as const },
+        headerTitleStyle: {
+          color: colors.label,
+          fontSize: type.title2.fontSize,
+          fontWeight: "700" as const,
+        },
       }
     : {}),
 } as const;
