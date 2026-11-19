@@ -1,4 +1,5 @@
 import MaskedView from "@react-native-masked-view/masked-view";
+import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
 import { Platform, StyleSheet, View } from "react-native";
 import { apiImageSource } from "@/lib/directory";
@@ -21,11 +22,10 @@ const canBlur = Platform.OS !== "android" || Number(Platform.Version) >= 31;
 
 /**
  * A page header washed in an image's own colours (H44, H48): the image itself,
- * enlarged and blurred until no shape (a logo's letters) survives, under a veil
+ * enlarged and softly blurred, under a veil
  * of the page colour and fading into the page, so each side keeps its colour.
  * It is the same request as the avatar or logo on the page, so the image is
- * downloaded once: iOS blurs the copy already in memory (expo-image queries the
- * original cache first), Android blurs the untransformed image with a style
+ * downloaded once: iOS blurs the rendered backdrop, Android blurs the image with a style
  * filter, since Glide would fetch a transformed one again. Private photos stay
  * in memory only, like the avatar (#934). Without an image the hero is the
  * single-colour wash (`fallback`, blue for people and projects).
@@ -66,7 +66,6 @@ export function ImageHero({
       >
         <Image
           accessible={false}
-          blurRadius={Platform.OS === "ios" ? 180 : undefined}
           cachePolicy="memory"
           contentFit="cover"
           source={apiImageSource(uri)}
@@ -76,11 +75,19 @@ export function ImageHero({
             StyleSheet.absoluteFill,
             {
               transform: [{ scale: 1.4 }],
-              ...(Platform.OS === "android" ? { filter: [{ blur: 120 }] } : null),
+              ...(Platform.OS === "android" ? { filter: [{ blur: 32 }] } : null),
             },
           ]}
           testID={testID ? `${testID}-image` : undefined}
         />
+        {/* H44, H48: blur rendered points, so SVGs and different source resolutions stay consistent. */}
+        {Platform.OS === "ios" ? (
+          <BlurView
+            intensity={100}
+            tint={dark ? "systemUltraThinMaterialDark" : "systemUltraThinMaterialLight"}
+            style={StyleSheet.absoluteFill}
+          />
+        ) : null}
         <View style={[StyleSheet.absoluteFill, { backgroundColor: ambientVeil(dark) }]} />
       </MaskedView>
     </View>
