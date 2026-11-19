@@ -290,10 +290,16 @@ function RouterTabsContent({
   } = useRouterTabBarInsets();
   const directTabCount = directTabs.length;
   const directTabNames = useMemo(() => directTabs.map(({ name }) => name), [directTabs]);
-  const { switchTab } = useTabTrigger({ name: directTabNames[0] ?? "" });
+  const { getTrigger, switchTab } = useTabTrigger({ name: directTabNames[0] ?? "" });
   const reducedMotion = useReducedMotion();
   const routeTabIndex = directTabs.findIndex((tab) => isTabActive(pathname, tab));
-  const selectedDirectTabIndex = routeTabIndex;
+  // H55: the buttons light up from the navigator's focused tab; when the path
+  // matches no tab (e.g. right after a window over the tabs closes) the lens
+  // follows that same focus instead of vanishing under a selected label.
+  const selectedDirectTabIndex =
+    routeTabIndex >= 0
+      ? routeTabIndex
+      : directTabs.findIndex((tab) => !tab.isActive && getTrigger(tab.name)?.isFocused);
   const [directGroupWidth, setDirectGroupWidth] = useState(0);
   const selectionOffset = useSharedValue(0);
   // H55: 0 resting, 1 lifted. Driven only from the gesture worklet, so the

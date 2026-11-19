@@ -4,6 +4,7 @@ import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { PageTitle } from "@/components/common/page-title";
 import { QrCode } from "@/components/common/qr-code";
 import { Spinner } from "@/components/common/spinner";
 import { WalletButtons } from "@/components/common/wallet-buttons";
@@ -190,6 +191,7 @@ function ConfirmInner() {
   const confirmation = (
     <Card>
       <CardHeader className="gap-4">
+        <PageTitle title={alreadyDone ? t("alreadyConfirmed") : t("placeConfirmed")} />
         <h1 className="type-page-title text-balance">
           {alreadyDone ? t("alreadyConfirmed") : t("placeConfirmed")}
         </h1>

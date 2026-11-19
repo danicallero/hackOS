@@ -41,7 +41,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
 import { AppRefreshControl } from "@/components/app-refresh-control";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
-import { EmptyState, LegacyHeaderIconButton, Section, Separator } from "@/components/native-ui";
+import { EmptyState, LegacyGlassIconButton, Section, Separator } from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
@@ -148,18 +148,18 @@ export default function AlertsScreen() {
     if (glassAvailable) return;
     navigation.setOptions({
       headerLeft: () => (
-        <LegacyHeaderIconButton icon="xmark" accessibilityLabel={t("close")} onPress={close} />
+        <LegacyGlassIconButton icon="xmark" accessibilityLabel={t("close")} onPress={close} />
       ),
       headerRight: () => (
-        <View style={{ flexDirection: "row" }}>
-          <LegacyHeaderIconButton
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <LegacyGlassIconButton
             icon={filterIcon}
             accessibilityLabel={t("notificationsUnreadOnly")}
             accessibilityState={{ selected: unreadOnly }}
             tintColor={unreadOnly ? colors.accent : colors.label}
             onPress={toggleUnread}
           />
-          <LegacyHeaderIconButton
+          <LegacyGlassIconButton
             icon="gearshape"
             accessibilityLabel={t("notificationsPreferences")}
             onPress={openPreferences}

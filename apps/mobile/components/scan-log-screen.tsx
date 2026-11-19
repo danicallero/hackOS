@@ -14,7 +14,7 @@ import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
-import { safeBack } from "@/lib/navigation";
+import { nativeStackScreenOptions, safeBack } from "@/lib/navigation";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { fetchScanLog, type ScanLogEntry } from "@/lib/scan-log";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
@@ -83,10 +83,11 @@ export function ScanLogScreen() {
       // The history can also be opened from a notification or a restored
       // deep link. Keep the native circular back item when there is a stack
       // entry to pop; otherwise use an equivalent safe back action.
-      headerBackVisible: !coldLink,
+      // Android draws its glass back circle as `headerLeft` instead (H55).
+      headerBackVisible: process.env.EXPO_OS === "ios" && !coldLink,
       headerLeft: coldLink
         ? () => <HeaderBackButton onPress={() => safeBack(router, fallbackRoute)} />
-        : undefined,
+        : nativeStackScreenOptions.headerLeft,
       headerSearchBarOptions: {
         placeholder: t("scanLogSearchPlaceholder"),
         autoCapitalize: "none",

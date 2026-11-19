@@ -43,7 +43,10 @@ export function heroTint(
   const foreground = luminance(shown) > 0.179 ? "black" : "white";
   const [r, g, b] = tint;
   return {
-    gradient: `linear-gradient(to bottom, rgba(${r},${g},${b},${alpha}) 0%, rgba(${r},${g},${b},0) 100%)`,
+    // Heroes are 620pt tall, starting 300pt above the content to cover the
+    // pull-down bounce: hold full strength over that part so the tint is
+    // strongest at the top edge of the screen, then fade (H44).
+    gradient: `linear-gradient(to bottom, rgba(${r},${g},${b},${alpha}) 0%, rgba(${r},${g},${b},${alpha}) 45%, rgba(${r},${g},${b},0) 100%)`,
     foreground,
   };
 }

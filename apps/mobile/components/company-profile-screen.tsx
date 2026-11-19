@@ -18,7 +18,7 @@ import { Desaturate } from "@/components/company-album";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { FavouriteStar } from "@/components/favourite-star";
 import { FloatingBackButton } from "@/components/floating-back-button";
-import { AndroidStatusBarScrim, EmptyState, Section, Separator } from "@/components/native-ui";
+import { EmptyState, Section, Separator } from "@/components/native-ui";
 import { loadingImageStyle, useApiImage } from "@/components/person-avatar";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { NoteRow, QuickAction } from "@/components/profile-parts";
@@ -411,7 +411,12 @@ export function CompanyProfileScreen() {
                   feedback="opacity"
                   accessibilityRole="link"
                   onPress={() => void Linking.openURL(site)}
-                  style={{ alignSelf: "flex-start", flexDirection: "row", gap: 6 }}
+                  style={{
+                    alignItems: "center",
+                    alignSelf: "flex-start",
+                    flexDirection: "row",
+                    gap: 6,
+                  }}
                 >
                   <SymbolView name="globe" size={16} tintColor={colors.accent} accessible={false} />
                   <Text style={{ color: colors.accent, fontSize: type.callout.fontSize }}>
@@ -609,7 +614,6 @@ export function CompanyProfileScreen() {
           patchEntry({ note });
         }}
       />
-      <AndroidStatusBarScrim />
     </View>
   );
 }

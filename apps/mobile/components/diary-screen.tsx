@@ -509,6 +509,15 @@ export function DiaryScreen() {
         : undefined,
     });
   }, [glassAvailable, navigation, searchable, t, wallet.open]);
+  // Adding or removing the native search re-lays the bar, and UIKit leaves the
+  // list scrolled under it (#935): switching People/Companies lands at the top.
+  const searchableShown = useRef(searchable);
+  useEffect(() => {
+    if (!glassAvailable || searchableShown.current === searchable) return;
+    searchableShown.current = searchable;
+    const frame = requestAnimationFrame(() => trueTop.scrollToTop(false));
+    return () => cancelAnimationFrame(frame);
+  }, [glassAvailable, searchable, trueTop]);
 
   const noteInitial = noteTarget?.entry.note ?? null;
 

@@ -42,9 +42,6 @@ export function apiAssetUrl(path: string): string {
   return `${API_URL.replace(/\/+$/, "")}${path}`;
 }
 
-const PHOTO_CACHE_LIMIT = 60;
-const photoCache = new Map<string, Promise<string>>();
-
 /** A short, stable tag for a session, so cache keys never carry the cookie itself. */
 function sessionTag(cookie: string): string {
   let hash = 5381;
@@ -82,43 +79,6 @@ export function apiImageSource(path: string): {
     headers: { Cookie: cookie, ...editionHeaders() },
     cacheKey: `${sessionTag(cookie)}:${url}`,
   };
-}
-
-function blobToDataUri(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error("Could not read the photo"));
-    reader.readAsDataURL(blob);
-  });
-}
-
-/**
- * The photo's bytes as a data URI, for Skia, which decodes them itself
- * (`connection-celebration-skia.tsx`). Views use `apiImageSource` instead.
- * Kept in memory only, like the views' cache.
- */
-export function loadApiImage(path: string): Promise<string> {
-  if (!path.startsWith("/")) return Promise.resolve(path);
-  const url = apiAssetUrl(path);
-  const cookie = getCurrentSessionCookie();
-  // Keyed by session too: another account on this device re-checks access.
-  const key = `${cookie}\n${url}`;
-  const cached = photoCache.get(key);
-  if (cached) return cached;
-  const request = fetch(url, { headers: { Cookie: cookie, ...editionHeaders() } })
-    .then((response) => {
-      if (!response.ok) throw new Error(`Photo request failed (${response.status})`);
-      return response.blob();
-    })
-    .then(blobToDataUri);
-  request.catch(() => photoCache.delete(key));
-  photoCache.set(key, request);
-  if (photoCache.size > PHOTO_CACHE_LIMIT) {
-    const oldest = photoCache.keys().next().value;
-    if (oldest) photoCache.delete(oldest);
-  }
-  return request;
 }
 
 /** Lowercased and accent-free, so "José" matches "jose" (as the API search does). */

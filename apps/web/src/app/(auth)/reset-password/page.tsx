@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { PageTitle } from "@/components/common/page-title";
 import { PasswordInput } from "@/components/common/password-input";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -88,6 +89,7 @@ function ResetPasswordForm() {
   return (
     <Card>
       <CardHeader>
+        <PageTitle title={t("setNewPassword")} />
         <h1 className="type-page-title text-balance">{t("setNewPassword")}</h1>
       </CardHeader>
       <CardContent>

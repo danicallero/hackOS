@@ -21,6 +21,29 @@ function buildCommit(): string | undefined {
 
 const eventWebsiteUrl = process.env.EXPO_PUBLIC_EVENT_WEBSITE_URL ?? "https://os.hackudc.com";
 const isDevelopmentBuild = process.env.APP_VARIANT === "development";
+/**
+ * The preview profile builds a sideloaded APK, which unlike a Play bundle is
+ * not split per device: keep only 64-bit ARM (every current phone) and
+ * compress the native libraries, so the download is not four ABIs uncompressed.
+ */
+const isPreviewApk = process.env.APP_VARIANT === "preview";
+
+type PluginEntry = NonNullable<ExpoConfig["plugins"]>[number];
+
+/** expo-build-properties with the preview APK's Android packaging added. */
+function withPreviewPackaging(plugin: PluginEntry): PluginEntry {
+  if (!isPreviewApk || !Array.isArray(plugin) || plugin[0] !== "expo-build-properties") {
+    return plugin;
+  }
+  const options = (plugin[1] ?? {}) as { android?: Record<string, unknown> };
+  return [
+    plugin[0],
+    {
+      ...options,
+      android: { ...options.android, buildArchs: ["arm64-v8a"], useLegacyPackaging: true },
+    },
+  ];
+}
 
 /**
  * Boots a development build straight into a Metro bundle instead of stopping
@@ -47,7 +70,7 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
   return {
     ...config,
     plugins: [
-      ...(config.plugins ?? []),
+      ...(config.plugins ?? []).map(withPreviewPackaging),
       "expo-font",
       [
         "react-native-nfc-manager",

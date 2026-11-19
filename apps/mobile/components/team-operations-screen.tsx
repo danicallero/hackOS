@@ -33,6 +33,7 @@ import { alert } from "@/lib/alert";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import { nativeStackScreenOptions } from "@/lib/navigation";
 import { isPadIdiom } from "@/lib/tabs";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
@@ -472,8 +473,9 @@ export function TeamOperationsScreen() {
     headerNavigation.setOptions({
       title: entry ? teamName : "",
       headerLargeTitle: true,
-      headerBackVisible: true,
-      headerLeft: undefined,
+      // Android draws its glass back circle as `headerLeft` instead (H55).
+      headerBackVisible: process.env.EXPO_OS === "ios",
+      headerLeft: nativeStackScreenOptions.headerLeft,
       headerRight: undefined,
     });
   }, [headerNavigation, teamName, entry]);

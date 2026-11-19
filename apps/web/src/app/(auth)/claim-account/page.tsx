@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ContextualError } from "@/components/common/contextual-error";
 import { MultiSelect } from "@/components/common/multi-select";
+import { PageTitle } from "@/components/common/page-title";
 import { PasswordInput } from "@/components/common/password-input";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -201,6 +202,7 @@ function ClaimInner() {
     return (
       <Card>
         <CardHeader>
+          <PageTitle title={t("inviteUnavailable")} />
           <h1 className="type-page-title text-balance">{t("inviteUnavailable")}</h1>
         </CardHeader>
         <CardContent>
@@ -216,6 +218,7 @@ function ClaimInner() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
+          <PageTitle title={t("accountCreated")} />
           <h1 ref={confirmationHeading} tabIndex={-1} className="type-page-title text-balance">
             {t("accountCreated")}
           </h1>
@@ -249,6 +252,7 @@ function ClaimInner() {
   return (
     <Card>
       <CardHeader>
+        <PageTitle title={t("createYourAccount")} />
         <h1 className="type-page-title text-balance">{t("createYourAccount")}</h1>
         {lookup.reusable && (
           <p className="text-muted-foreground text-pretty text-sm">

@@ -11,6 +11,7 @@ import { apiFetch } from "@/lib/api";
 import { authorizeGithubForProject, type GithubRepoCandidate } from "@/lib/github";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
+import { nativeStackScreenOptions } from "@/lib/navigation";
 import { projectMutation } from "@/lib/projects";
 import { colors, radius, type } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
@@ -55,7 +56,7 @@ export function ProjectGithubScreen() {
       headerLargeTitle: false,
       headerShadowVisible: false,
       // iOS 26 draws the native toolbar button below as a glass circle.
-      headerLeft: undefined,
+      headerLeft: nativeStackScreenOptions.headerLeft,
       headerRight: glass
         ? undefined
         : () => (

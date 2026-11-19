@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { BackLink } from "@/components/common/back-link";
 import { HeroBleed } from "@/components/common/hero-bleed";
+import { PageTitle } from "@/components/common/page-title";
 import { useLogoColor } from "@/lib/company";
 import { useLocale } from "@/lib/i18n";
 import type { NativeProject } from "@/lib/native-projects";
@@ -42,6 +43,7 @@ export function ProjectRecordHero({
       <BackLink href={backHref} label={backLabel} />
       <header className="space-y-4 pt-2">
         <div className="flex items-start justify-between gap-4">
+          <PageTitle title={name} />
           <h1 className="min-w-0 font-display text-3xl leading-tight text-balance wrap-anywhere sm:text-5xl">
             {name}
           </h1>
