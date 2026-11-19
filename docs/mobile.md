@@ -1266,8 +1266,7 @@ never slides behind the clock.
 
 **Company screen (H44, H45, H59).** `app/companies/[id].tsx`
 (`components/company-profile-screen.tsx`) reads `GET /api/enterprises/:id/profile`
-and follows Apple Music's artist page: a tinted gradient hero (CSS
-`experimental_backgroundImage`; `heroTint` in `lib/hero-tint.ts` tints it with the colour of the logo shown (`useCompanyLogoTint`: the negative logo in dark mode, falling back to the positive logo's colour when the negative is white or mono and has none), computed on the device by `lib/image-tint.ts` (`expo-image-manipulator` scales the logo to a 24x24 PNG in the cache, `lib/png-pixels.ts` decodes its RGBA with `fflate`; an SVG logo, which the platform decoders cannot read, gives the largest raster it embeds, else its fill/stroke colours, via `lib/svg-tint.ts`; `pickDominantColor` ignores transparent and near-white/black pixels and favours saturated buckets; nothing is stored server-side), darkened in dark mode,
+and follows Apple Music's artist page: a hero washed in the logo shown (the negative one in dark mode) by `ImageHero` (`components/ambient-hero.tsx`, below); lists and other screens still read a logo's single colour (`useCompanyLogoTint`: the negative logo in dark mode, falling back to the positive logo's colour when the negative is white or mono and has none), computed on the device by `lib/image-tint.ts` (`expo-image-manipulator` scales the logo to a 24x24 PNG in the cache, `lib/png-pixels.ts` decodes its RGBA with `fflate`, 8- or 16-bit since iOS writes wide-colour photos as 16-bit PNGs; an SVG logo, which the platform decoders cannot read, gives the largest raster it embeds, else its fill/stroke colours, via `lib/svg-tint.ts`; `pickDominantColor` ignores transparent and near-white/black pixels and favours saturated buckets; nothing is stored server-side), darkened in dark mode,
 neutral grey when null, and picks the white or black foreground for the name by
 luminance), the logo in a rounded
 card with a soft shadow (the negative logo in dark mode when present; artwork
@@ -1303,10 +1302,24 @@ name; opens `companies/[id]`) rows between the description and Information,
 from the item's optional `speakers` and `enterprises`. A person's profile
 shows every company they belong to (`enterprises`, one row each, opening its
 company screen with the same zoom) and Talks (`activities`) when the API sends
-them, tints its hero from the photo's dominant colour (same `useImageTint` and
-`heroTint`; no photo or no usable colour keeps the plain background), and a challenge's company row opens the company screen. Every hero is 620pt tall and starts 300pt above the content to cover the
+them, and a challenge's company row opens the company screen.
+
+**Image heroes (H44, H45, H48).** Person, company, challenge and project
+pages wash their header in their image (photo, logo, the company's logo, the
+first project image) with `ImageHero`: the image itself, enlarged and blurred
+until no shape survives (iOS `blurRadius` 180, Android a style `filter` blur;
+below Android 12 the single-colour wash), under a veil of the page colour
+(`ambientVeil`) and masked to fade into the page, so each side keeps its own
+colour and labels keep the page's colour. It is the same request as the avatar
+or logo on the page: iOS blurs the copy already in memory, Android blurs the
+untransformed image instead of fetching a transformed one, and private photos
+stay in memory only (#934). Without an image the hero is `heroTint`'s wash
+(blue for people, projects and challenges, grey for an uncollected company).
+Every hero is 620pt tall and starts 300pt above the content to cover the
 pull-down bounce; `heroTint` holds full strength over that first 45% so the
-tint is strongest at the screen's top edge, then fades. On Android the
+tint is strongest at the screen's top edge, then fades. On iOS a profile's role
+badge is drawn over the screen, not in the native bar: a bar item makes the
+whole bar take touches and the floating back circle stopped responding. On Android the
 challenge page (`components/challenge-detail.tsx`) hides the native bar and
 draws the company page's `FloatingBackButton`, padding its content below the
 status bar.

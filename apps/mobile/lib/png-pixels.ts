@@ -1,9 +1,10 @@
 import { unzlibSync } from "fflate";
 
 /**
- * Decodes a small 8-bit, non-interlaced PNG into RGBA bytes. It only has to
+ * Decodes a small 8- or 16-bit, non-interlaced PNG into 8-bit RGBA bytes. It only has to
  * read the thumbnails `expo-image-manipulator` writes for logo tints (H44), so
  * the app does not ship a native graphics library just to read 24x24 pixels.
+ * iOS writes wide-colour (P3) photos as 16-bit PNGs; their high bytes are kept.
  * Throws on anything else; the tint cache treats that as "no colour".
  */
 export function decodePngRgba(png: Uint8Array): {
@@ -18,6 +19,7 @@ export function decodePngRgba(png: Uint8Array): {
   let width = 0;
   let height = 0;
   let colorType = 0;
+  let depth = 8;
   let palette: Uint8Array | null = null;
   let transparency: Uint8Array | null = null;
   const data: Uint8Array[] = [];
@@ -29,9 +31,10 @@ export function decodePngRgba(png: Uint8Array): {
     if (kind === "IHDR") {
       width = view.getUint32(offset + 8);
       height = view.getUint32(offset + 12);
-      const depth = body[8];
+      depth = body[8] as number;
       colorType = body[9] as number;
-      if (depth !== 8 || body[12] !== 0) throw new Error("Unsupported PNG layout");
+      const supported = depth === 8 || (depth === 16 && colorType !== 3);
+      if (!supported || body[12] !== 0) throw new Error("Unsupported PNG layout");
     } else if (kind === "PLTE") palette = body;
     else if (kind === "tRNS") transparency = body;
     else if (kind === "IDAT") data.push(body);
@@ -48,16 +51,18 @@ export function decodePngRgba(png: Uint8Array): {
     at += part.length;
   }
   const raw = unzlibSync(compressed);
-  const stride = width * channels;
+  // Filters work on whole pixels of `bpp` bytes; 16-bit samples are two bytes each.
+  const sampleBytes = depth / 8;
+  const bpp = channels * sampleBytes;
+  const stride = width * bpp;
   const pixels = new Uint8Array(stride * height);
   for (let y = 0; y < height; y += 1) {
     const filter = raw[y * (stride + 1)];
     const line = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1));
     for (let x = 0; x < stride; x += 1) {
-      const left = x >= channels ? (pixels[y * stride + x - channels] as number) : 0;
+      const left = x >= bpp ? (pixels[y * stride + x - bpp] as number) : 0;
       const up = y > 0 ? (pixels[(y - 1) * stride + x] as number) : 0;
-      const corner =
-        y > 0 && x >= channels ? (pixels[(y - 1) * stride + x - channels] as number) : 0;
+      const corner = y > 0 && x >= bpp ? (pixels[(y - 1) * stride + x - bpp] as number) : 0;
       let predictor = 0;
       if (filter === 1) predictor = left;
       else if (filter === 2) predictor = up;
@@ -73,26 +78,31 @@ export function decodePngRgba(png: Uint8Array): {
     }
   }
 
+  // 8-bit samples, the high byte of each 16-bit one.
+  const samples =
+    sampleBytes === 1
+      ? pixels
+      : Uint8Array.from({ length: pixels.length / 2 }, (_, i) => pixels[i * 2] as number);
   const rgba = new Uint8Array(width * height * 4);
   for (let i = 0; i < width * height; i += 1) {
     const s = i * channels;
     const d = i * 4;
-    if (colorType === 6) rgba.set(pixels.subarray(s, s + 4), d);
+    if (colorType === 6) rgba.set(samples.subarray(s, s + 4), d);
     else if (colorType === 2) {
-      rgba.set(pixels.subarray(s, s + 3), d);
+      rgba.set(samples.subarray(s, s + 3), d);
       rgba[d + 3] = 255;
     } else if (colorType === 3) {
-      const index = pixels[s] as number;
+      const index = samples[s] as number;
       if (!palette) throw new Error("PNG palette missing");
       rgba.set(palette.subarray(index * 3, index * 3 + 3), d);
       rgba[d + 3] =
         transparency && index < transparency.length ? (transparency[index] as number) : 255;
     } else {
-      const grey = pixels[s] as number;
+      const grey = samples[s] as number;
       rgba[d] = grey;
       rgba[d + 1] = grey;
       rgba[d + 2] = grey;
-      rgba[d + 3] = colorType === 4 ? (pixels[s + 1] as number) : 255;
+      rgba[d + 3] = colorType === 4 ? (samples[s + 1] as number) : 255;
     }
   }
   return { width, height, rgba };

@@ -2,9 +2,10 @@ import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type LayoutChangeEvent, Text, View } from "react-native";
-import Animated, { FadeIn, runOnJS, useAnimatedReaction } from "react-native-reanimated";
+import Animated, { runOnJS, useAnimatedReaction } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActivityLinkSection } from "@/components/activity-link-rows";
+import { ImageHero, useImageHeroForeground } from "@/components/ambient-hero";
 import { AppRefreshControl } from "@/components/app-refresh-control";
 import { useCvViewer } from "@/components/cv-viewer";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
@@ -30,9 +31,8 @@ import type { DiaryEntry } from "@/lib/diary";
 import type { DirectoryEntry } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
 import { availabilityDays, type HelperDetail } from "@/lib/help-desk";
-import { heroTint, NO_PHOTO_TINT } from "@/lib/hero-tint";
+import { NO_PHOTO_TINT } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
-import { useImageTint } from "@/lib/image-tint";
 import { safeBack } from "@/lib/navigation";
 import { reportContent } from "@/lib/reports";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
@@ -216,12 +216,8 @@ export function PersonProfileScreen({
   const goBack = () => safeBack(router, "/");
   const person = state.status === "ready" ? state.person : null;
   const helper = state.status === "ready" ? state.helper : null;
-  // Tinted from the photo's colour, blue without a usable photo; a photo whose colour is still loading keeps the plain background.
-  const photoTint = useImageTint(person?.photoUrl);
-  const hero =
-    photoTint.color || (person && photoTint.settled)
-      ? heroTint(photoTint.color, dark, NO_PHOTO_TINT)
-      : null;
+  // H44/H48: the photo's own colours behind the header; blue without a photo.
+  const nameColor = useImageHeroForeground(person?.photoUrl, dark, NO_PHOTO_TINT);
 
   return (
     <View ref={avatarCollapse.hostRef} onLayout={avatarCollapse.onHostLayout} style={{ flex: 1 }}>
@@ -268,19 +264,12 @@ export function PersonProfileScreen({
           <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
         }
       >
-        {hero ? (
-          <Animated.View
-            entering={photoTint.fromCache ? undefined : FadeIn.duration(400)}
+        {person ? (
+          <ImageHero
+            uri={person.photoUrl}
+            dark={dark}
+            fallback={NO_PHOTO_TINT}
             testID="person-hero"
-            pointerEvents="none"
-            style={{
-              experimental_backgroundImage: hero.gradient,
-              height: 620,
-              left: 0,
-              position: "absolute",
-              right: 0,
-              top: -300,
-            }}
           />
         ) : null}
         {loadError && state.status === "ready" ? (
@@ -304,7 +293,7 @@ export function PersonProfileScreen({
                 ) : undefined
               }
               data={person}
-              nameColor={hero?.foreground}
+              nameColor={nameColor}
               onNameLayout={(event: LayoutChangeEvent) => {
                 avatarCollapse.onNameLayout(event);
                 const { y, height } = event.nativeEvent.layout;
@@ -502,20 +491,21 @@ export function PersonProfileScreen({
         />
       ) : null}
       {helper?.visibleRoleName ? (
-        process.env.EXPO_OS === "ios" ? (
-          <Stack.Toolbar placement="right">
-            <Stack.Toolbar.View hidesSharedBackground>
-              <StatusPill tone="accent">{helper.visibleRoleName}</StatusPill>
-            </Stack.Toolbar.View>
-          </Stack.Toolbar>
-        ) : (
-          <View
-            pointerEvents="none"
-            style={{ position: "absolute", right: 16, top: insets.top + 8 }}
-          >
-            <StatusPill tone="accent">{helper.visibleRoleName}</StatusPill>
-          </View>
-        )
+        // H61: drawn over the screen on iOS too: an item in the native bar makes the whole bar
+        // take touches, so the floating back circle under it stopped responding.
+        <View
+          pointerEvents="none"
+          style={{
+            alignItems: "center",
+            height: 44,
+            justifyContent: "center",
+            position: "absolute",
+            right: 16,
+            top: insets.top + 8,
+          }}
+        >
+          <StatusPill tone="accent">{helper.visibleRoleName}</StatusPill>
+        </View>
       ) : null}
     </View>
   );

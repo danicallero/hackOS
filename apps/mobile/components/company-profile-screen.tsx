@@ -9,9 +9,10 @@ import {
   Text,
   View,
 } from "react-native";
-import Animated, { FadeIn } from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActivityLinkSection } from "@/components/activity-link-rows";
+import { ImageHero, useImageHeroForeground } from "@/components/ambient-hero";
 import { AppRefreshControl } from "@/components/app-refresh-control";
 import { AvatarRow } from "@/components/avatar-row";
 import { Desaturate } from "@/components/company-album";
@@ -30,9 +31,8 @@ import { ApiError, apiFetch } from "@/lib/api";
 import { type CompanyProfile, companyDescription, fetchCompanyProfile } from "@/lib/company";
 import type { SponsorCollection, SponsorCollectionEntry } from "@/lib/diary-sponsors";
 import { haptic } from "@/lib/haptics";
-import { heroTint } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
-import { useCompanyLogoTint, useImageBleed } from "@/lib/image-tint";
+import { useImageBleed } from "@/lib/image-tint";
 import { safeBack } from "@/lib/navigation";
 import { resolveScheduleText } from "@/lib/schedule";
 import { colors, radius, type } from "@/theme";
@@ -263,9 +263,15 @@ export function CompanyProfileScreen() {
   // An uncollected company keeps the neutral grey hero instead of its logo colour.
   // The colour is computed on the device (prefetched from the lists); until it
   // is ready the neutral hero shows, then the tint fades in over it.
-  const logoTint = useCompanyLogoTint(uncollected ? null : (profile ?? null), dark);
-  const hero = heroTint(logoTint.color, dark);
-  const neutralHero = heroTint(null, dark);
+  // H44: a collected company's logo colours the header (`ImageHero`); an uncollected one keeps
+  // the neutral grey hero.
+  const heroLogo =
+    profile && !uncollected
+      ? dark && profile.logoNegativeUrl
+        ? profile.logoNegativeUrl
+        : profile.logoUrl
+      : null;
+  const nameColor = useImageHeroForeground(heroLogo, dark);
   const site = profile?.website;
   const description = profile ? companyDescription(profile, language) : null;
   const descriptionStyle = {
@@ -294,36 +300,7 @@ export function CompanyProfileScreen() {
           paddingTop: insets.top + 56,
         }}
       >
-        {profile ? (
-          <>
-            <View
-              pointerEvents="none"
-              style={{
-                experimental_backgroundImage: neutralHero.gradient,
-                height: 620,
-                left: 0,
-                position: "absolute",
-                right: 0,
-                top: -300,
-              }}
-            />
-            {logoTint.color ? (
-              <Animated.View
-                entering={logoTint.fromCache ? undefined : FadeIn.duration(400)}
-                testID="company-hero"
-                pointerEvents="none"
-                style={{
-                  experimental_backgroundImage: hero.gradient,
-                  height: 620,
-                  left: 0,
-                  position: "absolute",
-                  right: 0,
-                  top: -300,
-                }}
-              />
-            ) : null}
-          </>
-        ) : null}
+        {profile ? <ImageHero uri={heroLogo} dark={dark} testID="company-hero" /> : null}
         {state.status === "loading" ? (
           <RequestFeedback loading />
         ) : state.status === "error" ? (
@@ -345,7 +322,7 @@ export function CompanyProfileScreen() {
                 accessibilityRole="header"
                 selectable
                 style={{
-                  color: hero.foreground,
+                  color: nameColor ?? colors.label,
                   fontSize: type.title.fontSize,
                   fontWeight: "700",
                   textAlign: "center",

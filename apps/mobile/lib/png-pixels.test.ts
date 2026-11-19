@@ -84,8 +84,22 @@ describe("decodePngRgba", () => {
 
   it("refuses data it cannot read", () => {
     expect(() => decodePngRgba(new Uint8Array(16))).toThrow("Not a PNG");
-    const sixteenBit = png(1, 1, 6, [[0, 0, 0, 0, 0]]);
-    sixteenBit[8 + 8 + 8] = 16;
-    expect(() => decodePngRgba(sixteenBit)).toThrow("Unsupported PNG layout");
+    const interlaced = png(1, 1, 6, [[0, 0, 0, 0, 0]]);
+    interlaced[8 + 8 + 12] = 1;
+    expect(() => decodePngRgba(interlaced)).toThrow("Unsupported PNG layout");
   });
+});
+
+test("reads 16-bit PNGs, as iOS writes wide-colour photos, by their high bytes", () => {
+  // A 4x4 red-to-blue gradient saved as 16-bit RGBA.
+  const png = Uint8Array.from(
+    atob(
+      "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAEEAYAAAD5YUI9AAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGYktHRP///////wlY99wAAAAHdElNRQfqCxMSMgXMz4zEAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTExLTE5VDE4OjUwOjA1KzAwOjAwclbzDwAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0xMS0xOVQxODo1MDowNSswMDowMAMLS7MAAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMTEtMTlUMTg6NTA6MDUrMDA6MDBUHmpsAAAAI0lEQVQI12P8/5+BgYEBQmIDLKtXMzCEhjIwkK2AEWIBbisAqDIMA5z5kPUAAAAASUVORK5CYII=",
+    ),
+    (c) => c.charCodeAt(0),
+  );
+  const { width, height, rgba } = decodePngRgba(png);
+  expect([width, height]).toEqual([4, 4]);
+  expect(Array.from(rgba.subarray(0, 4))).toEqual([255, 0, 0, 255]);
+  expect(Array.from(rgba.subarray(rgba.length - 4))).toEqual([0, 0, 255, 255]);
 });
