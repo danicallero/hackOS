@@ -67,7 +67,7 @@ jest.mock("expo-router/ui", () => {
     Tabs: ({ children }: { children: unknown }) =>
       ReactLib.createElement(Native.View, null, children),
     TabTrigger,
-    useTabTrigger: () => ({ switchTab: mockSwitchTab }),
+    useTabTrigger: () => ({ getTrigger: () => undefined, switchTab: mockSwitchTab }),
   };
 });
 jest.mock("expo-glass-effect", () => ({
