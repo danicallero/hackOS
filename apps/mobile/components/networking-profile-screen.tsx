@@ -3,7 +3,7 @@ import Stack from "expo-router/stack";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { CvViewer } from "@/components/cv-viewer";
+import { useCvViewer } from "@/components/cv-viewer";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { HelperProfileSection } from "@/components/help-desk/helper-profile-section";
 import { HelperCompany, RoleBadge } from "@/components/help-desk/rows";
@@ -79,7 +79,7 @@ export default function NetworkingProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [togglingShare, setTogglingShare] = useState(false);
   const [cvBusy, setCvBusy] = useState<"upload" | "remove" | null>(null);
-  const [cvOpen, setCvOpen] = useState(false);
+  const cv = useCvViewer();
   const [failure, setFailure] = useState<Failure | null>(null);
   const [githubAccount, setGithubAccount] = useState<GithubAccount | null>(null);
   const [linkingGithub, setLinkingGithub] = useState(false);
@@ -263,6 +263,11 @@ export default function NetworkingProfileScreen() {
   const dirty = Boolean(draft && stored && !sameDraft(draft, stored));
   const fullName = me ? [me.name, me.surname].filter(Boolean).join(" ") || me.email : "";
 
+  function openCv() {
+    if (!profile?.cv) return;
+    cv.open(fullName, editing ? OWN_CV_PATH : (profile.preview.cvUrl ?? OWN_CV_PATH));
+  }
+
   function renderCard(current: NetworkingProfile, form: NetworkingDraft): ReactNode {
     const hasCv = current.cv !== null;
     let cvTile: ReactNode = null;
@@ -272,9 +277,9 @@ export default function NetworkingProfileScreen() {
           icon="doc.text"
           label={t("directoryCv")}
           title={t("directoryCv")}
-          busy={cvBusy !== null}
+          busy={cvBusy !== null || cv.opening}
           dimmed={form.shareCv === false}
-          onPress={() => setCvOpen(true)}
+          onPress={openCv}
           accessory={
             <VisibilityToggle
               visible={form.shareCv === true}
@@ -298,8 +303,8 @@ export default function NetworkingProfileScreen() {
           icon="doc.text"
           label={t("directoryCv")}
           title={t("directoryCv")}
-          busy={false}
-          onPress={() => setCvOpen(true)}
+          busy={cv.opening}
+          onPress={openCv}
         />
       );
     }
@@ -551,14 +556,7 @@ export default function NetworkingProfileScreen() {
           </Stack.Toolbar>
         </>
       ) : null}
-      {profile?.cv && cvOpen ? (
-        <CvViewer
-          visible
-          title={fullName}
-          cvPath={editing ? OWN_CV_PATH : (profile.preview.cvUrl ?? OWN_CV_PATH)}
-          onClose={() => setCvOpen(false)}
-        />
-      ) : null}
+      {cv.viewer}
 
       {nativeHeader ? null : (
         <>

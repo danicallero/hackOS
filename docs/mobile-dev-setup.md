@@ -326,6 +326,9 @@ A recommended `apps/mobile/eas.json` starting point is:
       "environment": "preview",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "APP_VARIANT": "preview"
       }
     },
     "production": {
@@ -354,7 +357,13 @@ same variable locally when compiling debug builds outside EAS.
 
 Replace the App Store ID before committing the file. The production Android
 profile produces an AAB by default; preview explicitly produces an installable
-APK. The iOS simulator profile is unsigned and cannot run on an iPhone. The
+APK. A sideloaded APK is not split per device the way Play splits a bundle, so
+`APP_VARIANT=preview` makes `app.config.ts` build it for `arm64-v8a` only (every
+current phone; 32-bit-only devices and x86 emulators cannot install it) with
+compressed native libraries (`useLegacyPackaging`). Every Android release build
+runs R8 minification and resource shrinking (`expo-build-properties` in
+`app.json`); a crash that appears only in release builds after adding a native
+dependency usually means that library needs a ProGuard keep rule. The iOS simulator profile is unsigned and cannot run on an iPhone. The
 production profile uses EAS remote build numbers and increments
 `ios.buildNumber`/`android.versionCode` on each build; the user-facing
 `expo.version` remains a deliberate release value. The widget extension

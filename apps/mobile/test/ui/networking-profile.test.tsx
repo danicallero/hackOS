@@ -80,7 +80,9 @@ jest.mock("@/lib/env", () => ({ API_URL: "https://api.test" }));
 jest.mock("expo-document-picker", () => ({
   getDocumentAsync: (...args: unknown[]) => mockPickDocument(...args),
 }));
-jest.mock("@/components/cv-viewer", () => ({ CvViewer: () => null }));
+jest.mock("@/components/cv-viewer", () => ({
+  useCvViewer: () => ({ open: jest.fn(), opening: false, viewer: null }),
+}));
 jest.mock("@/components/person-avatar", () => ({ PersonAvatar: () => null }));
 jest.mock("@/lib/haptics", () => ({ haptic: jest.fn() }));
 jest.mock("@/lib/i18n", () => ({ useLocale: () => ({ language: "en", t: (key: string) => key }) }));

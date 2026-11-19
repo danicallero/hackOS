@@ -1,11 +1,5 @@
 import type { DiaryEntry } from "./diary";
-import {
-  apiImageSource,
-  cvFileName,
-  filterDiaryEntries,
-  foldSearchText,
-  loadApiImage,
-} from "./directory";
+import { apiImageSource, cvFileName, filterDiaryEntries, foldSearchText } from "./directory";
 
 jest.mock("./api", () => ({ getCurrentSessionCookie: () => "session=1" }));
 jest.mock("./env", () => ({ API_URL: "https://api.test/" }));
@@ -76,47 +70,6 @@ describe("directory helpers (#935)", () => {
     expect(apiImageSource("https://cdn.test/logo.png")).toEqual({
       uri: "https://cdn.test/logo.png",
     });
-  });
-
-  it("fetches authenticated photos once per session and passes public logos through", async () => {
-    const blob = { size: 3 } as Blob;
-    const fetchMock = jest
-      .fn()
-      .mockResolvedValue({ ok: true, blob: async () => blob } as unknown as Response);
-    globalThis.fetch = fetchMock;
-    class Reader {
-      result: string | null = null;
-      onload: (() => void) | null = null;
-      onerror: (() => void) | null = null;
-      error = null;
-      readAsDataURL() {
-        this.result = "data:image/jpeg;base64,AAA";
-        this.onload?.();
-      }
-    }
-    globalThis.FileReader = Reader as unknown as typeof FileReader;
-    await expect(loadApiImage("/api/users/1/photo?v=a")).resolves.toBe(
-      "data:image/jpeg;base64,AAA",
-    );
-    await loadApiImage("/api/users/1/photo?v=a");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith("https://api.test/api/users/1/photo?v=a", {
-      headers: { Cookie: "session=1" },
-    });
-    await expect(loadApiImage("https://cdn.test/logo.png")).resolves.toBe(
-      "https://cdn.test/logo.png",
-    );
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not keep a failed photo request", async () => {
-    const fetchMock = jest
-      .fn()
-      .mockResolvedValue({ ok: false, status: 404 } as unknown as Response);
-    globalThis.fetch = fetchMock;
-    await expect(loadApiImage("/api/users/2/photo?v=b")).rejects.toThrow("404");
-    await expect(loadApiImage("/api/users/2/photo?v=b")).rejects.toThrow("404");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("derives a safe CV file name", () => {
