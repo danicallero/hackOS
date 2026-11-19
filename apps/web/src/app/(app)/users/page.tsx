@@ -151,32 +151,24 @@ function applicationLabel(status: string | null, t: Translate): string {
 /** Presence needs the live occupancy set, so the column list is built per-render
  * (see `useCan(PRESENCE_SCAN | LOGISTICS_STATS)` in the page component). */
 /**
- * #934: a real photo leads the name; when any listed user has one, the others
- * keep an empty slot of the same size so names stay aligned. No initials are
- * synthesized (DESIGN.md §Lists).
+ * #934: each person has a real photo or the shared deterministic mascot.
  */
-function UserPhotoSlot({
-  user,
-  reserve,
-  className,
-}: {
-  user: UserListItem;
-  reserve: boolean;
-  className: string;
-}) {
-  if (user.image) {
-    return (
-      <UserAvatar decorative name={avatarName(user)} image={user.image} className={className} />
-    );
-  }
-  return reserve ? <span aria-hidden="true" className={`${className} shrink-0`} /> : null;
+function UserPhotoSlot({ user, className }: { user: UserListItem; className: string }) {
+  return (
+    <UserAvatar
+      userId={user.id}
+      decorative
+      name={avatarName(user)}
+      image={user.image}
+      className={className}
+    />
+  );
 }
 
 function buildColumns(
   presentIds: Set<number> | null,
   t: Translate,
   language: Language,
-  reservePhoto: boolean,
 ): Column<UserListItem>[] {
   return [
     {
@@ -185,7 +177,7 @@ function buildColumns(
       sortValue: (u) => `${u.surname ?? ""} ${u.name ?? ""}`.trim().toLowerCase(),
       cell: (u) => (
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <UserPhotoSlot user={u} reserve={reservePhoto} className="size-7" />
+          <UserPhotoSlot user={u} className="size-7" />
           <span className="font-medium">{fullName(u)}</span>
           {u.isTestAccount && <StatusBadge tone="warning">{t("reviewFixture")}</StatusBadge>}
         </div>
@@ -280,14 +272,12 @@ function UserMobileRow({
   language,
   columns,
   presentIds,
-  reservePhoto,
 }: {
   user: UserListItem;
   t: Translate;
   language: Language;
   columns: Column<UserListItem>[];
   presentIds: Set<number> | null;
-  reservePhoto: boolean;
 }) {
   const name = fullName(user);
   const values: Record<UserColumnId, string> = {
@@ -306,7 +296,7 @@ function UserMobileRow({
       href={`/users/${user.id}`}
       className="focus-visible:ring-ring flex min-w-0 items-start gap-3 px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset"
     >
-      <UserPhotoSlot user={user} reserve={reservePhoto} className="mt-0.5 size-9" />
+      <UserPhotoSlot user={user} className="mt-0.5 size-9" />
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex min-w-0 flex-wrap items-start gap-2">
           <span className="min-w-0 flex-1 wrap-break-word font-medium">{name}</span>
@@ -477,15 +467,14 @@ export default function UsersPage() {
     [showPresence],
   );
 
-  const reservePhoto = useMemo(() => users.some((user) => user.image), [users]);
   const columns = useMemo(
     () =>
-      buildColumns(presentIds, t, language, reservePhoto).filter(
+      buildColumns(presentIds, t, language).filter(
         (column) =>
           visibleColumns.has(column.id as UserColumnId) &&
           (column.id !== "presence" || showPresence),
       ),
-    [visibleColumns, presentIds, showPresence, t, language, reservePhoto],
+    [visibleColumns, presentIds, showPresence, t, language],
   );
 
   function toggleColumn(id: UserColumnId, checked: boolean) {
@@ -624,7 +613,6 @@ export default function UsersPage() {
               language={language}
               columns={columns}
               presentIds={presentIds}
-              reservePhoto={reservePhoto}
             />
           )}
           pageSize={50}

@@ -259,6 +259,27 @@ A profile is shared only while it is visible, the person is in
 a test account. The same rule decides whether a scan saves the person
 (`profile_not_shared` otherwise) and whether a saved entry shows its card.
 
+## Default avatars (#934, H55)
+
+People without an available photo use the original HackUDC mascots. Both clients
+call `mascotAvatarChoice(userId)` from `@hackos/shared/mascot-avatars`: two salted
+32-bit FNV-1a hashes independently select one of 31 transparent square compositions
+and one of six background colours. Numeric and string forms of the same id agree;
+renaming, refresh, session and platform do not change the result. Nothing is saved,
+no API field changes, and no identity is sent to an image service. Components with
+no known user id fall back to a normalized display-name seed; real person data
+passes its user id. Missing/hidden person records keep the generic unavailable state.
+
+`packages/shared/assets/avatars/` contains the transparent 384 px PNGs; backgrounds
+are applied by the UI or share-image canvas, and circular masks belong to the avatar
+component. `assets/mascots/` retains the supplied original PNGs. Rebuild compositions
+with `python3 scripts/generate-mascot-avatars.py` (Pillow): crop/scale/mirror/rotate
+existing pixels only, with no generative artwork. Real photos take priority;
+failed or still-loading private photos show the same mascot. The photo editor's
+remove action and visibility switches still refer only to an uploaded photo.
+The onboarding social-sharing card uses the same user-id selection and background
+when its photo is absent or fails to load.
+
 ## Access
 
 | Route | Guard |
@@ -320,8 +341,12 @@ open it; the API answers the same 404 to anyone else. A person opened without
 a diary entry shows no CV row, favourite star, note or remove action: those
 need the reader's diary entry.
 
-The profile hero samples the authenticated photo at its absolute API URL with
-credentials, using the same photo as the avatar. Company rows use the dark
+The profile hero (H48) blurs the person's photo behind the header, using the
+avatar's own URL and plain request (no CORS fetch), so the private photo is
+loaded and cached only as the avatar already is: enlarged and blurred until no
+shape survives, under the veil and fade of the project record's `AmbientBackdrop`
+(see [`projects.md`](./projects.md) § Project surfaces). Without a photo it keeps the
+single-colour wash (`photoColor` when the API sends one, else the assigned mascot background). Company rows use the dark
 logo variant on dark backgrounds, including the helper affiliation row. Back links
 follow the shared in-app history stack, so profiles and companies return to their
 actual origin. Company representative links also carry `?company=<id>` as the

@@ -10,7 +10,7 @@ placement, routing and the signed-in data.
 ```tsx
 <SocialSharing
   event={{ name: "HackUDC", year: 2027, dateLabel?, location?, url?, logo? }}
-  attendee={{ displayName, roleLabel?, photoUrl? }}
+  attendee={{ userId, displayName, roleLabel?, photoUrl? }}
   onContinue={() => …}   // optional
 />
 ```
@@ -58,7 +58,7 @@ Drawn client-side on a canvas, exported as PNG at 2×. No image service.
 
 The pass is the Apple Wallet pass at its real proportions (838×1165): organizer
 logo and date in the header, the strip, NAME and ROLE side by side (red mono
-labels, Inter values), and the photo where the QR sits (initials on ink when
+labels, Inter values), and the photo where the QR sits (the person's deterministic mascot on its independently selected colour when
 there is no photo). It is drawn slightly tilted on the ink canvas with Emilia
 the seagull perched on it. All text is left-aligned on one margin. Landscape and Square put the text
 column (Square: at the top-left) (event line, name as the hero, role, host) on the left and the tilted
@@ -85,7 +85,7 @@ pass labels and date, matching the pass.
 
 - Photo: read with `fetch(..., { credentials: "include" })` into a blob, then
   `createImageBitmap`, so the private route is authorized by the session cookie
-  and the canvas is never tainted. A failed photo falls back to initials and
+  and the canvas is never tainted. A failed photo falls back to the same mascot and
   shows a short note; it is retried on the next render. The component owns one
   decoded photo bitmap and closes it when replaced, removed or unmounted; late
   decodes and a custom event logo are closed too.
@@ -150,7 +150,7 @@ shared skeleton/spinner (`motion-safe`). Controls use the shared Button sizes.
 ## Tests
 
 `pnpm --filter @hackos/web exec vitest run src/components/onboarding` covers the
-caption and links (including URL sanitising), drawing (photo tile, initials
+caption and links (including URL sanitising), drawing (photo tile, mascot
 fallback, strip/logo/text bands, seagull, host, truncation, both ratios), photo
 fetching and scheme rejection, the component's click-only behaviour, menu,
 fallbacks, errors, Skip/Continue and language, and the bitmap lifecycle.

@@ -42,18 +42,16 @@ export function GalleryProjectCard({ project }: { project: NativeProject }) {
       footer={
         <>
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            {members
-              .filter((member) => member.photoUrl)
-              .slice(0, 3)
-              .map((member) => (
-                <UserAvatar
-                  key={member.userId}
-                  name={member.name ?? ""}
-                  image={member.photoUrl}
-                  className="size-7"
-                  decorative
-                />
-              ))}
+            {members.slice(0, 3).map((member) => (
+              <UserAvatar
+                userId={member.userId}
+                key={member.userId}
+                name={member.name ?? ""}
+                image={member.photoUrl}
+                className="size-7"
+                decorative
+              />
+            ))}
             <p className="min-w-0 line-clamp-2 text-sm text-muted-foreground">
               {members
                 .map((member) => [member.name, member.surname].filter(Boolean).join(" "))

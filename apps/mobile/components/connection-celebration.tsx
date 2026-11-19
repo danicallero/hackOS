@@ -27,6 +27,7 @@ import { type } from "@/theme/tokens";
 
 /** Who was just met (#935): the scanned person's name and photo route. */
 export interface ConnectionCelebrationTarget {
+  userId?: number;
   /** Changes on every celebration, so a repeat plays again. */
   key: number;
   name: string;
@@ -35,6 +36,7 @@ export interface ConnectionCelebrationTarget {
 
 /** The viewer, shown on the other side of the meeting. */
 export interface ConnectionCelebrationSelf {
+  userId?: number;
   name: string;
   image: string | null;
 }
@@ -341,12 +343,23 @@ function SpringStage({
       )}
       <Animated.View style={[{ position: "absolute" }, stage.left]}>
         <Ringed>
-          <UserAvatar name={self.name} image={self.image} size={AVATAR} persist />
+          <UserAvatar
+            userId={self.userId}
+            name={self.name}
+            image={self.image}
+            size={AVATAR}
+            persist
+          />
         </Ringed>
       </Animated.View>
       <Animated.View style={[{ position: "absolute" }, stage.right]}>
         <Ringed>
-          <UserAvatar name={target.name} image={target.photoUrl} size={AVATAR} />
+          <UserAvatar
+            userId={target.userId}
+            name={target.name}
+            image={target.photoUrl}
+            size={AVATAR}
+          />
         </Ringed>
       </Animated.View>
     </>

@@ -246,6 +246,7 @@ export function InviteTeammatesScreen() {
                     <View style={{ alignItems: "center", flexDirection: "row", gap: 12 }}>
                       {recipient.contact ? (
                         <PersonAvatar
+                          userId={recipient.contact.userId}
                           size={28}
                           name={recipient.contact.displayName}
                           uri={recipient.contact.photoUrl}
@@ -306,7 +307,12 @@ export function InviteTeammatesScreen() {
                         paddingVertical: 8,
                       })}
                     >
-                      <PersonAvatar size={36} name={person.displayName} uri={person.photoUrl} />
+                      <PersonAvatar
+                        userId={person.userId}
+                        size={36}
+                        name={person.displayName}
+                        uri={person.photoUrl}
+                      />
                       <View style={{ flex: 1, gap: 2 }}>
                         <Text style={{ color: colors.label, fontSize: type.body.fontSize }}>
                           {person.displayName}

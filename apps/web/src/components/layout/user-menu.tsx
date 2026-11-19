@@ -66,19 +66,13 @@ export function UserMenu({ className }: { className?: string }) {
             className,
           )}
         >
-          {me.image ? (
-            <UserAvatar
-              decorative
-              name={displayName}
-              image={me.image}
-              className="size-7 group-data-[collapsible=icon]:size-6"
-            />
-          ) : (
-            <UserIcon
-              aria-hidden="true"
-              className="hidden size-4 group-data-[collapsible=icon]:block"
-            />
-          )}
+          <UserAvatar
+            userId={me.id}
+            decorative
+            name={displayName}
+            image={me.image}
+            className="size-7 group-data-[collapsible=icon]:size-6"
+          />
           <span className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
             <span className="block truncate text-sm font-medium">{me.name || me.email}</span>
             {me.name && (
@@ -92,9 +86,15 @@ export function UserMenu({ className }: { className?: string }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={8} className="ml-2 w-56">
         <DropdownMenuLabel className="flex items-center gap-3">
-          {me.image ? (
-            <UserAvatar decorative name={displayName} image={me.image} className="size-10" />
-          ) : null}
+          {
+            <UserAvatar
+              userId={me.id}
+              decorative
+              name={displayName}
+              image={me.image}
+              className="size-10"
+            />
+          }
           <span className="flex min-w-0 flex-col">
             <span className="truncate">{displayName}</span>
             <span className="text-muted-foreground truncate text-xs font-normal">{me.email}</span>

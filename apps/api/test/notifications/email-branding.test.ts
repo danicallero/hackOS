@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { config } from "../../src/config.js";
 import { pool } from "../../src/db/pool.js";
+import { translateEmail } from "../../src/lib/i18n.js";
 import { sendEmail } from "../../src/modules/notifications/channels/email.js";
 import { renderEmailTemplate } from "../../src/modules/notifications/templates.js";
 import { asUser, buildTestApp, createUserWithCapabilities } from "../helpers.js";
@@ -64,6 +65,57 @@ describe("layout", () => {
       "en",
     );
     expect(verify.html).toMatch(/class="email-btn"[\s\S]*background:#030846/);
+  });
+
+  it.each([
+    "es",
+    "gl",
+    "en",
+  ] as const)("preserves names, deadline and both actions in acceptance and reminders (%s, H14/H15/H52)", (language) => {
+    const confirmUrl = "https://event.test/applications/confirm#token=sample";
+    const declineUrl = "https://event.test/applications/decline#token=sample";
+    const details = translateEmail("mail.application.decision.confirmationDetails", language, {
+      confirmUrl,
+      declineUrl,
+      deadlineNotice: translateEmail("mail.application.decision.confirmationDeadline", language, {
+        deadline: "20/11/2026 18:00 CET",
+      }),
+    });
+    for (const template of [
+      "application.decision",
+      "application.confirmationReminder",
+      "application.confirmationLastChance",
+    ]) {
+      const rendered = renderEmailTemplate(
+        {
+          template,
+          vars: {
+            name: "Ana & Breo",
+            eventName: "Example Event",
+            applicationName: "Participants",
+            decision: "accepted",
+            decisionDetails: details,
+            confirmationDetails: details,
+          },
+        },
+        language,
+      );
+      expect(rendered.text).toContain("Ana & Breo");
+      expect(rendered.text).toContain("Example Event");
+      expect(rendered.text).toContain("20/11/2026 18:00 CET");
+      expect(rendered.text).toContain(confirmUrl);
+      expect(rendered.text).toContain(declineUrl);
+      expect(rendered.html).toContain("Ana &amp; Breo");
+      expect(rendered.html).toMatch(
+        /class="email-btn"[\s\S]*href="https:\/\/event.test\/applications\/confirm#token=sample"/,
+      );
+      expect(rendered.html).toMatch(
+        /class="email-btn-secondary"[\s\S]*href="https:\/\/event.test\/applications\/decline#token=sample"/,
+      );
+      expect(rendered.html).not.toContain("{{");
+      expect(rendered.text).not.toContain("{{");
+      if (template === "application.decision") expect(rendered.text).toContain("Participants");
+    }
   });
 });
 

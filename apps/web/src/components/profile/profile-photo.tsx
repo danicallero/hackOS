@@ -53,11 +53,10 @@ export function ProfilePhoto({
       <div className="relative w-fit">
         {variant === "avatar" ? (
           <UserAvatar
-            showInitials
+            userId={me.id}
             name={name}
             image={me.image}
             className={size === "lg" ? "size-28" : "size-16"}
-            fallbackClassName={size === "lg" ? "text-3xl" : "text-lg"}
           />
         ) : null}
         {me.image ? (

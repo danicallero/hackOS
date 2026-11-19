@@ -239,8 +239,10 @@ describe("drawShareCard", () => {
     expect(texts(withPhoto.calls)).not.toContain("AL");
 
     const fallback = recordingContext();
-    drawShareCard(fallback.ctx, options());
-    expect(texts(fallback.calls)).toContain("AL");
+    const mascot = image(384, 384);
+    drawShareCard(fallback.ctx, options({ mascot, mascotBackground: "#a9d8bd" }));
+    expect(fallback.calls.some((c) => c.op === "drawImage" && c.args[0] === mascot)).toBe(true);
+    expect(texts(fallback.calls)).not.toContain("AL");
   });
 
   it("draws the pass strip for HackUDC and the event name as text otherwise", () => {

@@ -432,6 +432,7 @@ export function RequestDetail({
               className="focus-visible:ring-ring flex min-w-0 items-center gap-3 rounded-sm py-2 outline-none hover:underline focus-visible:ring-2"
             >
               <UserAvatar
+                userId={helper.userId}
                 name={helper.displayName}
                 image={helper.photoUrl}
                 decorative

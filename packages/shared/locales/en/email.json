@@ -3,9 +3,9 @@
     "footer": "If you were not expecting this email, you can ignore it and avoid following any links.\n\nThis is an automated message.\nTo contact the organizers, email {{contactEmail}}.",
     "event": {
       "reminder": {
-        "subject": "See you at {{eventName}}!",
-        "heading": "{{eventName}} is getting close",
-        "body": "Hi {{name}},\n\n{{eventName}} starts on {{eventDate}}. See you at {{checkInTime}} for check-in.\n\nRemember to bring your ticket: show the QR code in this email when you arrive, or save it to your wallet.\n\n[Add to Apple Wallet]({{appleUrl}})\n\n[Add to Google Wallet]({{googleUrl}})\n\nYour ticket is also available in your profile:\n\n[View my ticket]({{walletUrl}})\n\nWe’re looking forward to seeing you!\nThe {{eventName}} team",
+        "subject": "Your ticket for {{eventName}}",
+        "heading": "Your ticket for {{eventName}}",
+        "body": "Hi {{name}},\n\n{{eventName}} starts on {{eventDate}}. See you at {{checkInTime}} for check-in.\n\nRemember to bring your ticket: show the QR code in this email when you arrive, or save it to your wallet.\n\n[Add to Apple Wallet]({{appleUrl}})\n\n[Add to Google Wallet]({{googleUrl}})\n\nYour ticket is also available in your profile:\n\n[View my ticket]({{walletUrl}})\n\nThe {{eventName}} team",
         "ticketAlt": "Your ticket QR code"
       }
     },
@@ -39,11 +39,11 @@
         "body": "Hi {{name}},\n\nYou created a hackOS account with this address, but you haven't verified it yet. Until you do, you can't submit applications, view information or make decisions on the platform.\n\n[Confirm email]({{verifyUrl}})\n\nThe link works for three days. If it has expired, you can request a new one from hackOS.\n\nDidn't you create this account? You can delete it: [Delete this account]({{deleteUrl}}). If the account has a password, you'll need to enter it to confirm."
       },
       "verifyReminder2": {
-        "subject": "Reminder: your hackOS email is still unverified",
+        "subject": "Your hackOS email verification is pending",
         "body": "Hi {{name}},\n\nWe're writing again because your hackOS account still has an unverified email. Without verification you can't submit applications, view information or use the platform.\n\n[Confirm email]({{verifyUrl}})\n\nThe link works for three days. If it has expired, you can request a new one from hackOS.\n\nDidn't you create this account? You can delete it: [Delete this account]({{deleteUrl}}). If the account has a password, you'll need to enter it to confirm."
       },
       "verifyReminder3": {
-        "subject": "Last reminder: verify your hackOS email",
+        "subject": "hackOS email verification: final reminder",
         "body": "Hi {{name}},\n\nThis is the last reminder we'll send. Your hackOS account is still unverified, so you can't submit applications, view information or use the platform.\n\nIf you want to keep it, verify it now:\n\n[Confirm email]({{verifyUrl}})\n\nThe link works for three days. If it has expired, you can request a new one from hackOS.\n\nDidn't you create this account? You can delete it: [Delete this account]({{deleteUrl}}). If the account has a password, you'll need to enter it to confirm."
       }
     },
@@ -87,15 +87,15 @@
         "body": "Hi {{name}},\n\nWe’ve reviewed your application to {{applicationName}}.{{decisionDetails}}",
         "accepted": {
           "subject": "Your application to {{eventName}} has been accepted",
-          "heading": "We can’t wait to see you at {{eventName}}!",
-          "body": "Hi {{name}},\n\nCongratulations! We’ve accepted your application for {{applicationName}} at {{eventName}}, and we’re excited to have you join us.\n\nWe’ve reserved a spot for you. All that’s left is to confirm you’re coming.{{decisionDetails}}\n\nWe can’t wait to meet you!\nThe {{eventName}} team"
+          "heading": "Confirm your spot at {{eventName}}",
+          "body": "Hi {{name}},\n\nYour application for {{applicationName}} at {{eventName}} has been accepted. We have reserved a spot pending your attendance confirmation.{{decisionDetails}}\n\nThe {{eventName}} team"
         },
         "rejected": {
           "subject": "About your application for {{applicationName}} at {{eventName}}",
           "body": "Hi {{name}},\n\nUnfortunately, your application for {{applicationName}} at {{eventName}} hasn’t been selected this time. We know this isn’t the news you were hoping for.{{rejectionDetails}}\n\nThank you for your interest and for the time you put into your application. We hope to see you at a future edition.\n\nBest wishes,\nThe organizing team"
         },
         "rejectionDetails": "\n\nReason: {{reason}}",
-        "confirmationDetails": "\n\n{{deadlineNotice}}\n\n[Confirm my spot]({{confirmUrl}})\n\nIf it turns out you can’t make it, please let us know so someone else can take your spot:\n\n[Decline my spot]({{declineUrl}})\n\nIf the deadline passes without your confirmation, the spot will be released automatically.",
+        "confirmationDetails": "\n\n{{deadlineNotice}}\n\n[Confirm my spot]({{confirmUrl}})\n\nIf you cannot attend, you can decline your spot:\n\n[Decline my spot]({{declineUrl}})\n\nIf the deadline passes without your confirmation, the spot will be released automatically.",
         "confirmationDeadline": "Confirm your spot before {{deadline}}."
       },
       "draftReminder1": {
@@ -107,7 +107,7 @@
         "body": "Hi {{name}},\n\nA reminder that your application for {{applicationName}} at {{eventName}} is still a draft.\n\nIf you don't submit it, we won't be able to evaluate it and you won't be able to take part in {{eventName}}.\n\n[Submit my application]({{applicationUrl}})\n\nThe {{eventName}} team"
       },
       "draftReminder3": {
-        "subject": "Last reminder about your {{applicationName}} application",
+        "subject": "Your application for {{applicationName}} is still unsubmitted",
         "body": "Hi {{name}},\n\nThis is the last time we'll write to you about this. Your application for {{applicationName}} at {{eventName}} is still a draft, and we won't evaluate drafts.\n\nIf you'd still like to take part, you can submit it whenever you're ready:\n\n[Submit my application]({{applicationUrl}})\n\nWe won't send any more reminders.\n\nThe {{eventName}} team"
       },
       "returned": {
@@ -115,12 +115,12 @@
         "body": "Hi {{name}},\n\nWe've reviewed your {{applicationName}} application for {{eventName}} and, as it stands, we can't accept it.{{rejectionDetails}}\n\nWe've returned it to you as a draft so you can fix it and submit it again, even if the deadline has passed.\n\n[Review my application]({{applicationUrl}})\n\nThe {{eventName}} team"
       },
       "confirmationReminder": {
-        "subject": "Remember to confirm your spot at {{eventName}}",
-        "body": "Hi {{name}},\n\nYour spot at {{eventName}} is still reserved, but you haven’t confirmed you’re coming yet.{{confirmationDetails}}\n\nThe {{eventName}} team"
+        "subject": "Pending confirmation for {{eventName}}",
+        "body": "Hi {{name}},\n\nYour spot at {{eventName}} is still awaiting confirmation.{{confirmationDetails}}\n\nThe {{eventName}} team"
       },
       "confirmationLastChance": {
-        "subject": "Last chance to confirm your spot at {{eventName}}",
-        "body": "Hi {{name}},\n\nThere are less than 24 hours left to confirm your spot at {{eventName}}. This is the last reminder we’ll send.{{confirmationDetails}}\n\nThe {{eventName}} team"
+        "subject": "Spot confirmation at {{eventName}}: less than 24 hours remaining",
+        "body": "Hi {{name}},\n\nThere are less than 24 hours left to confirm your spot at {{eventName}}. This is the final reminder.{{confirmationDetails}}\n\nThe {{eventName}} team"
       }
     },
     "schedule": {

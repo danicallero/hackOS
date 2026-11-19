@@ -1,9 +1,12 @@
+import { mascotAvatarChoice } from "@hackos/shared/mascot-avatars";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { Alert, Linking, Platform } from "react-native";
 import { PersonProfileScreen } from "@/components/person-profile-screen";
+import { resetStatusNoticeAttempts } from "@/components/status-notice";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { DiaryEntry } from "@/lib/diary";
 import type { DirectoryEntry } from "@/lib/directory";
+import { clearProfileSeeds, personSeed, seedPeople, seedRequester } from "@/lib/profile-seed";
 import { renderMobile } from "./render";
 
 let mockId = "101";
@@ -127,6 +130,8 @@ let personResult: DirectoryEntry | Error;
 let diary: DiaryEntry[];
 
 beforeEach(() => {
+  clearProfileSeeds();
+  resetStatusNoticeAttempts();
   mockId = "101";
   personResult = profile;
   mockTint = null;
@@ -178,24 +183,26 @@ it("shows the whole profile with the saved note", async () => {
   expect(open).toHaveBeenCalledWith("https://github.com/ana");
 });
 
-it("tints the hero from the photo's colour (H48)", async () => {
-  mockTint = "#3366cc";
+it("draws the photo itself behind the header (H44, H48)", async () => {
   await renderMobile(<PersonProfileScreen />);
   await screen.findByText("Ana Souto");
-  expect(screen.getByTestId("person-hero").props.style.experimental_backgroundImage).toContain(
-    "rgba(51,102,204,0.8)",
+  expect(JSON.stringify(screen.getByTestId("person-hero-image").props.source)).toContain(
+    String(profile.photoUrl),
   );
 });
 
-it("waits for the photo's colour, and is blue without a photo (H48)", async () => {
+it("uses the assigned mascot background without a photo (H48)", async () => {
+  personResult = { ...profile, photoUrl: null };
+  const hex = mascotAvatarChoice(profile.userId).background;
+  const rgb = [1, 3, 5].map((start) => Number.parseInt(hex.slice(start, start + 2), 16));
   await renderMobile(<PersonProfileScreen />);
   await screen.findByText("Ana Souto");
-  expect(screen.queryByTestId("person-hero")).toBeNull();
-  mockTint = "#3366cc";
-  personResult = { ...profile, photoUrl: null };
-  await renderMobile(<PersonProfileScreen />);
-  expect(screen.getByTestId("person-hero").props.style.experimental_backgroundImage).toContain(
-    "rgba(0,122,255,0.8)",
+  expect(screen.getByTestId("person-hero").props.style).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        experimental_backgroundImage: expect.stringContaining(`rgba(${rgb.join(",")},0.8)`),
+      }),
+    ]),
   );
 });
 
@@ -472,4 +479,124 @@ it.each([
     await fireEvent.press(screen.getByRole("button", { name: "Acme" }));
     expect(mockRouterPush).toHaveBeenCalledWith("/companies/4");
   }
+});
+
+describe("progressive load (#935)", () => {
+  const seed = {
+    userId: 101,
+    displayName: "Ana Souto",
+    photoUrl: profile.photoUrl,
+    headline: "Robotics engineer",
+  };
+
+  function holdProfile() {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    jest.mocked(apiFetch).mockImplementation(async (path: string) => {
+      if (path === "/api/directory/101") {
+        await held;
+        if (personResult instanceof Error) throw personResult;
+        return personResult;
+      }
+      if (path === "/api/me/diary") return { items: diary };
+      return undefined;
+    });
+    return async () => {
+      await act(async () => {
+        release();
+        await held;
+      });
+    };
+  }
+
+  it("draws the seeded header with skeletons before the profile arrives, then the rest", async () => {
+    seedPeople([seed]);
+    const release = holdProfile();
+    await renderMobile(<PersonProfileScreen />);
+    expect(screen.getByText("Ana Souto")).toBeTruthy();
+    expect(screen.getByText("Robotics engineer")).toBeTruthy();
+    expect(screen.getByTestId("person-hero")).toBeTruthy();
+    expect(screen.getByTestId("person-profile-skeleton")).toBeTruthy();
+    expect(screen.queryByText("I build rovers.")).toBeNull();
+    // The avatar asks for the same cached photo the list drew.
+    expect(JSON.stringify(screen.getByTestId("person-hero-image").props.source)).toContain(
+      String(profile.photoUrl),
+    );
+
+    await release();
+    expect(await screen.findByText("I build rovers.")).toBeTruthy();
+    expect(screen.queryByTestId("person-profile-skeleton")).toBeNull();
+    expect(screen.getAllByText("Ana Souto")).toHaveLength(1);
+  });
+
+  it("shows the page's shape, not a loading screen, without a seed", async () => {
+    const release = holdProfile();
+    await renderMobile(<PersonProfileScreen />);
+    expect(screen.getByTestId("person-profile-skeleton")).toBeTruthy();
+    expect(screen.queryByText("Ana Souto")).toBeNull();
+    await release();
+    expect(await screen.findByText("I build rovers.")).toBeTruthy();
+  });
+
+  it("keeps the seeded header when the rest fails, with a retry in place of the skeletons", async () => {
+    seedPeople([seed]);
+    personResult = new Error("offline");
+    await renderMobile(<PersonProfileScreen />);
+    expect(await screen.findByText("profileRestError")).toBeTruthy();
+    expect(screen.getByText("Ana Souto")).toBeTruthy();
+    expect(screen.queryByTestId("person-profile-skeleton")).toBeNull();
+
+    personResult = profile;
+    await fireEvent.press(screen.getByRole("button", { name: "retry" }));
+    expect(await screen.findByText("I build rovers.")).toBeTruthy();
+    expect(screen.queryByText("profileRestError")).toBeNull();
+  });
+
+  it("offers no retry for a refusal that retrying cannot fix", async () => {
+    seedPeople([seed]);
+    personResult = new ApiError("Bad request", 400);
+    await renderMobile(<PersonProfileScreen />);
+    expect(await screen.findByText("Ana Souto")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByTestId("person-profile-skeleton")).toBeNull());
+    expect(screen.queryByRole("button", { name: "retry" })).toBeNull();
+  });
+
+  it("keeps the full error without a seed", async () => {
+    personResult = new Error("offline");
+    await renderMobile(<PersonProfileScreen />);
+    expect(await screen.findByText("requestError")).toBeTruthy();
+    expect(screen.queryByText("Ana Souto")).toBeNull();
+  });
+
+  it("drops the seeded header when the person is not available", async () => {
+    seedPeople([seed]);
+    personResult = new ApiError("Person not found", 404);
+    await renderMobile(<PersonProfileScreen />);
+    expect(await screen.findByText("directoryPersonNotFound")).toBeTruthy();
+    expect(screen.queryByText("Ana Souto")).toBeNull();
+  });
+
+  it("seeds a helper's role from the help desk list until the helper loads (H61)", async () => {
+    seedPeople([{ ...seed, roleName: "Mentor" }]);
+    jest.mocked(apiFetch).mockImplementation(() => new Promise(() => {}));
+    await renderMobile(<PersonProfileScreen source="helpDesk" />);
+    expect(screen.getByText("Ana Souto")).toBeTruthy();
+    expect(screen.getByText("Mentor")).toBeTruthy();
+  });
+
+  it("opens a requester's profile from the request's seed (H64)", async () => {
+    mockId = "40";
+    seedRequester(40, { userId: 202, displayName: "Breixo Proba", photoUrl: null });
+    jest.mocked(apiFetch).mockImplementation(() => new Promise(() => {}));
+    await renderMobile(<PersonProfileScreen source="requester" />);
+    expect(screen.getByText("Breixo Proba")).toBeTruthy();
+  });
+
+  it("remembers the loaded profile in memory for the next visit", async () => {
+    await renderMobile(<PersonProfileScreen />);
+    await screen.findByText("I build rovers.");
+    expect(personSeed(101)).toEqual(expect.objectContaining({ displayName: "Ana Souto" }));
+  });
 });

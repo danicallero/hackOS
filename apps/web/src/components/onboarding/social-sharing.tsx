@@ -1,5 +1,6 @@
 "use client";
 
+import { mascotAvatarChoice } from "@hackos/shared/mascot-avatars";
 import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { LinkedinLogoIcon } from "@phosphor-icons/react/dist/csr/LinkedinLogo";
@@ -19,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { apiAssetUrl } from "@/lib/directory";
 import { saveBlob } from "@/lib/download";
 import { useLocale } from "@/lib/i18n";
-import { initials } from "@/lib/initials";
+import { mascotAvatarUrl } from "@/lib/mascot-avatar";
 import { toast } from "@/lib/toast";
 import type { Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -55,6 +56,7 @@ export interface SocialSharingEvent {
 }
 
 export interface SocialSharingAttendee {
+  userId?: string | number;
   displayName: string;
   roleLabel?: string;
   /** Authenticated photo route (`/api/users/:id/photo`) or a blob/data/http(s) URL. */
@@ -343,6 +345,8 @@ export interface DrawCardOptions {
   date?: string;
   labels: { name: string; role: string };
   photo: Drawable | null;
+  mascot?: Drawable;
+  mascotBackground?: string;
   band: CardBand;
   /** Public event host (e.g. "hackudc.com"), shown on the poster; omitted without an event link. */
   host?: string;
@@ -425,19 +429,14 @@ function drawPhotoTile(ctx: Ctx, o: DrawCardOptions, r: Rect) {
   ctx.beginPath();
   ctx.roundRect(inner.x, inner.y, inner.w, inner.h, 10);
   ctx.clip();
-  if (o.photo) {
-    const side = Math.min(o.photo.width, o.photo.height);
-    const sx = (o.photo.width - side) / 2;
-    const sy = (o.photo.height - side) / 2;
-    ctx.drawImage(o.photo, sx, sy, side, side, inner.x, inner.y, inner.w, inner.h);
-  } else {
-    ctx.fillStyle = COLORS.ink;
-    ctx.fillRect(inner.x, inner.y, inner.w, inner.h);
-    ctx.fillStyle = COLORS.cream;
-    ctx.font = `600 ${Math.round(inner.h * 0.38)}px ${o.sansFont}`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(initials(o.displayName), inner.x + inner.w / 2, inner.y + inner.h / 2);
+  const image = o.photo ?? o.mascot;
+  ctx.fillStyle = o.mascotBackground ?? COLORS.blue;
+  ctx.fillRect(inner.x, inner.y, inner.w, inner.h);
+  if (image) {
+    const side = Math.min(image.width, image.height);
+    const sx = (image.width - side) / 2;
+    const sy = (image.height - side) / 2;
+    ctx.drawImage(image, sx, sy, side, side, inner.x, inner.y, inner.w, inner.h);
   }
   ctx.restore();
   ctx.textAlign = "left";
@@ -904,6 +903,9 @@ export function useShareImage(
             photoFailed = !controller.signal.aborted;
           }
         }
+        const mascot = photo
+          ? undefined
+          : await loadStaticImage(mascotAvatarUrl(attendee.userId, attendee.displayName));
         if (controller.signal.aborted) return;
         const blob = await renderShareImage({
           format,
@@ -917,6 +919,8 @@ export function useShareImage(
           roleLabel: attendee.roleLabel,
           date,
           photo,
+          mascot,
+          mascotBackground: mascotAvatarChoice(attendee.userId, attendee.displayName).background,
           band: loaded.band,
           host:
             [publicEventUrl(event.url)?.host, event.location].filter(Boolean).join(" · ") ||
@@ -950,6 +954,7 @@ export function useShareImage(
     attendee.displayName,
     attendee.roleLabel,
     attendee.photoUrl,
+    attendee.userId,
     releasePhoto,
   ]);
 

@@ -73,6 +73,14 @@ body:has([data-hero-bleed]) [data-slot="sidebar-inner"] {
   backdrop-filter: blur(24px);
 }
 
+/* Muted text cannot reach 4.5:1 over every photo under the veil (measured on
+   saturated, near-white and near-black images): over an ambient backdrop the
+   hero's secondary text (back link, headline, website) uses the foreground. */
+[data-hero-bleed]:has(> [data-hero-ambient]) > [data-hero-content] {
+  --muted-foreground: var(--foreground);
+  --color-muted-foreground: var(--foreground);
+}
+
 /* On phones the back link shares the row with the floating sidebar button. */
 [data-hero-bleed] [data-back-link] {
   min-height: 2.5rem;
@@ -80,6 +88,12 @@ body:has([data-hero-bleed]) [data-slot="sidebar-inner"] {
 @media (max-width: 767px) {
   [data-app-main] [data-hero-bleed] {
     padding-top: 0.75rem;
+  }
+  /* The hero's first row matches the floating button (`top-3`, compact control
+     height), so the title below starts clear of it (H48). */
+  [data-app-main] [data-hero-content] > :first-child {
+    min-height: var(--control-height-compact);
+    margin-block: 0;
   }
   [data-app-main] [data-hero-bleed] [data-back-link] {
     padding-left: 3rem;

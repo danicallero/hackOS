@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PageLayout } from "@/components/common/page-layout";
+import { ProjectAmbientProvider } from "@/components/projects/project-ambient";
 import { ProjectOverview } from "@/components/projects/project-overview";
 import { ProjectRecordActions } from "@/components/projects/project-record-actions";
 import { ProjectRecordHero } from "@/components/projects/project-record-hero";
@@ -53,7 +54,7 @@ export default async function ProjectGalleryPage({ params }: { params: Promise<{
   }
   const { project, copy, language } = data;
   return (
-    <>
+    <ProjectAmbientProvider>
       <ProjectRecordHero
         name={project.name}
         files={project.files}
@@ -88,6 +89,6 @@ export default async function ProjectGalleryPage({ params }: { params: Promise<{
           }}
         />
       </PageLayout>
-    </>
+    </ProjectAmbientProvider>
   );
 }

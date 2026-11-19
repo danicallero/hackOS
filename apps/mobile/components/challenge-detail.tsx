@@ -1,9 +1,9 @@
 import { Link, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { Linking, ScrollView, Text, View } from "react-native";
-import Animated, { FadeIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
+import { ImageHero, useImageHeroForeground } from "@/components/ambient-hero";
 import { SheetModal } from "@/components/app-sheet";
 import { FloatingBackButton } from "@/components/floating-back-button";
 import { EntryBackToolbar } from "@/components/header-back-button";
@@ -15,10 +15,10 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { useColorScheme } from "@/components/useColorScheme";
 import { apiFetch } from "@/lib/api";
-import { heroTint, NO_PHOTO_TINT } from "@/lib/hero-tint";
+import { NO_PHOTO_TINT } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
-import { useImageTint } from "@/lib/image-tint";
 import { safeBack, transparentDetailHeaderOptions } from "@/lib/navigation";
+import { seedCompanies } from "@/lib/profile-seed";
 import { type ChallengeDetail, fetchChallengeDetail, type GalleryPage } from "@/lib/projects";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { colors, type } from "@/theme";
@@ -99,6 +99,10 @@ export function ChallengeDetailBody({
     };
   }, [challenge.id, onOpenProjects]);
   const company = challenge.company;
+  // The company's page opens on its logo and name (H44, #935), from memory only.
+  useEffect(() => {
+    if (company) seedCompanies([{ id: company.id, name: company.name, logoUrl: company.logoUrl }]);
+  }, [company]);
   return (
     <>
       {showTitle ? (
@@ -230,12 +234,9 @@ export function ChallengeDetailScreen() {
     );
   }, [navigation, android]);
   const dark = useColorScheme() === "dark";
-  // Tinted from the company logo's colour, blue without a usable logo; a logo whose colour is still loading keeps the plain background.
-  const logoTint = useImageTint(challenge?.company?.logoUrl);
-  const hero =
-    logoTint.color || (challenge && logoTint.settled)
-      ? heroTint(logoTint.color, dark, NO_PHOTO_TINT)
-      : null;
+  // H45: the company logo's colours wash the header, blue without a usable logo.
+  const logo = challenge ? (challenge.company?.logoUrl ?? null) : undefined;
+  const titleColor = useImageHeroForeground(logo, dark, NO_PHOTO_TINT);
   const openProjects = useCallback(
     () => router.push({ pathname: "/projects/gallery", params: { challengeId: String(id) } }),
     [router, id],
@@ -259,26 +260,12 @@ export function ChallengeDetailScreen() {
         }}
         style={{ backgroundColor: colors.background }}
       >
-        {hero ? (
-          <Animated.View
-            entering={logoTint.fromCache ? undefined : FadeIn.duration(400)}
-            testID="challenge-hero"
-            pointerEvents="none"
-            style={{
-              experimental_backgroundImage: hero.gradient,
-              height: 620,
-              left: 0,
-              position: "absolute",
-              right: 0,
-              top: -300,
-            }}
-          />
-        ) : null}
+        <ImageHero uri={logo} dark={dark} fallback={NO_PHOTO_TINT} testID="challenge-hero" />
         {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
         <ChallengeDetailBody
           challenge={challenge}
           showTitle
-          titleColor={hero?.foreground}
+          titleColor={titleColor}
           onOpenProjects={openProjects}
         />
       </ScrollView>

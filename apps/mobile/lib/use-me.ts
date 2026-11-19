@@ -10,6 +10,7 @@ import {
   readCachedValue,
   writeCachedValue,
 } from "./offline-cache";
+import { clearProfileSeeds } from "./profile-seed";
 import type { Me } from "./types";
 
 /** GET /api/me is JSON data, so a value comparison can retain a stable context snapshot. */
@@ -93,6 +94,7 @@ export function useMe(enabled = true) {
     if (previousMe) {
       void clearCachedValues(`user:${previousMe.id}:`);
       clearPersistedPhotos();
+      clearProfileSeeds();
     }
   }, [enabled]);
 
@@ -206,6 +208,7 @@ export function useMe(enabled = true) {
           if (invalidatedMe) {
             void clearCachedValues(`user:${invalidatedMe.id}:`);
             clearPersistedPhotos();
+            clearProfileSeeds();
           }
           return null;
         } else if (!hasData.current) {

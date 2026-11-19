@@ -1,51 +1,56 @@
 "use client";
 
+import { mascotAvatarChoice } from "@hackos/shared/mascot-avatars";
+import Image from "next/image";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { apiAssetUrl } from "@/lib/directory";
-import { initials } from "@/lib/initials";
-import { cn } from "@/lib/utils";
+import { mascotAvatarUrl } from "@/lib/mascot-avatar";
 
 /**
  * A person's account photo (#934). `image` is the authenticated
  * `/api/users/:id/photo` route the API returns; the object itself is never
  * public.
  *
- * `initials` is for surfaces whose purpose is the photo itself, such as the
- * photo editor. Text-first surfaces (the sidebar account row, user tables)
- * render this only when a photo exists and keep a plain placeholder disc while
- * it loads, so no avatar is fabricated (DESIGN.md §Navigation, §Lists).
+ * Without a photo, during loading or after a failed load, the shared deterministic
+ * mascot and independent background colour represent the same person everywhere.
  */
 export function UserAvatar({
   name,
+  userId,
   image,
   className,
   style,
-  fallbackClassName,
   decorative = false,
-  showInitials = false,
   presenceLabel,
 }: {
   name: string;
+  userId?: string | number;
   image: string | null | undefined;
   className?: string;
   style?: React.CSSProperties;
-  fallbackClassName?: string;
   /** Next to a visible name the photo adds nothing for screen readers. */
   decorative?: boolean;
-  showInitials?: boolean;
   /** Current presence, announced by text and painted at the avatar edge. Omit when absent. */
   presenceLabel?: string;
 }) {
+  const fallback = mascotAvatarChoice(userId, name);
   const avatar = (
-    <Avatar className={className} style={style} aria-hidden={decorative || undefined}>
+    <Avatar
+      className={className}
+      style={style}
+      aria-hidden={decorative || undefined}
+      aria-label={decorative ? undefined : name}
+    >
       {image ? <AvatarImage src={apiAssetUrl(image)} alt={decorative ? "" : name} /> : null}
-      <AvatarFallback
-        className={cn(
-          showInitials ? "bg-[#007aff] font-medium text-white dark:bg-[#0a84ff]" : "bg-muted",
-          fallbackClassName,
-        )}
-      >
-        {showInitials ? initials(name) : null}
+      <AvatarFallback className="overflow-hidden" style={{ backgroundColor: fallback.background }}>
+        <Image
+          src={mascotAvatarUrl(userId, name)}
+          width={384}
+          height={384}
+          unoptimized
+          alt=""
+          className="size-full object-cover"
+        />
       </AvatarFallback>
     </Avatar>
   );

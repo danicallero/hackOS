@@ -1,6 +1,7 @@
 import { Pressable, Text, View } from "react-native";
 import { haptic } from "@/lib/haptics";
 import { colors } from "@/theme/colors";
+import { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } from "@/theme/dynamic-type";
 import { radius, type } from "@/theme/tokens";
 
 export interface SegmentedControlProps {
@@ -61,6 +62,11 @@ export function SegmentedControl({
             })}
           >
             <Text
+              // H55: one line like the iOS control; a long label shrinks instead of wrapping.
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={CHROME_MIN_FONT_SCALE}
+              maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
               style={{
                 color: colors.label,
                 fontSize: type.footnote.fontSize,

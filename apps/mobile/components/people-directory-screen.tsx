@@ -528,7 +528,12 @@ const PersonRow = memo(function PersonRow({
         paddingVertical: 9,
       }}
     >
-      <PersonAvatar size={40} name={displayName} uri={person.photoUrl ?? null} />
+      <PersonAvatar
+        userId={person.userId}
+        size={40}
+        name={displayName}
+        uri={person.photoUrl ?? null}
+      />
       <View style={{ flex: 1, gap: 2 }}>
         <Text
           numberOfLines={accessibilityText ? undefined : 1}

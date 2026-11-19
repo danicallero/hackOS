@@ -147,6 +147,8 @@ function brandWrapHtml(
         .email-muted, .email-muted a { color:${EMAIL_DARK_MUTED} !important; }
         .email-rule { border-color:${EMAIL_DARK_HAIRLINE} !important; }
         .email-btn td, .email-btn a { background:${EMAIL_CREAM} !important; color:${EMAIL_INK} !important; }
+        .email-btn-secondary td { border-color:${EMAIL_DARK_HAIRLINE} !important; }
+        .email-btn-secondary a { color:${EMAIL_DARK_TEXT} !important; }
         .email-code { border-color:${EMAIL_DARK_HAIRLINE} !important; color:${EMAIL_DARK_TEXT} !important; }
       }
       [data-ogsc] .email-logo-light { display:none !important; }
@@ -154,8 +156,8 @@ function brandWrapHtml(
       @media only screen and (max-width:600px) {
         .email-pad { padding:32px 24px !important; }
         .email-title { font-size:25px !important; }
-        .email-btn { width:100% !important; }
-        .email-btn a { display:block !important; text-align:center !important; }
+        .email-btn, .email-btn-secondary { width:100% !important; }
+        .email-btn a, .email-btn-secondary a { display:block !important; text-align:center !important; }
       }
     </style>
   </head>
@@ -195,9 +197,13 @@ const BARE_URL_LINE = /^(https?:\/\/\S+)$/;
 const LABELED_LINK_LINE = /^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/;
 
 function ctaButton(url: string, label: string): string {
-  // H15/H52: declining remains available without competing with confirmation.
+  // H15/H52: declining remains a secondary action beside confirmation.
   if (/^https?:\/\/[^/?#]+\/applications\/decline(?:[?#]|$)/.test(url)) {
-    return `<p style="margin:0 0 24px;"><a class="email-muted" href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:${EMAIL_MUTED_TEXT};font-size:14px;text-decoration:underline;">${escapeHtml(label)}</a></p>`;
+    return `<table role="presentation" cellpadding="0" cellspacing="0" class="email-btn-secondary" style="margin:8px 0 28px;max-width:100%;">
+  <tr><td style="border:1px solid ${EMAIL_HAIRLINE};border-radius:${EMAIL_BUTTON_RADIUS}px;">
+    <a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="display:inline-block;padding:13px 22px;line-height:1.4;color:${EMAIL_INK};font-size:15px;font-weight:600;text-decoration:none;border-radius:${EMAIL_BUTTON_RADIUS}px;">${escapeHtml(label)}</a>
+  </td></tr>
+</table>`;
   }
   return `<table role="presentation" cellpadding="0" cellspacing="0" class="email-btn" style="margin:8px 0 28px;max-width:100%;">
   <tr><td bgcolor="${EMAIL_INK}" style="border-radius:${EMAIL_BUTTON_RADIUS}px;background:${EMAIL_INK};">

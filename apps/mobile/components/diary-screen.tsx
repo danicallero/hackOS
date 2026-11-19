@@ -46,6 +46,7 @@ import { filterDiaryEntries } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import { seedPeople } from "@/lib/profile-seed";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { scannerFetch } from "@/lib/scanner-request";
 import { fixedScrollHeaderOptions } from "@/lib/screen-header-options";
@@ -297,6 +298,7 @@ export function DiaryScreen() {
         metEntry.current = entry;
         celebrations.current += 1;
         setCelebration({
+          userId: entry.person.userId,
           key: celebrations.current,
           name: entry.person.displayName,
           photoUrl: entry.person.photoUrl,
@@ -440,6 +442,23 @@ export function DiaryScreen() {
       filterDiaryEntries(entries ?? [], { query: activeQuery, favouritesOnly: activeFavourites }),
     [entries, activeQuery, activeFavourites],
   );
+  // A saved person's page opens on what the card shows (#935), from memory only.
+  useEffect(() => {
+    seedPeople(
+      (entries ?? []).flatMap((entry) =>
+        entry.person
+          ? [
+              {
+                userId: entry.person.userId,
+                displayName: entry.person.displayName,
+                photoUrl: entry.person.photoUrl,
+                headline: entry.person.headline,
+              },
+            ]
+          : [],
+      ),
+    );
+  }, [entries]);
   // The just-scanned card is pinned on top only while nothing filters the list.
   const pinned = searching ? null : (visible.find((entry) => entry.id === savedId) ?? null);
   const rest = visible.filter((entry) => entry.id !== pinned?.id);
@@ -447,6 +466,7 @@ export function DiaryScreen() {
     const person = entry.person;
     return (
       <DiaryPersonRow
+        userId={person?.userId}
         testID={`diary-entry-${entry.id}`}
         name={person?.displayName ?? t("diaryUnavailablePerson")}
         available={person !== null}
@@ -626,6 +646,7 @@ export function DiaryScreen() {
     </ScrollView>
   );
   const celebrationSelf = {
+    userId: me?.id,
     name: [me?.name, me?.surname].filter(Boolean).join(" ") || (me?.email ?? ""),
     image: me?.image ?? null,
   };

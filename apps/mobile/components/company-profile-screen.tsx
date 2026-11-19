@@ -1,17 +1,19 @@
 import { Image } from "expo-image";
 import { Link, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Linking,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  StyleSheet,
   Text,
   View,
 } from "react-native";
-import Animated, { FadeIn } from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActivityLinkSection } from "@/components/activity-link-rows";
+import { ImageHero, useImageHeroForeground } from "@/components/ambient-hero";
 import { AppRefreshControl } from "@/components/app-refresh-control";
 import { AvatarRow } from "@/components/avatar-row";
 import { Desaturate } from "@/components/company-album";
@@ -19,10 +21,16 @@ import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { FavouriteStar } from "@/components/favourite-star";
 import { FloatingBackButton } from "@/components/floating-back-button";
 import { EmptyState, Section, Separator } from "@/components/native-ui";
-import { loadingImageStyle, useApiImage } from "@/components/person-avatar";
+import { useApiImage, useFallbackFade } from "@/components/person-avatar";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { NoteRow, QuickAction } from "@/components/profile-parts";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import {
+  RevealView,
+  SkeletonGroup,
+  SkeletonProfileHeader,
+  SkeletonSection,
+} from "@/components/skeleton";
 import { SymbolView } from "@/components/symbol";
 import { useColorScheme } from "@/components/useColorScheme";
 import { alert } from "@/lib/alert";
@@ -30,10 +38,11 @@ import { ApiError, apiFetch } from "@/lib/api";
 import { type CompanyProfile, companyDescription, fetchCompanyProfile } from "@/lib/company";
 import type { SponsorCollection, SponsorCollectionEntry } from "@/lib/diary-sponsors";
 import { haptic } from "@/lib/haptics";
-import { heroTint } from "@/lib/hero-tint";
 import { useLocale } from "@/lib/i18n";
-import { useCompanyLogoTint, useImageBleed } from "@/lib/image-tint";
+import { useImageBleed } from "@/lib/image-tint";
 import { safeBack } from "@/lib/navigation";
+import { isTransientError } from "@/lib/offline-error";
+import { type CompanySeed, companySeed, seedCompanies, seedPeople } from "@/lib/profile-seed";
 import { resolveScheduleText } from "@/lib/schedule";
 import { colors, radius, type } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
@@ -55,7 +64,7 @@ export function Logo({
   muted,
   size = LOGO,
 }: {
-  profile: Pick<CompanyProfile, "logoUrl" | "logoNegativeUrl">;
+  profile: { logoUrl: string | null; logoNegativeUrl?: string | null };
   dark: boolean;
   muted: boolean;
   size?: number;
@@ -63,6 +72,7 @@ export function Logo({
   // The negative artwork is drawn for dark grounds.
   const shown = dark && profile.logoNegativeUrl ? profile.logoNegativeUrl : profile.logoUrl;
   const photo = useApiImage(shown);
+  const fallbackFade = useFallbackFade(photo.loaded);
   // Artwork without its own margin is drawn smaller so it never touches the tile (H44).
   const inset = useImageBleed(shown) ? 0.84 : 1;
   const ground = dark && profile.logoNegativeUrl ? colors.elevatedSurface : colors.accentText;
@@ -88,27 +98,32 @@ export function Logo({
           justifyContent: "center",
         }}
       >
-        {photo.loaded ? null : (
+        {/* Under the logo, fading out as the logo dissolves in (H44). */}
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            { alignItems: "center", justifyContent: "center" },
+            fallbackFade,
+          ]}
+        >
           <SymbolView
             name="building.2"
             size={52}
             tintColor={colors.tertiaryLabel}
             accessible={false}
           />
-        )}
+        </Animated.View>
         {photo.props ? (
           <Image
             {...photo.props}
             accessible={false}
             contentFit="contain"
-            style={[
-              {
-                height: (size - 28) * inset,
-                opacity: muted ? 0.5 : 1,
-                width: (size - 28) * inset,
-              },
-              !photo.loaded && loadingImageStyle,
-            ]}
+            style={{
+              height: (size - 28) * inset,
+              opacity: muted ? 0.5 : 1,
+              width: (size - 28) * inset,
+            }}
           />
         ) : null}
         {muted ? <Desaturate /> : null}
@@ -144,25 +159,29 @@ export function CompanyProfileScreen() {
   // button hidden, so these screens always draw their own glass circle.
   const floatingBack = true;
 
-  const load = useCallback(async () => {
+  // What the list that opened this page already knew (memory only, #935): the
+  // logo and name draw from it on the first frame while the rest loads.
+  const seed = useMemo(() => companySeed(companyId), [companyId]);
+
+  const load = useCallback(async (): Promise<boolean> => {
     const current = ++request.current;
     if (!Number.isSafeInteger(companyId) || companyId <= 0) {
       setState({ status: "missing" });
-      return;
+      return true;
     }
     try {
       const profile = await fetchCompanyProfile(companyId);
       if (current === request.current) setState({ status: "ready", profile });
+      return true;
     } catch (cause) {
-      if (current !== request.current) return;
+      if (current !== request.current) return true;
       if (cause instanceof ApiError && (cause.status === 404 || cause.status === 403)) {
         setState({ status: "missing" });
-      } else {
-        const error = cause instanceof Error ? cause : new Error(String(cause));
-        setState((existing) =>
-          existing.status === "ready" ? existing : { status: "error", error },
-        );
+        return true;
       }
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+      setState((existing) => (existing.status === "ready" ? existing : { status: "error", error }));
+      return false;
     }
   }, [companyId]);
 
@@ -236,7 +255,29 @@ export function CompanyProfileScreen() {
   }, [load]);
 
   const profile = state.status === "ready" ? state.profile : null;
-  const name = profile?.name ?? "";
+  // The header: the loaded profile, else the list's seed while it loads or failed.
+  const header: CompanySeed | null =
+    profile ?? (seed && (state.status === "loading" || state.status === "error") ? seed : null);
+  const name = header?.name ?? "";
+  // Reopening this company, or a representative, starts from what is known now.
+  useEffect(() => {
+    if (!profile) return;
+    seedCompanies([
+      {
+        id: profile.id,
+        name: profile.name,
+        logoUrl: profile.logoUrl,
+        logoNegativeUrl: profile.logoNegativeUrl,
+      },
+    ]);
+    seedPeople(
+      profile.representatives.map((person) => ({
+        userId: person.userId,
+        displayName: person.name,
+        photoUrl: person.avatarUrl,
+      })),
+    );
+  }, [profile]);
   useEffect(() => {
     if (process.env.EXPO_OS !== "ios") return;
     navigation.setOptions({
@@ -263,9 +304,15 @@ export function CompanyProfileScreen() {
   // An uncollected company keeps the neutral grey hero instead of its logo colour.
   // The colour is computed on the device (prefetched from the lists); until it
   // is ready the neutral hero shows, then the tint fades in over it.
-  const logoTint = useCompanyLogoTint(uncollected ? null : (profile ?? null), dark);
-  const hero = heroTint(logoTint.color, dark);
-  const neutralHero = heroTint(null, dark);
+  // H44: a collected company's logo colours the header (`ImageHero`); an uncollected one keeps
+  // the neutral grey hero.
+  const heroLogo =
+    header && !uncollected
+      ? dark && header.logoNegativeUrl
+        ? header.logoNegativeUrl
+        : header.logoUrl
+      : null;
+  const nameColor = useImageHeroForeground(heroLogo, dark);
   const site = profile?.website;
   const description = profile ? companyDescription(profile, language) : null;
   const descriptionStyle = {
@@ -294,47 +341,30 @@ export function CompanyProfileScreen() {
           paddingTop: insets.top + 56,
         }}
       >
-        {profile ? (
-          <>
-            <View
-              pointerEvents="none"
-              style={{
-                experimental_backgroundImage: neutralHero.gradient,
-                height: 620,
-                left: 0,
-                position: "absolute",
-                right: 0,
-                top: -300,
-              }}
-            />
-            {logoTint.color ? (
-              <Animated.View
-                entering={logoTint.fromCache ? undefined : FadeIn.duration(400)}
-                testID="company-hero"
-                pointerEvents="none"
-                style={{
-                  experimental_backgroundImage: hero.gradient,
-                  height: 620,
-                  left: 0,
-                  position: "absolute",
-                  right: 0,
-                  top: -300,
-                }}
-              />
-            ) : null}
-          </>
-        ) : null}
-        {state.status === "loading" ? (
-          <RequestFeedback loading />
-        ) : state.status === "error" ? (
-          <RequestFeedback error={state.error} onRetry={() => void load()} />
-        ) : state.status === "missing" || !profile ? (
+        {header ? <ImageHero uri={heroLogo} dark={dark} testID="company-hero" /> : null}
+        {state.status === "missing" ? (
           <EmptyState icon="building.2" title={t("companyNotFound")} />
+        ) : !header ? (
+          state.status === "error" ? (
+            <RequestFeedback
+              error={state.error}
+              onRetry={isTransientError(state.error) ? () => load() : undefined}
+            />
+          ) : (
+            // Opened without a list behind it (a deep link): the page's shape, not a spinner.
+            <SkeletonGroup testID="company-profile-skeleton">
+              <SkeletonProfileHeader size={LOGO} shape="tile" />
+              <View style={{ gap: 24, ...readable.content }}>
+                <SkeletonSection rows={3} />
+                <SkeletonSection title rows={2} />
+              </View>
+            </SkeletonGroup>
+          )
         ) : (
           <>
             <View style={{ alignItems: "center", gap: 18, paddingHorizontal: 24 }}>
               <Link.AppleZoomTarget>
-                <Logo profile={profile} dark={dark} muted={uncollected} />
+                <Logo profile={header} dark={dark} muted={uncollected} />
               </Link.AppleZoomTarget>
               <Text
                 onLayout={({ nativeEvent: { layout } }) =>
@@ -345,263 +375,293 @@ export function CompanyProfileScreen() {
                 accessibilityRole="header"
                 selectable
                 style={{
-                  color: hero.foreground,
+                  color: nameColor ?? colors.label,
                   fontSize: type.title.fontSize,
                   fontWeight: "700",
                   textAlign: "center",
                 }}
               >
-                {profile.name}
+                {header.name}
               </Text>
             </View>
 
-            <View style={{ gap: 24, ...readable.content }}>
-              {description ? (
-                <View style={{ gap: 6 }}>
-                  <Text
-                    selectable
-                    numberOfLines={expanded ? undefined : DESCRIPTION_LINES}
-                    style={descriptionStyle}
-                  >
-                    {description}
-                  </Text>
-                  {/* iOS reports only the clamped lines, so measure an unclamped copy. */}
-                  <Text
-                    accessible={false}
-                    importantForAccessibility="no-hide-descendants"
-                    pointerEvents="none"
-                    onTextLayout={(event) =>
-                      setClamped(event.nativeEvent.lines.length > DESCRIPTION_LINES)
-                    }
-                    style={[
-                      descriptionStyle,
-                      { opacity: 0, position: "absolute", left: 0, right: 0 },
-                    ]}
-                  >
-                    {description}
-                  </Text>
-                  {clamped && !expanded ? (
+            {profile ? null : state.status === "error" ? (
+              <View style={readable.content}>
+                {/* Keep the header the list gave us; only the rest failed. */}
+                <RequestFeedback
+                  error={state.error}
+                  message={t("profileRestError")}
+                  onRetry={isTransientError(state.error) ? () => load() : undefined}
+                />
+              </View>
+            ) : (
+              <SkeletonGroup testID="company-profile-skeleton">
+                <View style={{ gap: 24, ...readable.content }}>
+                  <SkeletonSection rows={3} />
+                  <SkeletonSection title rows={2} />
+                </View>
+              </SkeletonGroup>
+            )}
+
+            {profile ? (
+              <RevealView>
+                <View style={{ gap: 24, ...readable.content }}>
+                  {description ? (
+                    <View style={{ gap: 6 }}>
+                      <Text
+                        selectable
+                        numberOfLines={expanded ? undefined : DESCRIPTION_LINES}
+                        style={descriptionStyle}
+                      >
+                        {description}
+                      </Text>
+                      {/* iOS reports only the clamped lines, so measure an unclamped copy. */}
+                      <Text
+                        accessible={false}
+                        importantForAccessibility="no-hide-descendants"
+                        pointerEvents="none"
+                        onTextLayout={(event) =>
+                          setClamped(event.nativeEvent.lines.length > DESCRIPTION_LINES)
+                        }
+                        style={[
+                          descriptionStyle,
+                          { opacity: 0, position: "absolute", left: 0, right: 0 },
+                        ]}
+                      >
+                        {description}
+                      </Text>
+                      {clamped && !expanded ? (
+                        <PressableFeedback
+                          feedback="opacity"
+                          accessibilityRole="button"
+                          onPress={() => setExpanded(true)}
+                          style={{
+                            alignSelf: "flex-end",
+                            minHeight: 44,
+                            justifyContent: "center",
+                            paddingHorizontal: 8,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: colors.accent,
+                              fontSize: type.callout.fontSize,
+                              fontWeight: "600",
+                            }}
+                          >
+                            {t("companyMore")}
+                          </Text>
+                        </PressableFeedback>
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  {site ? (
                     <PressableFeedback
                       feedback="opacity"
-                      accessibilityRole="button"
-                      onPress={() => setExpanded(true)}
+                      accessibilityRole="link"
+                      onPress={() => void Linking.openURL(site)}
                       style={{
-                        alignSelf: "flex-end",
-                        minHeight: 44,
-                        justifyContent: "center",
-                        paddingHorizontal: 8,
+                        alignItems: "center",
+                        alignSelf: "flex-start",
+                        flexDirection: "row",
+                        gap: 6,
                       }}
                     >
-                      <Text
-                        style={{
-                          color: colors.accent,
-                          fontSize: type.callout.fontSize,
-                          fontWeight: "600",
-                        }}
-                      >
-                        {t("companyMore")}
+                      <SymbolView
+                        name="globe"
+                        size={16}
+                        tintColor={colors.accent}
+                        accessible={false}
+                      />
+                      <Text style={{ color: colors.accent, fontSize: type.callout.fontSize }}>
+                        {site.replace(/^https?:\/\//, "").replace(/\/$/, "")}
                       </Text>
                     </PressableFeedback>
                   ) : null}
                 </View>
-              ) : null}
 
-              {site ? (
-                <PressableFeedback
-                  feedback="opacity"
-                  accessibilityRole="link"
-                  onPress={() => void Linking.openURL(site)}
-                  style={{
-                    alignItems: "center",
-                    alignSelf: "flex-start",
-                    flexDirection: "row",
-                    gap: 6,
-                  }}
-                >
-                  <SymbolView name="globe" size={16} tintColor={colors.accent} accessible={false} />
-                  <Text style={{ color: colors.accent, fontSize: type.callout.fontSize }}>
-                    {site.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                {uncollected ? (
+                  <Text
+                    style={{
+                      color: colors.secondaryLabel,
+                      fontSize: type.subhead.fontSize,
+                      textAlign: "center",
+                    }}
+                  >
+                    {t("diaryCompanyVisitBooth")}
                   </Text>
-                </PressableFeedback>
-              ) : null}
-            </View>
-
-            {uncollected ? (
-              <Text
-                style={{
-                  color: colors.secondaryLabel,
-                  fontSize: type.subhead.fontSize,
-                  textAlign: "center",
-                }}
-              >
-                {t("diaryCompanyVisitBooth")}
-              </Text>
-            ) : null}
-
-            {entry ? (
-              <View style={{ gap: 24, ...readable.content }}>
-                <Text
-                  style={{
-                    color: colors.secondaryLabel,
-                    fontSize: type.subhead.fontSize,
-                    textAlign: "center",
-                  }}
-                >
-                  {t("diaryCompanyCollectedOn", {
-                    date: new Date(entry.createdAt).toLocaleDateString(language, {
-                      day: "numeric",
-                      month: "long",
-                    }),
-                  })}
-                </Text>
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <QuickAction
-                    icon={entry.starred ? "star.fill" : "star"}
-                    iconTint={entry.starred ? colors.warning : colors.accent}
-                    label={t(entry.starred ? "diaryUnfavourite" : "diaryFavourite")}
-                    title={t("diaryFavourite")}
-                    selected={entry.starred}
-                    busy={entryBusy}
-                    onPress={() => patchEntry({ starred: !entry.starred })}
-                    iconNode={<FavouriteStar on={entry.starred} size={22} />}
-                  />
-                  <QuickAction
-                    icon="note.text"
-                    label={t(entry.note ? "diaryEditNote" : "diaryNote")}
-                    title={t(entry.note ? "diaryEditNote" : "diaryNote")}
-                    busy={false}
-                    onPress={() => setNoteOpen(true)}
-                  />
-                </View>
-                {entry.note ? (
-                  <Section title={t("diaryNote")}>
-                    <NoteRow
-                      note={entry.note}
-                      hint={t("diaryEditNote")}
-                      onPress={() => setNoteOpen(true)}
-                    />
-                  </Section>
                 ) : null}
-              </View>
-            ) : null}
 
-            {profile.representatives.length > 0 ? (
-              <View style={{ gap: 8 }}>
-                <Text
-                  accessibilityRole="header"
-                  style={{
-                    color: colors.secondaryLabel,
-                    fontSize: type.footnote.fontSize,
-                    fontWeight: "600",
-                    paddingHorizontal: 32,
-                  }}
-                >
-                  {t("companyRepresentatives")}
-                </Text>
-                <AvatarRow
-                  items={profile.representatives.map((person) => ({
-                    key: String(person.userId),
-                    name: person.name,
-                    firstName: person.firstName,
-                    surname: person.surname,
-                    uri: person.avatarUrl,
-                    href: `/people/${person.userId}`,
-                  }))}
-                />
-              </View>
-            ) : null}
+                {entry ? (
+                  <View style={{ gap: 24, ...readable.content }}>
+                    <Text
+                      style={{
+                        color: colors.secondaryLabel,
+                        fontSize: type.subhead.fontSize,
+                        textAlign: "center",
+                      }}
+                    >
+                      {t("diaryCompanyCollectedOn", {
+                        date: new Date(entry.createdAt).toLocaleDateString(language, {
+                          day: "numeric",
+                          month: "long",
+                        }),
+                      })}
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 10 }}>
+                      <QuickAction
+                        icon={entry.starred ? "star.fill" : "star"}
+                        iconTint={entry.starred ? colors.warning : colors.accent}
+                        label={t(entry.starred ? "diaryUnfavourite" : "diaryFavourite")}
+                        title={t("diaryFavourite")}
+                        selected={entry.starred}
+                        busy={entryBusy}
+                        onPress={() => patchEntry({ starred: !entry.starred })}
+                        iconNode={<FavouriteStar on={entry.starred} size={22} />}
+                      />
+                      <QuickAction
+                        icon="note.text"
+                        label={t(entry.note ? "diaryEditNote" : "diaryNote")}
+                        title={t(entry.note ? "diaryEditNote" : "diaryNote")}
+                        busy={false}
+                        onPress={() => setNoteOpen(true)}
+                      />
+                    </View>
+                    {entry.note ? (
+                      <Section title={t("diaryNote")}>
+                        <NoteRow
+                          note={entry.note}
+                          hint={t("diaryEditNote")}
+                          onPress={() => setNoteOpen(true)}
+                        />
+                      </Section>
+                    ) : null}
+                  </View>
+                ) : null}
 
-            <View style={{ gap: 24, ...readable.content }}>
-              {profile.challenges.length > 0 ? (
-                <Section title={t("companyChallenges")}>
-                  {profile.challenges.map((challenge, index) => (
-                    <View key={challenge.id}>
-                      {index > 0 ? <Separator /> : null}
+                {profile.representatives.length > 0 ? (
+                  <View style={{ gap: 8 }}>
+                    <Text
+                      accessibilityRole="header"
+                      style={{
+                        color: colors.secondaryLabel,
+                        fontSize: type.footnote.fontSize,
+                        fontWeight: "600",
+                        paddingHorizontal: 32,
+                      }}
+                    >
+                      {t("companyRepresentatives")}
+                    </Text>
+                    <AvatarRow
+                      items={profile.representatives.map((person) => ({
+                        key: String(person.userId),
+                        userId: person.userId,
+                        name: person.name,
+                        firstName: person.firstName,
+                        surname: person.surname,
+                        uri: person.avatarUrl,
+                        href: `/people/${person.userId}`,
+                      }))}
+                    />
+                  </View>
+                ) : null}
+
+                <View style={{ gap: 24, ...readable.content }}>
+                  {profile.challenges.length > 0 ? (
+                    <Section title={t("companyChallenges")}>
+                      {profile.challenges.map((challenge, index) => (
+                        <View key={challenge.id}>
+                          {index > 0 ? <Separator /> : null}
+                          <PressableFeedback
+                            feedback="row"
+                            accessibilityRole="button"
+                            onPress={() =>
+                              router.push({
+                                pathname: "/projects/challenge",
+                                params: { challengeId: String(challenge.id) },
+                              })
+                            }
+                            style={{
+                              alignItems: "center",
+                              flexDirection: "row",
+                              gap: 12,
+                              minHeight: 56,
+                              paddingHorizontal: 16,
+                              paddingVertical: 10,
+                            }}
+                          >
+                            <View style={{ flex: 1, gap: 2 }}>
+                              <Text
+                                numberOfLines={2}
+                                style={{
+                                  color: colors.label,
+                                  fontSize: type.body.fontSize,
+                                  fontWeight: "600",
+                                }}
+                              >
+                                {challenge.title}
+                              </Text>
+                              {challenge.summary ? (
+                                <Text
+                                  numberOfLines={2}
+                                  style={{
+                                    color: colors.secondaryLabel,
+                                    fontSize: type.footnote.fontSize,
+                                  }}
+                                >
+                                  {challenge.summary}
+                                </Text>
+                              ) : null}
+                            </View>
+                            <SymbolView
+                              name="chevron.right"
+                              size={13}
+                              tintColor={colors.tertiaryLabel}
+                              accessible={false}
+                            />
+                          </PressableFeedback>
+                        </View>
+                      ))}
+                    </Section>
+                  ) : null}
+
+                  <ActivityLinkSection
+                    title={t("companyActivities")}
+                    items={profile.activities.map((item) => ({
+                      id: item.id,
+                      title: resolveScheduleText(item, language).title,
+                      startsAt: item.startsAt,
+                      location: item.location,
+                    }))}
+                  />
+
+                  {entry ? (
+                    <Section>
                       <PressableFeedback
                         feedback="row"
                         accessibilityRole="button"
-                        onPress={() =>
-                          router.push({
-                            pathname: "/projects/challenge",
-                            params: { challengeId: String(challenge.id) },
-                          })
-                        }
+                        accessibilityState={{ disabled: entryBusy }}
+                        disabled={entryBusy}
+                        onPress={removeEntry}
                         style={{
                           alignItems: "center",
-                          flexDirection: "row",
-                          gap: 12,
-                          minHeight: 56,
+                          justifyContent: "center",
+                          minHeight: 50,
                           paddingHorizontal: 16,
-                          paddingVertical: 10,
                         }}
                       >
-                        <View style={{ flex: 1, gap: 2 }}>
-                          <Text
-                            numberOfLines={2}
-                            style={{
-                              color: colors.label,
-                              fontSize: type.body.fontSize,
-                              fontWeight: "600",
-                            }}
-                          >
-                            {challenge.title}
-                          </Text>
-                          {challenge.summary ? (
-                            <Text
-                              numberOfLines={2}
-                              style={{
-                                color: colors.secondaryLabel,
-                                fontSize: type.footnote.fontSize,
-                              }}
-                            >
-                              {challenge.summary}
-                            </Text>
-                          ) : null}
-                        </View>
-                        <SymbolView
-                          name="chevron.right"
-                          size={13}
-                          tintColor={colors.tertiaryLabel}
-                          accessible={false}
-                        />
+                        <Text
+                          style={{ color: colors.destructive, fontSize: type.callout.fontSize }}
+                        >
+                          {t("diaryCompanyRemove")}
+                        </Text>
                       </PressableFeedback>
-                    </View>
-                  ))}
-                </Section>
-              ) : null}
-
-              <ActivityLinkSection
-                title={t("companyActivities")}
-                items={profile.activities.map((item) => ({
-                  id: item.id,
-                  title: resolveScheduleText(item, language).title,
-                  startsAt: item.startsAt,
-                  location: item.location,
-                }))}
-              />
-
-              {entry ? (
-                <Section>
-                  <PressableFeedback
-                    feedback="row"
-                    accessibilityRole="button"
-                    accessibilityState={{ disabled: entryBusy }}
-                    disabled={entryBusy}
-                    onPress={removeEntry}
-                    style={{
-                      alignItems: "center",
-                      justifyContent: "center",
-                      minHeight: 50,
-                      paddingHorizontal: 16,
-                    }}
-                  >
-                    <Text style={{ color: colors.destructive, fontSize: type.callout.fontSize }}>
-                      {t("diaryCompanyRemove")}
-                    </Text>
-                  </PressableFeedback>
-                </Section>
-              ) : null}
-            </View>
+                    </Section>
+                  ) : null}
+                </View>
+              </RevealView>
+            ) : null}
           </>
         )}
       </Animated.ScrollView>

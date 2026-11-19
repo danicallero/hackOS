@@ -236,7 +236,12 @@ export function HelperRow({ helper, href }: { helper: HelperCard; href: Href }) 
       >
         <Link.AppleZoom>
           <View>
-            <PersonAvatar size={40} name={helper.displayName} uri={helper.photoUrl} />
+            <PersonAvatar
+              userId={helper.userId}
+              size={40}
+              name={helper.displayName}
+              uri={helper.photoUrl}
+            />
             {helper.present ? (
               <View
                 style={{

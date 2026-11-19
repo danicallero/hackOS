@@ -1266,8 +1266,7 @@ never slides behind the clock.
 
 **Company screen (H44, H45, H59).** `app/companies/[id].tsx`
 (`components/company-profile-screen.tsx`) reads `GET /api/enterprises/:id/profile`
-and follows Apple Music's artist page: a tinted gradient hero (CSS
-`experimental_backgroundImage`; `heroTint` in `lib/hero-tint.ts` tints it with the colour of the logo shown (`useCompanyLogoTint`: the negative logo in dark mode, falling back to the positive logo's colour when the negative is white or mono and has none), computed on the device by `lib/image-tint.ts` (`expo-image-manipulator` scales the logo to a 24x24 PNG in the cache, `lib/png-pixels.ts` decodes its RGBA with `fflate`; an SVG logo, which the platform decoders cannot read, gives the largest raster it embeds, else its fill/stroke colours, via `lib/svg-tint.ts`; `pickDominantColor` ignores transparent and near-white/black pixels and favours saturated buckets; nothing is stored server-side), darkened in dark mode,
+and follows Apple Music's artist page: a hero washed in the logo shown (the negative one in dark mode) by `ImageHero` (`components/ambient-hero.tsx`, below); lists and other screens still read a logo's single colour (`useCompanyLogoTint`: the negative logo in dark mode, falling back to the positive logo's colour when the negative is white or mono and has none), computed on the device by `lib/image-tint.ts` (`expo-image-manipulator` scales the logo to a 24x24 PNG in the cache, `lib/png-pixels.ts` decodes its RGBA with `fflate`, 8- or 16-bit since iOS writes wide-colour photos as 16-bit PNGs; an SVG logo, which the platform decoders cannot read, gives the largest raster it embeds, else its fill/stroke colours, via `lib/svg-tint.ts`; `pickDominantColor` ignores transparent and near-white/black pixels and favours saturated buckets; nothing is stored server-side), darkened in dark mode,
 neutral grey when null, and picks the white or black foreground for the name by
 luminance), the logo in a rounded
 card with a soft shadow (the negative logo in dark mode when present; artwork
@@ -1303,10 +1302,57 @@ name; opens `companies/[id]`) rows between the description and Information,
 from the item's optional `speakers` and `enterprises`. A person's profile
 shows every company they belong to (`enterprises`, one row each, opening its
 company screen with the same zoom) and Talks (`activities`) when the API sends
-them, tints its hero from the photo's dominant colour (same `useImageTint` and
-`heroTint`; no photo or no usable colour keeps the plain background), and a challenge's company row opens the company screen. Every hero is 620pt tall and starts 300pt above the content to cover the
+them, and a challenge's company row opens the company screen.
+
+**Opening a profile (H44, H55, H63, #935).** Person profiles (diary, help desk
+helper, requester) and the company screen never open on a blank loading screen.
+Lists that link to them (the diary's people, the Companies album, the help desk
+Helpers list and request rows, schedule speakers and companies, a challenge's
+company, a company's Representatives, a person's companies) write what their
+row shows into `lib/profile-seed.ts`: a memory-only LRU (300 entries) of
+id, name, photo/logo, headline and help desk role, keyed by user, company or,
+for a requester, request id. A loaded profile seeds itself and the people or
+companies it lists. Nothing there is written to disk, and `useMe` clears it
+with `clearProfileSeeds` on sign-out and session loss, next to
+`clearPersistedPhotos`. On open, the screen draws the seeded header (avatar or
+logo, name, headline, hero, a helper's role badge) on the first frame and grey
+section placeholders below (`components/skeleton.tsx`: `SkeletonGroup` breathes
+gently, static under Reduce Motion; `SkeletonSection` has a `Section`'s shape);
+the loaded sections then fade in (`RevealView`). Without a seed (a deep link)
+the placeholders include the avatar and name. If the load fails with a seed, the
+header stays and a compact notice ("Couldn't load the rest of this profile.",
+or the offline notice with Reconnect) replaces the placeholders; Retry appears
+only when retrying can help (offline, 429, 5xx). Without a seed the full-page
+error stays, and 404/403 still shows "Profile not available".
+
+**Default person avatars (#934, H55).** `UserAvatar`, `PersonAvatar` and the
+native profile-avatar morph use the same transparent mascot composition and
+background as the web, selected by the person's id through
+`@hackos/shared/mascot-avatars`. The photo editor, account tab, diary, helper,
+speaker and team-member surfaces pass this id; a real photo replaces the mascot
+once loaded. A no-photo person header uses the assigned avatar background colour. Missing or unavailable people keep their generic symbol. Assets,
+selection algorithm and regeneration are documented in [`directory.md`](./directory.md#default-avatars-934-h55).
+
+**Image heroes (H44, H45, H48).** Person, company, challenge and project
+pages wash their header in their image (photo, logo, the company's logo, the
+first project image) with `ImageHero`: the image itself, enlarged and softly blurred
+while retaining broad logo shapes (iOS `BlurView` with a full-strength
+ultra-thin material matching the appearance, Android a 32 pt style `filter` blur;
+below Android 12 the single-colour wash), under a veil of the page colour
+(`ambientVeil`: 20% light, 45% dark, accounting for the native material
+already adding its own wash; the profile headline uses the label colour
+there instead of grey) and masked to fade into the page, so each side keeps its own
+colour and labels keep the page's colour. It is the same request as the avatar
+or logo on the page: iOS blurs the rendered backdrop, so SVG logos and
+raster photos have the same blur regardless of their source resolution;
+Android blurs the untransformed image instead of fetching a transformed one, and private photos
+stay in memory only (#934). Without an image the hero is `heroTint`'s wash
+(blue for people, projects and challenges, grey for an uncollected company).
+Every hero is 620pt tall and starts 300pt above the content to cover the
 pull-down bounce; `heroTint` holds full strength over that first 45% so the
-tint is strongest at the screen's top edge, then fades. On Android the
+tint is strongest at the screen's top edge, then fades. On iOS a profile's role
+badge is drawn over the screen, not in the native bar: a bar item makes the
+whole bar take touches and the floating back circle stopped responding. On Android the
 challenge page (`components/challenge-detail.tsx`) hides the native bar and
 draws the company page's `FloatingBackButton`, padding its content below the
 status bar.
@@ -1365,7 +1411,7 @@ layer lifetime. The canvas converges to the cutout's lower edge as in Swift's
 backing follows mask progress, with the separate `-0.25 + progress * 1.55`
 fade curve and the radial gradient stops from `DynamicIslandBlurNode`.
 The React Native cover currently uses dark paint rather than UIKit's animated
-native blur. Static photos and initials share the mask; optional live avatar
+native blur. Static photos and deterministic mascots share the mask; optional live avatar
 children remain inside it.
 On iOS, the target uses window-space safe-area geometry because UIKit does not
 expose the Dynamic Island frame to apps. The hardware island is 126 x 37.33 pt
@@ -1538,8 +1584,13 @@ routes: `useApiImage` (`components/person-avatar.tsx`) hands `expo-image` the
 `apiImageSource` from `lib/directory.ts` — the session cookie as a header and a
 cache key tagged with the session — and every caller keeps
 `cachePolicy="memory"`, so a photo is never written to disk and one hidden later
-is gone after the next launch. The fallback (initials or symbol) stays until the
-photo has drawn. Public sponsor logos use `expo-image`'s default disk cache.
+is gone after the next launch. The fallback (initials or symbol) sits under the
+photo, which dissolves in over it (`transition`, `IMAGE_FADE_MS`, instant under
+Reduce Motion) while the fallback fades out (`useFallbackFade`), so initials
+never jump to the photo. List rows, the profile avatar and its hero all ask for
+the same `apiImageSource` (same cache key, memory policy), so a photo a list
+drew is reused when its profile opens. Public sponsor logos use `expo-image`'s
+default disk cache.
 **Native dependency:** `expo-image` needs a
 rebuilt development client and store build.
 
