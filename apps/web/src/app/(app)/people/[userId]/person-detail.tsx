@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { HeroBleed } from "@/components/common/hero-bleed";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
+import { PageTitle } from "@/components/common/page-title";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { UserAvatar } from "@/components/common/user-avatar";
 import { CvViewer } from "@/components/profile/cv-viewer";
@@ -272,6 +273,7 @@ export function PersonProfile({
             presenceLabel={present ? t("helpDeskPresent") : undefined}
           />
           <div className="min-w-0 space-y-2">
+            <PageTitle title={entry.displayName} />
             <h1 className="font-display text-3xl leading-tight wrap-anywhere sm:text-4xl">
               {entry.displayName}
             </h1>

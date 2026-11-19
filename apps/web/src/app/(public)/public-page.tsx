@@ -112,8 +112,8 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
   // The browser tab should read the configured event's name, not a generic
   // product title, once it's loaded.
   useEffect(() => {
-    if (content?.event.name) document.title = content.event.name;
-  }, [content]);
+    if (!embedded && content?.event.name) document.title = content.event.name;
+  }, [content, embedded]);
   const Landmark = embedded ? "div" : "main";
   return (
     <div className="relative min-w-0">

@@ -1,4 +1,5 @@
 import { ActionGroup } from "@/components/common/action-group";
+import { PageTitle } from "@/components/common/page-title";
 import { cn } from "@/lib/utils";
 
 /**
@@ -9,6 +10,7 @@ export function PageHeader({
   context,
   leading,
   title,
+  tabTitle,
   state,
   meta,
   description,
@@ -26,6 +28,8 @@ export function PageHeader({
    */
   leading?: React.ReactNode;
   title: string;
+  /** Use the active destination when sibling screens share a visible heading. */
+  tabTitle?: string;
   /** Embedded design specimens use h2; destinations always keep the default h1. */
   headingLevel?: 1 | 2;
   /** Narrow screens leave room for the app's sidebar trigger; public pages have none. */
@@ -59,6 +63,7 @@ export function PageHeader({
         className,
       )}
     >
+      {headingLevel === 1 && <PageTitle title={tabTitle ?? title} />}
       <div
         className={cn(
           "flex min-w-0 items-start gap-(--space-related) md:pl-0",
