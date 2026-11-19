@@ -34,7 +34,7 @@ describe("Android symbol aliases (H55)", () => {
     const icons = [
       ...Object.values(TAB_DEFINITIONS).flatMap((tab) => [tab.icon, tab.selectedIcon]),
       ...Object.values(OVERFLOW_TAB_ICON),
-    ].filter((icon): icon is string => Boolean(icon));
+    ].flatMap((icon) => (icon ? [String(icon)] : []));
     expect(icons.filter((icon) => !androidSymbolName(icon))).toEqual([]);
   });
 
