@@ -65,7 +65,7 @@ for name, bounds, face in ARTWORK:
         if frame == "right":
             art = ImageOps.mirror(art)
             face_x = 1 - face_x
-        if gull and frame == "top":
+        if (gull or name == "shell") and frame == "top":
             art = art.rotate(180)
             face_x, face_y = 1 - face_x, 1 - face_y
         if frame == "center" and not gull:
