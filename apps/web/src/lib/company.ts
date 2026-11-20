@@ -1,6 +1,6 @@
-import { logoTouchesEdge, pickDominantColor } from "@hackos/shared/image-color";
-import { useTheme } from "next-themes";
+import { logoTouchesEdge } from "@hackos/shared/image-color";
 import { useEffect, useState } from "react";
+import type { Ambient } from "@/components/common/ambient-backdrop";
 import { api } from "@/lib/api";
 import type { PublicScheduleItem } from "@/lib/logistics";
 
@@ -53,16 +53,15 @@ export function heroGradient(logoColor: string | null | undefined): string {
   return `linear-gradient(to bottom, color-mix(in srgb, ${base} var(--hero-mix, 40%), transparent) 0%, transparent 100%)`;
 }
 
-/** What a logo's pixels say (H44): its representative colour and whether its artwork reaches its edges. */
+/** What a logo's pixels say (H44): whether its artwork reaches its edges. */
 interface LogoAnalysis {
-  color: string | null;
   bleed: boolean;
 }
 
-const UNREADABLE: LogoAnalysis = { color: null, bleed: false };
+const UNREADABLE: LogoAnalysis = { bleed: false };
 const analysisCache = new Map<string, LogoAnalysis>();
 
-/** Reads a 32px copy; unreadable (no colour, no bleed) when the canvas is tainted. */
+/** Reads a 32px copy; unreadable (no bleed) when the canvas is tainted. */
 function sampleLogo(img: HTMLImageElement): LogoAnalysis {
   const size = 32;
   const canvas = document.createElement("canvas");
@@ -73,7 +72,7 @@ function sampleLogo(img: HTMLImageElement): LogoAnalysis {
   ctx.drawImage(img, 0, 0, size, size);
   try {
     const pixels = ctx.getImageData(0, 0, size, size).data;
-    return { color: pickDominantColor(pixels), bleed: logoTouchesEdge(pixels, size, size) };
+    return { bleed: logoTouchesEdge(pixels, size, size) };
   } catch {
     return UNREADABLE; // tainted canvas: the logo host sends no CORS headers
   }
@@ -101,7 +100,7 @@ function readLogo(url: string): Promise<LogoAnalysis> {
 
 /**
  * Warm the cache when a logo is shown in a list, off the critical path, so the
- * company page opens already tinted. Deduped per URL.
+ * company page opens with its logo tile already sized. Deduped per URL.
  */
 export function precomputeLogoColor(url: string | null | undefined): void {
   if (!url || analysisCache.has(url) || inFlight.has(url) || typeof window === "undefined") return;
@@ -137,21 +136,16 @@ export function useLogoBleed(url: string | null | undefined): boolean {
 }
 
 /**
- * A company's colour (H44), inferred from the logo the viewer actually sees:
- * the negative artwork in dark mode. A negative that lost the brand colours
- * (white or mono) has none, so the positive logo's colour is used instead.
+ * The blurred-logo backdrop of a company's hero (H44, H48): the logo the tile
+ * shows, the negative in dark mode. Same URLs as `SponsorLogo`, so the
+ * backdrop reuses its requests. Shared by the company and challenge pages.
  */
-export function useCompanyLogoColor(logo: {
+export function companyAmbient(logo: {
   logoUrl: string | null | undefined;
   logoNegativeUrl?: string | null;
-}): string | null {
-  const { resolvedTheme } = useTheme();
-  const negative =
-    resolvedTheme === "dark" && logo.logoNegativeUrl && logo.logoNegativeUrl !== logo.logoUrl
-      ? logo.logoNegativeUrl
-      : null;
-  const shown = useLogoAnalysis(negative);
-  const positive = useLogoAnalysis(logo.logoUrl);
-  if (negative) return shown === undefined ? null : (shown.color ?? positive?.color ?? null);
-  return positive?.color ?? null;
+}): Ambient | undefined {
+  const light = logo.logoUrl;
+  if (!light) return undefined;
+  const dark = logo.logoNegativeUrl ?? light;
+  return { urls: [...new Set([light, dark])], active: light, activeDark: dark };
 }

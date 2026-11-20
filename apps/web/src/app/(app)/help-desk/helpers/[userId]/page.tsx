@@ -65,15 +65,6 @@ export default function HelperPage() {
       context={back}
       visibleRole={helper.visibleRoleName}
       present={helper.present}
-      company={
-        helper.affiliation
-          ? {
-              name: helper.affiliation,
-              logoUrl: helper.affiliationLogoUrl,
-              logoNegativeUrl: helper.affiliationLogoNegativeUrl,
-            }
-          : undefined
-      }
     >
       {resource.stale ? <StaleDataNotice onRetry={resource.refetch} /> : null}
       {helper.challenges.length ? (
@@ -81,9 +72,11 @@ export default function HelperPage() {
           <p className="text-sm">{helper.challenges.map((item) => item.name).join(", ")}</p>
         </SectionCard>
       ) : null}
-      <SectionCard variant="plain" title={t("helpDeskSchedule")}>
-        <AvailabilityTimeline intervals={helper.availability} readOnly />
-      </SectionCard>
+      {helper.availability.length ? (
+        <SectionCard variant="plain" title={t("helpDeskSchedule")}>
+          <AvailabilityTimeline intervals={helper.availability} readOnly />
+        </SectionCard>
+      ) : null}
     </PersonProfile>
   );
 }

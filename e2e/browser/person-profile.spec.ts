@@ -104,6 +104,14 @@ test("company representative photo hero and return navigation", async ({ page },
           socials: [],
           projects: [],
           challenges: [],
+          enterprises: [
+            {
+              id: 7,
+              name: "GPUL",
+              logoUrl: "http://localhost:3000/api/logo",
+              logoNegativeUrl: "http://localhost:3000/api/logo-dark",
+            },
+          ],
         },
         affiliation: "GPUL",
         affiliationLogoUrl: "http://localhost:3000/api/logo",
@@ -119,6 +127,8 @@ test("company representative photo hero and return navigation", async ({ page },
   await page.goto("/help-desk/helpers/42");
   const role = page.getByText("Organizer", { exact: true });
   await expect(role).toBeVisible();
+  // The helper's company opens its page, as on every other profile (H63).
+  await expect(page.locator('a[href="/companies/7"]')).toBeVisible();
   const backBox = await page.locator("[data-back-link]").boundingBox();
   const roleBox = await role.boundingBox();
   expect(Math.abs((backBox?.y ?? 0) - (roleBox?.y ?? 0))).toBeLessThan(10);

@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import { GithubLogoIcon } from "@phosphor-icons/react/dist/csr/GithubLogo";
 import { useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -11,6 +12,7 @@ import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
+import { ProjectAsideBlock } from "./project-aside-block";
 
 interface Status {
   configured: boolean;
@@ -30,7 +32,8 @@ export function GithubLink({
   locked = false,
 }: {
   projectId: number;
-  variant?: "plain";
+  /** `aside` matches the project page's side facts; `plain` is the open editor section. */
+  variant?: "plain" | "aside";
   /** A submitted project keeps its repository until it is withdrawn or returned. */
   locked?: boolean;
 }) {
@@ -75,8 +78,8 @@ export function GithubLink({
       window.location.assign(url);
     });
 
-  return (
-    <SectionCard title="GitHub" icon={GithubLogoIcon} variant={variant}>
+  const body = (
+    <>
       {(error ?? (repos.error ? apiErrorText(repos.error, t, t("couldNotLoadProject")) : null)) && (
         <ContextualError
           message={error ?? apiErrorText(repos.error, t, t("couldNotLoadProject"))}
@@ -85,12 +88,17 @@ export function GithubLink({
       {link ? (
         <div className="flex items-center justify-between gap-3">
           <a
-            className="min-w-0 truncate font-medium underline"
+            className="row-link group flex min-h-10 min-w-0 flex-1 items-center gap-2 py-2 font-medium"
             href={`https://github.com/${link.fullName}`}
             target="_blank"
             rel="noreferrer"
           >
-            {link.fullName}
+            <GithubLogoIcon aria-hidden="true" className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">{link.fullName}</span>
+            <ArrowSquareOutIcon
+              aria-hidden="true"
+              className="size-4 shrink-0 text-muted-foreground group-hover:text-foreground"
+            />
           </a>
           {!locked && (
             <Button
@@ -142,6 +150,13 @@ export function GithubLink({
           {t("githubLinkRepo")}
         </Button>
       )}
+    </>
+  );
+  return variant === "aside" ? (
+    <ProjectAsideBlock title="GitHub">{body}</ProjectAsideBlock>
+  ) : (
+    <SectionCard title="GitHub" icon={GithubLogoIcon} variant={variant}>
+      {body}
     </SectionCard>
   );
 }

@@ -209,10 +209,12 @@ describe("shared helper identity (H63)", () => {
     const renderProfile = (present: boolean) =>
       root.render(
         <PersonProfile
-          entry={entry({ helpTopics: [{ id: 1, name: "Angular" }] })}
+          entry={entry({
+            helpTopics: [{ id: 1, name: "Angular" }],
+            enterprises: [{ id: 7, name: "QA Corp", logoUrl: "/api/enterprises/7/logo" }],
+          })}
           context="Support team"
           visibleRole="Mentor"
-          company={{ name: "QA Corp", logoUrl: "/api/enterprises/7/logo" }}
           present={present}
         />,
       );
@@ -222,6 +224,8 @@ describe("shared helper identity (H63)", () => {
     expect(contextRow?.textContent).toBe("Support teamMentor");
     expect(contextRow?.className).toContain("justify-between");
     expect(container.querySelector('img[src$="/api/enterprises/7/logo"]')).not.toBeNull();
+    // The company opens its page, as everywhere else the profile is shown.
+    expect(container.querySelector('a[href="/companies/7"]')?.textContent).toContain("QA Corp");
     expect([...container.querySelectorAll("section > h2")].map((el) => el.textContent)).toEqual([
       "helpDeskCompany",
       "helpDeskKnowledge",

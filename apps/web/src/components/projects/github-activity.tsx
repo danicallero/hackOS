@@ -1,11 +1,12 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { SectionCard } from "@/components/common/section-card";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
+import { cn } from "@/lib/utils";
+import { ProjectAsideBlock } from "./project-aside-block";
 
 interface Person {
   login: string;
@@ -43,43 +44,44 @@ export function GithubActivity({ projectId }: { projectId: number }) {
   const data = useProjectGithubActivity(projectId);
   if (!data) return null;
   const { people = [], totals } = data;
+  const rows = people.length > 1 ? [...people, null] : people;
   return (
-    <SectionCard title="GitHub" variant="plain">
-      <table className="w-full text-sm">
-        <thead className="text-muted-foreground text-left">
-          <tr>
-            <th className="pb-2 font-normal" />
-            <th className="pb-2 text-right font-normal">{t("githubCommits")}</th>
-            <th className="pb-2 text-right font-normal">{t("githubPullRequests")}</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border/60">
-          {people.map((person) => (
-            <tr key={person.login}>
-              <td className="max-w-0 truncate py-2 pr-3 font-medium">
-                {person.name ?? person.login}
-              </td>
-              <td className="py-2 text-right tabular-nums">{person.commits}</td>
-              <td className="py-2 text-right tabular-nums">{person.pullRequests}</td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot className="border-t border-border font-medium">
-          <tr>
-            <td className="py-2 pr-3" />
-            <td className="py-2 text-right tabular-nums">{totals.commits}</td>
-            <td className="py-2 text-right tabular-nums">
-              {totals.pullRequests}
-              {totals.merged > 0 && (
-                <span className="text-muted-foreground font-normal">
-                  {" "}
-                  · {totals.merged} {t("githubMerged")}
-                </span>
+    <ProjectAsideBlock title="GitHub">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-4 text-sm">
+        <span />
+        <span className="pb-1 text-right type-meta text-muted-foreground">
+          {t("githubCommits")}
+        </span>
+        <span className="pb-1 text-right type-meta text-muted-foreground">
+          {t("githubPullRequests")}
+        </span>
+        {rows.map((person) => {
+          const row = person ?? totals;
+          return (
+            <div
+              key={person?.login ?? "total"}
+              className={cn(
+                "col-span-3 grid grid-cols-subgrid items-baseline border-t py-2",
+                person ? "border-border/60" : "border-border font-medium",
               )}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-    </SectionCard>
+            >
+              <span
+                className="min-w-0 truncate"
+                title={person ? (person.name ?? person.login) : undefined}
+              >
+                {person ? (person.name ?? person.login) : ""}
+              </span>
+              <span className="text-right tabular-nums">{row.commits}</span>
+              <span className="text-right tabular-nums">{row.pullRequests}</span>
+            </div>
+          );
+        })}
+      </div>
+      {totals.merged > 0 && (
+        <p className="text-right text-sm text-muted-foreground tabular-nums">
+          {totals.merged} {t("githubMerged")}
+        </p>
+      )}
+    </ProjectAsideBlock>
   );
 }

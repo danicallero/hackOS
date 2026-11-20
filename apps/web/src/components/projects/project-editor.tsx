@@ -655,7 +655,7 @@ export function ProjectEditor({
               !staff && project.isMember ? (
                 <GithubLink
                   projectId={project.id}
-                  variant="plain"
+                  variant="aside"
                   locked={status === "submitted"}
                 />
               ) : staff && can(CAPABILITIES.PROJECTS_READ) ? (
