@@ -14,7 +14,7 @@ import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { CLOCK_SKEW_TOLERANCE_MS } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
-import { queueStatusPresentation } from "@/lib/pane-header-items";
+import { QUEUE_STATUS_SYMBOL, queueStatusBadge } from "@/lib/pane-header-items";
 import { SCAN_LOG_ROUTES } from "@/lib/scan-log-navigation";
 import { listScannerActivities, listScannerPeople } from "@/lib/scanner-db";
 import { scannerQueueHealth, scannerTransactionState } from "@/lib/scanner-state";
@@ -677,7 +677,7 @@ export function ScannerQueueStatus({
   }, [open, labelsAttempt]);
   const hasAttention = health.attention > 0;
   const label = hasAttention ? t("scannerStateAttention") : t("scannerStateReady");
-  const statusSymbol = queueStatusPresentation(hasAttention);
+  const badge = queueStatusBadge(health);
   const trigger = (
     <PressableFeedback
       feedback="opacity"
@@ -693,12 +693,43 @@ export function ScannerQueueStatus({
         paddingHorizontal: 14,
       }}
     >
-      <SymbolView
-        accessible={false}
-        name={statusSymbol.icon}
-        size={16}
-        tintColor={statusSymbol.tint ?? colors.label}
-      />
+      <View>
+        <SymbolView
+          accessible={false}
+          name={QUEUE_STATUS_SYMBOL}
+          size={16}
+          tintColor={colors.label}
+        />
+        {badge ? (
+          <View
+            testID="scanner-queue-badge"
+            style={{
+              alignItems: "center",
+              backgroundColor: badge.style.backgroundColor,
+              borderRadius: radius.full,
+              height: 16,
+              justifyContent: "center",
+              minWidth: 16,
+              paddingHorizontal: 4,
+              position: "absolute",
+              right: -10,
+              top: -8,
+            }}
+          >
+            <Text
+              style={{
+                ...type.caption,
+                color: badge.style.color,
+                lineHeight: 16,
+                fontVariant: ["tabular-nums"],
+                fontWeight: "700",
+              }}
+            >
+              {badge.value}
+            </Text>
+          </View>
+        ) : null}
+      </View>
       <Text style={{ ...type.compact, color: colors.label, fontWeight: "700" }}>{label}</Text>
     </PressableFeedback>
   );
@@ -712,10 +743,13 @@ export function ScannerQueueStatus({
           {toolbarAccessory ? <Stack.Toolbar.Spacer width={8} /> : null}
           <Stack.Toolbar.Button
             accessibilityLabel={label}
-            icon={statusSymbol.icon}
+            icon={QUEUE_STATUS_SYMBOL}
             onPress={() => setOpen(true)}
-            tintColor={statusSymbol.tint}
-          />
+          >
+            {badge ? (
+              <Stack.Toolbar.Badge style={badge.style}>{badge.value}</Stack.Toolbar.Badge>
+            ) : null}
+          </Stack.Toolbar.Button>
         </Stack.Toolbar>
       ) : (
         <GlassView

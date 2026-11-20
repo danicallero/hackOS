@@ -4,7 +4,8 @@ import { type HapticIntent, haptic } from "./haptics";
  * What a scan did, as the operator should feel it while looking at the camera
  * (#1170). Success, warning and error map onto the three notification haptics:
  * - `accepted`: the server (or local roster) confirmed the scan.
- * - `queued`: stored offline, not yet confirmed — a light tap, no verdict.
+ * - `queued`: stored offline, not yet confirmed — a medium tap, no verdict
+ *   (a light one was too faint to feel while holding the phone).
  * - `duplicate`: already registered, needs a decision — warning.
  * - `rejected`: the server refused the scan (business error) — error.
  * - `unknown`: unrecognised or revoked code — error.
@@ -13,7 +14,7 @@ export type ScanOutcome = "accepted" | "queued" | "duplicate" | "rejected" | "un
 
 const SCAN_OUTCOME_INTENT: Record<ScanOutcome, HapticIntent> = {
   accepted: "success",
-  queued: "light",
+  queued: "medium",
   duplicate: "warning",
   rejected: "error",
   unknown: "error",

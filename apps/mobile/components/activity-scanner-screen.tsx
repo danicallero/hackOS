@@ -10,6 +10,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   useWindowDimensions,
   View,
@@ -459,7 +460,7 @@ export function ActivityScannerScreen({
       unstable_headerRightItems: () => [
         {
           ...queueStatusBarItem({
-            hasAttention: queueHealth.attention > 0,
+            health: queueHealth,
             label: statusLabel,
             onPress: () => setStatusOpen(true),
             showLabel: statusShowsLabel(paneWidth ?? 0, isAccessibilityTextSize(fontScale)),
@@ -469,7 +470,7 @@ export function ActivityScannerScreen({
         },
       ],
     }),
-    [activityName, fontScale, paneWidth, queueHealth.attention, statusLabel, syncState.syncing],
+    [activityName, fontScale, paneWidth, queueHealth, statusLabel, syncState.syncing],
   );
   const queueStatus = (
     <ScannerQueueStatus
@@ -863,6 +864,42 @@ function ActivityResultPanel({
   const repeatPending = result.state === "repeat_pending";
   const fullName =
     [result.person.name, result.person.surname].filter(Boolean).join(" ") || result.person.email;
+  // One tone per outcome, shared by the avatar badge and the status strip.
+  const tone = repeatPending
+    ? {
+        symbol: "clock.badge.exclamationmark" as const,
+        color: colors.warning,
+        surface: colors.warningSurface,
+        onSurface: colors.onWarningSurface,
+      }
+    : result.state === "confirmed"
+      ? {
+          symbol: "checkmark.circle.fill" as const,
+          color: colors.success,
+          surface: colors.successSurface,
+          onSurface: colors.onSuccessSurface,
+        }
+      : result.state === "attention"
+        ? {
+            symbol: "exclamationmark.triangle.fill" as const,
+            color: colors.destructive,
+            surface: colors.destructiveSurface,
+            onSurface: colors.onDestructiveSurface,
+          }
+        : {
+            symbol: "internaldrive.fill" as const,
+            color: colors.warning,
+            surface: colors.warningSurface,
+            onSurface: colors.onWarningSurface,
+          };
+  const statusLabel = repeatPending
+    ? t("scannerRepeatFound")
+    : result.state === "confirmed"
+      ? t("scannerStateConfirmed")
+      : result.state === "attention"
+        ? t("scannerStateAttention")
+        : t("scannerStateSaved");
+  const countLabel = meal ? t("scannerServed") : t("scannerPasses");
   const hasMealDetails =
     meal &&
     (result.person.intolerances.length > 0 ||
@@ -910,121 +947,131 @@ function ActivityResultPanel({
             style={{ flexGrow: 0, flexShrink: 1, minHeight: 0 }}
             contentContainerStyle={{ gap: 16, padding: 20 }}
           >
-            <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 16 }}>
-              <View style={{ flex: 1, gap: 8 }}>
-                <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
-                  <SymbolView
-                    accessible={false}
-                    name={
-                      repeatPending
-                        ? "clock.badge.exclamationmark"
-                        : result.state === "confirmed"
-                          ? "checkmark.circle.fill"
-                          : result.state === "attention"
-                            ? "exclamationmark.triangle.fill"
-                            : "internaldrive.fill"
-                    }
-                    tintColor={
-                      repeatPending || result.state === "saved"
-                        ? colors.warning
-                        : result.state === "attention"
-                          ? colors.destructive
-                          : colors.success
-                    }
-                    size={18}
-                  />
-                  <Text
-                    accessibilityLiveRegion="polite"
-                    selectable
-                    style={{
-                      ...type.footnote,
-                      flexShrink: 1,
-                      color: colors.label,
-
-                      fontWeight: "600",
-                    }}
-                  >
-                    {repeatPending
-                      ? t("scannerRepeatFound")
-                      : result.state === "confirmed"
-                        ? t("scannerStateConfirmed")
-                        : result.state === "attention"
-                          ? t("scannerStateAttention")
-                          : t("scannerStateSaved")}
-                  </Text>
-                </View>
-                {/* Staff match the photo to the person in front of them (#934). */}
-                <View style={{ alignItems: "center", flexDirection: "row", gap: 12 }}>
-                  <UserAvatar
-                    testID="scan-result-avatar"
-                    userId={result.person.userId}
-                    name={result.person.name ?? ""}
-                    surname={result.person.surname}
-                    image={result.person.photoUrl}
-                    size={48}
-                  />
-                  <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
-                    <Text
-                      selectable
-                      style={{ ...type.title2, color: colors.label, fontWeight: "700" }}
-                    >
-                      {fullName}
-                    </Text>
-                    <Text selectable style={{ ...type.compact, color: colors.secondaryLabel }}>
-                      {result.person.email || t("accountNotSet")}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-              <View
+            {/* Staff match the photo to the person in front of them (#934). */}
+            <View style={{ alignItems: "center", gap: 4 }}>
+              <Text
+                accessibilityLiveRegion="polite"
+                selectable
                 style={{
-                  alignItems: "flex-end",
-                  minWidth: 44,
-                  justifyContent: "center",
+                  ...type.footnote,
+                  color: tone.color,
+                  fontWeight: "600",
+                  marginBottom: 12,
+                  textAlign: "center",
                 }}
               >
-                <Text
-                  accessibilityLabel={`${result.count} ${meal ? t("scannerServed") : t("scannerPasses")}`}
-                  selectable
+                {statusLabel}
+              </Text>
+              <View style={{ marginBottom: 8 }}>
+                <UserAvatar
+                  testID="scan-result-avatar"
+                  userId={result.person.userId}
+                  name={result.person.name ?? ""}
+                  surname={result.person.surname}
+                  image={result.person.photoUrl}
+                  size={80}
+                />
+                <View
                   style={{
-                    color: repeatPending
-                      ? colors.warning
-                      : result.state === "confirmed"
-                        ? colors.success
-                        : colors.label,
-                    fontSize: type.largeTitle.fontSize,
-                    fontVariant: ["tabular-nums"],
-                    fontWeight: "600",
+                    alignItems: "center",
+                    backgroundColor: colors.surface,
+                    borderRadius: radius.full,
+                    bottom: -2,
+                    height: 30,
+                    justifyContent: "center",
+                    position: "absolute",
+                    right: -2,
+                    width: 30,
                   }}
                 >
-                  {result.count}
-                </Text>
+                  <SymbolView
+                    accessible={false}
+                    name={tone.symbol}
+                    tintColor={tone.color}
+                    size={24}
+                  />
+                </View>
               </View>
+              <Text
+                selectable
+                numberOfLines={2}
+                style={{
+                  ...type.title2,
+                  color: colors.label,
+                  fontWeight: "700",
+                  textAlign: "center",
+                }}
+              >
+                {fullName}
+              </Text>
+              <Text
+                selectable
+                numberOfLines={1}
+                style={{ ...type.compact, color: colors.secondaryLabel, textAlign: "center" }}
+              >
+                {result.person.email || t("accountNotSet")}
+              </Text>
+            </View>
+
+            <View
+              accessible
+              accessibilityLabel={`${result.count} ${countLabel}`}
+              style={{
+                alignItems: "center",
+                borderTopColor: colors.separator,
+                borderTopWidth: StyleSheet.hairlineWidth,
+                paddingTop: 14,
+              }}
+            >
+              <Text
+                style={{
+                  ...type.largeTitle,
+                  color: tone.color,
+                  fontVariant: ["tabular-nums"],
+                  fontWeight: "700",
+                }}
+              >
+                {result.count}
+              </Text>
+              <Text style={{ ...type.footnote, color: colors.secondaryLabel }}>{countLabel}</Text>
             </View>
 
             {hasMealDetails ? (
               <View
                 style={{
-                  borderTopColor: colors.separator,
-                  borderTopWidth: 1,
+                  backgroundColor: colors.warningSurface,
+                  borderCurve: "continuous",
+                  borderRadius: radius.control,
                   gap: 12,
-                  paddingTop: 16,
+                  padding: 14,
                 }}
               >
-                <Text selectable style={{ ...type.body, color: colors.label, fontWeight: "600" }}>
-                  {t("scannerDietaryGroup")}
-                </Text>
+                <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
+                  <SymbolView
+                    accessible={false}
+                    name="exclamationmark.triangle.fill"
+                    tintColor={colors.warning}
+                    size={18}
+                  />
+                  <Text
+                    selectable
+                    accessibilityRole="header"
+                    style={{ ...type.callout, color: colors.onWarningSurface, fontWeight: "600" }}
+                  >
+                    {t("scannerDietaryGroup")}
+                  </Text>
+                </View>
                 {result.person.intolerances.length > 0 ? (
                   <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                     {result.person.intolerances.map((item) => (
                       <View
                         key={item.id}
                         style={{
-                          backgroundColor: colors.warningSurface,
+                          backgroundColor: colors.surface,
                           borderCurve: "continuous",
-                          borderRadius: radius.control,
+                          borderRadius: radius.full,
                           paddingHorizontal: 12,
-                          paddingVertical: 8,
+                          paddingVertical: 6,
                         }}
                       >
                         <Text
@@ -1038,34 +1085,41 @@ function ActivityResultPanel({
                   </View>
                 ) : null}
                 {result.person.foodIntoleranceNotes ? (
-                  <View style={{ gap: 3 }}>
+                  <View style={{ gap: 2 }}>
                     <Text
                       selectable
-                      style={{ ...type.caption, color: colors.secondaryLabel, fontWeight: "700" }}
+                      style={{
+                        ...type.footnote,
+                        color: colors.onWarningSurface,
+                        fontWeight: "600",
+                      }}
                     >
                       {t("personFoodNotes")}
                     </Text>
-                    <Text selectable style={{ color: colors.label, lineHeight: 20 }}>
+                    <Text selectable style={{ ...type.subhead, color: colors.label }}>
                       {result.person.foodIntoleranceNotes}
                     </Text>
                   </View>
                 ) : null}
                 {result.person.notes ? (
-                  <View style={{ gap: 3 }}>
+                  <View style={{ gap: 2 }}>
                     <Text
                       selectable
-                      style={{ ...type.caption, color: colors.secondaryLabel, fontWeight: "700" }}
+                      style={{
+                        ...type.footnote,
+                        color: colors.onWarningSurface,
+                        fontWeight: "600",
+                      }}
                     >
                       {t("personNotes")}
                     </Text>
-                    <Text selectable style={{ color: colors.label, lineHeight: 20 }}>
+                    <Text selectable style={{ ...type.subhead, color: colors.label }}>
                       {result.person.notes}
                     </Text>
                   </View>
                 ) : null}
               </View>
             ) : null}
-
             {result.error ? (
               <Text
                 accessibilityLiveRegion="assertive"

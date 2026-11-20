@@ -296,7 +296,8 @@ export function GeneralScannerScreen() {
 
   const [queueOpen, setQueueOpen] = useState(false);
   const [detailTitle, setDetailTitle] = useState("");
-  const hasAttention = scannerQueueHealth(sync.queue).attention > 0;
+  const queueHealth = scannerQueueHealth(sync.queue);
+  const hasAttention = queueHealth.attention > 0;
   const roleFilter = useScannerRoleFilterMenu({
     options: roleOptions,
     groups,
@@ -390,7 +391,7 @@ export function GeneralScannerScreen() {
             rootHeaderRight={[
               roleFilter.barItem,
               queueStatusBarItem({
-                hasAttention,
+                health: queueHealth,
                 label: hasAttention ? t("scannerStateAttention") : t("scannerStateReady"),
                 onPress: () => setQueueOpen(true),
                 showLabel: statusShowsLabel(listWidth, isAccessibilityTextSize(fontScale)),

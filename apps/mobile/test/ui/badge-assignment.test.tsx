@@ -265,7 +265,7 @@ it("shows the person's photo beside their name (#934)", async () => {
   await screen.findByText("badge@example.test");
   expect(
     JSON.stringify(
-      screen.getByTestId("person-avatar-photo", { includeHiddenElements: true }).props.source,
+      screen.getByTestId("person-avatar-image", { includeHiddenElements: true }).props.source,
     ),
   ).toContain("/api/users/21/photo?v=badge");
 });

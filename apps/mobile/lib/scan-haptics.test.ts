@@ -20,7 +20,7 @@ describe("scanner outcome haptics (#1170)", () => {
 
   it.each([
     ["accepted", "success"],
-    ["queued", "light"],
+    ["queued", "medium"],
     ["duplicate", "warning"],
     ["rejected", "error"],
     ["unknown", "error"],
