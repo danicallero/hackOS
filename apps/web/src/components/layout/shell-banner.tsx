@@ -7,7 +7,8 @@ import { cn } from "@/lib/utils";
  * full-bleed strip glued to the viewport edge. The action sits at the trailing
  * edge; on narrow screens the notice is one compact row that leaves room for the
  * fixed sidebar control. While it is shown, `PageHeader` stops reserving that
- * room itself (`data-shell-notice`).
+ * room itself (`data-shell-notice`). It stacks above a hero's tint, which
+ * runs up behind it to the window top.
  */
 export function ShellBanner({
   tone,
@@ -23,7 +24,7 @@ export function ShellBanner({
   children: React.ReactNode;
 }) {
   return (
-    <div data-shell-notice className="px-4 pt-2 sm:px-6 max-md:pl-14">
+    <div data-shell-notice className="relative z-10 px-4 pt-2 sm:px-6 max-md:pl-14">
       <div
         role="status"
         className={cn(

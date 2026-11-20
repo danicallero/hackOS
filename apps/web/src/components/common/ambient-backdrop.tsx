@@ -42,7 +42,19 @@ export function AmbientBackdrop({ urls, active, activeDark, crossOrigin }: Ambie
     const observer = new ResizeObserver(place);
     observer.observe(hero);
     observer.observe(document.documentElement);
-    return () => observer.disconnect();
+    // Shell notices (verify email, onboarding) mount above the page after
+    // their own fetch and push the hero down without resizing it; re-place so
+    // the backdrop still reaches the window top behind them (H48).
+    const shell = hero.closest("[data-app-main]")?.parentElement;
+    const notices = shell ? new MutationObserver(place) : null;
+    if (shell) {
+      notices?.observe(shell, { childList: true });
+      for (const notice of shell.querySelectorAll("[data-shell-notice]")) observer.observe(notice);
+    }
+    return () => {
+      observer.disconnect();
+      notices?.disconnect();
+    };
   }, []);
   return (
     <div
