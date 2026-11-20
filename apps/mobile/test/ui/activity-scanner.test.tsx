@@ -136,7 +136,9 @@ jest.mock("@/lib/scanner-db", () => ({
 }));
 const mockRunSync = jest.fn().mockResolvedValue(undefined);
 const mockRefreshLocal = jest.fn().mockResolvedValue(undefined);
-let mockQueue = [{ id: "scan-1", status: "acknowledged" }];
+let mockQueue: Array<{ id: string; status: string } & Record<string, unknown>> = [
+  { id: "scan-1", status: "acknowledged" },
+];
 jest.mock("@/lib/use-scanner", () => ({
   useScannerSync: () => ({
     queue: mockQueue,
@@ -282,6 +284,28 @@ it("keeps an offline meal scan saved and asks before another serving", async () 
       11,
     ),
   );
+});
+
+it("flags an offline repeat that is only in this device's queue (H26)", async () => {
+  jest.mocked(enqueueLocalScan).mockClear();
+  // The local roster could not tie the first scan to the person (count 0); the queue can.
+  mockQueue = [
+    {
+      id: "queued-1",
+      status: "pending",
+      kind: "activity",
+      payload: {
+        kind: "activity",
+        activityId: 7,
+        badgeId: "BADGE-1",
+        allowRepeat: false,
+        scannedAt: "2026-01-01T00:00:00.000Z",
+      },
+    },
+  ];
+  await renderMobile(<ActivityScannerScreen />);
+  expect(await screen.findByRole("button", { name: "Add another" })).toBeTruthy();
+  expect(enqueueLocalScan).not.toHaveBeenCalled();
 });
 
 it("accepts a ticket QR and preserves it in the offline activity payload", async () => {

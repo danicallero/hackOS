@@ -2075,6 +2075,12 @@ queue before a sync is attempted, and are replayed with that persisted scan ID
 when the app next regains a server connection — including after a cold restart.
 Scans at meals and registrable activities are attendance events, so every
 locally queued repeat is accepted on replay without a confirmation conflict.
+Before queuing, a scan asks Add another / Do not add whenever the person already
+has a scan of this activity: the server count plus this device's unsynced queue
+entries for them (`pendingActivityScans` in `lib/scanner-model.ts`, matched by
+scanned code, badge, ticket or expected owner), or the local roster count,
+whichever is higher. The queue term covers offline repeats the roster could not
+tie to the person, such as a badge accredited on this device and not yet synced.
 A scan rejected as "timestamp must be in the past" (device clock running
 ahead of the server's) is corrected once by the measured clock skew — read
 from the API's `Date` response header in `lib/api.ts` — and retried before

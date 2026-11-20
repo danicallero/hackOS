@@ -50,7 +50,7 @@ import {
   listScannerActivities,
   listScannerPeople,
 } from "@/lib/scanner-db";
-import { pendingBadgeClaim } from "@/lib/scanner-model";
+import { pendingActivityScans, pendingBadgeClaim } from "@/lib/scanner-model";
 import { scannerQueueHealth } from "@/lib/scanner-state";
 import { resolveActivityText, type ScannerActivity, type ScannerPerson } from "@/lib/scanner-types";
 import { fixedScrollHeaderOptions, screenTitleElement } from "@/lib/screen-header-options";
@@ -400,7 +400,13 @@ export function ActivityScannerScreen({
           : localState;
         setError(null);
         setRegistering(false);
-        const count = Math.max(state.count, localState.count);
+        // H26: the server count misses scans still queued here, and the local roster misses
+        // queued scans it could not tie to this person; either one makes this a repeat.
+        const queued = pendingActivityScans(syncState.queue, activityId, found.person, badgeId);
+        const count = Math.max(
+          localState.count,
+          syncState.serverSnapshot ? state.count + queued : queued,
+        );
         if (count > 0) {
           void scanOutcomeHaptic("duplicate");
           setResult({
