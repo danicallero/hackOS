@@ -66,7 +66,7 @@ export function ProjectCarousel({
           <li
             key={file.objectKey}
             className={cn(
-              "relative w-full shrink-0 snap-center",
+              "relative w-full shrink-0 snap-center overflow-hidden",
               fit === "contain" ? !ratio && "aspect-video" : "aspect-[4/3]",
             )}
             style={fit === "contain" && ratio ? { aspectRatio: ratio } : undefined}
@@ -86,7 +86,7 @@ export function ProjectCarousel({
             <button
               type="button"
               onClick={() => setOpen(true)}
-              className="relative size-full cursor-zoom-in"
+              className="relative block size-full cursor-zoom-in"
               aria-label={file.fileName}
             >
               {/* biome-ignore lint/performance/noImgElement: authenticated project assets. */}
@@ -102,7 +102,10 @@ export function ProjectCarousel({
                       }
                     : undefined
                 }
-                className={cn("size-full", fit === "contain" ? "object-contain" : "object-cover")}
+                className={cn(
+                  "block size-full",
+                  fit === "contain" ? "object-contain" : "object-cover",
+                )}
               />
             </button>
           </li>
