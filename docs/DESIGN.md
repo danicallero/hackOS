@@ -1064,12 +1064,17 @@ Tables and lists:
   one offers "Clear filters".
 - No two columns in one table share a header: a repeated header makes sorting
   do two different things depending on which one is clicked (#299).
+- A sort heading click sorts by that column alone (ascending → descending →
+  off); Shift+click adds it as the next tiebreaker (or flips/removes it),
+  keeping the other keys. With more than one key each sorted heading shows its
+  priority number, and once any sort is active the headings carry a tooltip
+  explaining Shift+click. `aria-sort` stays on the primary key's header.
 - A table adapts to its own width, not the viewport: `DataTable` switches to
   `renderMobileRow` rows when its container is narrower than 48 rem (the
   sidebar makes a mid-width window narrower than its breakpoint suggests).
   Those rows have no headers to click, so a table with sortable columns shows
   a field picker plus an ascending/descending toggle above them, sharing the
-  table's persisted sort.
+  table's persisted sort (the picker edits the primary key).
   A fixed-layout table keeps a minimum width (14 rem per unsized column plus
   the sized ones) and scrolls rather than letting a flexible column collapse
   under its neighbour. Size a status column for its longest translated label.

@@ -47,6 +47,8 @@ const actionStates = [
 const sampleRows = [
   { id: "ada", name: "Ada Lovelace", email: "ada@example.com", confirmed: true },
   { id: "grace", name: "Grace Hopper", email: "grace@example.com", confirmed: false },
+  { id: "katherine", name: "Katherine Johnson", email: "katherine@example.com", confirmed: true },
+  { id: "margaret", name: "Margaret Hamilton", email: "margaret@example.com", confirmed: false },
 ];
 
 /** Public component preview using synthetic data; no operational mutations. */
@@ -196,6 +198,7 @@ export default function DesignSystemPage() {
               {
                 id: "status",
                 header: t("designSystemStates"),
+                sortValue: (row) => Number(row.confirmed),
                 cell: (row) => (
                   <StatusBadge tone={row.confirmed ? "success" : "neutral"}>
                     {t(row.confirmed ? "confirmed" : "waiting")}

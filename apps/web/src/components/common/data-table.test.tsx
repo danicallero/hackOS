@@ -2,7 +2,7 @@ import userEvent from "@testing-library/user-event";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type Column, DataTable } from "./data-table";
+import { type Column, DataTable, nextSort, sortRows } from "./data-table";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -48,6 +48,8 @@ vi.mock("@/lib/i18n", () => ({
         defaultOrder: "Default order",
         sortAscending: "Ascending",
         sortDescending: "Descending",
+        sortByLevel: "Sort by {column} (key {level}, {direction})",
+        sortAddHint: "Shift + click: add sort key",
       };
       return Object.entries(values).reduce(
         (text, [name, value]) => text.replace(`{${name}}`, String(value)),
@@ -535,5 +537,75 @@ describe("DataTable accessibility and interactions", () => {
     );
     act(() => retryButton?.click());
     expect(retry).toHaveBeenCalledOnce();
+  });
+
+  it("sorts by a tiebreaker added with Shift+click", () => {
+    interface Graded {
+      id: string;
+      grade: number;
+      published: string;
+    }
+    const graded: Graded[] = [
+      { id: "late-8", grade: 8, published: "2026-11-03" },
+      { id: "early-6", grade: 6, published: "2026-11-01" },
+      { id: "early-8", grade: 8, published: "2026-11-01" },
+      { id: "mid-8", grade: 8, published: "2026-11-02" },
+    ];
+    const gradedColumns: Column<Graded>[] = [
+      { id: "grade", header: "Grade", cell: (r) => r.grade, sortValue: (r) => r.grade },
+      {
+        id: "published",
+        header: "Published",
+        cell: (r) => r.published,
+        sortValue: (r) => r.published,
+      },
+    ];
+    render(<DataTable columns={gradedColumns} data={graded} getRowId={(r) => r.id} />);
+    const column = (index: number) =>
+      [...container.querySelectorAll("tbody tr")].map(
+        (tr) => tr.querySelectorAll("td")[index]?.textContent,
+      );
+    const button = (name: string) =>
+      [...container.querySelectorAll<HTMLButtonElement>("th button")].find((b) =>
+        b.textContent?.startsWith(name),
+      ) as HTMLButtonElement;
+    const grade = button("Grade");
+    act(() => grade.click());
+    act(() => grade.click());
+    act(() =>
+      button("Published").dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true })),
+    );
+    expect(column(0)).toEqual(["8", "8", "8", "6"]);
+    expect(column(1)).toEqual(["2026-11-01", "2026-11-02", "2026-11-03", "2026-11-01"]);
+    expect(button("Grade").getAttribute("aria-label")).toBe("Sort by Grade (key 1, Descending)");
+    expect(button("Published").getAttribute("aria-label")).toBe(
+      "Sort by Published (key 2, Ascending)",
+    );
+    // The hint tooltip must not remount the header button (keeps keyboard focus).
+    expect(button("Grade")).toBe(grade);
+    const headers = container.querySelectorAll("th");
+    expect(headers[0]?.getAttribute("aria-sort")).toBe("descending");
+    expect(headers[1]?.getAttribute("aria-sort")).toBe("none");
+    // A plain click goes back to sorting by that column alone.
+    act(() => button("Published").click());
+    expect(button("Published").getAttribute("aria-label")).toBe("Sort by Published");
+  });
+
+  it("cycles additive sort keys without disturbing the others", () => {
+    const base = [{ id: "a", dir: "desc" as const }];
+    const added = nextSort(base, "b", true);
+    expect(added).toEqual([
+      { id: "a", dir: "desc" },
+      { id: "b", dir: "asc" },
+    ]);
+    const flipped = nextSort(added, "b", true);
+    expect(flipped[1]).toEqual({ id: "b", dir: "desc" });
+    expect(nextSort(flipped, "b", true)).toEqual(base);
+    expect(nextSort(flipped, "a", false)).toEqual([{ id: "a", dir: "asc" }]);
+    expect(nextSort(base, "a", false)).toEqual([]);
+    expect(sortRows([{ v: 1 }, { v: 2 }], [{ id: "missing", dir: "asc" }], [])).toEqual([
+      { v: 1 },
+      { v: 2 },
+    ]);
   });
 });
