@@ -106,7 +106,7 @@ export function CompanyView({ company, context }: { company: Company; context: R
                 href={company.website}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="button-interaction type-meta inline-flex max-w-full items-center gap-1 rounded-sm underline-offset-4 hover:underline"
+                className="button-interaction type-meta -mx-2 -my-1 inline-flex max-w-full items-center gap-1 rounded-md px-2 py-1"
               >
                 <span className="truncate">{socialLinkText(company.website)}</span>
                 <ArrowSquareOutIcon aria-hidden="true" className="size-4 shrink-0" />

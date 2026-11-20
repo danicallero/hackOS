@@ -230,6 +230,8 @@
   "tableResultCount": "{count} results",
   "noFilteredResults": "No results",
   "sortBy": "Sort by {column}",
+  "sortByLevel": "Sort by {column} (key {level}, {direction})",
+  "sortAddHint": "Shift + click: add sort key",
   "sortOrder": "Sort",
   "defaultOrder": "Default order",
   "sortAscending": "Ascending",
