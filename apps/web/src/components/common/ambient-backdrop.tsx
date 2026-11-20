@@ -65,29 +65,33 @@ export function AmbientBackdrop({ urls, active, activeDark, crossOrigin }: Ambie
       style={{ maskImage: MASK, WebkitMaskImage: MASK }}
     >
       {/* One blur over the stack: the cross-fade blends already-blurred colours.
-          Its own compositing layer: otherwise Safari re-rasterises the blur
-          only inside a repainted rect above it (a hovered back link), leaving
-          a lasting band across the hero row (H48). */}
-      <div className="absolute inset-0 scale-[1.4] blur-[72px] will-change-transform">
-        {urls.map((url) => {
-          const dark = url === (activeDark ?? active);
-          return (
-            // biome-ignore lint/performance/noImgElement: the same request the page's own image makes.
-            <img
-              key={url}
-              src={url}
-              alt=""
-              crossOrigin={crossOrigin}
-              data-active={url === active ? "true" : undefined}
-              data-active-dark={dark ? "true" : undefined}
-              className={cn(
-                "absolute inset-0 size-full object-cover transition-opacity duration-700 ease-out motion-reduce:transition-none",
-                url === active ? "opacity-100" : "opacity-0",
-                dark ? "dark:opacity-100" : "dark:opacity-0",
-              )}
-            />
-          );
-        })}
+          It runs on a quarter-size copy scaled up 4x (18px there is 72px on
+          screen): a window-sized blur is split into tiles by Firefox, showing
+          vertical seams, and Safari re-rasterised it only inside a repainted
+          rect (a hovered back link), leaving a band. The small layer is its
+          own compositing layer, rasterised once (H48). */}
+      <div className="absolute top-0 left-0 size-1/4 origin-top-left scale-400 will-change-transform">
+        <div className="absolute inset-0 scale-[1.4] blur-[18px]">
+          {urls.map((url) => {
+            const dark = url === (activeDark ?? active);
+            return (
+              // biome-ignore lint/performance/noImgElement: the same request the page's own image makes.
+              <img
+                key={url}
+                src={url}
+                alt=""
+                crossOrigin={crossOrigin}
+                data-active={url === active ? "true" : undefined}
+                data-active-dark={dark ? "true" : undefined}
+                className={cn(
+                  "absolute inset-0 size-full object-cover transition-opacity duration-700 ease-out motion-reduce:transition-none",
+                  url === active ? "opacity-100" : "opacity-0",
+                  dark ? "dark:opacity-100" : "dark:opacity-0",
+                )}
+              />
+            );
+          })}
+        </div>
       </div>
       <div className="absolute inset-0 bg-background/65 dark:bg-background/55" />
     </div>

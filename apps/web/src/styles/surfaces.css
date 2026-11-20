@@ -81,6 +81,15 @@ body:has([data-hero-bleed]) [data-slot="sidebar-inner"] {
   --color-muted-foreground: var(--foreground);
 }
 
+/* Hero links (back, website) hover with a foreground tint like `row-link`:
+   the opaque quiet-button fill reads as a grey slab over a tinted or image
+   backdrop (H48). */
+@media (hover: hover) and (pointer: fine) {
+  [data-hero-content] .button-interaction:hover {
+    background-color: color-mix(in srgb, var(--foreground) 10%, transparent);
+  }
+}
+
 /* On phones the back link shares the row with the floating sidebar button. */
 [data-hero-bleed] [data-back-link] {
   min-height: 2.5rem;
