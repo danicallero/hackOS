@@ -230,6 +230,8 @@
   "tableResultCount": "{count} resultados",
   "noFilteredResults": "Non hai resultados",
   "sortBy": "Ordenar por {column}",
+  "sortByLevel": "Ordenar por {column} (criterio {level}, {direction})",
+  "sortAddHint": "Maiús. + clic: engadir criterio",
   "sortOrder": "Ordenar",
   "defaultOrder": "Orde predeterminada",
   "sortAscending": "Ascendente",

@@ -33,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { useLocale } from "@/lib/i18n";
@@ -40,6 +41,51 @@ import { normalizeSearchText } from "@/lib/search-text";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_SORT = "__default";
+
+export interface SortKey {
+  id: string;
+  dir: "asc" | "desc";
+}
+
+/**
+ * Next sort after activating a column header. A plain click sorts by that
+ * column alone (asc → desc → off); Shift+click adds it as a further key, or
+ * cycles/removes it while keeping the other keys, so "best grade first, then
+ * earliest published" is two keys applied in order.
+ */
+export function nextSort(sort: readonly SortKey[], id: string, additive: boolean): SortKey[] {
+  const existing = sort.find((key) => key.id === id);
+  if (!additive) {
+    if (sort.length !== 1 || !existing) return [{ id, dir: "asc" }];
+    return existing.dir === "asc" ? [{ id, dir: "desc" }] : [];
+  }
+  if (!existing) return [...sort, { id, dir: "asc" }];
+  return existing.dir === "asc"
+    ? sort.map((key) => (key.id === id ? { id, dir: "desc" } : key))
+    : sort.filter((key) => key.id !== id);
+}
+
+/** Orders rows by each key in turn; ties on every key keep their incoming order. */
+export function sortRows<T>(
+  rows: readonly T[],
+  sort: readonly SortKey[],
+  columns: readonly Pick<Column<T>, "id" | "sortValue">[],
+): T[] {
+  const keys = sort.flatMap((key) => {
+    const value = columns.find((col) => col.id === key.id)?.sortValue;
+    return value ? [{ value, dir: key.dir === "asc" ? 1 : -1 }] : [];
+  });
+  if (keys.length === 0) return [...rows];
+  return [...rows].sort((a, b) => {
+    for (const { value, dir } of keys) {
+      const av = value(a) ?? "";
+      const bv = value(b) ?? "";
+      if (av < bv) return -dir;
+      if (av > bv) return dir;
+    }
+    return 0;
+  });
+}
 
 export interface Column<T> {
   id: string;
@@ -279,9 +325,9 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
   const { t } = useLocale();
   const [query, setQuery] = usePersistedState(stateKey ? `${stateKey}:query` : null, "");
-  const [sort, setSort] = usePersistedState<{ id: string; dir: "asc" | "desc" } | null>(
-    stateKey ? `${stateKey}:sort` : null,
-    null,
+  const [storedSort, setSort] = usePersistedState<SortKey[]>(
+    stateKey ? `${stateKey}:sorts` : null,
+    [],
   );
   const [preferredPageSize, setPreferredPageSize] = usePersistedState(
     stateKey ? `${stateKey}:pageSize` : null,
@@ -310,17 +356,19 @@ export function DataTable<T>({
     return data.filter((row) => normalizeSearchText(searchable(row)).includes(q));
   }, [data, searchable, query]);
 
-  const sorted = useMemo(() => {
-    if (!sort) return filtered;
-    const col = columns.find((c) => c.id === sort.id);
-    if (!col?.sortValue) return filtered;
-    const dir = sort.dir === "asc" ? 1 : -1;
-    return [...filtered].sort((a, b) => {
-      const av = col.sortValue?.(a) ?? "";
-      const bv = col.sortValue?.(b) ?? "";
-      return av < bv ? -dir : av > bv ? dir : 0;
-    });
-  }, [filtered, sort, columns]);
+  // Keys for columns that are hidden or no longer sortable drop out.
+  const sort = useMemo(
+    () =>
+      (Array.isArray(storedSort) ? storedSort : []).filter((key) =>
+        columns.some((col) => col.id === key.id && col.sortValue),
+      ),
+    [storedSort, columns],
+  );
+
+  const sorted = useMemo(
+    () => (sort.length ? sortRows(filtered, sort, columns) : filtered),
+    [filtered, sort, columns],
+  );
 
   const reportedRows = useRef<T[] | null>(null);
   // Inline column definitions can recompute the same sorted sequence after a
@@ -342,14 +390,14 @@ export function DataTable<T>({
   const rows = pageSize ? sorted.slice(current * pageSize, current * pageSize + pageSize) : sorted;
 
   const sortableColumns = columns.filter((col) => col.sortValue);
-  const mobileSort = sort && sortableColumns.some((col) => col.id === sort.id) ? sort : null;
+  const mobileSort = sort[0] ?? null;
   const columnName = (col: Column<T>) =>
     col.sortLabel ?? (typeof col.header === "string" ? col.header : col.id);
 
-  const toggleSort = (id: string) =>
-    setSort((s) =>
-      s?.id === id ? (s.dir === "asc" ? { id, dir: "desc" } : null) : { id, dir: "asc" },
-    );
+  const toggleSort = (id: string, additive: boolean) => {
+    setSort(nextSort(sort, id, additive));
+    setPage(0);
+  };
 
   const router = useRouter();
   const showToolbar = Boolean(searchable || toolbar);
@@ -461,48 +509,40 @@ export function DataTable<T>({
               }
             >
               <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  {selectable && (
-                    <TableHead className="w-10">
-                      <Checkbox
-                        checked={allSelected}
-                        onCheckedChange={toggleAll}
-                        aria-label={t("selectAll")}
-                      />
-                    </TableHead>
-                  )}
-                  {columns.map((col) => (
-                    <TableHead
-                      key={col.id}
-                      aria-sort={
-                        sort?.id === col.id
-                          ? sort.dir === "asc"
-                            ? "ascending"
-                            : "descending"
-                          : col.sortValue
-                            ? "none"
-                            : undefined
-                      }
-                      className={cn(
-                        alignClass[col.align ?? "left"],
-                        col.width,
-                        col.headerClassName,
-                      )}
-                    >
-                      {col.sortValue ? (
+                <TooltipProvider>
+                  <TableRow className="hover:bg-transparent">
+                    {selectable && (
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={allSelected}
+                          onCheckedChange={toggleAll}
+                          aria-label={t("selectAll")}
+                        />
+                      </TableHead>
+                    )}
+                    {columns.map((col) => {
+                      const level = sort.findIndex((key) => key.id === col.id);
+                      const key = level >= 0 ? sort[level] : null;
+                      const button = (
                         <button
                           type="button"
-                          onClick={() => toggleSort(col.id)}
-                          className="button-interaction touch-target text-muted-foreground hover:text-foreground inline-flex min-h-(--target-min) items-center gap-1 font-medium transition-colors"
-                          aria-label={t("sortBy", {
-                            column:
-                              col.sortLabel ??
-                              (typeof col.header === "string" ? col.header : col.id),
-                          })}
+                          onClick={(event) => toggleSort(col.id, event.shiftKey)}
+                          className="button-interaction touch-target text-muted-foreground hover:text-foreground inline-flex min-h-(--target-min) select-none items-center gap-1 font-medium transition-colors"
+                          aria-label={
+                            key && sort.length > 1
+                              ? t("sortByLevel", {
+                                  column: columnName(col),
+                                  level: level + 1,
+                                  direction: t(
+                                    key.dir === "asc" ? "sortAscending" : "sortDescending",
+                                  ),
+                                })
+                              : t("sortBy", { column: columnName(col) })
+                          }
                         >
                           {col.header}
-                          {sort?.id === col.id ? (
-                            sort.dir === "asc" ? (
+                          {key ? (
+                            key.dir === "asc" ? (
                               <ArrowUpIcon aria-hidden="true" className="size-3.5" />
                             ) : (
                               <ArrowDownIcon aria-hidden="true" className="size-3.5" />
@@ -510,23 +550,58 @@ export function DataTable<T>({
                           ) : (
                             <ArrowsDownUpIcon aria-hidden="true" className="size-3.5 opacity-50" />
                           )}
+                          {key && sort.length > 1 && (
+                            <span aria-hidden="true" className="text-[11px] tabular-nums">
+                              {level + 1}
+                            </span>
+                          )}
                         </button>
-                      ) : (
-                        col.header
-                      )}
-                    </TableHead>
-                  ))}
-                  {rowInteractionCol > 0 && (
-                    <TableHead className="w-12">
-                      <span className="sr-only">{t("openRow")}</span>
-                    </TableHead>
-                  )}
-                  {rowActions && (
-                    <TableHead className="w-12">
-                      <span className="sr-only">{t("actionsColumn")}</span>
-                    </TableHead>
-                  )}
-                </TableRow>
+                      );
+                      return (
+                        <TableHead
+                          key={col.id}
+                          // ARIA expects aria-sort on the primary key's header only.
+                          aria-sort={
+                            level === 0 && key
+                              ? key.dir === "asc"
+                                ? "ascending"
+                                : "descending"
+                              : col.sortValue
+                                ? "none"
+                                : undefined
+                          }
+                          className={cn(
+                            alignClass[col.align ?? "left"],
+                            col.width,
+                            col.headerClassName,
+                          )}
+                        >
+                          {col.sortValue ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>{button}</TooltipTrigger>
+                              {/* Once a sort exists, hint that Shift+click adds a tiebreaker. */}
+                              {sort.length > 0 && (
+                                <TooltipContent>{t("sortAddHint")}</TooltipContent>
+                              )}
+                            </Tooltip>
+                          ) : (
+                            col.header
+                          )}
+                        </TableHead>
+                      );
+                    })}
+                    {rowInteractionCol > 0 && (
+                      <TableHead className="w-12">
+                        <span className="sr-only">{t("openRow")}</span>
+                      </TableHead>
+                    )}
+                    {rowActions && (
+                      <TableHead className="w-12">
+                        <span className="sr-only">{t("actionsColumn")}</span>
+                      </TableHead>
+                    )}
+                  </TableRow>
+                </TooltipProvider>
               </TableHeader>
               <TableBody>
                 {error ? (
@@ -660,7 +735,7 @@ export function DataTable<T>({
                     <Select
                       value={mobileSort?.id ?? DEFAULT_SORT}
                       onValueChange={(id) => {
-                        setSort(id === DEFAULT_SORT ? null : { id, dir: mobileSort?.dir ?? "asc" });
+                        setSort(id === DEFAULT_SORT ? [] : [{ id, dir: mobileSort?.dir ?? "asc" }]);
                         setPage(0);
                       }}
                     >
@@ -688,10 +763,10 @@ export function DataTable<T>({
                         size="icon-sm"
                         label={t(mobileSort.dir === "asc" ? "sortAscending" : "sortDescending")}
                         onClick={() => {
-                          setSort({
-                            id: mobileSort.id,
-                            dir: mobileSort.dir === "asc" ? "desc" : "asc",
-                          });
+                          setSort([
+                            { id: mobileSort.id, dir: mobileSort.dir === "asc" ? "desc" : "asc" },
+                            ...sort.slice(1),
+                          ]);
                           setPage(0);
                         }}
                       >
