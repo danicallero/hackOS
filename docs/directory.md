@@ -275,7 +275,8 @@ are applied by the UI or share-image canvas, and circular masks belong to the av
 component. `assets/mascots/` retains the supplied original PNGs. Rebuild compositions
 with `python3 scripts/generate-mascot-avatars.py` (Pillow): crop/scale/mirror/rotate
 existing pixels only, with no generative artwork. The gull and shell top variants
-rotate 180° to look down from the upper edge. Real photos take priority;
+rotate 180° to look down from the upper edge; the shell sits slightly lower to
+balance its visual centre. Real photos take priority;
 failed or still-loading private photos show the same mascot. The photo editor's
 remove action and visibility switches still refer only to an uploaded photo.
 The onboarding social-sharing card uses the same user-id selection and background

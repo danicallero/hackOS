@@ -76,6 +76,8 @@ for name, bounds, face in ARTWORK:
             y = dict(center=0.36, left=0.44, right=0.44, close=0.38, top=0.13, peek=0.73)[frame]
             if gull and frame == "top":
                 y = 0.31
+            if name == "shell" and frame == "top":
+                y = 0.23
             if name == "crab" and frame == "peek":
                 y = 0.81
             if name == "crab" and frame == "close":
