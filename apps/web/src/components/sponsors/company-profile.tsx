@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import Link from "next/link";
 import { useState } from "react";
@@ -18,6 +19,7 @@ import { isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import {
   type CompanyProfile as Company,
+  companyAmbient,
   companyDescription,
   fetchCompanyProfile,
 } from "@/lib/company";
@@ -69,10 +71,6 @@ export function CompanyProfile({ id }: { id: number }) {
 export function CompanyView({ company, context }: { company: Company; context: React.ReactNode }) {
   const { t, language } = useLocale();
   const [expanded, setExpanded] = useState(false);
-  // The logo the tile shows (the negative in dark mode), from the same URLs and
-  // requests as `SponsorLogo`, blurred behind the hero (H44, H48).
-  const logo = company.logoUrl;
-  const darkLogo = company.logoNegativeUrl ?? logo;
   const { data: event } = useServerResource(["public", "event"], () => getPublicEvent());
   const zone = event?.timezone;
   const clock = eventDateFormat(language, "clock", zone);
@@ -82,15 +80,7 @@ export function CompanyView({ company, context }: { company: Company; context: R
 
   return (
     <>
-      <HeroBleed
-        color={null}
-        ambient={
-          logo && darkLogo
-            ? { urls: [...new Set([logo, darkLogo])], active: logo, activeDark: darkLogo }
-            : undefined
-        }
-        className="space-y-5"
-      >
+      <HeroBleed color={null} ambient={companyAmbient(company)} className="space-y-5">
         {context}
         <header className="flex flex-col items-center gap-4 pt-4 text-center sm:flex-row sm:gap-8 sm:text-left">
           <div className="flex size-28 shrink-0 items-center justify-center rounded-surface bg-white p-4 shadow-md sm:size-44 dark:bg-card">
@@ -167,7 +157,7 @@ export function CompanyView({ company, context }: { company: Company; context: R
                 <li key={person.userId} className="min-w-0">
                   <Link
                     href={`/people/${person.userId}?company=${company.id}`}
-                    className="button-interaction -mx-1 flex min-w-0 items-center gap-3 rounded-sm px-1 py-1 hover:bg-muted"
+                    className="row-link flex min-w-0 items-center gap-3 py-2"
                   >
                     <UserAvatar
                       userId={person.userId}
@@ -196,14 +186,20 @@ export function CompanyView({ company, context }: { company: Company; context: R
                 <li key={challenge.id}>
                   <Link
                     href={`/challenge/${challenge.id}`}
-                    className="button-interaction -mx-1 block rounded-sm px-1 py-2 hover:bg-muted"
+                    className="row-link group flex items-center gap-4 py-3"
                   >
-                    <span className="block text-sm font-medium">{challenge.title}</span>
-                    {challenge.summary && (
-                      <span className="line-clamp-2 text-sm text-muted-foreground">
-                        {challenge.summary}
-                      </span>
-                    )}
+                    <span className="min-w-0 flex-1 space-y-0.5">
+                      <span className="block font-medium">{challenge.title}</span>
+                      {challenge.summary && (
+                        <span className="line-clamp-2 text-sm text-muted-foreground">
+                          {challenge.summary}
+                        </span>
+                      )}
+                    </span>
+                    <ArrowRightIcon
+                      aria-hidden="true"
+                      className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                    />
                   </Link>
                 </li>
               ))}
@@ -223,7 +219,7 @@ export function CompanyView({ company, context }: { company: Company; context: R
                 <li key={activity.id}>
                   <Link
                     href={`/timetable?activity=${activity.id}`}
-                    className="button-interaction -mx-1 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 rounded-sm px-1 py-2 hover:bg-muted"
+                    className="row-link grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 py-2"
                   >
                     <span className="flex min-w-0 items-center gap-3">
                       <span className="flex h-11 min-w-12 shrink-0 flex-col px-1.5 items-center justify-center rounded-lg border border-border/60 leading-none">

@@ -109,11 +109,9 @@ export function PersonProfile({
   context,
   children,
   visibleRole,
-  company,
   present,
 }: {
   visibleRole?: string | null;
-  company?: { name: string; logoUrl: string | null; logoNegativeUrl?: string | null };
   present?: boolean;
   entry: DirectoryEntry;
   context: React.ReactNode;
@@ -133,26 +131,7 @@ export function PersonProfile({
   const day = eventDateFormat(language, "weekdayDayMonthText");
   const clock = eventDateFormat(language, "clock");
   const rows: { id: string; label: string; value: React.ReactNode }[] = [];
-  if (company)
-    rows.push({
-      id: "company",
-      label: t("helpDeskCompany"),
-      value: (
-        <div className="flex min-w-0 items-center gap-3">
-          {company.logoUrl ? (
-            <SponsorLogo
-              logoUrl={company.logoUrl}
-              logoNegativeUrl={company.logoNegativeUrl}
-              alt=""
-              className="size-10 shrink-0 object-contain"
-              inset={false}
-            />
-          ) : null}
-          <span className="wrap-anywhere">{company.name}</span>
-        </div>
-      ),
-    });
-  if (!company && companies.length > 0)
+  if (companies.length > 0)
     rows.push({
       id: "companies",
       label: t(companies.length === 1 ? "helpDeskCompany" : "profileCompanies"),
@@ -162,7 +141,7 @@ export function PersonProfile({
             <li key={c.id}>
               <Link
                 href={`/companies/${c.id}`}
-                className="button-interaction -mx-1 flex min-w-0 items-center gap-3 rounded-sm px-1 py-1 hover:bg-muted"
+                className="row-link flex min-w-0 items-center gap-3 py-1.5"
               >
                 {c.logoUrl ? (
                   <SponsorLogo
