@@ -1,4 +1,31 @@
 @layer components {
+  /* A whole list row that navigates (a challenge, a person, a repository).
+     The wash runs past the text so it reads as clickable while the label stays
+     aligned with the section heading; a foreground tint works on plain pages
+     and over tinted heroes alike. */
+  .row-link {
+    margin-inline: -0.625rem;
+    padding-inline: 0.625rem;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background-color var(--button-feedback-duration) ease-out;
+  }
+
+  @media (hover: hover) {
+    .row-link:hover {
+      background-color: color-mix(in srgb, var(--foreground) 8%, transparent);
+    }
+  }
+
+  .row-link:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+
+  .row-link:active {
+    background-color: color-mix(in srgb, var(--foreground) 12%, transparent);
+  }
+
   /* Rows, editable cells and official badge actions keep their own geometry. */
   .button-interaction {
     cursor: pointer;

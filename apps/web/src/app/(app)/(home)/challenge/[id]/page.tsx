@@ -26,7 +26,7 @@ import { usePublishedWinners } from "@/hooks/use-published-winners";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { useCompanyLogoColor } from "@/lib/company";
+import { companyAmbient } from "@/lib/company";
 import { useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
@@ -76,16 +76,12 @@ export default function PublicChallengePage() {
   const hasOpenApplications = applicationForms ? applicationForms.applications.length > 0 : null;
   const applicationsFailed = applicationsError != null;
 
-  const logoColor = useCompanyLogoColor({
-    logoUrl: challenge?.enterprise.logoUrl,
-    logoNegativeUrl: challenge?.enterprise.logoNegativeUrl,
-  });
-
   return (
     <>
       {challenge && <PageTitle title={displayText(challenge.title, language)} />}
       {challenge ? (
-        <HeroBleed color={logoColor}>
+        // Same blurred-logo backdrop as the company's own page (H44, H48).
+        <HeroBleed color={null} ambient={companyAmbient(challenge.enterprise)}>
           <BackLink
             href={authenticated ? "/event" : "/"}
             label={t(authenticated ? "eventInformation" : "home")}
@@ -275,10 +271,7 @@ function CompanyLink({
   children: React.ReactNode;
 }) {
   return href ? (
-    <Link
-      href={href}
-      className={`${className} button-interaction w-fit rounded-sm hover:underline`}
-    >
+    <Link href={href} className={`${className} row-link w-fit py-1.5`}>
       {children}
     </Link>
   ) : (

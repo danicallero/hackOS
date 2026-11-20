@@ -340,7 +340,6 @@ function ProjectInfo({
       project={project}
       language={language ?? "en"}
       omitFieldKeys={urlFields.map((field) => field.key)}
-      assetUrl={(path) => new URL(path, API_URL).toString()}
     />
   );
   const activity = useProjectGithubActivity(entry.repo_id)?.totals;

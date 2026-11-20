@@ -294,7 +294,6 @@ export function ProjectEditor({
         management={staff}
         name={name || project.name}
         files={project.files}
-        assetUrl={(path) => new URL(path, API_URL).toString()}
         actions={
           <>
             {submitAction}
@@ -656,7 +655,7 @@ export function ProjectEditor({
               !staff && project.isMember ? (
                 <GithubLink
                   projectId={project.id}
-                  variant="plain"
+                  variant="aside"
                   locked={status === "submitted"}
                 />
               ) : staff && can(CAPABILITIES.PROJECTS_READ) ? (
@@ -701,7 +700,6 @@ export function ProjectEditor({
               noChallenges: t("noChallenges"),
               description: t("projectDescriptionFieldLabel"),
             }}
-            assetUrl={(path) => new URL(path, API_URL).toString()}
           />
         )}
         <DeleteProjectAction

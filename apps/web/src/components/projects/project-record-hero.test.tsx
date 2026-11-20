@@ -13,7 +13,9 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t: (key: string) => key }) }));
 
-const assetUrl = (path: string) => `https://api.test${path}`;
+vi.mock("@/lib/project-assets", () => ({
+  projectAssetUrl: (path: string) => `https://api.test${path}`,
+}));
 const photo = (n: number, fieldKey = "photos") => ({
   objectKey: `obj-${fieldKey}-${n}`,
   fieldKey,
@@ -40,8 +42,8 @@ async function render(files: NativeProject["files"]) {
   await act(async () =>
     root.render(
       <ProjectAmbientProvider>
-        <ProjectRecordHero name="Tidepool" files={files} assetUrl={assetUrl} />
-        {gallery && <ProjectCarousel images={gallery.images} assetUrl={assetUrl} />}
+        <ProjectRecordHero name="Tidepool" files={files} />
+        {gallery && <ProjectCarousel images={gallery.images} />}
       </ProjectAmbientProvider>,
     ),
   );

@@ -298,6 +298,14 @@ Apple/Google Wallet artwork stays intact; Google adds an adjacent spinner and
 `aria-busy` while fetching its save URL. Do not replace these badges with generic
 pill buttons.
 
+A whole list row that navigates (a challenge, person, company, repository or
+activity in an open section) uses `row-link`: the hover wash runs past the text
+by the same amount it is outdented, so the label stays aligned with the section
+heading while the row clearly reads as clickable. The wash is a foreground tint,
+so it shows on plain pages and over tinted or image heroes alike. Rows leading
+to another page add a trailing `ArrowRight` that nudges on hover. Do not use a
+ghost `Button` with zero padding for this; its wash hugs the text.
+
 ```tsx
 <Button loading={saving} disabled={!hasChanges} onClick={save}>
   {t("save")}
