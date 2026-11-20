@@ -294,7 +294,6 @@ export function ProjectEditor({
         management={staff}
         name={name || project.name}
         files={project.files}
-        assetUrl={(path) => new URL(path, API_URL).toString()}
         actions={
           <>
             {submitAction}
@@ -701,7 +700,6 @@ export function ProjectEditor({
               noChallenges: t("noChallenges"),
               description: t("projectDescriptionFieldLabel"),
             }}
-            assetUrl={(path) => new URL(path, API_URL).toString()}
           />
         )}
         <DeleteProjectAction

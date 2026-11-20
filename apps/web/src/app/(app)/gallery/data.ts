@@ -47,7 +47,3 @@ export async function galleryProject(id: string) {
   );
   return { ...context, project };
 }
-
-export function projectAssetUrl(path: string) {
-  return new URL(path, API_URL).toString();
-}

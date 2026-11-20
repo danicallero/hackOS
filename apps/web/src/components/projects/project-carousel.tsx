@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import type { NativeProject } from "@/lib/native-projects";
+import { projectAssetUrl as assetUrl } from "@/lib/project-assets";
 import { cn } from "@/lib/utils";
 import { useAmbientReporter } from "./project-ambient";
 
@@ -25,18 +26,19 @@ export function projectGallery(
 /** One image, or a swipeable strip with dots when there are several; tap to enlarge. */
 export function ProjectCarousel({
   images,
-  assetUrl,
   className,
   fit = "cover",
 }: {
   images: ProjectFile[];
-  assetUrl: (path: string) => string;
   className?: string;
   /** `contain` shows whole screenshots on a muted ground; `cover` fills the frame. */
   fit?: "cover" | "contain";
 }) {
   const [index, setIndex] = useState(0);
   const [open, setOpen] = useState(false);
+  // `contain` frames follow the first photo's own shape (clamped), so a single
+  // image fills it edge to edge instead of sitting between flat bands (H18).
+  const [ratio, setRatio] = useState<number | null>(null);
   const current = images[open ? index : 0];
   const report = useAmbientReporter();
   const fieldKey = images[index]?.fieldKey;
@@ -60,18 +62,31 @@ export function ProjectCarousel({
           setIndex(Math.round(el.scrollLeft / el.clientWidth));
         }}
       >
-        {images.map((file) => (
+        {images.map((file, i) => (
           <li
             key={file.objectKey}
             className={cn(
-              "w-full shrink-0 snap-center",
-              fit === "contain" ? "aspect-video" : "aspect-[4/3]",
+              "relative w-full shrink-0 snap-center",
+              fit === "contain" ? !ratio && "aspect-video" : "aspect-[4/3]",
             )}
+            style={fit === "contain" && ratio ? { aspectRatio: ratio } : undefined}
           >
+            {fit === "contain" && (
+              // Leftover space around a differently shaped photo shows a soft
+              // copy of it rather than an empty band.
+              // biome-ignore lint/performance/noImgElement: authenticated project assets.
+              <img
+                src={assetUrl(file.thumbnailUrl ?? file.url)}
+                alt=""
+                aria-hidden="true"
+                crossOrigin="use-credentials"
+                className="absolute inset-0 size-full scale-110 object-cover opacity-60 blur-2xl"
+              />
+            )}
             <button
               type="button"
               onClick={() => setOpen(true)}
-              className="size-full cursor-zoom-in"
+              className="relative size-full cursor-zoom-in"
               aria-label={file.fileName}
             >
               {/* biome-ignore lint/performance/noImgElement: authenticated project assets. */}
@@ -79,6 +94,14 @@ export function ProjectCarousel({
                 src={assetUrl(file.thumbnailUrl ?? file.url)}
                 alt=""
                 crossOrigin="use-credentials"
+                onLoad={
+                  fit === "contain" && i === 0
+                    ? (event) => {
+                        const { naturalWidth: w, naturalHeight: h } = event.currentTarget;
+                        if (w && h) setRatio(Math.min(21 / 9, Math.max(3 / 4, w / h)));
+                      }
+                    : undefined
+                }
                 className={cn("size-full", fit === "contain" ? "object-contain" : "object-cover")}
               />
             </button>

@@ -6,6 +6,7 @@ import { HeroBleed } from "@/components/common/hero-bleed";
 import { PageTitle } from "@/components/common/page-title";
 import { useLocale } from "@/lib/i18n";
 import type { NativeProject } from "@/lib/native-projects";
+import { projectAssetUrl } from "@/lib/project-assets";
 import { useAmbientActive } from "./project-ambient";
 import { projectGallery } from "./project-carousel";
 
@@ -18,14 +19,12 @@ import { projectGallery } from "./project-carousel";
 export function ProjectRecordHero({
   name,
   files,
-  assetUrl,
   management = false,
   state,
   actions,
 }: {
   name: string;
   files: NativeProject["files"];
-  assetUrl: (path: string) => string;
   management?: boolean;
   state?: React.ReactNode;
   actions?: React.ReactNode;
@@ -39,7 +38,8 @@ export function ProjectRecordHero({
       gallery?.images.find((image) => image.objectKey === active?.objectKey)) ||
     gallery?.images[0];
   // The carousel's own thumbnail URLs, so the backdrop reuses its requests.
-  const thumb = (image: NonNullable<typeof cover>) => assetUrl(image.thumbnailUrl ?? image.url);
+  const thumb = (image: NonNullable<typeof cover>) =>
+    projectAssetUrl(image.thumbnailUrl ?? image.url);
   const backHref = management ? "/projects" : inGallery ? "/gallery" : "/my-project?view=all";
   const backLabel = t(management ? "manageProjects" : inGallery ? "projectGallery" : "myProjects");
   return (

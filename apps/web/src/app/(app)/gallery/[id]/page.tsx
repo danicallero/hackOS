@@ -7,7 +7,8 @@ import { ProjectRecordActions } from "@/components/projects/project-record-actio
 import { ProjectRecordHero } from "@/components/projects/project-record-hero";
 import { ApiError } from "@/lib/api";
 import { INDEXABLE_ROBOTS, SITE_URL, SOCIAL_IMAGE_PATH } from "@/lib/metadata";
-import { galleryProject, projectAssetUrl } from "../data";
+import { projectAssetUrl } from "@/lib/project-assets";
+import { galleryProject } from "../data";
 import { GalleryRefresh } from "../gallery-refresh";
 
 export const dynamic = "force-dynamic";
@@ -58,7 +59,6 @@ export default async function ProjectGalleryPage({ params }: { params: Promise<{
       <ProjectRecordHero
         name={project.name}
         files={project.files}
-        assetUrl={projectAssetUrl}
         actions={
           <ProjectRecordActions
             id={project.id}
@@ -76,7 +76,6 @@ export default async function ProjectGalleryPage({ params }: { params: Promise<{
           showQueue={project.isMember === true || project.canInspect === true}
           project={project}
           language={language}
-          assetUrl={projectAssetUrl}
           labels={{
             team: copy.surfaceTeam,
             challenges: copy.challenges,

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { groupApplicationFields } from "@/lib/application-field-groups";
 import { externalUrlHref } from "@/lib/external-url";
 import type { NativeProject } from "@/lib/native-projects";
+import { projectAssetUrl } from "@/lib/project-assets";
 import { normalizeProjectMarkdown } from "@/lib/project-text";
 import type { Language } from "@/lib/types";
 import { ProjectCarousel } from "./project-carousel";
@@ -19,7 +20,6 @@ export function ProjectAnswers({
   language,
   descriptionLabel,
   omitFieldKeys = [],
-  assetUrl,
 }: {
   project: NativeProject;
   language: Language;
@@ -27,7 +27,6 @@ export function ProjectAnswers({
   descriptionLabel?: string;
   /** Answers the surrounding view already shows, so they are not repeated. */
   omitFieldKeys?: string[];
-  assetUrl: (path: string) => string;
 }) {
   const description = projectDescriptionField(project.template);
   const visible = project.template.filter((field) => {
@@ -103,7 +102,6 @@ export function ProjectAnswers({
                           <ProjectCarousel
                             fit="contain"
                             images={files.filter((file) => file.mimeType.startsWith("image/"))}
-                            assetUrl={assetUrl}
                           />
                         )}
                         <div className="flex flex-wrap gap-2">
@@ -111,7 +109,11 @@ export function ProjectAnswers({
                             .filter((file) => !file.mimeType.startsWith("image/"))
                             .map((file) => (
                               <Button key={file.objectKey} asChild variant="outline" size="sm">
-                                <a href={assetUrl(file.url)} target="_blank" rel="noreferrer">
+                                <a
+                                  href={projectAssetUrl(file.url)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
                                   <FileIcon aria-hidden="true" />
                                   <span className="truncate">{file.fileName}</span>
                                   <ArrowSquareOutIcon aria-hidden="true" className="ml-auto" />

@@ -5,6 +5,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { UserAvatar } from "@/components/common/user-avatar";
 import { Button } from "@/components/ui/button";
 import type { NativeProject } from "@/lib/native-projects";
+import { projectAssetUrl } from "@/lib/project-assets";
 import type { Language } from "@/lib/types";
 import { PresentationStatus } from "./presentation-status";
 import { ProjectAnswers } from "./project-answers";
@@ -15,7 +16,6 @@ export function ProjectOverview({
   project,
   language,
   labels,
-  assetUrl,
   review,
   showQueue = false,
   asideExtra,
@@ -32,7 +32,6 @@ export function ProjectOverview({
     noChallenges: string;
     description: string;
   };
-  assetUrl: (path: string) => string;
   review?: React.ReactNode;
   showQueue?: boolean;
   /** Extra content after the team. */
@@ -55,7 +54,6 @@ export function ProjectOverview({
           project={project}
           language={language}
           descriptionLabel={labels.description}
-          assetUrl={assetUrl}
         />
       </div>
       <aside className="min-w-0 space-y-8 lg:sticky lg:top-6">
@@ -74,7 +72,7 @@ export function ProjectOverview({
                       <UserAvatar
                         userId={member.userId}
                         name={`${member.name ?? ""} ${member.surname ?? ""}`.trim()}
-                        image={member.photoUrl ? assetUrl(member.photoUrl) : null}
+                        image={member.photoUrl ? projectAssetUrl(member.photoUrl) : null}
                         className="size-10"
                         decorative
                       />
