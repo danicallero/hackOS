@@ -444,7 +444,8 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   route hands a deep link or a people-list/history tap to the scanner as `personId` params. Compact
   windows still push the route.
   "View people" opens the people finder over the scanner pane only. Rows show
-  every person's account photo, whether or not their public profile shares it. On iOS the pane is its own
+  every person's account photo, whether or not their public profile shares it; the person
+  screen and the meal/activity scan result show the same photo beside the name and email. On iOS the pane is its own
   native stack (`components/pane-people-stack.ios.tsx`, an independent react-navigation tree):
   its root bar carries the title, role filter and sync status, `People` is pushed with the native
   large title, back item, integrated search and filter, and the route's header is hidden

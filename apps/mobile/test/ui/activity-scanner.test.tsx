@@ -59,6 +59,7 @@ jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
 jest.mock("@/lib/api", () => ({
   apiFetch: jest.fn().mockResolvedValue({ items: [], byRole: [] }),
   ApiError: class ApiError extends Error {},
+  getCurrentSessionCookie: () => "session=1",
 }));
 jest.mock("@/lib/live-activities/sync", () => ({ bumpActivityScanned: jest.fn() }));
 jest.mock("@/lib/haptics", () => ({ haptic: jest.fn() }));
@@ -103,6 +104,7 @@ jest.mock("@/lib/scanner-db", () => ({
       revokedBadgeIds: [],
       name: "Ada",
       surname: "Lovelace",
+      photoUrl: "/api/users/21/photo?v=ada",
       dni: null,
       accepted: true,
       confirmed: true,
@@ -218,6 +220,18 @@ it("treats failed live figures as offline mode, not an error", async () => {
 });
 
 describe("activity scanner result (H26)", () => {
+  it("shows the scanned person's photo beside their name (#934)", async () => {
+    await renderMobile(<ActivityScannerScreen />);
+
+    await screen.findByText("Ada Lovelace");
+    expect(
+      JSON.stringify(
+        screen.getByTestId("scan-result-avatar-photo", { includeHiddenElements: true }).props
+          .source,
+      ),
+    ).toContain("/api/users/21/photo?v=ada");
+  });
+
   it("offers Close after a first scan", async () => {
     await renderMobile(<ActivityScannerScreen />);
 

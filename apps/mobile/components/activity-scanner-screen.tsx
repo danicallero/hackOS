@@ -29,6 +29,7 @@ import { ScannerStatBlock } from "@/components/scanner-stat-block";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { OfflineNotice } from "@/components/status-notice";
 import { SymbolView } from "@/components/symbol";
+import { UserAvatar } from "@/components/user-avatar";
 import { resultCardMaxHeight } from "@/lib/activity-pane";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -952,12 +953,28 @@ function ActivityResultPanel({
                           : t("scannerStateSaved")}
                   </Text>
                 </View>
-                <Text selectable style={{ ...type.title2, color: colors.label, fontWeight: "700" }}>
-                  {fullName}
-                </Text>
-                <Text selectable style={{ ...type.compact, color: colors.secondaryLabel }}>
-                  {result.person.email || t("accountNotSet")}
-                </Text>
+                {/* Staff match the photo to the person in front of them (#934). */}
+                <View style={{ alignItems: "center", flexDirection: "row", gap: 12 }}>
+                  <UserAvatar
+                    testID="scan-result-avatar"
+                    userId={result.person.userId}
+                    name={result.person.name ?? ""}
+                    surname={result.person.surname}
+                    image={result.person.photoUrl}
+                    size={48}
+                  />
+                  <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
+                    <Text
+                      selectable
+                      style={{ ...type.title2, color: colors.label, fontWeight: "700" }}
+                    >
+                      {fullName}
+                    </Text>
+                    <Text selectable style={{ ...type.compact, color: colors.secondaryLabel }}>
+                      {result.person.email || t("accountNotSet")}
+                    </Text>
+                  </View>
+                </View>
               </View>
               <View
                 style={{

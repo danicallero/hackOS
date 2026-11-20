@@ -28,6 +28,7 @@ import { QrCamera } from "@/components/QrCamera";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { SymbolView } from "@/components/symbol";
+import { UserAvatar } from "@/components/user-avatar";
 import { alert } from "@/lib/alert";
 import { ApiError } from "@/lib/api";
 import { errorText } from "@/lib/api-error-reason";
@@ -971,27 +972,40 @@ export function PersonOperationsScreen({
           ) : null}
 
           <View style={{ gap: 2 }}>
-            {embedded ? (
-              <TitleReporter title={fullName} onTitle={onTitle} />
-            ) : (
-              <Text
-                selectable
-                accessibilityRole="header"
-                numberOfLines={accessibilityText ? undefined : 1}
-                style={{ ...type.title, color: colors.label, fontWeight: "700" }}
-              >
-                {fullName}
-              </Text>
-            )}
-            {person.email ? (
-              <Text
-                selectable
-                numberOfLines={1}
-                style={{ ...type.subhead, color: colors.secondaryLabel }}
-              >
-                {person.email}
-              </Text>
-            ) : null}
+            {/* Staff match the photo to the person in front of them (#934). */}
+            <View style={{ alignItems: "center", flexDirection: "row", gap: 12 }}>
+              <UserAvatar
+                testID="person-avatar"
+                userId={person.userId}
+                name={person.name ?? ""}
+                surname={person.surname}
+                image={person.photoUrl}
+                size={56}
+              />
+              <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
+                {embedded ? (
+                  <TitleReporter title={fullName} onTitle={onTitle} />
+                ) : (
+                  <Text
+                    selectable
+                    accessibilityRole="header"
+                    numberOfLines={accessibilityText ? undefined : 1}
+                    style={{ ...type.title, color: colors.label, fontWeight: "700" }}
+                  >
+                    {fullName}
+                  </Text>
+                )}
+                {person.email ? (
+                  <Text
+                    selectable
+                    numberOfLines={1}
+                    style={{ ...type.subhead, color: colors.secondaryLabel }}
+                  >
+                    {person.email}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
             {rolePill && (sideRegion.edge || embedded) ? (
               // The overlay below would cover the name beside a side column.
               <View style={{ alignSelf: "flex-start", marginTop: 6 }}>
