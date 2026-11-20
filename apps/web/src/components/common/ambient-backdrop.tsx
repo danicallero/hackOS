@@ -61,11 +61,14 @@ export function AmbientBackdrop({ urls, active, activeDark, crossOrigin }: Ambie
       ref={ref}
       aria-hidden="true"
       data-hero-ambient=""
-      className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+      className="pointer-events-none absolute inset-0 z-0 overflow-hidden will-change-transform"
       style={{ maskImage: MASK, WebkitMaskImage: MASK }}
     >
-      {/* One blur over the stack: the cross-fade blends already-blurred colours. */}
-      <div className="absolute inset-0 scale-[1.4] blur-[72px]">
+      {/* One blur over the stack: the cross-fade blends already-blurred colours.
+          Its own compositing layer: otherwise Safari re-rasterises the blur
+          only inside a repainted rect above it (a hovered back link), leaving
+          a lasting band across the hero row (H48). */}
+      <div className="absolute inset-0 scale-[1.4] blur-[72px] will-change-transform">
         {urls.map((url) => {
           const dark = url === (activeDark ?? active);
           return (
