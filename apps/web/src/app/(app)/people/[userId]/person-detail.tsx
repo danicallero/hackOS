@@ -167,10 +167,7 @@ export function PersonProfile({
         <ul className="space-y-1">
           {talks.map((talk) => (
             <li key={talk.id}>
-              <Link
-                href={`/timetable?activity=${talk.id}`}
-                className="button-interaction -mx-1 block rounded-sm px-1 py-1 hover:bg-muted"
-              >
+              <Link href={`/timetable?activity=${talk.id}`} className="row-link block py-1.5">
                 <span className="block wrap-anywhere font-medium">{talk.title}</span>
                 <span className="block text-xs text-muted-foreground capitalize">
                   {day.format(new Date(talk.startsAt))} · {clock.format(new Date(talk.startsAt))}
