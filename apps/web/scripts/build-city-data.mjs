@@ -22,12 +22,14 @@ const MIN_POPULATION = 15000;
 const RENAMES = { Laracha: "A Laracha" };
 const EXTRAS = [["O Burgo", "Galicia", 43.33, -8.37]];
 const base = "https://download.geonames.org/export/dump";
+// Absolute path: the build never resolves a command through PATH.
+const UNZIP = "/usr/bin/unzip";
 const dir = mkdtempSync(join(tmpdir(), "cities-"));
 
 const fetchBytes = async (name) =>
   Buffer.from(await (await fetch(`${base}/${name}`)).arrayBuffer());
 writeFileSync(join(dir, "c.zip"), await fetchBytes("cities1000.zip"));
-execFileSync("unzip", ["-o", "-q", join(dir, "c.zip"), "-d", dir]);
+execFileSync(UNZIP, ["-o", "-q", join(dir, "c.zip"), "-d", dir]);
 const admin1 = new Map(
   (await (await fetch(`${base}/admin1CodesASCII.txt`)).text())
     .split("\n")
@@ -80,7 +82,7 @@ for (const line of readFileSync(join(dir, "cities1000.txt"), "utf8").split("\n")
   ]);
 }
 writeFileSync(join(dir, "es.zip"), await fetchBytes(`${COUNTRY}.zip`));
-execFileSync("unzip", ["-o", "-q", join(dir, "es.zip"), "-d", dir]);
+execFileSync(UNZIP, ["-o", "-q", join(dir, "es.zip"), "-d", dir]);
 for (const line of readFileSync(join(dir, `${COUNTRY}.txt`), "utf8").split("\n")) {
   if (!line) continue;
   const f = line.split("\t");

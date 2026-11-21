@@ -174,14 +174,16 @@ async function searchOpenMeteo(query: string, language: string, signal: AbortSig
 
 const dedupe = (cities: CityValue[]) => {
   const seen = new Set<string>();
-  return cities.map(canonicalCityAnswer).filter((c) => {
-    const key = normalizeSearchText(formatCityValue(c))
-      .replace(/[^\p{L}\p{N}]+/gu, " ")
-      .trim();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return cities
+    .map((city) => canonicalCityAnswer(city))
+    .filter((c) => {
+      const key = normalizeSearchText(formatCityValue(c))
+        .replace(/[^\p{L}\p{N}]+/gu, " ")
+        .trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 };
 
 /**
