@@ -1019,7 +1019,7 @@ export interface OwnerCandidate {
  * person(s) (H59) — gated by SCHEDULE_MANAGE (the same capability that
  * governs the write), not the broad USERS_READ, mirroring
  * projects/service.ts's listProjectMemberCandidates. Someone who can manage
- * the programme but isn't a general user-directory admin should still be
+ * the program but isn't a general user-directory admin should still be
  * able to pick a colleague.
  */
 export async function listScheduleOwnerCandidates(

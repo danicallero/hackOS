@@ -1,5 +1,5 @@
 /**
- * Trigger-event catalogue (H8): the fixed, developer-defined vocabulary of
+ * Trigger-event catalog (H8): the fixed, developer-defined vocabulary of
  * "things that can happen" that an admin-configured `role_grant_rules` row
  * may react to. Mirrors CAPABILITIES's own doc comment and rationale —
  * adding a new automatic-grant scenario here (and wiring exactly one

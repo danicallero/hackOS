@@ -7,7 +7,7 @@ import { valkey } from "../../lib/valkey.js";
  * a second activity of the same subject on the device, and the server can
  * address only one of them — the other stays until iOS removes it hours
  * later. So for a short window after the app reads its state, the worker
- * leaves starts to the app. Valkey is only an optimisation here: when it is
+ * leaves starts to the app. Valkey is only an optimization here: when it is
  * unavailable the worker starts remotely as before.
  */
 const FOREGROUND_WINDOW_SECONDS = 30;

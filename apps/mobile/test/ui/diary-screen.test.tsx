@@ -318,7 +318,7 @@ function WithNativeHeader() {
 }
 
 describe("Wallet", () => {
-  it("opens the badge wallet from the header, beside the favourites star", async () => {
+  it("opens the badge wallet from the header, beside the favorites star", async () => {
     await renderMobile(<DiaryScreen />);
     expect(await screen.findByText("Ana S.")).toBeTruthy();
     expect(screen.getByLabelText("diaryShowFavourites")).toBeTruthy();
@@ -561,7 +561,7 @@ describe("People", () => {
     expect(mockSetOptions).toHaveBeenCalledWith({ headerShown: false });
   });
 
-  it("uses the native header search and a favourites toolbar button on iOS 26", async () => {
+  it("uses the native header search and a favorites toolbar button on iOS 26", async () => {
     mockGlass = true;
     diary = [person(1, "José P.", { starred: true }), person(2, "Bea R.")];
     await renderMobile(<WithNativeHeader />);
@@ -618,7 +618,7 @@ describe("People", () => {
     ).toBe(false);
   });
 
-  it("hides search and the favourites filter on Companies", async () => {
+  it("hides search and the favorites filter on Companies", async () => {
     await renderMobile(<DiaryScreen />);
     await screen.findByText("Ana S.");
     await fireEvent.press(screen.getByRole("button", { name: "scheduleSearch" }));

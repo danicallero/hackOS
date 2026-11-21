@@ -23,7 +23,7 @@ export const SCHEDULE_STATUS_TONES: Record<ScheduleStatus, Tone> = {
 };
 
 /**
- * A programme item's status is purely *who can see it*: shown, hidden, or
+ * A program item's status is purely *who can see it*: shown, hidden, or
  * hidden-until-a-publish-date (H47, H48). Manage Schedule is a run-of-show —
  * a full rundown of every activity, past and future alike — so whether an
  * item happens to be running right now is not a status and is deliberately

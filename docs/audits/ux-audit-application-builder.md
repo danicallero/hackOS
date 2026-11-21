@@ -78,7 +78,7 @@ then confirming each finding against the source.
       questions; the desktop live-preview sidebar matched; added a custom
       question, then tried switching to the Overview tab — got "There are
       unsaved changes in this section. Leave anyway?" and stayed on the Form
-      tab after cancelling; the page header showed an aggregate "Unsaved
+      tab after canceling; the page header showed an aggregate "Unsaved
       changes" indicator the whole time; the Overview tab (no edits) showed
       "Ask for t-shirt size: Yes" / "Ask for dietary restrictions: Yes".
 
@@ -106,7 +106,7 @@ and five web spots — `my-applications/lib.ts` (participant form), `application
 - Settings UI: a `useFieldArray`-backed add/remove list. Originally added to
   the Invited-accounts tab; relocated to Settings → Libraries
   (`shirt-sizes-manager.tsx`) in the Event Settings restructuring that moved
-  every shared reference catalogue to one place — see
+  every shared reference catalog to one place — see
   `docs/event-config-wallet.md`.
 - Verified backend end-to-end via direct API calls (not just typecheck): set
   the list to `["S","M","L","3XL"]`, confirmed a submit with the now-removed
@@ -455,7 +455,7 @@ full page at `applications/[id]/page.tsx`.
 
 Expanding and collapsing a long question editor now preserves the card's
 viewport anchor instead of leaving the user several cards below it after the
-layout contracts. Expanded cards expose a sticky, explicitly labelled collapse
+layout contracts. Expanded cards expose a sticky, explicitly labeled collapse
 action; opening remains a native button interaction, and drag/reorder controls
 remain independently keyboard accessible.
 
@@ -475,7 +475,7 @@ duplicate actions.
   and at the end of the form, so a long form never requires returning to the
   header to add another field.
 - An active field groups its visible label, answer type and required state in
-  one labelled row. Duplicate, deletion, translations and technical settings
+  one labeled row. Duplicate, deletion, translations and technical settings
   remain available without competing with those core choices.
 - Section and validation containers use the shared border-only surface rhythm
   rather than primary-accent rails, tinted nested cards or dashed boxes, which
@@ -490,7 +490,7 @@ dividers rather than recursively becoming cards.
 
 | Finding | Locations | Resolution |
 | --- | --- | --- |
-| Settings groups were cards inside the form-settings card, then logistics switches became cards inside those cards. | `new/page.tsx`, `metadata-card.tsx` | Settings groups are now divider-led disclosures; logistics is a simple labelled row. |
+| Settings groups were cards inside the form-settings card, then logistics switches became cards inside those cards. | `new/page.tsx`, `metadata-card.tsx` | Settings groups are now divider-led disclosures; logistics is a simple labeled row. |
 | A section was a tinted, accented card containing individually-carded fields. | `questions-card.tsx` | A section is now a heading/editor followed by a divider and field surfaces; only a field remains a bounded, movable record. |
 | Translations, advanced settings, file restrictions and response validation all introduced another framed box inside one field. | `questions-card.tsx` | They use a single top divider and progressive disclosure, with no nested surface styling. |
 | Active-field chrome created another elevated card inside the field itself. | `questions-card.tsx` | The sticky editing header is now a quiet divider on the existing field surface, without radius, border frame or shadow. |

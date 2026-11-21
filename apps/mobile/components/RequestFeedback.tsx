@@ -27,7 +27,7 @@ export function RequestFeedback({
 }: {
   error?: Error | null;
   loading?: boolean;
-  /** Inline spinner beside content that is already on screen (no centred block). */
+  /** Inline spinner beside content that is already on screen (no centered block). */
   compact?: boolean;
   onRetry?: () => void;
   message?: string;
@@ -42,7 +42,7 @@ export function RequestFeedback({
         accessibilityLiveRegion="polite"
         accessibilityLabel={t("loading")}
         accessibilityRole="progressbar"
-        // Centred in a block taller than the header and Dynamic Island, wherever it is mounted.
+        // Centered in a block taller than the header and Dynamic Island, wherever it is mounted.
         style={[
           styles.container,
           compact ? null : { justifyContent: "center", minHeight: height * 0.6 },

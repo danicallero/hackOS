@@ -81,7 +81,7 @@ describe("role-derivation consistency across screens", () => {
     expect(source).toMatch(/roleDisplayName/);
   });
 
-  it("general-scanner-screen uses the People directory catalogue and matching", () => {
+  it("general-scanner-screen uses the People directory catalog and matching", () => {
     const source = read("general-scanner-screen.tsx");
     expect(source).toMatch(/roleFilterOptionsFromRoster/);
     expect(source).toMatch(/matchesScannerRole/);

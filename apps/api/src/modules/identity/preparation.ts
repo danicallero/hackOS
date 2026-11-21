@@ -55,7 +55,7 @@ export async function prepareAccountRemoval(
     // account is the last wildcard holder, failing only in the final
     // transaction would leave a half-revoked pending account that can never
     // complete. The same invariant is checked again after the user row is
-    // deleted as a defence in depth.
+    // deleted as a defense in depth.
     if (await userHasWildcardRegardlessOfState(client, user.id)) {
       await assertActiveWildcardHolder(client, user.id);
     }

@@ -111,7 +111,7 @@ describe("tab bar on a foldable iPhone", () => {
     expect(StyleSheet.flatten(bar?.props.style).right).toBeUndefined();
   });
 
-  it("stays a horizontal, labelled bar without a reserved column (inner display, portrait)", async () => {
+  it("stays a horizontal, labeled bar without a reserved column (inner display, portrait)", async () => {
     await renderBar(NO_SIDE_REGION);
     expect(screen.queryByTestId("bar-vertical")).toBeNull();
     expect(screen.getByText("Schedule")).toBeTruthy();

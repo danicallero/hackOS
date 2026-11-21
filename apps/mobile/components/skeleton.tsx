@@ -16,7 +16,7 @@ import { colors, motion, radius, space, type } from "@/theme";
 const SHIMMER_MS = 900;
 
 /**
- * Placeholders for content still on its way (H55, #935): grey shapes in the
+ * Placeholders for content still on its way (H55, #935): gray shapes in the
  * page's own sections that breathe gently, then the real sections fade in.
  * Static under Reduce Motion. One announcement for the whole group.
  */
@@ -47,7 +47,7 @@ export function SkeletonGroup({ children, testID }: { children: ReactNode; testI
   );
 }
 
-/** A grey bar the height of a line of text. */
+/** A gray bar the height of a line of text. */
 export function SkeletonBar({
   width,
   height = type.callout.fontSize,

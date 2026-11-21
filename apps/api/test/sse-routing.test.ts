@@ -95,7 +95,7 @@ describe("domain mutation routing", () => {
     expect(mutationDomainForPath("/api/challenges/3/repos/bulk-add")).toBe(SSE_TOPICS.PROJECTS);
   });
 
-  it("routes identity, sponsor and catalogue writes without treating reads as mutations", () => {
+  it("routes identity, sponsor and catalog writes without treating reads as mutations", () => {
     expect(mutationDomainForPath("/api/users/2")).toBe(SSE_TOPICS.IDENTITY);
     expect(mutationDomainForPath("/api/enterprises/4/judges/9")).toBe(SSE_TOPICS.SPONSORS);
     expect(mutationDomainForPath("/api/invites/enterprise-links/4/withdraw")).toBe(

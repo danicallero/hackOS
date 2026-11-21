@@ -38,7 +38,7 @@ export function mascotAvatar(userId?: string | number | null, name = ""): number
   return assets[mascotAvatarChoice(userId, name).index];
 }
 
-/** The no-photo header uses the same colour as its avatar (#934, H48). */
+/** The no-photo header uses the same color as its avatar (#934, H48). */
 export function mascotBackgroundRgb(
   userId?: string | number | null,
   name = "",

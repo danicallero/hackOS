@@ -420,7 +420,7 @@ async function distributionBuckets(
     );
     rows = result.rows as Array<{ value: string; n: number }>;
   } else if (kind === "university" || kind === "degree") {
-    // Library-backed answers store the catalogue id; chart the catalogue name (H13, H54).
+    // Library-backed answers store the catalog id; chart the catalog name (H13, H54).
     const table = kind === "university" ? "universities" : "university_degrees";
     const result = await pool.query(
       `SELECT COALESCE(un.name, r.responses ->> $2) AS value, count(*)::int AS n

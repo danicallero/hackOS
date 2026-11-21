@@ -32,7 +32,7 @@ type EventPhase =
 
 /**
  * Before hacking_starts_at the countdown must not tick: it either sits frozen
- * on the full hacking_ends_at - hacking_starts_at span, or (if the organiser
+ * on the full hacking_ends_at - hacking_starts_at span, or (if the organizer
  * opted in) counts down toward the start instead. Once hacking ends, the same
  * widget hands off to the judging window (queue_settings, H39) if one is set.
  */
@@ -44,7 +44,7 @@ function computeEventPhase(event: PublicEvent | null, now: number, t: Translate)
   if (end === null) return { kind: "none" };
 
   if (start === null) {
-    // No start configured: keep the legacy plain countdown-to-end behaviour.
+    // No start configured: keep the legacy plain countdown-to-end behavior.
     return {
       kind: "hacking-remaining",
       label: t("timeRemaining"),

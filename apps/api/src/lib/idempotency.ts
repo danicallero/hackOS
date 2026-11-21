@@ -34,7 +34,7 @@ import { ConflictError } from "./errors.js";
 const STALE_IN_FLIGHT_MS = 30_000;
 
 /**
- * Retention (#994, H54 data minimisation). Completed rows are kept
+ * Retention (#994, H54 data minimization). Completed rows are kept
  * IDEMPOTENCY_RETENTION_DAYS (shared with the mobile scanner, which stops
  * replaying queued scans after SCANNER_REPLAY_MAX_AGE_DAYS) — then purged.
  * NULL-response rows (never completed, or the H54 pending-removal marker) are

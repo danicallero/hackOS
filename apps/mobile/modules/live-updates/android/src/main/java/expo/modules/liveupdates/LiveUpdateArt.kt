@@ -13,10 +13,10 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
- * Colours, glyphs and bitmaps for Live Updates (#966). Promoted notifications
+ * Colors, glyphs and bitmaps for Live Updates (#966). Promoted notifications
  * and RemoteViews take no vector paths or dynamic shapes, so the round
  * badges, the progress tracker and the card's stage track are drawn here.
- * Bitmaps use the light/dark mode at post time; the card's text colours are
+ * Bitmaps use the light/dark mode at post time; the card's text colors are
  * resources that RemoteViews resolve in the system's configuration.
  */
 object LiveUpdateArt {
@@ -64,7 +64,7 @@ object LiveUpdateArt {
     drawable.draw(canvas)
   }
 
-  /** A white glyph on a disc in the tone colour (the large-icon badge). */
+  /** A white glyph on a disc in the tone color (the large-icon badge). */
   fun badge(context: Context, glyph: String?, tone: String?, sizeDp: Float): Bitmap {
     val size = dp(context, sizeDp).roundToInt()
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
@@ -76,7 +76,7 @@ object LiveUpdateArt {
     return bitmap
   }
 
-  /** The track's tracker: a glyph in the tone colour on a white disc with a hairline. */
+  /** The track's tracker: a glyph in the tone color on a white disc with a hairline. */
   fun tracker(context: Context, glyph: String?, tone: String?, sizeDp: Float): Bitmap {
     val size = dp(context, sizeDp).roundToInt()
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
@@ -93,7 +93,7 @@ object LiveUpdateArt {
     drawGlyph(context, canvas, glyph, tone(context, tone), cx, cy, radius * 1.25f)
   }
 
-  /** A bare glyph in the secondary colour (the track's start and end icons). */
+  /** A bare glyph in the secondary color (the track's start and end icons). */
   fun glyph(context: Context, glyph: String?, sizeDp: Float): Bitmap {
     val size = dp(context, sizeDp).roundToInt()
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
@@ -114,9 +114,9 @@ object LiveUpdateArt {
 
   /**
    * The card's track (H38 queue stages, H24 served share), drawn like the
-   * promoted ProgressStyle: each stage filled in its colour, the rest grey,
+   * promoted ProgressStyle: each stage filled in its color, the rest gray,
    * gaps between segments, a round tracker at `value`,
-   * and labels under `stops` (first left, last right, others centred).
+   * and labels under `stops` (first left, last right, others centered).
    */
   fun track(context: Context, width: Int, progress: LiveUpdateProgress, labels: List<String>, currentStop: Int?): Bitmap {
     val total = progress.segments.sumOf { it.length }.coerceAtLeast(1).toFloat()

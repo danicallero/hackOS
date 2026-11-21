@@ -15,7 +15,7 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   identity: "Users, invites, permissions and the caller's own profile (H1–H10).",
   applications: "Application forms, review, decisions and confirmations (H11–H15).",
   "form-libraries":
-    "Question-owned catalogues, participant proposals and organizer curation (H11, H16).",
+    "Question-owned catalogs, participant proposals and organizer curation (H11, H16).",
   projects:
     "Native project drafts, submissions, gallery and queue-facing project records (H16–H21, H44–H46).",
   challenges: "Challenge details, visibility and judging configuration (H44–H46, H49).",
@@ -26,12 +26,12 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
     "Accreditation, badge/presence scanning, schedule, Wallet and on-site activities (H22–H28, H48–H49, H59).",
   event: "Event identity, timing, venue and admission settings (H10, H45, H47).",
   editions:
-    "Edition catalogue and lifecycle: create, make current, close (read-only) and reopen; the caller's editions (H8, H53).",
+    "Edition catalog and lifecycle: create, make current, close (read-only) and reopen; the caller's editions (H8, H53).",
   exports: "Application and operational data exports (H54, H56).",
   directory: "Opt-in public participant profiles and their shared details (#934).",
   diary: "The attendee's saved people and sponsor stands (#935).",
   helpdesk: "Helper profiles, knowledge topics, help requests and coverage (H61–H67).",
-  reports: "Attendee content reports and the organiser moderation inbox (H18).",
+  reports: "Attendee content reports and the organizer moderation inbox (H18).",
   certificates:
     "Attendance certificates, their policy, issue, revocation and verification (#1083).",
   "live-activities": "Participant and staff Live Activities / Live Updates (#966).",

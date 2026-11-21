@@ -1,5 +1,5 @@
 /**
- * Non-colour design tokens (H55, H59). Colours live in `theme/colors.ts`,
+ * Non-color design tokens (H55, H59). Colors live in `theme/colors.ts`,
  * Dynamic Type caps in `theme/dynamic-type.ts`. `docs/DESIGN.md` §12 explains
  * how the three fit together; screens import from `@/theme`.
  */

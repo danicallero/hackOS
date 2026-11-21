@@ -85,7 +85,7 @@ const JSON_HEADERS = () => ({
  * - Companies: a sticker album of the sponsor stands to collect.
  * The screen uses the platform header, laid out like Activities: on iOS 26
  * the native bar with the title as a leading item, the native search and the
- * favourites filter as a native toolbar button; elsewhere
+ * favorites filter as a native toolbar button; elsewhere
  * `LegacyScreenHeader`. Search and
  * the filter apply to People only. Scanning is the shared `BadgeLinkActions`
  * pill in the content (R008: NFC direct where supported, QR and manual code
@@ -431,7 +431,7 @@ export function DiaryScreen() {
   const openPerson = useCallback((userId: number) => router.push(personHref(userId)), [router]);
 
   const inputOpen = input !== null;
-  // Search and the favourites filter apply to People only, once there is
+  // Search and the favorites filter apply to People only, once there is
   // anyone to search; Companies shows the header without them.
   const searchable = section === "people" && (entries?.length ?? 0) > 0;
   const activeQuery = searchable ? query : "";
@@ -717,7 +717,7 @@ export function DiaryScreen() {
               accessibilityRole="header"
               maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
               style={{
-                // A fixed colour, not the dynamic label: iOS 26 flips a bar
+                // A fixed color, not the dynamic label: iOS 26 flips a bar
                 // item's light/dark appearance with what scrolls behind it,
                 // which turned the title white over the blue scan pill.
                 color: colorScheme === "dark" ? "#ffffff" : "#000000",
@@ -811,7 +811,7 @@ export function DiaryScreen() {
   );
 }
 
-/** The favourites filter (#935) in `LegacyScreenHeader`, on People only. */
+/** The favorites filter (#935) in `LegacyScreenHeader`, on People only. */
 function FavouritesToggle({
   visible,
   on,
@@ -838,7 +838,7 @@ function FavouritesToggle({
   );
 }
 
-/** The wallet (badge QR) button in `LegacyScreenHeader`, beside the favourites star. */
+/** The wallet (badge QR) button in `LegacyScreenHeader`, beside the favorites star. */
 function WalletToggle({ onToggle }: { onToggle: () => void }) {
   const { t } = useLocale();
   return (

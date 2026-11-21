@@ -83,7 +83,7 @@ const helper = { routeAccessPolicy: { kind: "contextual" as const, policy: "help
 const catalogue = {
   routeAccessPolicy: { kind: "contextual" as const, policy: "helpdesk-catalogue" },
 };
-/** The topic catalogue is global: proposing a topic is allowed in any edition. */
+/** The topic catalog is global: proposing a topic is allowed in any edition. */
 const catalogueGlobal = {
   routeAccessPolicy: {
     kind: "contextual" as const,
@@ -127,7 +127,7 @@ const topicProposalLimit = rateLimitGuard(
 export function registerHelpdeskRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
-  // ── H61 knowledge catalogue ────────────────────────────────────────────
+  // ── H61 knowledge catalog ────────────────────────────────────────────
   r.get(
     "/api/helpdesk/topics",
     {
@@ -137,12 +137,12 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         querystring: topicQuery,
         summary: "Search help desk topics",
         description:
-          "The shared knowledge catalogue used by helper profiles and help requests (H61). Requesters, and any call with `available=1`, get only the topics offered by published helpers who are in the venue now (H24); eligible helpers and `helpdesk:manage` holders otherwise get the whole catalogue. `q` matches anywhere in the name, ignoring case and accents; exact and prefix matches come first. Other is not a topic: requests carry `other`. Readable with any help desk capability or by an eligible helper (accepted mentor) preparing a profile.",
+          "The shared knowledge catalog used by helper profiles and help requests (H61). Requesters, and any call with `available=1`, get only the topics offered by published helpers who are in the venue now (H24); eligible helpers and `helpdesk:manage` holders otherwise get the whole catalog. `q` matches anywhere in the name, ignoring case and accents; exact and prefix matches come first. Other is not a topic: requests carry `other`. Readable with any help desk capability or by an eligible helper (accepted mentor) preparing a profile.",
       },
     },
     async (req) => {
       // Requesters (and any request form) see only what someone in the venue can help with;
-      // helpers preparing a profile and managers see the whole catalogue.
+      // helpers preparing a profile and managers see the whole catalog.
       const wholeCatalogue =
         !req.query.available &&
         ((await isEligibleHelper(pool, req.userId as number)) ||
@@ -168,7 +168,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         body: topicBody,
         summary: "Add a help desk topic",
         description:
-          'Adds a missing topic to the shared catalogue (H61), like the university picker. An equivalent name (case, accents and spacing ignored) returns the existing topic with `created: false` and status 200; a new one answers 201. "Other" and its translations are reserved (400 `topic_reserved`). Only people who can have a helper profile (the `eligible` flag of GET /api/me/helper-profile, accepted mentors preparing a profile included) may add topics; everyone else, requesters and managers who are not helpers included, gets 403 `helper_not_eligible`. Audited; 20 proposals per hour per person.',
+          'Adds a missing topic to the shared catalog (H61), like the university picker. An equivalent name (case, accents and spacing ignored) returns the existing topic with `created: false` and status 200; a new one answers 201. "Other" and its translations are reserved (400 `topic_reserved`). Only people who can have a helper profile (the `eligible` flag of GET /api/me/helper-profile, accepted mentors preparing a profile included) may add topics; everyone else, requesters and managers who are not helpers included, gets 403 `helper_not_eligible`. Audited; 20 proposals per hour per person.',
       },
     },
     async (req, reply) => {
@@ -183,7 +183,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
       config: cap(CAPABILITIES.HELPDESK_MANAGE),
       preHandler: requireCapability(CAPABILITIES.HELPDESK_MANAGE),
       schema: {
-        summary: "List the knowledge catalogue with its usage",
+        summary: "List the knowledge catalog with its usage",
         description:
           "Every help desk topic with `helpers` (profiles that list it) and `requests` (requests about it), for the knowledge areas manager in Libraries (H61). Requires `helpdesk:manage`.",
       },
@@ -217,7 +217,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         body: topicBody,
         summary: "Rename a help desk topic",
         description:
-          "Renames a catalogue topic everywhere it is used (H61). A name equivalent to another topic answers 409 `topic_name_taken`: merge them instead. Audited with the old and new name.",
+          "Renames a catalog topic everywhere it is used (H61). A name equivalent to another topic answers 409 `topic_name_taken`: merge them instead. Audited with the old and new name.",
       },
     },
     async (req) => renameTopic(req.userId as number, req.params.id, req.body.name),
@@ -247,7 +247,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Read my helper profile",
         description:
-          "The caller's help desk profile (H61, H62): `eligible` (holds `helpdesk:offer`, or has an accepted or confirmed application whose granted role carries it, so accepted mentors can prepare before event access), `published`, the shared public-profile `bio`, `topics`, stated `availability`, `suggestedInterval` (hacking window, else event window, else null: what clients prefill for a new interval), `challengeIds` and `challenges` (the challenges the helper limited their alerts and inbox to, named; empty means every request) with `challengeOptions` (every visible challenge they may pick), and `preview`: exactly what others get from GET /api/helpdesk/helpers/:userId (the card plus `profile`, the public-profile entry honouring the person's switches), even while unpublished; only `profile.cvUrl` is the owner's own route. Answers any signed-in person; non-helpers get `eligible: false` with empty data.",
+          "The caller's help desk profile (H61, H62): `eligible` (holds `helpdesk:offer`, or has an accepted or confirmed application whose granted role carries it, so accepted mentors can prepare before event access), `published`, the shared public-profile `bio`, `topics`, stated `availability`, `suggestedInterval` (hacking window, else event window, else null: what clients prefill for a new interval), `challengeIds` and `challenges` (the challenges the helper limited their alerts and inbox to, named; empty means every request) with `challengeOptions` (every visible challenge they may pick), and `preview`: exactly what others get from GET /api/helpdesk/helpers/:userId (the card plus `profile`, the public-profile entry honoring the person's switches), even while unpublished; only `profile.cvUrl` is the owner's own route. Answers any signed-in person; non-helpers get `eligible: false` with empty data.",
       },
     },
     async (req) => getMyHelperProfile(req.userId as number),
@@ -412,7 +412,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         params: userParams,
         summary: "Read a helper",
         description:
-          "One published helper (H63): the list card (including `affiliationLogoUrl` and `affiliationLogoNegativeUrl` for light/dark artwork) plus `profile`, the person's public profile in exactly the shape of GET /api/directory/:userId (name, photo route, headline, bio, location note, social links, CV route, projects, challenges, help topics), honouring their own public-profile switches (surname, photo, project, CV). Publishing the helper profile is the consent for help desk readers: it needs neither a badge scan nor a visible public profile, and reading it creates no diary contact. `profile.cvUrl` is served to help desk readers too. The requester of a request this helper claimed or resolved can also open them (H64, H66), even if they were unpublished since; knowing an id grants nothing else. Unpublished, ineligible and unknown people all answer 404.",
+          "One published helper (H63): the list card (including `affiliationLogoUrl` and `affiliationLogoNegativeUrl` for light/dark artwork) plus `profile`, the person's public profile in exactly the shape of GET /api/directory/:userId (name, photo route, headline, bio, location note, social links, CV route, projects, challenges, help topics), honoring their own public-profile switches (surname, photo, project, CV). Publishing the helper profile is the consent for help desk readers: it needs neither a badge scan nor a visible public profile, and reading it creates no diary contact. `profile.cvUrl` is served to help desk readers too. The requester of a request this helper claimed or resolved can also open them (H64, H66), even if they were unpublished since; knowing an id grants nothing else. Unpublished, ineligible and unknown people all answer 404.",
       },
     },
     async (req) => {
@@ -460,7 +460,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         body: createRequestBody,
         summary: "Request help",
         description:
-          "Opens a help request for the caller, who is always its only requester (H64): a description (≤500), where they are (≤120), up to 5 catalogue topics and/or `other`, optionally `challengeId` (a visible challenge, else 400) and `preferSponsor` (default false, requires a selected challenge). Routing (H65) runs once now, among available present helpers: a helper who limited themselves to some challenges is a candidate only for those challenges; sponsors of the request's challenge match regardless of topic; with `preferSponsor` and at least one available representative of the chosen challenge’s company only those representatives are notified (`routing: sponsor`). Otherwise: published helpers present at the venue (H24; stated intervals are advisory) and know ANY requested topic are notified (`routing: matched`); with Other, or when no such helper matches, every available present helper is (`fallback`); nobody available leaves it open with `none`, still visible in every helper's inbox. Notices go to the inbox and push (category `helpdesk`). One active request per person or team (409 `help_request_active`); 409 `helpdesk_closed` while configured opening hours are closed (H64, GET /api/helpdesk/schedule); 403 without event access or active team membership. Audited.",
+          "Opens a help request for the caller, who is always its only requester (H64): a description (≤500), where they are (≤120), up to 5 catalog topics and/or `other`, optionally `challengeId` (a visible challenge, else 400) and `preferSponsor` (default false, requires a selected challenge). Routing (H65) runs once now, among available present helpers: a helper who limited themselves to some challenges is a candidate only for those challenges; sponsors of the request's challenge match regardless of topic; with `preferSponsor` and at least one available representative of the chosen challenge’s company only those representatives are notified (`routing: sponsor`). Otherwise: published helpers present at the venue (H24; stated intervals are advisory) and know ANY requested topic are notified (`routing: matched`); with Other, or when no such helper matches, every available present helper is (`fallback`); nobody available leaves it open with `none`, still visible in every helper's inbox. Notices go to the inbox and push (category `helpdesk`). One active request per person or team (409 `help_request_active`); 409 `helpdesk_closed` while configured opening hours are closed (H64, GET /api/helpdesk/schedule); 403 without event access or active team membership. Audited.",
       },
     },
     async (req, reply) => reply.code(201).send(await createRequest(req.userId as number, req.body)),
@@ -512,7 +512,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         body: editRequestBody,
         summary: "Edit an open help request",
         description:
-          "The requester replaces the content of an OPEN request (H64): `description`, `location`, `topicIds`/`other`, `challengeId`, `preferSponsor`, with the same validation as creation (400). The request goes to the end of the first-come, first-served queue (`queuedAt` = now, `queuePosition` recomputed) and is routed again: helpers who newly match are notified, nobody who already received it is notified twice. A claimed request answers 409 `help_request_already_claimed`, a resolved or cancelled one 409 `help_request_closed`; 404 for anyone else. Serialized with claims by a row lock. Audited with the names of the changed fields only.",
+          "The requester replaces the content of an OPEN request (H64): `description`, `location`, `topicIds`/`other`, `challengeId`, `preferSponsor`, with the same validation as creation (400). The request goes to the end of the first-come, first-served queue (`queuedAt` = now, `queuePosition` recomputed) and is routed again: helpers who newly match are notified, nobody who already received it is notified twice. A claimed request answers 409 `help_request_already_claimed`, a resolved or canceled one 409 `help_request_closed`; 404 for anyone else. Serialized with claims by a row lock. Audited with the names of the changed fields only.",
       },
     },
     async (req) => editRequest(req.userId as number, req.params.id, req.body),
@@ -526,7 +526,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         params: idParams,
         summary: "Cancel a help request",
         description:
-          "The requester withdraws an open or claimed request; its status becomes `cancelled` and the audited record remains in history. A claiming helper is notified. 409 `help_request_closed` once resolved or cancelled; 404 for anyone else (H64).",
+          "The requester withdraws an open or claimed request; its status becomes `cancelled` and the audited record remains in history. A claiming helper is notified. 409 `help_request_closed` once resolved or canceled; 404 for anyone else (H64).",
       },
     },
     async (req) => cancelRequest(req.userId as number, req.params.id),

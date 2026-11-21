@@ -382,7 +382,7 @@ key; they are not application secrets. Public ingress is a separate always-on
 service and is not the administration path. The staging workflow remains
 manually dispatchable for an explicit SHA rollback or verification run.
 
-`deploy-incus.yml` runs only when an authorised operator manually selects an
+`deploy-incus.yml` runs only when an authorized operator manually selects an
 already-published release tag and its API/web image set. It needs a self-hosted
 runner with local Incus access. Registering that runner is an infrastructure
 prerequisite outside this repository.

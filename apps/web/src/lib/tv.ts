@@ -17,7 +17,7 @@ type TvModeName =
   | "github"
   | typeof TV_CONNECTIONS_MODE;
 
-/** Modes organisers may select from the TV control surface. */
+/** Modes organizers may select from the TV control surface. */
 export const TV_CONTROL_MODES = [
   "live",
   "rooms",

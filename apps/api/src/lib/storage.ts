@@ -30,7 +30,7 @@ const s3 = new S3Client({
  * Fetch a PRIVATE object's bytes server-side. Downloads of application uploads
  * are PROXIED through the API rather than presigned, so the owner-or-staff check
  * runs on every request against the caller's session — a copied link grants
- * nothing to anyone who isn't authorised (H12).
+ * nothing to anyone who isn't authorized (H12).
  */
 export async function getObject(key: string): Promise<GetObjectCommandOutput> {
   return s3.send(new GetObjectCommand({ Bucket: config.S3_BUCKET, Key: key }));

@@ -117,7 +117,7 @@ legend formatter is updated, without replacing series or React state. Bar catego
 separate overlapping sparse series so each legend item targets its own bar.
 Diagonal decals use thicker stripes, count axes use integer bounds, and a
 native “Chart data and filters” disclosure exposes every exact value without hover.
-Its labelled checkboxes mirror the native legend selection and let keyboard users
+Its labeled checkboxes mirror the native legend selection and let keyboard users
 filter every category or series, including entries outside the scrolling legend.
 Pointer legend changes update the checkboxes, and theme changes preserve selection.
 
@@ -127,7 +127,7 @@ draws an ECharts `geo` component through a d3 orthographic projection on the
 canvas renderer, with Natural Earth 110m countries from `world-atlas`, a
 heat-map layer (square-root weighted so small towns stay visible beside the
 largest one) and a dot per city whose tooltip gives the exact count. Dragging
-rotates the globe; zoom buttons scale it; the first view centres on the
+rotates the globe; zoom buttons scale it; the first view centers on the
 people-weighted mean and frames 90% of them (the whole globe when they are
 spread over most of a hemisphere). The heat kernel spans a fixed arc of the
 sphere, so it grows with the zoom. Only the visible hemisphere is drawn. A hidden, evenly spaced point set over the whole sphere keeps the geo
@@ -139,7 +139,7 @@ stores each row's coordinates, a district flag and every country's capital;
 rebuild with `apps/web/scripts/build-city-data.mjs`). A city matches by name
 within its country, preferring the answer's region by shared words (so
 "Castilla y León" finds "Castille and León") and then a town over a district.
-A city outside the index is shown at its country's capital; an unrecognisable
+A city outside the index is shown at its country's capital; an unrecognizable
 country is counted in a "not placed on the map" line under the globe. No
 answer is sent to a third-party geocoder.
 

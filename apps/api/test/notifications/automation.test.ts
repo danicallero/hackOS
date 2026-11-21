@@ -122,7 +122,7 @@ describe("automatic notification settings", () => {
   });
 });
 
-describe("schedule reminder job honours the settings", () => {
+describe("schedule reminder job honors the settings", () => {
   async function run() {
     const { runScheduleRemindersOnce } = await import(
       "../../src/modules/notifications/schedule-reminders.js"

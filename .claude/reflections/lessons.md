@@ -139,7 +139,7 @@ Composing detail pages, lists, or participant workflows.
 
 ### Mistake
 Nested cards surrounded every member and challenge, while badges decorated
-static metadata. The single-project participant had to navigate a catalogue.
+static metadata. The single-project participant had to navigate a catalog.
 
 ### Lesson
 Apply `docs/DESIGN.md` §3 deliberately: start with spacing, aligned headings
@@ -180,7 +180,7 @@ header collapses and blurs. Forms are inset-grouped rows with a caption above a
 borderless input, never boxes inside a card. Header actions are native toolbar
 buttons (perfect circles) or liquid-glass buttons; an icon-only button is only
 acceptable for a universal glyph (plus, filter), never for a destination such
-as a gallery or inbox; those get a labelled row or glass button. No badge on
+as a gallery or inbox; those get a labeled row or glass button. No badge on
 an icon that already carries a count. Pick one corner radius per role
 (containers 14, buttons capsule) instead of mixing. A filter that grows with
 data (challenges, projects) is a menu, not a sliding segmented control; test
@@ -487,7 +487,7 @@ Inspect actual desktop/narrow screenshots before claiming visual quality.
 Compare new screens directly with those maintained references; passing flows
 and having screenshots are not evidence that hierarchy or alignment is good.
 Also compare the narrow header action row with Users; preserve its inline
-layout, reducing labelled edit actions to accessible icons when necessary.
+layout, reducing labeled edit actions to accessible icons when necessary.
 For compact review dialogs, test the maximum permitted action set at the
 smallest supported viewport, including long names. At narrow widths, separate
 identity from the navigation/close row and use single-line ellipsis while
@@ -703,7 +703,7 @@ Date: 2026-10-20
 Adapting a phone or foldable layout to a large tablet window.
 
 ### Mistake
-Moved the tab bar to a rail but left the whole navigator capped inside a centred column. Large empty margins remained, while the list and detail competed for the restricted width.
+Moved the tab bar to a rail but left the whole navigator capped inside a centered column. Large empty margins remained, while the list and detail competed for the restricted width.
 
 ### Lesson
 A navigation rail alone does not establish a tablet layout. The navigator must use the available window; reading limits belong to the content panes.
@@ -804,8 +804,8 @@ Adding a new family of native pages or sheets with a shared page wrapper.
 
 ### Mistake
 The help desk wrapper set `headerTransparent: false` with an opaque
-`headerStyle` colour (and sheets `headerBlurEffect: "none"`), so every new page
-and modal painted a grey band and clipped content instead of scrolling under
+`headerStyle` color (and sheets `headerBlurEffect: "none"`), so every new page
+and modal painted a gray band and clipped content instead of scrolling under
 the native scroll-edge blur. The first fix made sheets transparent but left
 their first field under the bar, because UIKit does not inset content under a
 transparent sheet header.
@@ -854,7 +854,7 @@ future section headers blurs the whole area above them. Move the pinned native
 the date itself is blurred. Restore it inline when the next section pushes it
 out. `modules/scroll-edge-container` implements this lifecycle, and needs a
 native rebuild, not just Metro refresh. Keep event-time formatting, secondary
-label colour, semibold weight and the user's chosen size. The jump-to-now
+label color, semibold weight and the user's chosen size. The jump-to-now
 position must account for the native header and the sticky date, not a fixed
 old 80 pt offset. Apple's reference is
 [custom edge containers](https://developer.apple.com/videos/play/wwdc2025/284/).
@@ -905,7 +905,7 @@ the parallel card/editor in the same change.
 
 ### Validation
 Open the person from the feature and from the original entry point and compare
-screenshots: same layout, fields and header behaviour; editing from either
+screenshots: same layout, fields and header behavior; editing from either
 place changes both.
 
 ### Exceptions
@@ -937,7 +937,7 @@ UI components) and render it before consulting outside references. New
 surfaces take their proportions, fields, labels, palette and typefaces from the
 closest existing artifact; outside art is an accent, not the base. Titles use
 the edition's actual title weights (Rockwell regular), values use Inter; flat
-colour, no decorative gradients.
+color, no decorative gradients.
 
 ### Action
 Look at the real rendered artifact (e.g. screenshot of the Wallet pass), copy
@@ -968,7 +968,7 @@ Date: 2026-11-15
 Changing a record's return navigation when records link to other record types.
 
 ### Mistake
-Fixed company → profile while profile → company still returned to a fixed catalogue.
+Fixed company → profile while profile → company still returned to a fixed catalog.
 
 ### Lesson
 A single entry-point fix does not establish correct navigation through a stack of cross-linked records.
@@ -993,7 +993,7 @@ Date: 2026-11-17
 Animating a control that navigates or commits a selection (tab bars, segmented controls, menus).
 
 ### Mistake
-Deferred the tab switch until the tab-bar lens had travelled and settled, to avoid a hitch while the next screen mounted. In a release build the bar visibly paused for about a second before every tab change.
+Deferred the tab switch until the tab-bar lens had traveled and settled, to avoid a hitch while the next screen mounted. In a release build the bar visibly paused for about a second before every tab change.
 
 ### Lesson
 The action a person asked for commits immediately; the animation runs alongside and may be interrupted. A hitch is fixed at its source, never by delaying the outcome.

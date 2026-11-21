@@ -402,7 +402,7 @@ export function HelpInput({
 }
 
 /**
- * One row for a catalogue selection (like the challenge field): the chosen
+ * One row for a catalog selection (like the challenge field): the chosen
  * names on the row, a chevron, and the searchable sheet on tap. The sheet
  * writes back through the shared draft, which this row mirrors into the form.
  */
@@ -421,7 +421,7 @@ export function TopicField({
   /** The request form's "Other" choice, edited inside the picker; absent for helper knowledge. */
   other?: boolean;
   onOtherChange?: (other: boolean) => void;
-  /** Eligible helpers may add a name to the catalogue from the picker. */
+  /** Eligible helpers may add a name to the catalog from the picker. */
   allowAdd?: boolean;
   disabled?: boolean;
 }) {

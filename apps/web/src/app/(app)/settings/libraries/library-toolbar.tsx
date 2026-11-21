@@ -20,7 +20,7 @@ export function LibraryToolbar({
   onSearchChange: (value: string) => void;
   searchLabel: string;
   count: number;
-  /** Omitted when the catalogue is not created here (knowledge areas are added by helpers). */
+  /** Omitted when the catalog is not created here (knowledge areas are added by helpers). */
   addLabel?: string;
   onAdd?: () => void;
 }) {

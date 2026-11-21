@@ -1,6 +1,6 @@
 /**
  * Layout for participant surfaces (H55, H59): symmetric size-class gutters and a readable,
- * centred content column, so header and body share one leading edge at every window size.
+ * centered content column, so header and body share one leading edge at every window size.
  * Navigators stay full width; only content panes are bounded (R028).
  */
 import { useWindowDimensions } from "react-native";
@@ -11,7 +11,7 @@ import { readableContentWidth, screenGutter } from "@/theme/layout";
 
 export type ContentKind = "form" | "list" | "grid";
 
-/** Style for a ScrollView/FlatList `contentContainerStyle`: centred, bounded (full width when expanded), equal gutters. */
+/** Style for a ScrollView/FlatList `contentContainerStyle`: centered, bounded (full width when expanded), equal gutters. */
 export interface ReadableContentStyle {
   alignSelf: "center" | "flex-start";
   maxWidth: number;
@@ -51,7 +51,7 @@ export function participantLayout(
         ? windowWidth
         : readableContentWidth(windowWidth);
   const columnWidth = Math.min(windowWidth, cap);
-  // A narrow form centred in an expanded window leaves the native title at the window edge and
+  // A narrow form centered in an expanded window leaves the native title at the window edge and
   // the body in the middle of an empty canvas. There it starts at the leading edge, under the title.
   const alignSelf =
     kind === "form" && windowSizeClass(windowWidth) === "expanded" ? "flex-start" : "center";

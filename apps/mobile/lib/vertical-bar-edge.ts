@@ -40,7 +40,7 @@ export function useSideInsets(): { left: number; right: number } {
   return navigationSideInsets(insets, edge, window, Platform.OS);
 }
 
-/** Whether the root navigator stands in the labelled tablet rail rather than a symbol column. */
+/** Whether the root navigator stands in the labeled tablet rail rather than a symbol column. */
 export function useTabletRail(): boolean {
   const insets = useSafeAreaInsets();
   const edge = useVerticalBarEdge();

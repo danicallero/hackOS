@@ -155,7 +155,7 @@ const MAX_OFFLINE_ASSIGNMENT_AGE_MS = 72 * 60 * 60 * 1000;
  * transaction (read by `h54_set_badge_assigned_at`) so scans taken with the badge
  * in between are not rejected as predating the assignment. Never in the future,
  * never before the previous assignment boundary, and bounded in age; anything
- * else is rejected so a client cannot backdate a badge to legitimise old scans.
+ * else is rejected so a client cannot backdate a badge to legitimize old scans.
  */
 export async function pinBadgeAssignmentTime(
   client: Queryable,

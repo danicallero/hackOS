@@ -22,7 +22,7 @@ import type { UpdateEntryInput } from "./schemas.js";
  * Event diary (#935): an attendee's private list of the people and sponsor
  * stands they met. Entries are added only by scanning a badge, ticket or stand
  * tag; there is no browsable directory. Only the owner's own choices
- * (favourite, note) are stored;
+ * (favorite, note) are stored;
  * cards are projected live from the #934 public profile and the public sponsor
  * profile, so a person who hides their profile — or a sponsor that is hidden
  * again — shows as unavailable instead of as a stale copy.

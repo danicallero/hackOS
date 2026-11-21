@@ -14,7 +14,7 @@ import { useLocale } from "@/lib/i18n";
 import type { NativeProject } from "@/lib/native-projects";
 import { projectSummary } from "@/lib/project-text";
 
-/** H18/H60: catalogue cards keep real content compact and disclosures out of the grid flow. */
+/** H18/H60: catalog cards keep real content compact and disclosures out of the grid flow. */
 export function GalleryProjectCard({ project }: { project: NativeProject }) {
   const { language, t } = useLocale();
   const cover = project.files?.find((file) => file.mimeType.startsWith("image/"));

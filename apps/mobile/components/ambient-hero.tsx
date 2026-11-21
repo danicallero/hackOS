@@ -17,18 +17,18 @@ const box = {
   top: HERO_TOP,
 } as const;
 
-/** Style blur needs Android 12 (RenderEffect); older devices keep the single-colour wash. */
+/** Style blur needs Android 12 (RenderEffect); older devices keep the single-color wash. */
 const canBlur = Platform.OS !== "android" || Number(Platform.Version) >= 31;
 
 /**
- * A page header washed in an image's own colours (H44, H48): the image itself,
+ * A page header washed in an image's own colors (H44, H48): the image itself,
  * enlarged and softly blurred, under a veil
- * of the page colour and fading into the page, so each side keeps its colour.
+ * of the page color and fading into the page, so each side keeps its color.
  * It is the same request as the avatar or logo on the page, so the image is
  * downloaded once: iOS blurs the rendered backdrop, Android blurs the image with a style
  * filter, since Glide would fetch a transformed one again. Private photos stay
  * in memory only, like the avatar (#934). Without an image the hero is the
- * single-colour wash (`fallback`, blue for people and projects).
+ * single-color wash (`fallback`, blue for people and projects).
  */
 export function ImageHero({
   uri,
@@ -69,7 +69,7 @@ export function ImageHero({
           cachePolicy="memory"
           contentFit="cover"
           source={apiImageSource(uri)}
-          // A slow connection fades the colours in instead of popping them.
+          // A slow connection fades the colors in instead of popping them.
           transition={600}
           style={[
             StyleSheet.absoluteFill,
@@ -94,7 +94,7 @@ export function ImageHero({
   );
 }
 
-/** Label colour on an `ImageHero`: the page's own over an image, else the wash's pick. */
+/** Label color on an `ImageHero`: the page's own over an image, else the wash's pick. */
 export function useImageHeroForeground(
   uri: string | null | undefined,
   dark: boolean,

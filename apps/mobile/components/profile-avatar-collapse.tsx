@@ -98,7 +98,7 @@ export function useProfileAvatarCollapse(
     /**
      * False when the screen pads its own content instead of letting iOS add an
      * automatic inset: the true top is then offset 0 and never moves, so a
-     * cancelled swipe-to-dismiss (which briefly changes an automatic inset)
+     * canceled swipe-to-dismiss (which briefly changes an automatic inset)
      * cannot shift the page and half-collapse the avatar.
      */
     insetAdjusted?: boolean;

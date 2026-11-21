@@ -1,6 +1,6 @@
 // Spreadsheet-style keyboard navigation for the Manage Schedule grid (H59).
 //
-// This is the DOM half of the behaviour — it walks the rendered cells by their
+// This is the DOM half of the behavior — it walks the rendered cells by their
 // `data-schedule-*` attributes — while the pure "which way does this key move
 // the focus" half lives in schedule-model.ts and is unit-tested there.
 

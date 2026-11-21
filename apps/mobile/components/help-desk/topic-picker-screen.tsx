@@ -17,12 +17,12 @@ import { useLocale } from "@/lib/i18n";
 const PAGE = 50;
 
 /**
- * H61/H64: the shared knowledge catalogue in the same searchable sheet as the
+ * H61/H64: the shared knowledge catalog in the same searchable sheet as the
  * project challenge picker. Tapping a row toggles it in the draft the form
- * that opened the sheet is holding; a name that is not in the catalogue yet
+ * that opened the sheet is holding; a name that is not in the catalog yet
  * can be added (it becomes a real topic everyone can pick). On the request
- * form, "Other" is its own group above the catalogue (like None in the
- * challenge picker) and excludes the catalogue topics.
+ * form, "Other" is its own group above the catalog (like None in the
+ * challenge picker) and excludes the catalog topics.
  */
 export function HelpTopicPickerScreen() {
   const { t } = useLocale();
@@ -36,11 +36,11 @@ export function HelpTopicPickerScreen() {
   const [adding, setAdding] = useState(false);
   const [retry, setRetry] = useState(0);
   // H64: a request can only ask for what an available helper covers right now;
-  // a helper editing their own knowledge sees the whole catalogue.
+  // a helper editing their own knowledge sees the whole catalog.
   const availableOnly = !allowAdd;
   const latestSelected = useRef(selected);
   latestSelected.current = selected;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: retry repeats the catalogue request after an error.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: retry repeats the catalog request after an error.
   useEffect(() => {
     let active = true;
     const timer = setTimeout(
@@ -80,7 +80,7 @@ export function HelpTopicPickerScreen() {
     (topic) => topic.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
   );
   const full = selected.length >= maximum;
-  // Catalogue order; a checkmark changes, the row stays. Selected topics outside the current search stay visible first.
+  // Catalog order; a checkmark changes, the row stays. Selected topics outside the current search stay visible first.
   const rows = [
     ...selected.filter((topic) => !(topics ?? []).some((item) => item.id === topic.id) && !name),
     ...(topics ?? []),

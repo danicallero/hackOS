@@ -151,7 +151,7 @@
         "body": "The person who took it can no longer come. Others can still take it."
       },
       "cancelled": {
-        "subject": "Help request cancelled",
+        "subject": "Help request canceled",
         "body": "The person or team who asked for help no longer needs it."
       },
       "resolved": {
@@ -217,7 +217,7 @@
         "body": "The person who took it can no longer come."
       },
       "cancelled": {
-        "title": "Help request cancelled",
+        "title": "Help request canceled",
         "body": "They no longer need help."
       },
       "resolved": {

@@ -13,7 +13,7 @@ import type { Queryable } from "../../db/pool.js";
  *
  * The fold is a de-duplicating union, deliberately shallow: two questions are
  * "the same question" when their keys match, or when their labels match after
- * case/whitespace/trailing-punctuation normalisation. Nothing semantic — the
+ * case/whitespace/trailing-punctuation normalization. Nothing semantic — the
  * admin review step is what catches near-misses, and guessing harder would
  * silently drop questions an enterprise wrote on purpose.
  */
@@ -31,7 +31,7 @@ function normalizeQuestionText(text: string): string {
 
 /**
  * Identity of a question for merge purposes: every language of its label,
- * normalised. Two questions collide when ANY language matches — an enterprise
+ * normalized. Two questions collide when ANY language matches — an enterprise
  * that translated the same question slightly differently in one language
  * should still get one merged question, not two.
  */
@@ -125,7 +125,7 @@ export async function challengePanels(
  * takes the second branch, so single-challenge enterprises are unaffected.
  *
  * Returned untyped on purpose: pre-H44 panels are bare key strings rather
- * than catalogue questions, and `loadCriteria` still validates those
+ * than catalog questions, and `loadCriteria` still validates those
  * leniently.
  */
 export async function resolveChallengePanel(

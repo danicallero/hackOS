@@ -14,7 +14,7 @@ const prizeSchema = z.object({
 /**
  * Partial edit of the sponsor-owned surface of a challenge. `judgingPanelCriteria`
  * is the typed questionnaire the judges will fill in; it is validated against
- * the shared question catalogue and locked after the first submitted
+ * the shared question catalog and locked after the first submitted
  * evaluation or completed queue entry.
  */
 export const updateChallengeBody = z

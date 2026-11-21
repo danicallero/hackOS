@@ -4,7 +4,7 @@ import { renderMobile } from "./render";
 
 // Android draws UIKit's switch (IosSwitch) instead of the Material Switch.
 
-// The stock jest Switch drops colour props; expose them to assert what AppSwitch passes.
+// The stock jest Switch drops color props; expose them to assert what AppSwitch passes.
 jest.mock("react-native/Libraries/Components/Switch/Switch", () => {
   const Native = require("react-native");
   return {

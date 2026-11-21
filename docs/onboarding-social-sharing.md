@@ -1,7 +1,7 @@
 # Onboarding social sharing
 
 Reusable web component that lets an attendee share "I'm going" with a
-personalised image. It lives in
+personalized image. It lives in
 `apps/web/src/components/onboarding/social-sharing.tsx`; the embedding flow owns
 placement, routing and the signed-in data.
 
@@ -58,14 +58,14 @@ Drawn client-side on a canvas, exported as PNG at 2×. No image service.
 
 The pass is the Apple Wallet pass at its real proportions (838×1165): organizer
 logo and date in the header, the strip, NAME and ROLE side by side (red mono
-labels, Inter values), and the photo where the QR sits (the person's deterministic mascot on its independently selected colour when
+labels, Inter values), and the photo where the QR sits (the person's deterministic mascot on its independently selected color when
 there is no photo). It is drawn slightly tilted on the ink canvas with Emilia
 the seagull perched on it. All text is left-aligned on one margin. Landscape and Square put the text
 column (Square: at the top-left) (event line, name as the hero, role, host) on the left and the tilted
 pass on the right. Portrait stacks the text on top and anchors the pass to the right below it;
 Story instead anchors the ticket at the bottom-right corner and grows it to the
-left and up as far as the text block allows, and and put the host (the link, larger in Story) centred under it
-(Square too; Landscape keeps it with the text column); the column is centred in the format's safe band and the pass is scaled to
+left and up as far as the text block allows, and and put the host (the link, larger in Story) centered under it
+(Square too; Landscape keeps it with the text column); the column is centered in the format's safe band and the pass is scaled to
 fill what is left. The pass header shows the supplied date with the year
 (`dateWithYear`: "26 - 28 feb" becomes "26 - 28 feb 2027" unless the label
 already has it); the host line adds the supplied location. Long names shrink
@@ -76,10 +76,10 @@ Assets, all copied from the repo into `apps/web/public/onboarding/`:
 | File | Source |
 | --- | --- |
 | `pass-strip.png` | `apps/api/assets/apple-wallet/strip@3x.png` (lighthouse + HackUDC 2027) |
-| `gpul-logo.png` | `apps/api/assets/apple-wallet/logo@2x.png`, recoloured ink for the blue body |
+| `gpul-logo.png` | `apps/api/assets/apple-wallet/logo@2x.png`, recolored ink for the blue body |
 | `emilia.png` | `apps/web/public/errors/emilia-404.png`, trimmed and scaled |
 
-Palette: ink `#030846`, brand blue `#a3d5ff` (the Wallet pass colour), red
+Palette: ink `#030846`, brand blue `#a3d5ff` (the Wallet pass color), red
 labels `#bf2100`. Inter for values (the page's own stack), a system mono for the
 pass labels and date, matching the pass.
 
@@ -103,12 +103,12 @@ numbers as conservative defaults:
   ([story size guide](https://www.inro.social/blog/instagram-story-size),
   [story design tips](https://designshack.net/articles/graphics/instagram-story-design),
   [layout ideas](https://postsyncer.com/blog/instagram-story-layout-ideas)).
-- Feed: design at 4:5 (1080×1350) and keep key content in a centred 3:4 area,
+- Feed: design at 4:5 (1080×1350) and keep key content in a centered 3:4 area,
   since the profile grid crops to 3:4
   ([image sizes](https://postsyncer.com/tips/instagram-image-sizes-complete-guide),
   [post size guide](https://creatorflow.so/blog/instagram-post-size-guide/)).
 
-## Sharing behaviour
+## Sharing behavior
 
 Every action needs an explicit click; mounting only renders the preview.
 
@@ -130,29 +130,29 @@ Every action needs an explicit click; mounting only renders the preview.
 - **Send image…** appears only where `navigator.canShare({ files })` is true and
   hands the PNG and caption to the system share sheet, which is the one path
   that attaches the image to a post.
-- A personalised link preview would need a server-rendered Open Graph image on
+- A personalized link preview would need a server-rendered Open Graph image on
   a per-person URL, which this component does not do (no tokens in shared URLs).
 
 ## Copy
 
 Strings live in `social-sharing.locales.json` (es/gl/en, identical keys,
 enforced by the component test) and are read by `useLocale().language`. To fold
-them into the shared catalogue, move the keys into
+them into the shared catalog, move the keys into
 `packages/shared/locales/{es,gl,en}/web.json` and switch the component to `t()`.
 
 ## Accessibility
 
 Radio group for the format; preview `alt` names the attendee and event;
-the loading skeleton is a labelled status; `role="alert"` with retry on render
+the loading skeleton is a labeled status; `role="alert"` with retry on render
 errors; the Share menu is the shared Radix menu; the only animation is the
 shared skeleton/spinner (`motion-safe`). Controls use the shared Button sizes.
 
 ## Tests
 
 `pnpm --filter @hackos/web exec vitest run src/components/onboarding` covers the
-caption and links (including URL sanitising), drawing (photo tile, mascot
+caption and links (including URL sanitizing), drawing (photo tile, mascot
 fallback, strip/logo/text bands, seagull, host, truncation, both ratios), photo
-fetching and scheme rejection, the component's click-only behaviour, menu,
+fetching and scheme rejection, the component's click-only behavior, menu,
 fallbacks, errors, Skip/Continue and language, and the bitmap lifecycle.
 
 In Wallet, the surrounding section supplies the visible heading; the share

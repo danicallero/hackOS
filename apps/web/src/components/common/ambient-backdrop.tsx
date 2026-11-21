@@ -19,11 +19,11 @@ export interface Ambient {
 
 /**
  * The image itself behind a hero (H18, H44, H48): enlarged and blurred until no
- * shape survives, under a veil of the page colour strong enough for AA text
+ * shape survives, under a veil of the page color strong enough for AA text
  * contrast, cross-fading when the visible image changes (instant under reduced
  * motion). It spans the window from its top to the bottom of the hero, behind
  * the floating sidebar, and scrolls with the hero, so text after the hero never
- * sits on colour. Place it as the first child of a positioned hero.
+ * sits on color. Place it as the first child of a positioned hero.
  */
 export function AmbientBackdrop({ urls, active, activeDark, crossOrigin }: Ambient) {
   const ref = useRef<HTMLDivElement>(null);
@@ -64,12 +64,12 @@ export function AmbientBackdrop({ urls, active, activeDark, crossOrigin }: Ambie
       className="pointer-events-none absolute inset-0 z-0 overflow-hidden will-change-transform"
       style={{ maskImage: MASK, WebkitMaskImage: MASK }}
     >
-      {/* One blur over the stack: the cross-fade blends already-blurred colours.
+      {/* One blur over the stack: the cross-fade blends already-blurred colors.
           It runs on a quarter-size copy scaled up 4x (18px there is 72px on
           screen): a window-sized blur is split into tiles by Firefox, showing
-          vertical seams, and Safari re-rasterised it only inside a repainted
+          vertical seams, and Safari re-rasterized it only inside a repainted
           rect (a hovered back link), leaving a band. The small layer is its
-          own compositing layer, rasterised once (H48). */}
+          own compositing layer, rasterized once (H48). */}
       <div className="absolute top-0 left-0 size-1/4 origin-top-left scale-400 will-change-transform">
         <div className="absolute inset-0 scale-[1.4] blur-[18px]">
           {urls.map((url) => {

@@ -18,7 +18,7 @@ the thing being replaced.
 Phases: `draining` → `restoring` → `verifying`, or `failed`. A missing file
 means no maintenance; an unreadable file blocks traffic (fail closed).
 
-| Piece | Behaviour |
+| Piece | Behavior |
 |---|---|
 | API gate (`plugins/maintenance.ts`) | Every route except `/healthz`, `/readyz`, `/metrics` and `GET /api/public/maintenance` answers `503 maintenance_in_progress` with `Retry-After: 30` and `details.phase`. Runs before auth context, so no session query touches the database. |
 | `GET /api/public/maintenance` | `{ "active": false }` or `{ "active": true, "phase", "restoreId", "startedAt", "etaAt" }`. Reads the file only (cached 1 s), never the database. |

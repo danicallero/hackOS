@@ -3,7 +3,7 @@ import type { App } from "../src/app.js";
 import { config } from "../src/config.js";
 import { useTestApp } from "./helpers.js";
 
-// #1367 defence in depth: a lease held past REQUEST_ADMISSION_MAX_HOLD_MS is
+// #1367 defense in depth: a lease held past REQUEST_ADMISSION_MAX_HOLD_MS is
 // force-released once, and the request is not double-counted if it later
 // completes. The short hold is set before the app (and its gate) is built.
 config.REQUEST_ADMISSION_MAX_HOLD_MS = 150;

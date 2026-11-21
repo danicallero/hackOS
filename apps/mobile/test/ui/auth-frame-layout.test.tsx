@@ -65,7 +65,7 @@ describe.each([
     mockRegion = null;
   });
 
-  it("keeps a readable form centred on the first page in a book pose", async () => {
+  it("keeps a readable form centered on the first page in a book pose", async () => {
     setWindow(951, 669);
     mockRegion = DUO_CREASE;
     await renderAuth(scrollable, DUO_COLUMN);
@@ -76,7 +76,7 @@ describe.each([
     expect(form.x + form.width / 2).toBeCloseTo(DUO_CREASE.x / 2, 0);
   });
 
-  it("centres the form on the window beside the column when the Duo is flat", async () => {
+  it("centers the form on the window beside the column when the Duo is flat", async () => {
     setWindow(951, 669);
     await renderAuth(scrollable, DUO_COLUMN);
     const form = formBox("form", 951 - 64);
@@ -88,7 +88,7 @@ describe.each([
     ["iPad landscape", 1366, 1024, { edge: "left", size: 64 } as SideRegion, 64],
     ["iPad portrait", 1024, 1366, { edge: null, size: 0 } as SideRegion, 0],
     ["Duo portrait", 669, 951, { edge: null, size: 0 } as SideRegion, 0],
-  ])("centres a full-width form on %s", async (_label, width, height, region, padded) => {
+  ])("centers a full-width form on %s", async (_label, width, height, region, padded) => {
     setWindow(width, height);
     await renderAuth(scrollable, region);
     const form = formBox("form", width - padded);

@@ -520,7 +520,7 @@ describe("organizer settings", () => {
     };
   }
 
-  it("validates, audits, replays idempotently and honours names and dates", async () => {
+  it("validates, audits, replays idempotently and honors names and dates", async () => {
     const organizer = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
     const meal = await activity({});
     const workshop = await activity({ category: "activity" });

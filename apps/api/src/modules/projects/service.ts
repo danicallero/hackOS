@@ -37,7 +37,7 @@ interface EnqueueOutcome {
 
 /**
  * Core of H21's "apuntar un equipo a un reto": appends the repo at the
- * BOTTOM of the challenge's queue, reviving a terminal (cancelled /
+ * BOTTOM of the challenge's queue, reviving a terminal (canceled /
  * disqualified / completed) entry instead of duplicating it. Writes exactly
  * one queue_history row + one audit row per mutation (plan/07 invariant 5).
  * Returns null when the repo is already actively queued (no-op). The caller

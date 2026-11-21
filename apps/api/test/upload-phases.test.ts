@@ -4,7 +4,7 @@ import type { TemplateField } from "../src/modules/applications/schemas.js";
 import { createApplication, createResponse } from "./applications/fixtures.js";
 import { asUser, createUser, useTestApp } from "./helpers.js";
 
-/** Per-phase upload timing (#934, H12, H54): closed labels, no behaviour change. */
+/** Per-phase upload timing (#934, H12, H54): closed labels, no behavior change. */
 
 const getApp = useTestApp();
 let keySeq = 0;

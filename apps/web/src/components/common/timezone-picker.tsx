@@ -3,7 +3,7 @@
 // Searchable timezone selector (settings audit: "replace free-form timezone
 // entry with a searchable timezone selector"). Built on the IANA list the
 // runtime already ships (Intl.supportedValuesOf), so it never drifts from
-// what the server accepts — no separate catalogue to keep in sync.
+// what the server accepts — no separate catalog to keep in sync.
 
 import { CaretUpDownIcon } from "@phosphor-icons/react/dist/csr/CaretUpDown";
 import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";

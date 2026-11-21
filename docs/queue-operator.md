@@ -19,7 +19,7 @@ enter. **Notify room entry** is the separate participant notification for
 telling a team to enter the judging room and lives in the row's overflow menu.
 The overflow trigger sits in the top-right corner of each team card, keeping
 the numbered name and its visible action easy to scan.
-Adding a team to a waiting area, prioritising it, or sending it to the end of
+Adding a team to a waiting area, prioritizing it, or sending it to the end of
 the queue are exceptional actions shown in the team lookup when the row has
 room for them.
 
@@ -81,7 +81,7 @@ the existing audited entry actions:
 - notify a called team that it can enter the judging room;
 - remind a called team to come to the waiting room again;
 - manually send an exceptional waiting team to a room's waiting area;
-- prioritise a team or send it to the end of the queue;
+- prioritize a team or send it to the end of the queue;
 - disqualify a team from the team lookup (queue administrators only);
 - requeue or mark a called team absent.
 
@@ -134,7 +134,7 @@ Participant-facing stages must remain explicit:
    enter yet.”
 3. **Enter:** “Enter Room X now. It is your turn.”
 
-The `called` state must never be labelled as “your turn” without saying that
+The `called` state must never be labeled as “your turn” without saying that
 the team is waiting outside. The operator actions should use equally explicit
 labels: **Call to door**, **Remind: wait outside**, and **Call to enter**.
 
@@ -144,7 +144,7 @@ Event settings → **Danger zone** contains an event-wide recovery reset. The ta
 and the API are gated by the `ADMIN_ALL` wildcard (`*`); `QUEUE_ADMIN`, project
 import, and sponsor permissions are not enough. The control has three separate
 confirmation gates: an impact review, an exact confirmation phrase plus an
-irreversible-action acknowledgement, and a final destructive confirmation.
+irreversible-action acknowledgment, and a final destructive confirmation.
 
 `POST /api/queue/admin/reset` runs as one transaction with exclusive locks on
 the project/queue/judging tables and writes one `queue_reset` audit row

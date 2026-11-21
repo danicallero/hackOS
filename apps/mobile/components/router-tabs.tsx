@@ -145,7 +145,7 @@ export interface RouterTabRoute {
   name: string;
 }
 
-/** Semantic colours used by Liquid Glass and its opaque fallback. */
+/** Semantic colors used by Liquid Glass and its opaque fallback. */
 export interface RouterTabsTheme {
   /** Inactive label token. */
   label: ColorValue;
@@ -185,7 +185,7 @@ export interface RouterTabsProps {
   surfaceComponent?: RouterTabsSurfaceComponent;
   /** Prefix for the shell's native test identifiers. */
   testID?: string;
-  /** Semantic colours for both rendering paths. */
+  /** Semantic colors for both rendering paths. */
   theme: RouterTabsTheme;
 }
 
@@ -312,7 +312,7 @@ function RouterTabsContent({
   const tabItemVerticalInset = (tabBarHeight - tabItemHeight) / 2;
 
   useEffect(() => {
-    // A lifted lens is still travelling under the gesture; it lands itself.
+    // A lifted lens is still traveling under the gesture; it lands itself.
     if (lift.value > 0) return;
     if (selectedDirectTabIndex < 0 || directTabCellWidth <= 0) {
       cancelAnimation(selectionOffset);
@@ -376,7 +376,7 @@ function RouterTabsContent({
     // H55: like the system tab bar, the lens moves under the finger on touch
     // down anywhere in the group and follows it in both directions; release
     // selects the cell underneath. Activating on touch down makes this the
-    // only owner of the touch: the cells' Pressables are cancelled (so a long
+    // only owner of the touch: the cells' Pressables are canceled (so a long
     // press cannot switch tabs mid-drag) and the dock back swipe, which waits
     // on this gesture, cannot claim a rightward drag.
     return Gesture.Manual()
@@ -613,7 +613,7 @@ function VerticalTabBar({
 }) {
   const cell = ROUTER_TAB_BAR_VERTICAL_CELL;
   // The system's own column (its back, bell and add controls) is 44 pt wide, 20 pt in from the
-  // display's edge. The bar's cells match that, in a pill with a 4 pt rim, centred on the same line.
+  // display's edge. The bar's cells match that, in a pill with a 4 pt rim, centered on the same line.
   const barWidth = tabletRail ? size - 24 : ROUTER_TAB_BAR_VERTICAL_WIDTH;
   const columnInset = tabletRail ? 12 : 20 - (barWidth - cell) / 2;
   return (
@@ -742,7 +742,7 @@ type RouterTabButtonProps = Omit<TabTriggerSlotProps, "children"> & {
   registerPress?: (press: () => void) => void;
   /**
    * True while the bar gesture owns the touch. The cell's Pressable still
-   * sees that touch (it is not cancelled), so its press and long press must
+   * sees that touch (it is not canceled), so its press and long press must
    * stand down; VoiceOver and keyboard activation never set it.
    */
   gestureOwnsTouch?: () => boolean;

@@ -3,7 +3,7 @@ import { colors, type TypeVariant, type } from "@/theme";
 
 type Tone = "primary" | "secondary" | "accent" | "destructive";
 
-// Keys, not values: Android colours resolve against the scheme when read, so a
+// Keys, not values: Android colors resolve against the scheme when read, so a
 // module-scope palette would freeze the launch scheme (see theme/colors.ts).
 const TONE_KEY = {
   primary: "label",
@@ -14,7 +14,7 @@ const TONE_KEY = {
 
 /**
  * The app's text. `variant` picks a step of the Apple ramp (`theme/tokens.ts`)
- * and `tone` a semantic label colour, so screens never write a font size.
+ * and `tone` a semantic label color, so screens never write a font size.
  * Scales with Dynamic Type; pass `style` last for layout only.
  */
 export function AppText({

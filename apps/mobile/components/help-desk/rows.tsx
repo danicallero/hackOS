@@ -17,7 +17,7 @@ export const HELP_STATUS: Record<
   {
     label: MessageKey;
     icon: "clock" | "figure.walk" | "checkmark.circle" | "xmark.circle";
-    /** A colour token, read at render so the scheme is current. */
+    /** A color token, read at render so the scheme is current. */
     tint: "warning" | "success" | "secondaryLabel";
   }
 > = {

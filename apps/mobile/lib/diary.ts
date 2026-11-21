@@ -52,7 +52,7 @@ export function timestampOf(value: string | Date): number {
   return new Date(value).getTime();
 }
 
-/** The API order: favourites first, then most recently saved. */
+/** The API order: favorites first, then most recently saved. */
 export function sortDiaryEntries(entries: DiaryEntry[]): DiaryEntry[] {
   return [...entries].sort(
     (a, b) =>

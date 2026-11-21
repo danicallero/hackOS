@@ -345,7 +345,7 @@ describe("saved profile reads (#934, #935)", () => {
     }
   });
 
-  it("ignores cancelled and disqualified queue entries in challenges", async () => {
+  it("ignores canceled and disqualified queue entries in challenges", async () => {
     const kept = await publishChallenge("Kept");
     const cancelled = await publishChallenge("Cancelled");
     const disqualified = await publishChallenge("Disqualified");

@@ -70,7 +70,7 @@ for (const [directory, table, name, query] of [
     const { pool } = await import("../../src/db/pool.js");
     const { rows } = await pool.query(
       `INSERT INTO ${table} (name) VALUES ($1), ($2) RETURNING id, name`,
-      [name, "Unrelated catalogue entry"],
+      [name, "Unrelated catalog entry"],
     );
     for (const q of [query, name, name.normalize("NFD")]) {
       const response = await app.inject({

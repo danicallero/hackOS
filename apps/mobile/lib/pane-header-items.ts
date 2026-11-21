@@ -52,7 +52,7 @@ export interface PaneBarSpacing {
 
 export type PaneBarItem = PaneBarButton | PaneBarMenu | PaneBarSpacing;
 
-/** Space between neighbouring trailing actions, so each stays its own glass circle. */
+/** Space between neighboring trailing actions, so each stays its own glass circle. */
 export const PANE_BAR_ITEM_GAP = 8;
 
 /** The sync button keeps one symbol; its badge carries the queue state. */
@@ -149,7 +149,7 @@ export function filterMenuBarItem({
   };
 }
 
-/** Puts a gap between neighbouring actions so iOS 26 draws a separate glass circle for each. */
+/** Puts a gap between neighboring actions so iOS 26 draws a separate glass circle for each. */
 export function withBarGaps(items: Array<PaneBarButton | PaneBarMenu>): PaneBarItem[] {
   return items.flatMap((item, index) => [
     ...(index > 0 ? [{ type: "spacing" as const, spacing: PANE_BAR_ITEM_GAP }] : []),

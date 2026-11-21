@@ -75,7 +75,7 @@ describe("project record hero ambient backdrop (H18, H48)", () => {
     expect(hidden?.className).toContain("transition-opacity");
   });
 
-  it("keeps the single-colour wash without photos", async () => {
+  it("keeps the single-color wash without photos", async () => {
     await render([{ ...photo(1), mimeType: "application/pdf", thumbnailUrl: null }]);
     expect(ambient()).toBeNull();
     expect(node.querySelector("[data-hero-bleed] img")).toBeNull();

@@ -27,7 +27,7 @@ export function SpeakerStack({
   speakers: ScheduleSpeaker[];
   max?: number;
   className?: string;
-  /** Sits on a pill in the page background, for stacks drawn over coloured blocks. */
+  /** Sits on a pill in the page background, for stacks drawn over colored blocks. */
   large?: boolean;
 }) {
   if (speakers.length === 0) return null;

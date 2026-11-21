@@ -39,7 +39,7 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
 });
-it("keeps the draft and restores the editor after cancelling discard, then closes on explicit discard (H64)", async () => {
+it("keeps the draft and restores the editor after canceling discard, then closes on explicit discard (H64)", async () => {
   await act(async () => root.render(<Editor />));
   await act(async () =>
     userEvent.type(getByRole(document.body, "textbox", { name: "Need" }), "Debug model"),

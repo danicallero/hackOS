@@ -19,7 +19,7 @@ export interface SideRegion {
   edge: "left" | "right" | null;
   /** Width of the reserved column (0 without one). */
   size: number;
-  /** The wide labelled tablet rail rather than a symbol-only column. */
+  /** The wide labeled tablet rail rather than a symbol-only column. */
   tabletRail?: boolean;
 }
 
@@ -35,7 +35,7 @@ export const TABLET_NAVIGATION_WIDTH = 200;
  */
 export const ANDROID_RAIL_COLUMN_SIZE = 76;
 
-/** True when the window gets the labelled tablet rail (iOS, no system column, wide landscape). */
+/** True when the window gets the labeled tablet rail (iOS, no system column, wide landscape). */
 export function isTabletRailWindow(
   insets: { left: number; right: number },
   systemEdge: "left" | "right" | null,

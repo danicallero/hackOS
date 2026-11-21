@@ -17,7 +17,7 @@ import android.widget.RemoteViews
  * whenever promotion is unavailable (revoked by the user, refused by the
  * system or an OEM). Promotion forbids custom views, which is why the
  * promoted path cannot look like this. Layouts mirror the iOS Live Activity
- * Lock Screen: header, large metrics (one in the phase colour), stats, the
+ * Lock Screen: header, large metrics (one in the phase color), stats, the
  * queue stage track or a bar, and the Scan button inside the card.
  */
 object LiveUpdateCardViews {
@@ -153,7 +153,7 @@ object LiveUpdateCardViews {
     }
   }
 
-  /** The metric's own colour, else the phase colour for the hero. */
+  /** The metric's own color, else the phase color for the hero. */
   private fun toneOf(content: LiveUpdateContent, metric: LiveUpdateMetric): String? =
     metric.tone ?: content.tone.takeIf { metric.hero }
 

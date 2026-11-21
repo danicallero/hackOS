@@ -91,7 +91,7 @@ to `RESERVED_FIELD_KEYS` — see the doc comment on that constant.
   no code change needed per event.
 - `(auth)/claim-account/page.tsx` — added an optional **Dietary notes** textarea;
   an invited **participant** is routed to `/login?next=/my-applications`.
-- `(auth)/login/page.tsx` — honours a **same-origin** `?next=` param
+- `(auth)/login/page.tsx` — honors a **same-origin** `?next=` param
   (open-redirect guarded via `safeNext`), so the invited participant lands on
   the application form right after signing in.
 - `(app)/users/active-invitations-modal.tsx` and
@@ -130,7 +130,7 @@ ledger. Invite lookup/acceptance and spot confirmation are explicit token
 flows; profile/application self-service routes are authenticated; staff routes
 declare their concrete capability (or the documented review/decide discovery
 combination). Invitation group assignments are checked against the shared
-capability catalogue while the permission-graph transaction lock is held, and
+capability catalog while the permission-graph transaction lock is held, and
 only an existing wildcard holder can defer a wildcard group through an invite.
 Each token persists that wildcard authorization as durable provenance: if a
 previously ordinary group later inherits `*`, acceptance fails closed unless a
@@ -156,9 +156,9 @@ managers so staff-invite forms can show assignable roles; role creation,
 capability editing, reordering, and assignment mutations remain
 `PERMISSIONS_MANAGE` only, and the actor's edit/reorder target must sit
 strictly below their own highest assigned role.
-The role-creation template catalogue is code-owned (`identity/templates.ts`)
+The role-creation template catalog is code-owned (`identity/templates.ts`)
 and exposes stable keys, client-side i18n message keys, and capability sets —
-never localized interface copy. `GET /api/role-templates` lists the catalogue;
+never localized interface copy. `GET /api/role-templates` lists the catalog;
 creating a role from one just seeds its initial ALLOW rows (no drift-tracking
 concept — an edited role is simply an edited role). Wildcard-bearing role
 mutations take the role-graph advisory lock (`role-authority.ts`'s
@@ -207,7 +207,7 @@ confirmed|declined|expired`).
 - Back to review / accept-pending-confirmation already existed
   (`revertDecision(…, "review")`, `decide` + `send-decision`) — verified.
 
-**Batch (fixed "flaky" behaviour).**
+**Batch (fixed "flaky" behavior).**
 - `decision-batches.ts:runBatch` — shared helper: deterministic id order, one row's
   failure never aborts the rest, and **every skip is reported** as
   `{ id, reason }`. Previously batches did `catch {}` and returned only a count,

@@ -74,7 +74,7 @@ jest.mock("@/components/symbol", () => ({
   SymbolView: () => null,
 }));
 // Indirect call: the factory runs while the screen module is being
-// required, which can precede this file's own `const` initialisation.
+// required, which can precede this file's own `const` initialization.
 jest.mock("@/lib/api", () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
 }));

@@ -45,7 +45,7 @@ export function fetchCompanyProfile(id: number, signal?: AbortSignal): Promise<C
 const HEX = /^#[0-9a-f]{6}$/i;
 
 /**
- * Hero wash from the logo colour, fading to transparent over the page
+ * Hero wash from the logo color, fading to transparent over the page
  * background. Strength comes from `--hero-mix` so dark mode can soften it.
  */
 export function heroGradient(logoColor: string | null | undefined): string {

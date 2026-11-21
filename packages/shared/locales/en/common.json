@@ -50,7 +50,7 @@
   "scannerStateSaved": "Saved on this device",
   "scannerStateReady": "Ready",
   "scannerStateAttention": "Needs attention",
-  "scannerAwaitingAcknowledgement": "Waiting for server acknowledgement.",
+  "scannerAwaitingAcknowledgement": "Waiting for server acknowledgment.",
   "scannerOfflineWaiting": "Still saved; it will retry when the connection returns.",
   "queueStatusWaiting": "In queue",
   "queueStatusCalled": "Waiting at the door",

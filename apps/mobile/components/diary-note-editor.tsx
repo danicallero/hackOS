@@ -13,8 +13,8 @@ const HEADER_HEIGHT = 76;
 /**
  * The owner's private note on one diary entry, person or company (#935).
  *
- * A native page sheet rather than a hand-made centred card: the card had to
- * be re-centred above every keyboard (iOS hid Save behind the keys; Android,
+ * A native page sheet rather than a hand-made centered card: the card had to
+ * be re-centered above every keyboard (iOS hid Save behind the keys; Android,
  * edge-to-edge, never resized the modal). The sheet keeps a fixed header,
  * circular Cancel and Save in the corners as in the CV viewer and team
  * sheets, and a field that fills the space the keyboard leaves.

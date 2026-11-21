@@ -18,7 +18,7 @@ export type EmailVerificationRequirement = "caller" | "target" | "none";
  * Multi-edition write scope (docs/multi-edition-plan.md §3). Mutations are
  * `scoped` by default: they change data of the viewed edition and are
  * rejected while it is closed. Routes that change only global data (account,
- * profile, preferences, devices, catalogues, the edition lifecycle itself)
+ * profile, preferences, devices, catalogs, the edition lifecycle itself)
  * declare `global`. Routes that write the current edition's singleton
  * settings (event_config and the other id=1 settings rows) declare `current`:
  * they are also rejected while viewing any other edition. A participant's own

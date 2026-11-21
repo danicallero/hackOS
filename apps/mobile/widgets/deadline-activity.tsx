@@ -44,7 +44,7 @@ export const DeadlineActivityLayout = withLiveActivityKit(
     const closing = props.phase === "closing";
     const submitted = props.phase === "submitted";
     // Open = blue, closing = red (urgent), submitted = green (done); a draft
-    // status while open is amber. Island colours are the dark variants; the
+    // status while open is amber. Island colors are the dark variants; the
     // Lock Screen ones are dynamic (accessible light variants). Always-On
     // drops the accents and lets the system dim.
     const reduced = environment.isLuminanceReduced === true;
@@ -61,9 +61,9 @@ export const DeadlineActivityLayout = withLiveActivityKit(
     const tone = submitted ? "green" : closing ? "red" : "blue";
     const islandColor = island[tone];
     const bannerColor = reduced ? null : lock[tone];
-    // The countdown, bar and symbol share the phase colour in every state:
-    // blue open, red closing, green submitted. Neutral grey on black was
-    // unreadable once submitted, and a primary-colour countdown while closing
+    // The countdown, bar and symbol share the phase color in every state:
+    // blue open, red closing, green submitted. Neutral gray on black was
+    // unreadable once submitted, and a primary-color countdown while closing
     // read as near-white next to the red symbol.
     const valueIsland = islandColor;
     const valueBanner = bannerColor;
@@ -264,7 +264,7 @@ export const DeadlineActivityLayout = withLiveActivityKit(
 
     // watchOS Smart Stack and CarPlay (`.small` family, #966): glyph + title in
     // secondary, then one hero value (the countdown, or "Submitted"), then at
-    // most one short status line. Colour is sparing: the glyph carries the
+    // most one short status line. Color is sparing: the glyph carries the
     // phase accent; red marks a single element, the "Not submitted" line, and
     // only in the last minutes. Always-On drops every accent.
     const watchRed = reduced ? null : "#FF6961";

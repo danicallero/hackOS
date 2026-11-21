@@ -645,7 +645,7 @@ export function registerApplicationBatchExportRoutes(app: FastifyInstance): void
       schema: {
         summary: "Export selected application responses and documents",
         description:
-          "Streams a ZIP containing applications.csv with the requested statuses and columns. CSV headers use field keys, with numeric suffixes for repeated keys in selection order. Library-backed university and degree answers are exported as their catalogue names, not stored IDs. `documents=all` includes every saved file from each response's immutable form snapshot. `documents=shared` includes only file fields marked shareable_with_sponsors where the applicant explicitly consented with the corresponding sponsor-share response value (H13/H14/H54/H56). Missing objects are omitted, audited per response, and reported in x-export-file-failures.",
+          "Streams a ZIP containing applications.csv with the requested statuses and columns. CSV headers use field keys, with numeric suffixes for repeated keys in selection order. Library-backed university and degree answers are exported as their catalog names, not stored IDs. `documents=all` includes every saved file from each response's immutable form snapshot. `documents=shared` includes only file fields marked shareable_with_sponsors where the applicant explicitly consented with the corresponding sponsor-share response value (H13/H14/H54/H56). Missing objects are omitted, audited per response, and reported in x-export-file-failures.",
         body: applicationExportBody,
       },
     },

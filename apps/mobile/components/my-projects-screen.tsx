@@ -371,7 +371,7 @@ function CircleButton({
   );
 }
 
-/** A labelled Liquid Glass button; two share a row evenly, one fills it. */
+/** A labeled Liquid Glass button; two share a row evenly, one fills it. */
 function GlassPill({
   icon,
   label,

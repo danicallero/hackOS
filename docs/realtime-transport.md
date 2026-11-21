@@ -68,7 +68,7 @@ cursor even when no consumer wants that event type. Legacy endpoints retain
 their named events and numeric SSE ids.
 
 Library managers with only `INTOLERANCES_MANAGE` can combine `domain:logistics`
-with `personal` for catalogue refreshes and notifications (H8). This does not
+with `personal` for catalog refreshes and notifications (H8). This does not
 grant the operational `logistics` scope, which retains its scanner/stats/schedule
 capability guard.
 

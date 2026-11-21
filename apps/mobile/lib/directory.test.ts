@@ -53,7 +53,7 @@ describe("directory helpers (#935)", () => {
     ]);
   });
 
-  it("keeps only favourites when asked", () => {
+  it("keeps only favorites when asked", () => {
     const entries = [entry(1), entry(2, { starred: true })];
     expect(filterDiaryEntries(entries, { query: "", favouritesOnly: true })).toEqual([entries[1]]);
   });

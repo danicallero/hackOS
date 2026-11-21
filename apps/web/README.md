@@ -20,7 +20,7 @@ backend, one workstream at a time.
   **next-themes** for light/dark, **@phosphor-icons/react** for icons,
  **qrcode.react** for locally-rendered QR codes, so QR payloads never need to
   travel to a third-party image service.
-- `@hackos/shared` for the capability catalogue and SSE event contract — the
+- `@hackos/shared` for the capability catalog and SSE event contract — the
   same single source the API uses.
 
 Realtime readers share one authenticated fetch/SSE transport per tab through
@@ -433,7 +433,7 @@ surfaces (sidebar account row, user tables) render it only when a photo exists;
 (896 px) for focused form/text workflows, and `workspace` only for genuinely
 wide operational data. Users, application management and user/enterprise detail
 use the 1280 px content canvas. Event settings and profile use the 1280 px content canvas; compact Libraries
-catalogues use the 896 px reading canvas. A full route does not
+catalogs use the 896 px reading canvas. A full route does not
 imply unlimited width. Mixed record pages keep their table tabs in this canvas;
 constrain only their text/form blocks when needed.
 Use one `PageHeader`, then optional `TabBar`, `PageToolbar`, and content.
@@ -446,7 +446,7 @@ live only in `src/lib/shortcuts.ts` and are handled by `CommandPalette`;
 `ShortcutTooltip` (label + chip on hover/focus, sets `aria-keyshortcuts`) or
 `ShortcutKbd` (the chip alone) from `components/common/shortcut-hint.tsx`,
 never a hand-written string. Rules: `docs/DESIGN.md` §9.
-`PageToolbar` is a labelled region for specialized search/filter/view controls.
+`PageToolbar` is a labeled region for specialized search/filter/view controls.
 `TabBar`
 uses the same segmented style everywhere: `width="full"` stretches it and
 `width="content"` fits the tabs beside other controls. Preserve the specialized fixed judging
@@ -489,7 +489,7 @@ dietary restrictions: search, clear action, result count and add action sit abov
 the table. `LibraryAddButton` adapts its label to container width (full label,
 short add label, then icon only) without forcing a second row. Keep filtering
 with the owning manager: universities/degrees query the API, dietary restrictions
-filter the loaded trilingual catalogue.
+filter the loaded trilingual catalog.
 
 The Users roster groups export, invitations and review accounts in an outlined
 actions menu at the far right of its header. Search, filters and visible fields
@@ -609,7 +609,7 @@ screens and starts in the same 12px top band as the fixed control.
 
 Most routes are a single `page.tsx`. Some grow into a directory of colocated
 files. The rule below exists so that when that happens, every page grows the
-*same* shape — three differently-organised directories are worse than three
+*same* shape — three differently-organized directories are worse than three
 large files.
 
 ### When to split
@@ -874,8 +874,8 @@ page (`/companies/:id`, `components/sponsors/company-profile.tsx`) reads
 behind the header (H44, H48: the negative logo in dark mode, from the same URLs
 and plain requests as `SponsorLogo`), with the veil and fade of `HeroBleed`
 `ambient`; without a logo it keeps the blue wash. The challenge page's hero
-still tints from the logo colour (`useCompanyLogoColor` in `lib/company.ts`: the
-negative logo in dark mode, falling back to the positive logo's colour when the
+still tints from the logo color (`useCompanyLogoColor` in `lib/company.ts`: the
+negative logo in dark mode, falling back to the positive logo's color when the
 negative is white or mono; cached per URL, neutral when the canvas is tainted). The description is the
 viewer's language from `descriptionTranslations`, else `description`
 (`companyDescription`); the enterprise editor edits it with `MultilingualInput`. `/people/:userId` lists the person's companies and talks;
@@ -904,8 +904,8 @@ with a header back action. Description/criteria occupy the main column; publishe
 winners and prizes occupy the supporting column. Winners use ranked status and the
 shared project action, never a raw list above the challenge identity.
 
-Question-owned catalogue controls (`LibraryPicker` and `LibraryManager`) reuse the
-shared MultiSelect and destructive AlertModal. Catalogue management is embedded in
+Question-owned catalog controls (`LibraryPicker` and `LibraryManager`) reuse the
+shared MultiSelect and destructive AlertModal. Catalog management is embedded in
 the question editor, never the general Libraries settings. See
 [question-owned libraries](../../docs/form-libraries.md). Project reading,
 reading routes reuse `ProjectOverview` (answers, team, challenges and queue state);
@@ -918,7 +918,7 @@ Picker searches ignore case and diacritics (`ingenieria` matches `Ingeniería`),
 without changing labels or stored selections. Shared Command filtering keeps its
 fuzzy ranking and keywords after normalization; explicit custom filters still win.
 Directory and account autocomplete endpoints perform the same comparison server-side.
-Catalogue creation suggestions do not offer accent-only variants of current results.
+Catalog creation suggestions do not offer accent-only variants of current results.
 
 Select menus inside overlays default to trigger-anchored popper positioning.
 Viewport-based item alignment can overflow a transformed dialog and scroll its
@@ -954,7 +954,7 @@ permissions, including CV sharing and marketing, remain separate from that
 notice and must not be inferred from account creation.
 
 The event image clause mirrors the HackUDC website: it states that physical
-attendance signifies consent to capture and use images by organisers, sponsor
+attendance signifies consent to capture and use images by organizers, sponsor
 representatives, other participants and participating entities for promotional,
 social-media, commercial or other purposes. Keep this wording consistent in the
 terms and privacy policy in all three languages.

@@ -52,7 +52,7 @@ const reportSchema = z.object({
   person: person.nullable(),
 });
 
-/** H18: attendee reports of user-generated content and the organiser inbox that reads them. */
+/** H18: attendee reports of user-generated content and the organizer inbox that reads them. */
 export function registerReportRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
   const moderate = requireAnyCapability(CAPABILITIES.USERS_WRITE, CAPABILITIES.PROJECTS_EDIT);
@@ -70,7 +70,7 @@ export function registerReportRoutes(app: FastifyInstance): void {
         body: createBody,
         summary: "Report a project or a person's profile",
         description:
-          "An event attendee reports a project page they can view (never their own) or the public profile of a person they saved in their diary (never their own), with a reason (inappropriate, harassment, spam, other) and up to 500 characters of detail. Targets the caller cannot see answer 404, so a report cannot probe for hidden content. Reporting the same target again returns the open report; at most 10 reports can be open at once (429). Organisers read it in the report inbox (H18).",
+          "An event attendee reports a project page they can view (never their own) or the public profile of a person they saved in their diary (never their own), with a reason (inappropriate, harassment, spam, other) and up to 500 characters of detail. Targets the caller cannot see answer 404, so a report cannot probe for hidden content. Reporting the same target again returns the open report; at most 10 reports can be open at once (429). Organizers read it in the report inbox (H18).",
         response: { 200: z.object({ id: z.number(), status: z.literal("open") }) },
       },
     },
@@ -86,7 +86,7 @@ export function registerReportRoutes(app: FastifyInstance): void {
         querystring: listQuery,
         summary: "List reported content",
         description:
-          "The organiser report inbox of the viewed edition (X-Edition): a report belongs to the edition it was filed in (its own `event_key`), so it stays listed even if the reporter later removes their diary entry. Open reports first and then newest, at most 200. Reports about projects need `projects:edit`, reports about profiles need `users:write`; a moderator sees only the kinds they hold. Reports by synthetic review accounts are visible only to synthetic moderators. The reported content itself is read live from its own page, never copied here (H18).",
+          "The organizer report inbox of the viewed edition (X-Edition): a report belongs to the edition it was filed in (its own `event_key`), so it stays listed even if the reporter later removes their diary entry. Open reports first and then newest, at most 200. Reports about projects need `projects:edit`, reports about profiles need `users:write`; a moderator sees only the kinds they hold. Reports by synthetic review accounts are visible only to synthetic moderators. The reported content itself is read live from its own page, never copied here (H18).",
         response: { 200: z.object({ items: z.array(reportSchema) }) },
       },
     },

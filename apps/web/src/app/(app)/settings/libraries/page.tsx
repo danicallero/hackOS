@@ -1,6 +1,6 @@
 "use client";
 
-// Libraries (H12/H25): the shared reference catalogues that feed application
+// Libraries (H12/H25): the shared reference catalogs that feed application
 // forms and profiles — food intolerances, t-shirt sizes, and the university
 // directory — under one page, all guarded by INTOLERANCES_MANAGE. Each tab is
 // a self-contained manager (list + create/edit/delete, or for shirt sizes a

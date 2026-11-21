@@ -23,7 +23,7 @@ of help desk writes.
 | `/help-desk/hours` | Opening hours editor (H64) | `HELPDESK_MANAGE` |
 | `/help-desk/coverage` | Event coverage timeline, topic counts and current presence | `HELPDESK_COVERAGE` |
 
-The header's gear menu holds Coverage (`HELPDESK_COVERAGE`) and My support profile (eligible people, → Settings › Help desk); the sibling navigation keeps Requests and Support team, with a live available count on the directory link. My requests, Open and My assignments share one `TabBar` on the entry screen. Open/My assignments require both `HELPDESK_OFFER` and server eligibility; request capability remains additive. Coverage-only viewers retain directory access without querying request lists. Topic pickers allow adding to the catalogue only in the support profile (`allowAdd`). Coverage bars show their count when slots are 1 h or wider. The personal sidebar entry uses capability constants. Each page renders
+The header's gear menu holds Coverage (`HELPDESK_COVERAGE`) and My support profile (eligible people, → Settings › Help desk); the sibling navigation keeps Requests and Support team, with a live available count on the directory link. My requests, Open and My assignments share one `TabBar` on the entry screen. Open/My assignments require both `HELPDESK_OFFER` and server eligibility; request capability remains additive. Coverage-only viewers retain directory access without querying request lists. Topic pickers allow adding to the catalog only in the support profile (`allowAdd`). Coverage bars show their count when slots are 1 h or wider. The personal sidebar entry uses capability constants. Each page renders
 `HelpDeskSectionHeader` (title plus sibling links) as Home and Projects do; there
 is no layout. The helper record renders the people reader's `PersonProfile`
 (`people/[userId]/person-detail.tsx`) from the API's `profile`, followed by the
@@ -46,9 +46,9 @@ event access still reach it.
 
 ## Interaction rules
 
-Knowledge uses one searchable `MultiSelect` catalogue across profile and request
-forms. New topics use the catalogue endpoint; in the request form Other is the
-pinned first row of the same list, exclusive with the catalogue topics (`TopicsPicker`'s `other` prop). The request form also
+Knowledge uses one searchable `MultiSelect` catalog across profile and request
+forms. New topics use the catalog endpoint; in the request form Other is the
+pinned first row of the same list, exclusive with the catalog topics (`TopicsPicker`'s `other` prop). The request form also
 picks a challenge (None, then the requester's project challenges, then the
 rest, from `/api/helpdesk/challenges`) and a "Prefer a sponsor" switch.
 Request rows and detail show the challenge and the sponsor preference. Request
@@ -63,7 +63,7 @@ A request always belongs to the person who sends it; there is no team
 selection. API business errors use the existing localized error-reason resolver.
 A successful inbox claim opens Assigned to me so meeting instructions and lifecycle
 actions remain in view. A lost concurrent claim retains a visible explanation and refreshes the inbox.
-Creation and editing share `requests/request-editor.tsx`: closing a dirty form confirms discard within the owning modal, cancelling keeps the draft, and pending writes cannot dismiss it. Controls disable during writes; the API client preserves mutation intent keys
+Creation and editing share `requests/request-editor.tsx`: closing a dirty form confirms discard within the owning modal, canceling keeps the draft, and pending writes cannot dismiss it. Controls disable during writes; the API client preserves mutation intent keys
 through transport retries.
 
 Availability ("When do you plan to be at the venue?") is a complete replacement of
@@ -71,7 +71,7 @@ up to 30 dated intervals, edited in `availability-editor.tsx`: intervals are row
 grouped by event day ("Sat 27 · 10:00–13:00") over a compact 24 h track
 (`schedule-view.tsx`). Add opens a from/to date-time dialog prefilled with the
 first 24 hours of the API's `suggestedInterval` (hacking window); each existing interval also has Edit, replacing it atomically without deleting the saved interval first. Failed replacements retain the saved schedule and the editor draft; order, overlap and over-24 h errors
-show inline, and each row has a labelled Remove. Every change
+show inline, and each row has a labeled Remove. Every change
 saves immediately. Times use the event time zone (`useEventTimeZone`); grouping
 and validation live in `schedule.ts`. Planned availability and venue presence
 always render as distinct states.
@@ -136,7 +136,7 @@ the other entries default to My requests when permitted, else Open. `?tab=mine`,
 `?tab=open` and `?tab=claims` restore selection; `assigned` is accepted as a legacy
 alias. Invalid or no-longer-authorized choices fall back to an available view.
 `useUrlTab` keeps explicit selections stable during live refreshes. Request links
-carry a validated `from` list URL so their labelled return link restores the
+carry a validated `from` list URL so their labeled return link restores the
 selected view, including after a reload; helper/requester profile links retain the same request and list return context, and directory navigation retains the selected view. Browser Back retains normal history.
 Numeric notification links remain valid without `from` and use a capability-based
 fallback. A successful creation opens My requests; a successful claim selects My

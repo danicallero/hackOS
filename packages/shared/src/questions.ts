@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Typed question catalogue shared by the judging panel builder (H44) and,
+ * Typed question catalog shared by the judging panel builder (H44) and,
  * going forward, any dynamic form the client renders from JSONB. A panel /
  * form is an ordered array of questions; a judge's / applicant's answers are
  * an object keyed by `question.key`.

@@ -38,7 +38,7 @@ const clamp = (value: number) => Math.min(1 - MARGIN, Math.max(MARGIN, value));
 function seedPoint(id: string, anchor: Point | null, home: Point): Point {
   const angle = hashUnit(id, 1) * Math.PI * 2;
   if (anchor) {
-    // Near the neighbours it connects to, so it joins the cluster in place.
+    // Near the neighbors it connects to, so it joins the cluster in place.
     const radius = 0.015 + hashUnit(id, 2) * 0.02;
     return {
       x: clamp(anchor.x + Math.cos(angle) * radius),
@@ -50,7 +50,7 @@ function seedPoint(id: string, anchor: Point | null, home: Point): Point {
   return { x: home.x + Math.cos(angle) * radius, y: home.y + Math.sin(angle) * radius };
 }
 
-/** Ring of community anchors around the canvas centre, biggest community first. */
+/** Ring of community anchors around the canvas center, biggest community first. */
 const RING = { rx: 0.4, ry: 0.3 };
 export function communityAnchors(count: number): Point[] {
   if (count <= 1) return count === 1 ? [{ x: 0.5, y: 0.5 }] : [];
@@ -60,7 +60,7 @@ export function communityAnchors(count: number): Point[] {
   });
 }
 
-/** Companies sit on a ring outside the community ring, never at the centre of gravity. */
+/** Companies sit on a ring outside the community ring, never at the center of gravity. */
 const COMPANY_RING = { rx: 0.56, ry: 0.43 };
 const companyCount = (flags: boolean[]) => flags.filter(Boolean).length;
 
@@ -115,12 +115,12 @@ export function linkAlpha(
 
 /**
  * Positions around the unit square (soft bounds -0.6..1.6) for every node. Communities
- * (`detectSections`) get anchor points on an ellipse around the centre, biggest first;
+ * (`detectSections`) get anchor points on an ellipse around the center, biggest first;
  * people gravitate to their community's anchor, companies to a point outside or
  * between the communities they link to; links inside a community are short and
  * stiff, links across communities long and weak, so groups separate. `previous` positions are kept
  * as the starting point (and only gently relaxed), new nodes are seeded next to
- * their already placed neighbours, then a bounded force simulation settles and
+ * their already placed neighbors, then a bounded force simulation settles and
  * stops — there is no running simulation afterwards.
  */
 export function layoutGraph(
@@ -162,7 +162,7 @@ export function layoutGraph(
       if (i !== undefined) community[i] = c;
     }
   });
-  // People outside every section follow the majority of their person neighbours.
+  // People outside every section follow the majority of their person neighbors.
   for (let i = 0; i < n; i++) {
     if (isCompany[i] || community[i] >= 0) continue;
     const votes = new Map<number, number>();
@@ -402,7 +402,7 @@ export function detectSections(nodes: TvConnectionNode[], edges: TvConnectionEdg
   const people = nodes.filter((node) => node.kind === "person");
   if (people.length < MIN_SECTION_PEOPLE * 2) return [];
   // Communities come from person-person links only: sponsors are linked to most people and
-  // would merge every group (and drag everyone to one centre).
+  // would merge every group (and drag everyone to one center).
   const adjacency = new Map<string, string[]>(nodes.map((node) => [node.id, []]));
   const companyLinks = new Map<string, string[]>(nodes.map((node) => [node.id, []]));
   for (const edge of edges) {
@@ -498,7 +498,7 @@ export interface Camera {
   cy: number;
 }
 
-/** Camera centred on a section's people and home companies; overview is the full frame. */
+/** Camera centered on a section's people and home companies; overview is the full frame. */
 export function cameraFor(
   section: Section | null,
   world: Map<string, Point>,
@@ -744,7 +744,7 @@ export function createCoalescer<T>() {
 }
 
 /**
- * Where a new node starts: the centroid of its neighbours already on screen, or, with
+ * Where a new node starts: the centroid of its neighbors already on screen, or, with
  * none (or a non-finite centroid), its own laid-out position. Never an origin default.
  */
 export function spawnPoint(own: Point, neighbours: Point[]): Point {

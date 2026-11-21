@@ -41,7 +41,7 @@ describe("onboarding resume helpers", () => {
     expect(currentStep(state, null)?.step).toBe("networking");
   });
 
-  it("honours a requested step that exists and ignores one that does not", () => {
+  it("honors a requested step that exists and ignores one that does not", () => {
     expect(currentStep(state, "share")?.step).toBe("share");
     expect(currentStep(state, "rsvp")?.step).toBe("networking");
   });

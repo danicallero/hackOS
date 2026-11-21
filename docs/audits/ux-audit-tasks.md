@@ -411,7 +411,7 @@ does not mean skip QA.
 | Logistics | Presence | Split scanning, sessions, and reporting — UX-10 |
 | Logistics | Meals, activities | Keep as focused station/task pages |
 | Logistics | Statistics | Route-backed event phases — UX-11 |
-| Programme | Schedule management, timetable | Keep separate; clarify organizer vs attendee intent — UX-14 |
+| Program | Schedule management, timetable | Keep separate; clarify organizer vs attendee intent — UX-14 |
 | TV operations | TV control, live settings, timetable | Keep specialized; make live mode/state obvious |
 | Challenges | List, create, challenge detail | Move create out of modal; split editor/result/history areas — UX-08 |
 | Enterprises/sponsors | Enterprise list, enterprise detail | Keep list; split detail management areas — UX-06 |

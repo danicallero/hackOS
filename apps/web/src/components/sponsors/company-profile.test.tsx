@@ -60,7 +60,7 @@ describe("company hero ambient backdrop (H44, H48)", () => {
     expect(layers()[0]?.dataset).toMatchObject({ active: "true", activeDark: "true" });
   });
 
-  it("keeps the single-colour wash without a logo", async () => {
+  it("keeps the single-color wash without a logo", async () => {
     await render(company());
     expect(node.querySelector("[data-hero-bleed]")).not.toBeNull();
     expect(node.querySelector("[data-hero-ambient]")).toBeNull();

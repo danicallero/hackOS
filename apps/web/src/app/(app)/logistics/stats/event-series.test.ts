@@ -39,7 +39,7 @@ describe("hours helpers", () => {
     expect(hoursDistributionRows(hours).map((row) => row.n)).toEqual([1, 0, 1, 0, 1]);
   });
 
-  it("summarises attended people only", () => {
+  it("summarizes attended people only", () => {
     expect(hoursSummary(hours)).toEqual({
       attended: 3,
       totalHours: 37.5,

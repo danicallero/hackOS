@@ -2,7 +2,7 @@ import { SCREEN_TITLE_CENTER } from "@/theme/screen-title";
 
 /** Layout of the Scanner's two-pane window (reader left, person right); see `lib/scan-pane.ts`. */
 
-/** Widest the person profile grows in the right pane; wider panes centre it. */
+/** Widest the person profile grows in the right pane; wider panes center it. */
 export const SCAN_DETAIL_MAX_WIDTH = 760;
 
 /** Space between the top band and the profile's first row. */
@@ -15,7 +15,7 @@ export const FINDER_HEADER_ROW_HEIGHT = 44;
 const LEGACY_HEADER_TOP_PADDING = 8;
 
 /**
- * Space above the finder's header so its back button centres on the line the pane's own title sat
+ * Space above the finder's header so its back button centers on the line the pane's own title sat
  * on (`SCREEN_TITLE_CENTER`), which the finder covers.
  */
 export const FINDER_HEADER_TOP =

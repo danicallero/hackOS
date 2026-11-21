@@ -14,7 +14,7 @@ export const TONE_DOT: Record<Tone, string> = {
   info: "bg-info",
 };
 
-/** Colour of an icon standing in for the status dot. */
+/** Color of an icon standing in for the status dot. */
 export const TONE_ICON: Record<Tone, string> = {
   neutral: "text-muted-foreground",
   brand: "text-primary",

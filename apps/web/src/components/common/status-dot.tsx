@@ -15,7 +15,7 @@ export function StatusDot({
   tone: Tone;
   children: React.ReactNode;
   className?: string;
-  /** Replaces the dot; takes the tone's colour unless it sets its own. */
+  /** Replaces the dot; takes the tone's color unless it sets its own. */
   icon?: React.ReactNode;
 }) {
   return (

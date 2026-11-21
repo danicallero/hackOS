@@ -3,7 +3,7 @@
 This is the operational contract for a production event with up to 500
 concurrent browser/mobile connections. It is intentionally more concrete than
 the product stories: it describes the resource ceilings, traffic channels,
-priority policy, failure behaviour and the signals an operator should use
+priority policy, failure behavior and the signals an operator should use
 while diagnosing an event.
 
 ## Resource contract
@@ -104,14 +104,14 @@ must be reviewed before it is added.
 
 ## Priority channels
 
-| Lane | Traffic | Behaviour under pressure |
+| Lane | Traffic | Behavior under pressure |
 |---|---|---|
 | P0 | Queue transitions, room operations, accreditation, presence and live scanning | Protected first; inspect lock waits and P0 latency before changing pool size. |
 | P1 | Review, projects, applications, exports, schedule and staff collaboration | Protected below P0; may queue behind P0 but is not intentionally shed. |
-| P2 | Public catalogue, public content, TV and anonymous GET reads | Best effort; can receive bounded `429` responses while preserving P0/P1. |
+| P2 | Public catalog, public content, TV and anonymous GET reads | Best effort; can receive bounded `429` responses while preserving P0/P1. |
 | P3 | Participant self-service, personal reads and authentication | Best effort; bounded queue and rate limits prevent refresh storms from starving operations. |
 
-Valkey outage behaviour is deliberately asymmetric: PostgreSQL remains the
+Valkey outage behavior is deliberately asymmetric: PostgreSQL remains the
 source of truth; SSE publication becomes best effort and clients refetch;
 rate limiting fails open and emits a metric; TV falls back to rooms; BullMQ
 reconnects with its durable work state still represented by PostgreSQL/outbox
@@ -297,7 +297,7 @@ max by (lane) (hackos_http_request_admission_queue_size)
 
 `hackos_http_request_admission_queue_size` is a gauge by `lane` (defined in
 `apps/api/src/lib/metrics.ts`). `hackos_http_requests_in_flight` is the
-unlabelled in-flight gauge.
+unlabeled in-flight gauge.
 
 ### Histogram buckets and cardinality
 

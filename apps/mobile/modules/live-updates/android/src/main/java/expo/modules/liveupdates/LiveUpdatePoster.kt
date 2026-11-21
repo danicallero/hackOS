@@ -143,7 +143,7 @@ object LiveUpdatePoster {
     val label = content.actionLabel ?: return null
     val url = content.actionUrl ?: return null
     // Promoted notifications cannot be colorized: SystemUI draws actions as
-    // text buttons, strips colour/background spans and hides action icons
+    // text buttons, strips color/background spans and hides action icons
     // (verified on Android 16). Bold survives, so the label is bold.
     val title = SpannableString(label).apply {
       setSpan(StyleSpan(Typeface.BOLD), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -205,8 +205,8 @@ object LiveUpdatePoster {
 
   /**
    * The JS mapping already split each stage into its filled part (stage
-   * colour) and its grey rest (the platform draws the gaps between segments),
-   * so the colours are used as given, not faded by progress.
+   * color) and its gray rest (the platform draws the gaps between segments),
+   * so the colors are used as given, not faded by progress.
    */
   private fun progressStyle(context: Context, progress: LiveUpdateProgress): NotificationCompat.ProgressStyle {
     val style = NotificationCompat.ProgressStyle()

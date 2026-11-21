@@ -16,7 +16,7 @@ import type { RemovalRetryJob } from "./types.js";
 
 export async function processAccountRemovalRetry(job: Job<RemovalRetryJob>): Promise<void> {
   // Provider retries carry pass row ids rather than raw external credentials.
-  // That lets a cancelled request still invalidate the original installed
+  // That lets a canceled request still invalidate the original installed
   // copy, while preventing a stale retry from touching a pass reissued after
   // cancellation.
   const walletArtifacts = await collectWalletArtifactsByPassIds(pool, job.data.walletPassIds ?? []);

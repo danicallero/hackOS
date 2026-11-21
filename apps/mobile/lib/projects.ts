@@ -275,7 +275,7 @@ function challengeDetail(item: PublicChallengeRow, language: Lang): ChallengeDet
   };
 }
 
-/** The catalogue as the API returns it (`{ items }`, localized titles), in catalogue order. */
+/** The catalog as the API returns it (`{ items }`, localized titles), in catalog order. */
 export async function fetchChallengeCatalogue(language: Lang) {
   const result = await apiFetch<{ items: PublicChallengeRow[] }>("/api/public/challenges");
   return result.items.map((item) => challengeDetail(item, language));

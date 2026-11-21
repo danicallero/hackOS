@@ -30,10 +30,10 @@ change details: the UI must not invent what changed.
 
 Public event content uses an entity-specific allowlist: Wallet broadcasts,
 explicitly untargeted announcements, schedule descriptions/locations, challenge
-content, company/form/role names, catalogue labels and certificate templates are
+content, company/form/role names, catalog labels and certificate templates are
 readable. Targeted or unknown-audience announcements, personal reviews/answers,
 stand-tag labels, internal notes and credentials remain minimized. Audience and content are captured under the same announcement row lock. Public content
-never exempts nested private/credential fields. A queued alert is labelled queued,
+never exempts nested private/credential fields. A queued alert is labeled queued,
 not sent. Existing minimized Wallet alerts can recover their content from the
 immutable broadcast operation with the same ID; mutable current content is never
 substituted for a historical snapshot.
@@ -53,7 +53,7 @@ substituted for a historical snapshot.
   System as executor and source, including legacy reads that recorded Web by
   default. Device lifecycle events remain device-originated.
 - Legacy null actors with no reliable
-  source are shown as unrecorded, not silently relabelled as the system.
+  source are shown as unrecorded, not silently relabeled as the system.
 - Intentionally identity-free events (`ip: null`, `userAgent: null`) acquire
   neither an initiator nor request correlation. Account removal scrubs subject
   references, initiator references and correlation on surviving related entries.
@@ -104,7 +104,7 @@ event per action and preserving the existing single history/broadcast invariant.
 `GET /api/audit` and `GET /api/audit/:id` require `AUDIT_READ`. Responses include
 minimized snapshots, changed fields, executor/initiator context and correlation.
 `requestId` filters related events; actor filters match executor or initiator.
-Rows also carry `entity_label`, the current name of catalogue subjects
+Rows also carry `entity_label`, the current name of catalog subjects
 (university, degree, enterprise, challenge, role, room, application, activity,
 active user) resolved at read time, so the list reads "University · UDC" rather
 than "University #12"; deleted subjects fall back to their id.
@@ -114,7 +114,7 @@ range). Each active filter is a chip that removes only itself. An entry's detail
 links to `/audit?entityType=…&entityId=…`, which seeds the entity filters and
 then leaves `/audit`, so removing the chip never fights the link.
 The desktop table constrains column widths and truncates long changed-field summaries with an ellipsis (the full list remains in the detail) so the subject, actor and source remain visible without horizontal scrolling.
-The UI localizes the current action/entity catalogue in English, Spanish and
+The UI localizes the current action/entity catalog in English, Spanish and
 Galician, shows recursive object differences and changed fields separately from
 private values, and links supported subjects to their existing detail routes.
 Application-response links choose a workspace the viewer can access and keep
@@ -130,7 +130,7 @@ API integration tests cover single/batched correlation, legacy minimization,
 private-content exclusion, actor/session/token/device/system distinctions,
 autosave grouping and account deletion. Browser checks cover desktop/narrow
 audit detail, related actions and application links for review/decision capability
-combinations. A new event should extend the action/entity catalogue and preserve
+combinations. A new event should extend the action/entity catalog and preserve
 this privacy boundary; private review/answer content remains excluded. Operational identifier histories
 are covered by account erasure, including historical email addresses; identifiers
 that were already replaced by a private-value marker are not guessed from current data.

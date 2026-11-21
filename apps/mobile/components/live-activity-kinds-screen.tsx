@@ -236,7 +236,7 @@ function KindRow({
   const startTop = useSharedValue(0);
   const duration = reducedMotion ? 0 : 180;
 
-  // Neighbours slide into the slot the dragged row leaves.
+  // Neighbors slide into the slot the dragged row leaves.
   useAnimatedReaction(
     () => slots.value[kind] ?? 0,
     (next) => {

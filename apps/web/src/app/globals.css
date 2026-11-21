@@ -234,7 +234,7 @@
   }
 
   /* A restrained, themed scrollbar keeps long editor panels from introducing
-     platform-coloured chrome into the workspace. */
+     platform-colored chrome into the workspace. */
   * {
     scrollbar-color: color-mix(in oklch, var(--muted-foreground) 35%, transparent) transparent;
     scrollbar-width: thin;

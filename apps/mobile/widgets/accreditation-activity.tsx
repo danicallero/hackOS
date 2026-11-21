@@ -41,7 +41,7 @@ export const AccreditationActivityLayout = withLiveActivityKit(
       );
     }
     const labels = props.labels;
-    // Same colour logic as the staff activity.
+    // Same color logic as the staff activity.
     const { islandAccent } = kit;
     const { neutral } = kit;
     const bannerAccent = kit.bannerAccent(environment.isLuminanceReduced);

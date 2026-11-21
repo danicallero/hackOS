@@ -36,7 +36,7 @@ const REDUCED_MS = 1400;
 
 /**
  * #935: the moment a stand is collected. The logo springs in over a wash of its
- * own colour that pulses outward like a heartbeat, with a rising haptic beat
+ * own color that pulses outward like a heartbeat, with a rising haptic beat
  * (about 3 s). Tapping skips it; `onCovered` fires once the overlay hides the
  * screen so the company page is already open underneath when it fades.
  */
@@ -121,7 +121,7 @@ function Celebration({
     onDoneRef.current();
   }).current;
 
-  // The wash fades in once the logo colour is known, and not at all if it never is.
+  // The wash fades in once the logo color is known, and not at all if it never is.
   // biome-ignore lint/correctness/useExhaustiveDependencies: shared values are stable.
   useEffect(() => {
     wash.value = withTiming(1, { duration: 500 });
@@ -235,7 +235,7 @@ function Celebration({
   );
 }
 
-/** One expanding ring of the logo's colour; the three are staggered a third of a beat apart. */
+/** One expanding ring of the logo's color; the three are staggered a third of a beat apart. */
 function PulseRing({
   index,
   pulse,

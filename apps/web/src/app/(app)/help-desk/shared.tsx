@@ -85,7 +85,7 @@ export function TopicsPicker({
   inDialog?: boolean;
   /** Request forms only: Other is the last row of the same list. */
   other?: { value: boolean; onChange: (other: boolean) => void };
-  /** Support profile only: eligible people may add topics to the catalogue (the API refuses others). */
+  /** Support profile only: eligible people may add topics to the catalog (the API refuses others). */
   allowAdd?: boolean;
 }) {
   const { t } = useLocale();
@@ -120,7 +120,7 @@ export function TopicsPicker({
         options={choices}
         value={[...value.map((topic) => String(topic.id)), ...(other?.value ? [OTHER] : [])]}
         onChange={(ids) => {
-          // Other excludes the catalogue: picking one side clears the other.
+          // Other excludes the catalog: picking one side clears the other.
           const pickedOther = ids.includes(OTHER) && !other?.value;
           const topicIds = pickedOther ? [] : ids.filter((id) => id !== OTHER);
           other?.onChange(pickedOther || (ids.includes(OTHER) && topicIds.length === 0));

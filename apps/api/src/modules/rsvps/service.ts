@@ -10,7 +10,7 @@ import { attendanceKind } from "../identity/attendance.js";
 import { roleAudienceTagsForUsers } from "../logistics/role-audiences.js";
 
 /**
- * Per-activity RSVPs (generalises the sponsor meal plans of #933). An activity
+ * Per-activity RSVPs (generalizes the sponsor meal plans of #933). An activity
  * is offered to a person when it has enabled RSVP settings for the CURRENT
  * event key, its schedule entry is shown, and the person's
  * attendance kind (derived, participant-first) is in the settings' `kinds`.
@@ -210,7 +210,7 @@ export interface SubmitOptions {
 }
 
 /**
- * Single write path for every RSVP submission. The user row lock serialises
+ * Single write path for every RSVP submission. The user row lock serializes
  * concurrent submissions (several tabs/devices) so the stored answers always
  * match one whole request.
  */

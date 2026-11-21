@@ -39,7 +39,7 @@ At the venue, staff can accredit arrivals, assign or replace badges, record
 entries and exits, serve meals and scan attendance at activities. The mobile
 scanner keeps an encrypted local roster and a durable queue of pending scans,
 so a bad connection does not turn the door or meal line into a spreadsheet.
-The API still gives the final acknowledgement for every operation.
+The API still gives the final acknowledgment for every operation.
 
 Judging has its own explicit workflow: a team can be waiting, called, in the
 room, presenting or complete. Shared queues prevent the same team from being
@@ -56,7 +56,7 @@ export/deletion workflows and a queryable audit trail.
 
 | App                          | Who it is for                                 | Main jobs                                                                                                   |
 | ---------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| [`apps/web`](apps/web)       | Participants, organisers, judges and sponsors | Applications, administration, projects, judging,        logistics dashboards, public schedule and TV screens |
+| [`apps/web`](apps/web)       | Participants, organizers, judges and sponsors | Applications, administration, projects, judging,        logistics dashboards, public schedule and TV screens |
 | [`apps/mobile`](apps/mobile) | Participants and on-site operators            | Schedule, queue status, passes, notifications, queue operations and offline-capable scanners                |
 | [`apps/api`](apps/api)       | Both clients and external consumers           | Authentication, domain rules, OpenAPI, background work, realtime streams and storage access                 |
 
@@ -77,7 +77,7 @@ Those schemas generate the live OpenAPI documentation at `/documentation`.
 - **Web:** Next.js 16 App Router, React 19, Tailwind CSS v4 and shadcn/ui.
 - **Mobile:** Expo Router, React Native, Secure Store, SQLite, Expo
 Notifications and native Wallet integrations.
-- **Database:** Postgres 17 with parameterised raw SQL and versioned SQL
+- **Database:** Postgres 17 with parameterized raw SQL and versioned SQL
 migrations. There is no ORM.
 - **Background work and realtime:** BullMQ ticks and SSE fan-out use Valkey.
 Durable work, retries and dead-letter state remain in Postgres, so Valkey can
@@ -204,7 +204,7 @@ the pre-event qualification run are in
   you are touching, and applies to people and coding agents alike.
 - [`CLAUDE.md`](CLAUDE.md) lists the conventions every change follows:
   capability-based permissions, audited mutations in the same transaction,
-  idempotent and row-locked state transitions, raw parameterised SQL,
+  idempotent and row-locked state transitions, raw parameterized SQL,
   es/gl/en copy, and which doc to update with which code.
 - Reference the story (`H29`) or the issue (`#934`) in every commit and PR.
 - Open every pull request as a draft against `staging` (development) or

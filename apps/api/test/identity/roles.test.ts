@@ -1397,7 +1397,7 @@ describe("H8 default seeded role set", () => {
     return seedPool;
   }
 
-  it("seeds the composable default catalogue with real, exact capability grants per role", async () => {
+  it("seeds the composable default catalog with real, exact capability grants per role", async () => {
     const pool = await seededRoles();
     const eventDirectorCaps = Object.values(CAPABILITIES).filter(
       (cap) => cap !== CAPABILITIES.ADMIN_ALL,
@@ -1586,7 +1586,7 @@ describe("H8 default seeded role set", () => {
       "Accreditation station",
       "Presence station",
       "Activity and meal station",
-      "Programme manager",
+      "Program manager",
       "Event settings manager",
       "TV operator",
       "Sponsor administrator",
@@ -1599,7 +1599,7 @@ describe("H8 default seeded role set", () => {
     ]);
     expect(rows).toHaveLength(0);
 
-    // Also confirm the OLD (superseded) six-role draft catalogue is gone.
+    // Also confirm the OLD (superseded) six-role draft catalog is gone.
     const { rows: oldDraftRows } = await pool.query(
       `SELECT name FROM roles WHERE name = ANY($1::text[])`,
       [["Event director", "Judge coordinator", "Operations lead", "Volunteer staff"]],

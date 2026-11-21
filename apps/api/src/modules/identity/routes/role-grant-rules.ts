@@ -262,7 +262,7 @@ export function registerRoleGrantRuleRoutes(app: FastifyInstance): void {
     "/api/role-grant-rules",
     {
       preHandler: [manage, idempotencyGuard],
-      // Global catalogue data: authority is resolved in the current edition (H8).
+      // Global catalog data: authority is resolved in the current edition (H8).
       config: routeAccess({
         kind: "capability",
         capability: CAPABILITIES.PERMISSIONS_MANAGE,
@@ -320,7 +320,7 @@ export function registerRoleGrantRuleRoutes(app: FastifyInstance): void {
     "/api/role-grant-rules/:ruleId",
     {
       preHandler: [manage, idempotencyGuard],
-      // Global catalogue data: authority is resolved in the current edition (H8).
+      // Global catalog data: authority is resolved in the current edition (H8).
       config: routeAccess({
         kind: "capability",
         capability: CAPABILITIES.PERMISSIONS_MANAGE,
@@ -401,7 +401,7 @@ export function registerRoleGrantRuleRoutes(app: FastifyInstance): void {
     "/api/role-grant-rules/:ruleId",
     {
       preHandler: manage,
-      // Global catalogue data: authority is resolved in the current edition (H8).
+      // Global catalog data: authority is resolved in the current edition (H8).
       config: routeAccess({
         kind: "capability",
         capability: CAPABILITIES.PERMISSIONS_MANAGE,

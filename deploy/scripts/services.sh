@@ -1154,7 +1154,7 @@ print_log_export_command() {
   target="$shell_input"
   [[ -n "$target" ]] || target="$default_target"
   if [[ -z "$target" ]]; then
-    printf '%s\n' "${c_yellow}No SSH target was supplied; export cancelled.${c_reset}"
+    printf '%s\n' "${c_yellow}No SSH target was supplied; export canceled.${c_reset}"
     pause_shell
     return 0
   fi
@@ -1829,7 +1829,7 @@ deploy_target_shell() {
       run_action "deploy $tag" deploy "$tag" "$option"
     fi
   else
-    printf '%s\n' "${c_dim}Deployment cancelled; no image was pulled.${c_reset}"
+    printf '%s\n' "${c_dim}Deployment canceled; no image was pulled.${c_reset}"
     pause_shell
   fi
 }
@@ -1922,7 +1922,7 @@ service_operations_shell() {
             if [[ "$shell_navigation" == value && "$shell_input" == STOP ]]; then
               run_action "stop all services" shutdown
             elif [[ "$shell_navigation" == value ]]; then
-              printf '%s\n' "${c_dim}Stop cancelled; persistent data was not changed.${c_reset}"
+              printf '%s\n' "${c_dim}Stop canceled; persistent data was not changed.${c_reset}"
               pause_shell
             fi
             ;;

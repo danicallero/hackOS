@@ -241,7 +241,7 @@ export function registerRsvpRoutes(app: FastifyInstance): void {
           "Per activity asked to at least one kind (enabled RSVP settings on a shown schedule entry, ended included): attending, notAttending, " +
           "unsure and unanswered among eligible people (holding an asked role or in the asked kinds, never participants for " +
           "meals), broken down by kind, with the intolerance breakdown and dietary-note count among those attending. " +
-          "Aggregates only; excludes inactive and anonymized accounts and honours the review-fixture boundary. " +
+          "Aggregates only; excludes inactive and anonymized accounts and honors the review-fixture boundary. " +
           "`activityId` narrows to one activity. Requires logistics statistics access.",
         response: { 200: z.object({ activities: z.array(rsvpSummarySchema) }) },
       },

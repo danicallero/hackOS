@@ -27,7 +27,7 @@ export function registerQueueResetRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Reset all project, queue, and judging data",
         description:
-          "Super-admin-only, irreversible reset for an event recovery. Atomically removes projects, project memberships and challenge selections, queue entries and movement history, reviews, judging sessions, winners, judge assignments, and queue routing; preserves accounts, applications, event settings, challenge definitions, rooms, and the audit trail. Requires the server confirmation phrase and an explicit irreversible-action acknowledgement.",
+          "Super-admin-only, irreversible reset for an event recovery. Atomically removes projects, project memberships and challenge selections, queue entries and movement history, reviews, judging sessions, winners, judge assignments, and queue routing; preserves accounts, applications, event settings, challenge definitions, rooms, and the audit trail. Requires the server confirmation phrase and an explicit irreversible-action acknowledgment.",
         body: judgingDataResetBody,
       },
     },

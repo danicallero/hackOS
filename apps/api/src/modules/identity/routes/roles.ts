@@ -75,7 +75,7 @@ const manageAccess = routeAccess({
   kind: "capability",
   capability: CAPABILITIES.PERMISSIONS_MANAGE,
 });
-// The role catalogue (roles, role_capabilities, grant rules) is global, so its
+// The role catalog (roles, role_capabilities, grant rules) is global, so its
 // mutations resolve authority in the current edition only: a role held in a
 // past edition must not grant itself rights over roles the current one uses
 // (H8, docs/multi-edition-plan.md). User assignment stays edition-scoped.
@@ -100,7 +100,7 @@ const roleResponse = z.object({
   /** Independent of visibility/capabilities: this role entitles its holders to the event app/ticket. */
   eventAccess: z.boolean(),
   isProtected: z.boolean(),
-  // H8: true for a role from the seeded default catalogue rather than one
+  // H8: true for a role from the seeded default catalog rather than one
   // created via POST /api/roles.
   // Scopes the trash/restore panel and gates the reset-to-default action.
   isSeeded: z.boolean(),
@@ -245,7 +245,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List role-creation templates",
         description:
-          "Returns the stable H8 template catalogue used to prefill a new role's capabilities. Labels/descriptions are message keys for the client i18n catalogue.",
+          "Returns the stable H8 template catalog used to prefill a new role's capabilities. Labels/descriptions are message keys for the client i18n catalog.",
         response: {
           200: z.array(
             z.object({
@@ -276,7 +276,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List roles by position",
         description:
-          "Lists non-deleted roles highest-position first (H8), excluding the dedicated internal Store-review operator roles from both active and deleted catalogues. Each role's memberIds contains active, non-anonymized real accounts only; synthetic Store-review fixtures are excluded. Invitation managers get this same read access to choose deferred role pre-assignments; only PERMISSIONS_MANAGE can mutate. Pass includeDeleted=true (PERMISSIONS_MANAGE only) to ALSO list soft-deleted roles, scoped to is_seeded=true ones only — the trash/restore panel only ever offers back roles from the seeded default catalogue, never a custom role an admin created and later deleted. Non-deleted roles in the response are unaffected by this scoping.",
+          "Lists non-deleted roles highest-position first (H8), excluding the dedicated internal Store-review operator roles from both active and deleted catalogs. Each role's memberIds contains active, non-anonymized real accounts only; synthetic Store-review fixtures are excluded. Invitation managers get this same read access to choose deferred role pre-assignments; only PERMISSIONS_MANAGE can mutate. Pass includeDeleted=true (PERMISSIONS_MANAGE only) to ALSO list soft-deleted roles, scoped to is_seeded=true ones only — the trash/restore panel only ever offers back roles from the seeded default catalog, never a custom role an admin created and later deleted. Non-deleted roles in the response are unaffected by this scoping.",
         querystring: z.object({ includeDeleted: z.coerce.boolean().default(false) }),
         response: { 200: z.array(roleResponse) },
       },
@@ -986,7 +986,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       config: manageAccess,
       schema: {
         summary: "List every known capability",
-        description: "The full shared capability catalogue (H8), for the role capability editor.",
+        description: "The full shared capability catalog (H8), for the role capability editor.",
         response: { 200: z.array(z.string()) },
       },
     },

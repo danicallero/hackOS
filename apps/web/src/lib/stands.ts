@@ -43,7 +43,7 @@ export function displayCode(tag: Pick<StandTag, "kind" | "code">): string {
   return tag.kind === "qr" ? `STAND-…${tag.code.slice(-4)}` : tag.code;
 }
 
-/** The labelled, print-quality SVG the API renders for one QR tag. */
+/** The labeled, print-quality SVG the API renders for one QR tag. */
 export function standQrSvgPath(enterpriseId: number, tagId: number): string {
   return `/api/enterprises/${enterpriseId}/stand-tags/${tagId}/qr.svg`;
 }

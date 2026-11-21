@@ -16,7 +16,7 @@ import {
 
 /**
  * Pump (plan/07 §5.1): tops up `called` per active non-paused room from the
- * shared challenge queue, honouring priority/position, the H30 guard and
+ * shared challenge queue, honoring priority/position, the H30 guard and
  * paused/inactive rooms; emits pre-call warnings (H38) exactly once.
  * pumpTick() is invoked directly — the BullMQ repeatable job just calls it.
  */
@@ -202,7 +202,7 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
     expect((await getEntry(secondEntryId)).precalled_at).toBeNull();
   });
 
-  it("honours the H30 member-busy guard and retries the team on a later tick", async () => {
+  it("honors the H30 member-busy guard and retries the team on a later tick", async () => {
     const ch1 = await createChallenge();
     const ch2 = await createChallenge();
     const room1 = await createRoom({ maxInWaitingArea: 1 });
@@ -233,7 +233,7 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
     expect(after).toEqual(["called", "completed"]);
   });
 
-  it("honours the call_count ladder: repeated no-shows sink below clean teams at equal position", async () => {
+  it("honors the call_count ladder: repeated no-shows sink below clean teams at equal position", async () => {
     const challengeId = await createChallenge();
     const roomId = await createRoom({ maxInWaitingArea: 1 });
     await assignChallengeToRoom(roomId, challengeId);

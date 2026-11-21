@@ -50,7 +50,7 @@ export const StaffActivityLayout = withLiveActivityKit(
     const labels = props.labels;
     // Dynamic Island is always dark; the Lock Screen follows the system scheme,
     // which `environment.colorScheme` does not reliably report, so the Lock
-    // Screen accent is a dynamic colour resolved by the view's own appearance.
+    // Screen accent is a dynamic color resolved by the view's own appearance.
     // Always-On (reduced luminance) drops accent fills and lets the system dim.
     const { islandAccent } = kit;
     const { neutral } = kit;

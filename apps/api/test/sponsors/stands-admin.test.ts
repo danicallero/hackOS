@@ -312,7 +312,7 @@ describe("code exports", () => {
     ]);
   });
 
-  it("zips one labelled SVG per QR of the scannable stands, audited", async () => {
+  it("zips one labeled SVG per QR of the scannable stands, audited", async () => {
     const acme = await enterprise("Ácme & Co", true);
     const beta = await enterprise("Beta", true);
     await tag(acme, "04ACAC00000001");

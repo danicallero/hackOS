@@ -21,7 +21,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 /**
  * How a control answers a touch. One vocabulary on iOS and Android — Android
  * deliberately gets no Material ripple.
- * - `row`: the cell turns the grouped-list highlight colour (UIKit table cells).
+ * - `row`: the cell turns the grouped-list highlight color (UIKit table cells).
  * - `opacity`: text and icon buttons fade.
  * - `scale`: filled buttons and cards shrink slightly and spring back.
  * - `none`: the control draws its own feedback (glass, native controls).

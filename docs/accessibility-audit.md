@@ -10,7 +10,7 @@ browser suite is in [ui-testing.md](./ui-testing.md).
 |---|---|
 | [1. Scope and method](#1-scope-and-method) | What was audited and how |
 | [2. Findings](#2-findings) | Fixed defects by WCAG principle, with before/after and user impact |
-| [3. Safari: Tab skips links](#3-safari-tab-skips-links) | Platform behaviour, not a defect |
+| [3. Safari: Tab skips links](#3-safari-tab-skips-links) | Platform behavior, not a defect |
 | [4. Route coverage](#4-route-coverage) | Which of the 72 routes were verified, and how deeply |
 | [5. Regression suite](#5-regression-suite) | Specs, commands, assertions |
 | [6. Limitations](#6-limitations) | What this audit does not establish |
@@ -31,7 +31,7 @@ browser suite is in [ui-testing.md](./ui-testing.md).
 - **Keyboard flows**: Tab, Shift+Tab, arrows, Enter, Space and Escape through
   the shell, public sections, overlays, menus, pickers, toasts and the
   route-specific widgets, in Chromium, Firefox and WebKit.
-- **Rendered contrast**: colours were measured from rendered pixels rather than
+- **Rendered contrast**: colors were measured from rendered pixels rather than
   read from tokens.
 - **Source review**: every `page.tsx` was triaged statically (control names,
   label associations, roles, click/drag handlers, headings, live regions,
@@ -58,8 +58,8 @@ overlays).
 
 | Sev | Location | Before | After | User impact |
 |---|---|---|---|---|
-| HIGH | `apps/web/src/styles/theme.css:93`, `:160` | `--input` equalled the decorative `--border`: field boundaries measured 1.56:1 (light, rgb 201,202,214 on 250,250,250) and 1.41:1 (dark, rgb 41,45,55 on 11,13,20) | `--input` uses the outline-button border: ≥3:1 (light rgb 102,105,142 on 250,250,250; dark rgb 154,155,158 on 11,13,20) | Low-vision users can see where every input, select, textarea, checkbox and switch begins and ends |
-| HIGH | `apps/web/src/app/(app)/logistics/stats/stats-chart.tsx:183` | Exact values only in `sr-only` text; ECharts legend filtering and pagination pointer-only | Visible native disclosure with every exact value; native labelled checkboxes mirror the legend and stay in sync with it | Sighted keyboard users can read exact numbers and filter every series |
+| HIGH | `apps/web/src/styles/theme.css:93`, `:160` | `--input` equaled the decorative `--border`: field boundaries measured 1.56:1 (light, rgb 201,202,214 on 250,250,250) and 1.41:1 (dark, rgb 41,45,55 on 11,13,20) | `--input` uses the outline-button border: ≥3:1 (light rgb 102,105,142 on 250,250,250; dark rgb 154,155,158 on 11,13,20) | Low-vision users can see where every input, select, textarea, checkbox and switch begins and ends |
+| HIGH | `apps/web/src/app/(app)/logistics/stats/stats-chart.tsx:183` | Exact values only in `sr-only` text; ECharts legend filtering and pagination pointer-only | Visible native disclosure with every exact value; native labeled checkboxes mirror the legend and stay in sync with it | Sighted keyboard users can read exact numbers and filter every series |
 | MEDIUM | `apps/web/src/app/(auth)/login/page.tsx:127` (also `signup`, `forgot-password`, `reset-password`, `claim-account`, `verify-email`) | Page title was a card-title `div`: no `h1` | Real `<h1>` on every auth state | Screen-reader users get a page heading and heading navigation |
 | MEDIUM | `apps/web/src/components/common/data-table.tsx:363` | Row-actions column header was empty | Header carries a `sr-only` "Actions" | Table cell actions have a column name |
 | MEDIUM | `apps/web/src/app/(app)/inbox/page.tsx:21` and `inbox/inbox-tabs.tsx` | At 320 px and 200 % text, Preferences ended at x 415 and Add reminder at x 338 (viewport 320) | Tab triggers wrap; button text grows inside the available width | Controls are fully visible instead of clipped |
@@ -81,7 +81,7 @@ overlays).
 | MEDIUM | `apps/web/src/components/common/entity-combobox.tsx:117`, `degree-picker.tsx:123`, `multi-select.tsx:212`, `university-picker.tsx:279`, `user-picker.tsx:199` | Pickers opened by click/Enter only; trigger announced `aria-haspopup="listbox"` for a popover | ArrowDown/ArrowUp open the picker; popup role is `dialog`, matching the popover that holds search and list | Keyboard users get the expected combobox opening key and an accurate role |
 | MEDIUM | `apps/web/src/components/common/datetime-input.tsx:206` | Clear button had `tabIndex={-1}` | Clear button is in the Tab order | Keyboard users can clear a date/time |
 | MEDIUM | `apps/web/src/components/ui/dialog.tsx:52`, `sheet.tsx:42`, `select.tsx:101`, `popover.tsx:62`, `dropdown-menu.tsx:90`, `tooltip.tsx:45` | Overlays kept 0.15–0.3 s enter/exit animations under `prefers-reduced-motion: reduce` (measured: dialog 0.2 s, sheet 0.3 s, select 0.15 s) | `motion-reduce` removes animation and transition on all six primitives | Motion-sensitive users see overlays without movement |
-| MEDIUM | `apps/web/src/components/ui/input.tsx:17`, `textarea.tsx:10`, `select.tsx:69`, `checkbox.tsx:17`, `switch.tsx:20` | Focus indication relied on border/shadow colour, which forced-colors mode removes | `forced-colors:focus-visible` solid outline | Windows High Contrast users see focus on fields and toggles |
+| MEDIUM | `apps/web/src/components/ui/input.tsx:17`, `textarea.tsx:10`, `select.tsx:69`, `checkbox.tsx:17`, `switch.tsx:20` | Focus indication relied on border/shadow color, which forced-colors mode removes | `forced-colors:focus-visible` solid outline | Windows High Contrast users see focus on fields and toggles |
 | LOW | `apps/web/src/components/ui/tabs.tsx:61` | Focusable tab panel had `outline-none` | Visible `focus-visible` outline | Focus on a tab panel is visible |
 | MEDIUM | `apps/web/src/app/(app)/schedule/schedule-cells.tsx:227` | Inline text/time inputs unnamed; empty notes trigger showed only an em dash | Localized field label supplied by `ActivityRow`; triggers expose field plus value | Location, notes, start and end are identifiable by screen-reader and voice users |
 | MEDIUM | `apps/web/src/app/(app)/users/invite-dialog.tsx:364` | Unnamed radios; a fake tablist of ordinary buttons; unnamed limit, URL and expiry | Native radio groups, pressed-state method buttons in a fieldset, named fields | Arrow keys change radios; method state and field purpose are announced |
@@ -90,7 +90,7 @@ overlays).
 
 | Sev | Location | Before | After | User impact |
 |---|---|---|---|---|
-| MEDIUM | `apps/web/src/components/common/question-field.tsx:54`, `:66` | Fixed `question-<key>` ids (duplicates when a question renders twice); description, lock note and required state not tied to the control; asterisk was the only required cue | `useId` ids; `fieldset` labelled by the question; `aria-describedby` for description and lock; `aria-required`; multi-choice/scale announce "required" in text | Forms state what each question is, what it needs and why it is locked |
+| MEDIUM | `apps/web/src/components/common/question-field.tsx:54`, `:66` | Fixed `question-<key>` ids (duplicates when a question renders twice); description, lock note and required state not tied to the control; asterisk was the only required cue | `useId` ids; `fieldset` labeled by the question; `aria-describedby` for description and lock; `aria-required`; multi-choice/scale announce "required" in text | Forms state what each question is, what it needs and why it is locked |
 | MEDIUM | `apps/web/src/components/common/datetime-input.tsx:196`, `duration-input.tsx:119`, `scale-buttons.tsx:20` | Description, invalid and required state not forwarded to the inner time/duration/scale controls | Forwarded `aria-describedby`, `aria-invalid`, `aria-required`, `aria-labelledby` | Validation messages reach the control that failed |
 | MEDIUM | `apps/web/src/app/(auth)/forgot-password/page.tsx:38`, `signup/page.tsx:89`, `claim-account/page.tsx:101` | After submit the form was replaced and focus was lost | Focus moves to the confirmation `h1` | The result of submitting is announced |
 | MEDIUM | `apps/web/src/components/common/language-select.tsx:24` | Button named only "Language", while showing the current code | Name includes the visible code, e.g. "Language: EN" | Voice-control users can say what they see (WCAG label in name) |
@@ -99,7 +99,7 @@ overlays).
 | MEDIUM | `apps/web/src/app/(app)/schedule/schedule-cells.tsx:767`, `schedule-form-modal.tsx:736` | Owner free-text input named only by placeholder | Persistent localized name | Name remains after typing |
 | MEDIUM | `apps/web/src/app/(app)/schedule/schedule-cells.tsx:146`, `:396`, `:482`, `:625`; `schedule-activity-row.tsx:410` | Visibility, type, audience, publish-time and activity triggers were named only "Edit <field>" / "Edit item", hiding the visible value (found once the axe fixture had a real activity) | Buttons keep a visually hidden "Edit <field>:" prefix before the visible value; the type select (a combobox, which takes no name from content) carries the value in its label | Screen-reader users hear the current value; voice-control users can say what they see |
 | MEDIUM | `apps/web/src/app/(app)/permissions/grant-rules-overview.tsx:99`, `permissions/role-editor.tsx:353` | Search fields had no programmatic label | Localized `aria-label` | Search is identifiable |
-| MEDIUM | `apps/web/src/app/(app)/sponsor-faq/page.tsx:157` | Block-kind select unlabelled | Existing localized "Kind" label | Block type identifiable |
+| MEDIUM | `apps/web/src/app/(app)/sponsor-faq/page.tsx:157` | Block-kind select unlabeled | Existing localized "Kind" label | Block type identifiable |
 | MEDIUM | `apps/web/src/components/forms/field-editor/validation-editor.tsx` | Validation type, text condition and select-count labels had no `for`/`id` link | Unique matching ids | Builder validation controls are named; clicking a label focuses it |
 
 ### 2.4 Robust
@@ -107,7 +107,7 @@ overlays).
 | Sev | Location | Before | After | User impact |
 |---|---|---|---|---|
 | MEDIUM | `apps/web/src/components/ui/command.tsx:25`, `:55` | `cmdk` root unnamed; dialog title/description sat outside `DialogContent` | Root gets a label; title and description move inside the content | Command palette is named and its dialog is correctly described |
-| LOW | `apps/web/src/components/common/page-toolbar.tsx:10` | Labelled `section` used as a toolbar group | `fieldset` with `min-w-0` | Group is announced as a labelled group without a stray region |
+| LOW | `apps/web/src/components/common/page-toolbar.tsx:10` | Labeled `section` used as a toolbar group | `fieldset` with `min-w-0` | Group is announced as a labeled group without a stray region |
 | MEDIUM | `apps/web/src/components/ui/sileo.tsx:143` | The patched toast viewport (now server-rendered so its live region exists before the first toast) rendered `data-theme` from an unresolved theme on the server: a hydration mismatch on every page | Server and first client render use the default theme, then follow the resolved one | No hydration error; the polite live region is stable from first paint |
 | LOW | `apps/web/src/components/common/password-input.tsx:28` | Reveal button stayed enabled on a disabled field | Disabled with the field | No actionable control inside a disabled field |
 
@@ -117,7 +117,7 @@ On macOS, Safari does not put links on the Tab sequence unless **Settings →
 Advanced → "Press Tab to highlight each item on a webpage"** is on (off by
 default). With it off, Tab skips sidebar and landing-page anchors, so Access
 and audit children and section links looked unreachable. **Option-Tab** moves
-through every item. This is platform behaviour: the links are native `<a>`
+through every item. This is platform behavior: the links are native `<a>`
 elements and were **not** replaced with fake buttons; Chromium, Firefox and
 Safari with the setting on reach them with Tab. Source:
 [Apple, Safari User Guide](https://support.apple.com/en-lamr/guide/safari/cpsh003/mac).
@@ -274,7 +274,7 @@ No claim of WCAG conformance is made. What remains unverified:
 
 - **Screen readers**: no VoiceOver, NVDA or JAWS pass. Automated name, role and
   state checks are not a substitute for hearing the page; live-region and
-  announcement behaviour was inspected in source only.
+  announcement behavior was inspected in source only.
 - **Speech input**: not exercised. Label-in-name fixes target it, but no
   dictation tool was run.
 - **Forced colors**: emulated through the browser, not run on Windows High

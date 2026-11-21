@@ -197,7 +197,7 @@ describe("EventDiary (#935)", () => {
     expect(navigation.push).toHaveBeenCalledWith("/people/41");
   });
 
-  it("toggles a favourite and keeps favourites first", async () => {
+  it("toggles a favorite and keeps favorites first", async () => {
     diary = [
       person({
         id: 5,
@@ -224,7 +224,7 @@ describe("EventDiary (#935)", () => {
     ).toBe("true");
   });
 
-  it("never removes an entry when it is un-favourited, even under the Favourites filter", async () => {
+  it("never removes an entry when it is un-favourited, even under the Favorites filter", async () => {
     diary = [
       person({ starred: true }),
       person({ id: 6, person: { ...person().person!, userId: 44, displayName: "Dan E." } }),
@@ -372,7 +372,7 @@ describe("Companies collection (#935)", () => {
     expect(container.textContent).toContain("diaryCollectionEmpty");
   });
 
-  it("opens a collected company and favourites it without removing it", async () => {
+  it("opens a collected company and favorites it without removing it", async () => {
     collection = {
       total: 2,
       collected: 1,

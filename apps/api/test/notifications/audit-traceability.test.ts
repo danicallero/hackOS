@@ -330,7 +330,7 @@ it("presents legacy automatic exits as System in list and detail without guessin
   ]);
 });
 
-it("labels catalogue subjects by their current name (H53, H54)", async () => {
+it("labels catalog subjects by their current name (H53, H54)", async () => {
   const app = await getApp();
   const actor = await createUserWithCapabilities([CAPABILITIES.AUDIT_READ]);
   const university = await pool.query<{ id: number }>(

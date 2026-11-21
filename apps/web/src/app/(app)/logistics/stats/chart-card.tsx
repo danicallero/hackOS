@@ -81,7 +81,7 @@ function ChartTypeSelect({
 /**
  * H27: every statistics chart (before, during, after) is a card whose chart can
  * be opened full screen — the same view the meal detail already offers — so
- * organisers can project or inspect it. When `onChartTypeChange` is given the
+ * organizers can project or inspect it. When `onChartTypeChange` is given the
  * viewer can switch bar/pie/line in the card and in the full-screen view;
  * city answers (`allowGlobe`) can also be shown on a globe.
  */

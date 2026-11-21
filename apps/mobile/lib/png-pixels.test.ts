@@ -18,7 +18,7 @@ function chunk(kind: string, body: Uint8Array): number[] {
   ];
 }
 
-/** A PNG with the given colour type whose rows are already filtered. */
+/** A PNG with the given color type whose rows are already filtered. */
 function png(
   width: number,
   height: number,
@@ -69,7 +69,7 @@ describe("decodePngRgba", () => {
     expect([...decodePngRgba(png(2, 2, 6, [zero, paeth])).rgba.slice(8)]).toEqual(row);
   });
 
-  it("expands RGB, grey and palette images to opaque or tRNS alpha", () => {
+  it("expands RGB, gray and palette images to opaque or tRNS alpha", () => {
     expect([...decodePngRgba(png(1, 1, 2, [[0, 1, 2, 3]])).rgba]).toEqual([1, 2, 3, 255]);
     expect([...decodePngRgba(png(1, 1, 0, [[0, 9]])).rgba]).toEqual([9, 9, 9, 255]);
     expect([...decodePngRgba(png(1, 1, 4, [[0, 9, 7]])).rgba]).toEqual([9, 9, 9, 7]);
@@ -90,7 +90,7 @@ describe("decodePngRgba", () => {
   });
 });
 
-test("reads 16-bit PNGs, as iOS writes wide-colour photos, by their high bytes", () => {
+test("reads 16-bit PNGs, as iOS writes wide-color photos, by their high bytes", () => {
   // A 4x4 red-to-blue gradient saved as 16-bit RGBA.
   const png = Uint8Array.from(
     atob(

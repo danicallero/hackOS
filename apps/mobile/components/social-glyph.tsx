@@ -31,7 +31,7 @@ export function SocialGlyph({
   );
 }
 
-/** The glyph on a neutral rounded tile, the row's leading icon (no brand colours). */
+/** The glyph on a neutral rounded tile, the row's leading icon (no brand colors). */
 export function SocialTile({ kind }: { kind: SocialKind }) {
   return (
     <Svg width={SOCIAL_TILE_SIZE} height={SOCIAL_TILE_SIZE} viewBox="0 0 30 30" accessible={false}>
