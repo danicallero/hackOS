@@ -251,7 +251,7 @@ describe("toLiveUpdateSpec (Android, #966)", () => {
     expect(spec(queueProps({ position: 123, etaMinutes: 150 })).shortCriticalText).toBe("#123");
   });
 
-  it("fills the queue track up to the team: 2:1 stages, grey rest, the tracker at the team", () => {
+  it("fills the queue track up to the team: 2:1 stages, gray rest, the tracker at the team", () => {
     const track = spec(waiting()).progress!;
     // #4 of 9: (9 - 4 + 1) / (9 + 1) of the first (two-thirds) stage.
     const value = Math.round(0.6 * 200);
@@ -285,7 +285,7 @@ describe("toLiveUpdateSpec (Android, #966)", () => {
     ]);
   });
 
-  it("fills each stage in its colour up to the value, the rest grey", () => {
+  it("fills each stage in its color up to the value, the rest grey", () => {
     const stages = [
       { length: 200, tone: "accent" as const },
       { length: 100, tone: "go" as const },

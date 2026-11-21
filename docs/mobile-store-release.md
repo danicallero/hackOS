@@ -126,7 +126,7 @@ decide the final declarations. At minimum:
   visible in-app Account/Data action below.
 - Keep a visible in-app Account/Data or Danger zone action in the reviewer
   account. It must call the authenticated backend removal flow, explain the
-  difference between full deletion and irreversible anonymisation, disclose
+  difference between full deletion and irreversible anonymization, disclose
   active-event/venue-exit and named-proof consequences, and sign out/clear
   local app data after success or an ambiguous network result. Do not make an
   email request the primary path.

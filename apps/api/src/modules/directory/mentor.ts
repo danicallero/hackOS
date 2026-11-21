@@ -17,7 +17,7 @@ export const MENTOR_NOT_ELIGIBLE = "mentor_profile_not_eligible";
 export interface MentorProfile {
   eligible: boolean;
   published: boolean;
-  /** The person's knowledge topics (the help desk catalogue), which is what a scan shows. */
+  /** The person's knowledge topics (the help desk catalog), which is what a scan shows. */
   expertise: { id: number; label: string }[];
 }
 
@@ -36,7 +36,7 @@ export async function isMentorEligible(db: Queryable, userId: number): Promise<b
 
 /**
  * The stored profile with its eligibility. Expertise is the person's help desk
- * knowledge topics, edited with the helper profile (one catalogue, H61).
+ * knowledge topics, edited with the helper profile (one catalog, H61).
  */
 export async function readMentorProfile(db: Queryable, userId: number): Promise<MentorProfile> {
   const eventKey = await currentEventKey(db);

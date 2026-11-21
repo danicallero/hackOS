@@ -13,7 +13,7 @@ interface TopicSelection {
   maximum: number;
   other: boolean;
   allowOther: boolean;
-  /** Whether this person may add a name to the catalogue (an eligible helper). */
+  /** Whether this person may add a name to the catalog (an eligible helper). */
   allowAdd: boolean;
 }
 
@@ -40,12 +40,12 @@ export function seedTopicSelection(
   publish({ selected, maximum, other: other === true, allowOther: other !== null, allowAdd });
 }
 
-/** Choosing a catalogue topic drops "Other": a request is about topics or about something else. */
+/** Choosing a catalog topic drops "Other": a request is about topics or about something else. */
 export function setTopicSelection(selected: HelpTopic[]): void {
   publish({ ...state, selected, other: selected.length > 0 ? false : state.other });
 }
 
-/** Choosing "Other" clears the catalogue topics. */
+/** Choosing "Other" clears the catalog topics. */
 export function setOtherSelection(other: boolean): void {
   publish({ ...state, other, selected: other ? [] : state.selected });
 }

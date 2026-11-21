@@ -19,7 +19,7 @@ key + same body = same response, no second write or delivery).
 | `HELPDESK_MANAGE` | `helpdesk:manage` | Rename and merge knowledge topics; set the opening hours | Event Director |
 
 `*` passes every check. **Browsing** helpers needs any of `helpdesk:request`, `helpdesk:offer`,
-`helpdesk:coverage`. The topic catalogue (`GET /api/helpdesk/topics`)
+`helpdesk:coverage`. The topic catalog (`GET /api/helpdesk/topics`)
 also accepts eligible helpers without a capability (accepted mentors); adding a
 topic (`POST`) needs eligibility or `helpdesk:manage`.
 
@@ -161,7 +161,7 @@ means always open. Only creating requests is gated.
 | `GET /api/helpdesk/schedule` | authenticated (no event access needed) | - | `HelpdeskSchedule`: `configured`, `open` (server clock; true when not configured), `windows` (ascending), `nextChangeAt` (next start when closed, end of the current continuous opening when open, else null), `suggestedInterval` |
 | `PUT /api/helpdesk/schedule` | `helpdesk:manage` | `{ windows: { startsAt, endsAt }[] }` (0-30, each end after start, no overlaps; replaces the set, `[]` clears it) | `HelpdeskSchedule`; 400 on invalid windows. Audited; idempotent. |
 
-### Knowledge catalogue (H61)
+### Knowledge catalog (H61)
 
 | Method & path | Guard | Body / query | Response |
 | --- | --- | --- | --- |

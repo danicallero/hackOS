@@ -72,7 +72,7 @@ function abortError(signal: AbortSignal): unknown {
  * Concurrent identical GETs (same URL, credentials and cache mode) share one
  * network request, so components that mount together and ask for the same
  * resource no longer each hit the API. Each caller still gets its own copy of
- * the result and its own abort: the request is cancelled only when every
+ * the result and its own abort: the request is canceled only when every
  * caller has aborted.
  */
 function coalescedGet<T>(path: string, options: RequestOptions): Promise<T> {

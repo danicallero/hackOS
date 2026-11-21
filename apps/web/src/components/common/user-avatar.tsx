@@ -12,7 +12,7 @@ import { mascotAvatarUrl } from "@/lib/mascot-avatar";
  * public.
  *
  * Without a photo, during loading or after a failed load, the shared deterministic
- * mascot and independent background colour represent the same person everywhere.
+ * mascot and independent background color represent the same person everywhere.
  */
 export function UserAvatar({
   name,

@@ -364,9 +364,9 @@ export function queueStageFill(props: QueueLiveProps): number {
 }
 
 /**
- * Track like the iOS ProgressView: each stage fills with its colour up to
- * `value` and the rest of it stays grey, so a stage boundary is a segment
- * gap and the tracker rides the edge between filled and grey (#966).
+ * Track like the iOS ProgressView: each stage fills with its color up to
+ * `value` and the rest of it stays gray, so a stage boundary is a segment
+ * gap and the tracker rides the edge between filled and gray (#966).
  */
 export function trackSegments(
   stages: { length: number; tone: LiveUpdateTone }[],
@@ -392,7 +392,7 @@ function queueProgress(props: QueueLiveProps): LiveUpdateProgress {
         : IN_LINE_LENGTH + CALLED_LENGTH;
   return {
     value,
-    // The filled part takes the phase colour, as on iOS (green once called).
+    // The filled part takes the phase color, as on iOS (green once called).
     segments: trackSegments(
       [
         { length: IN_LINE_LENGTH, tone: QUEUE_TONE[props.phase] },

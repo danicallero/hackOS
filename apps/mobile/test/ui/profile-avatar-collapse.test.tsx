@@ -122,7 +122,7 @@ describe("profile avatar collapse geometry", () => {
     expect(descendingScrollFrames.at(-1)).toEqual(profileAvatarMaskFrame(112, start, island, 0));
   });
 
-  it("keeps the mask frame centred on the same line as the morph path for an off-center start", () => {
+  it("keeps the mask frame centered on the same line as the morph path for an off-center start", () => {
     const offCenter = { left: 20, top: 300, width: 112, height: 112 };
     const target = resolveProfileCameraTarget({
       height: 852,
@@ -192,12 +192,12 @@ describe("profile avatar collapse geometry", () => {
       expect(image.left).toBeLessThanOrEqual(blob.left + 0.01);
       expect(image.left + image.width).toBeGreaterThanOrEqual(blob.left + blob.width - 0.01);
       expect(image.top + image.height).toBeGreaterThanOrEqual(blob.top + blob.height - 0.01);
-      // Square around the blob: centred on it horizontally.
+      // Square around the blob: centered on it horizontally.
       expect(image.left + image.width / 2).toBeCloseTo(blob.left + blob.width / 2, 0);
     }
   });
 
-  it("keeps the photo centred on the blob for an avatar far below the island (#935)", () => {
+  it("keeps the photo centered on the blob for an avatar far below the island (#935)", () => {
     // A person profile under a native header starts ~30 pt lower than Account,
     // so the linear mask frame trails below the clip.
     for (const low of [start, { ...start, top: start.top + 40 }]) {
@@ -312,7 +312,7 @@ describe("profile avatar image clip (#935)", () => {
         expect(image.height).toBeCloseTo(image.width, 6);
         for (const corner of Object.values(profileAvatarContentRadii(image, progress)))
           expect(corner).toBeCloseTo(radius, 6);
-        // The mask is that same circle: same size, same centre.
+        // The mask is that same circle: same size, same center.
         const blob = profileAvatarBlobBounds(112, from, target, progress);
         expect(blob?.height).toBeCloseTo(image.height, 1);
         const cx = image.left + radius;
@@ -343,7 +343,7 @@ describe("profile avatar carry before the morph (#935)", () => {
     screenWidth: 393,
   });
   const far = { left: 140, top: 300, width: 112, height: 112 };
-  // The Telegram mask starts with the avatar centre 234/300 of its size below
+  // The Telegram mask starts with the avatar center 234/300 of its size below
   // the island's lower edge.
   const morphStartY = target.top + target.height + (234 * 112) / 300;
 
@@ -478,7 +478,7 @@ describe("profile avatar snap (#935)", () => {
     expect(profileAvatarSnapOffset(-12, -62, 1, 120, 60, 40)).toBe(-22);
   });
 
-  it("honours a custom collapse distance", () => {
+  it("honors a custom collapse distance", () => {
     expect(profileAvatarSnapTarget(60, 0, 80)).toBe(80);
     expect(profileAvatarSnapTarget(30, 0, 80)).toBe(0);
     expect(profileAvatarSnapTarget(90, 0, 80)).toBeNull();
@@ -551,7 +551,7 @@ describe("profile camera target", () => {
     });
     expect(narrow.width).toBeCloseTo(94 - 2);
     expect(narrow.width).toBeLessThan(wide.width);
-    // Centred, so it still sits inside the hardware island.
+    // Centered, so it still sits inside the hardware island.
     expect(narrow.left + narrow.width / 2).toBeCloseTo(201);
     const old = resolveProfileCameraTarget({
       ...base,
@@ -724,7 +724,7 @@ describe("profile camera target", () => {
       ).toEqual({ left: 190, top: 8, width: 20, height: 20 });
     });
 
-    it("morphs into a circle centred in a padded or oval cutout", () => {
+    it("morphs into a circle centered in a padded or oval cutout", () => {
       expect(pickHolePunchCutout([{ left: 180, top: 6, width: 40, height: 24 }], 400)).toEqual({
         left: 188,
         top: 6,
@@ -1154,7 +1154,7 @@ describe("profile avatar snap under a native header (#935)", () => {
 
 describe("android hole-punch gooey geometry", () => {
   const avatar = { left: 152, top: 180, width: 96, height: 96 };
-  // A Pixel-style 26 dp lens centred at (200, 25).
+  // A Pixel-style 26 dp lens centered at (200, 25).
   const lens = { left: 187, top: 12, width: 26, height: 26 };
 
   it("maps the scroll offset to a clamped progress", () => {
@@ -1200,7 +1200,7 @@ describe("android hole-punch gooey geometry", () => {
     expect(staged.avatarY - staged.avatarDiameter / 2).toBeGreaterThanOrEqual(38 + 23.4 - 1e-9);
     expect(staged.darkness).toBeGreaterThan(0.8);
     // A photo never touches the lens, and the black neck, pill and drip only
-    // ever meet a fully black avatar (no coloured second blob).
+    // ever meet a fully black avatar (no colored second blob).
     for (let i = 0; i <= 200; i++) {
       const frame = profileGooeyFrame(avatar, lens, i / 200, 120);
       if (frame.darkness < 1) {
@@ -1319,7 +1319,7 @@ describe("android hole-punch gooey overlay", () => {
     mockCutoutRects = [{ left: 182, top: 7, width: 36, height: 36 }];
     await render();
     const gooey = screen.getByTestId("profile-avatar-gooey", { includeHiddenElements: true });
-    // 36 dp padded rect -> 36 dp circle centred at (200, 25), in the canvas
+    // 36 dp padded rect -> 36 dp circle centered at (200, 25), in the canvas
     // padded by the margin around the avatar/lens bounds.
     expect(gooey.props.holeDiameter).toBe(36);
     expect(gooey.props.holeX).toBe(200 - 152 + 24);
@@ -1417,7 +1417,7 @@ describe("plain avatar collapse geometry (#935)", () => {
           minScale,
           false,
         );
-        // Screen positions: content moves up by `offset`, the transform is about the centre.
+        // Screen positions: content moves up by `offset`, the transform is about the center.
         const centre = avatarTop + size / 2 - offset + translateY;
         return { bottom: centre + (size * scale) / 2, scale };
       };

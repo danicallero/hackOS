@@ -458,7 +458,7 @@ export const logisticsApi = {
     }),
   /** Public schedule reads always omit session cookies, matching its `*` CORS contract. */
   publicSchedule: () => api.get<{ items: PublicScheduleItem[] }>("/api/public/activities"),
-  // H59: programme views use the viewer's audience permissions; TV stays on the public projection.
+  // H59: program views use the viewer's audience permissions; TV stays on the public projection.
   viewerSchedule: () =>
     api.get<{ items: PublicScheduleItem[] }>("/api/public/activities", { credentials: "include" }),
   schedule: () => api.get<{ items: PublicScheduleItem[] }>("/api/schedule"),

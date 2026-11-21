@@ -154,7 +154,7 @@ const envSchema = z.object({
    * Comma-separated list of allowed browser origins (the web/TV app URLs).
    * In production non-public CORS is restricted to exactly this list; in dev
    * it reflects any origin. `/api/public/*` always uses `*` without
-   * credentials, so catalogue consumers need no deployment configuration.
+   * credentials, so catalog consumers need no deployment configuration.
    */
   CORS_ORIGINS: z.string().default(""),
 

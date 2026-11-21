@@ -606,7 +606,7 @@ export default function ScheduleScreen() {
             }}
           >
             {twoPane ? (
-              // The list's own top band, in the page colour: the dates and cards stop at its
+              // The list's own top band, in the page color: the dates and cards stop at its
               // bottom edge, the way they stop under the bar on a phone.
               <View
                 pointerEvents="none"

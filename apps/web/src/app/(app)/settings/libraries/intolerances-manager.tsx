@@ -1,7 +1,7 @@
 "use client";
 
 // Food-intolerance dictionary manager (H12/H25), rendered inside the Libraries
-// page's tab. Admins maintain the shared, i18n catalogue used by the
+// page's tab. Admins maintain the shared, i18n catalog used by the
 // registration/profile pickers and the application dietary field. There is no
 // admin GET — we list via the public endpoint — and mutate via the guarded
 // POST/PATCH/DELETE /api/food-intolerances (capability INTOLERANCES_MANAGE).

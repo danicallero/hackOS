@@ -32,7 +32,7 @@ import type { QueueEntryRow } from "./types.js";
 
 /**
  * Load a challenge's judging panel. Returns typed questions when the panel was
- * built with the question catalogue (H44); otherwise falls back to the legacy
+ * built with the question catalog (H44); otherwise falls back to the legacy
  * key set (["innovation", ...] or [{ key }, ...]) so pre-builder challenges
  * still validate leniently.
  */
@@ -42,7 +42,7 @@ async function loadCriteria(
 ): Promise<{ typed: Question[] | null; keys: Set<string> | null }> {
   // H46: a merged queue group has ONE judging form for all its challenges, so
   // the entry is validated against the group's panel when there is one. Every
-  // 1:1 group falls back to the challenge's own — unchanged behaviour.
+  // 1:1 group falls back to the challenge's own — unchanged behavior.
   const criteria = await resolveChallengePanel(client, challengeId);
   if (criteria.length === 0) return { typed: null, keys: null }; // no panel yet — lenient
   const isTyped =

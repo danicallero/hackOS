@@ -117,7 +117,7 @@ describe("MultiSelect", () => {
   });
 });
 
-it("does not suggest creating an accent-only variant of an existing catalogue option", () => {
+it("does not suggest creating an accent-only variant of an existing catalog option", () => {
   const host = document.createElement("div");
   document.body.append(host);
   const picker = createRoot(host);

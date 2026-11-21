@@ -12,7 +12,7 @@ import { likeContains } from "../../lib/like.js";
  */
 
 /**
- * H53: the current display name of a catalogue entity, resolved at read time
+ * H53: the current display name of a catalog entity, resolved at read time
  * so the trail shows "University · UDC" instead of "University #12". Most
  * subjects never record their name in the payload; a deleted one falls back
  * to its id.

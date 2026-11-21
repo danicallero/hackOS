@@ -741,7 +741,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Get my account-removal recovery status",
         description:
-          "Returns the server-authoritative pending-exit state used by the login recovery surface. A pending request can be cancelled only before the exit or fixed recovery deadline.",
+          "Returns the server-authoritative pending-exit state used by the login recovery surface. A pending request can be canceled only before the exit or fixed recovery deadline.",
         response: { 200: accountRemovalStatusResponseSchema },
       },
     },

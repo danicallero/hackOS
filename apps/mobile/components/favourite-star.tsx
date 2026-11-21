@@ -7,7 +7,7 @@ const STAR_PATH =
   "M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z";
 
 /**
- * The favourite star (#935). Android's Material Symbols font only ships the
+ * The favorite star (#935). Android's Material Symbols font only ships the
  * outlined `star` glyph, so on/off were indistinguishable there; Android
  * draws a filled path for "on" and an outline for "off".
  */

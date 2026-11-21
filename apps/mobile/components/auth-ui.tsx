@@ -55,7 +55,7 @@ export function AuthScreen({
     );
   }
   // The stack already pads the side column; "automatic" would inset the scroll content by the
-  // horizontal safe area a second time (a foldable's column pushed the form far off-centre), so
+  // horizontal safe area a second time (a foldable's column pushed the form far off-center), so
   // only the vertical safe area is added here.
   return (
     <ScrollView
@@ -82,7 +82,7 @@ export function AuthScreen({
 /**
  * Moves the centered form on the compositor while keeping the footer fixed. Only the vertical
  * safe area is applied here: the stack already pads the side column, and a second horizontal
- * inset pushed the form far off-centre on a foldable.
+ * inset pushed the form far off-center on a foldable.
  */
 function FixedAuthScreen({
   children,

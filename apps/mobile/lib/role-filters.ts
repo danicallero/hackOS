@@ -1,17 +1,17 @@
 import type { ScannerPerson } from "@/lib/scanner-types";
 
 /**
- * Dynamic role-filter catalogue (H8). `badge_category` (a small fixed enum)
+ * Dynamic role-filter catalog (H8). `badge_category` (a small fixed enum)
  * has been retired — a person's `role` on the synced roster is now their
  * actual highest-visible role NAME (admin-editable free text), or null when
  * they have none. There is no fixed, compile-time-known set of role values
  * any more, so the filter options are derived at render time from whichever
  * roles are actually present on the currently-synced roster, rather than
- * fetched separately from `GET /api/roles` — the roles catalogue can contain
+ * fetched separately from `GET /api/roles` — the roles catalog can contain
  * custom role names that nobody on the current roster actually holds, which
  * would offer filter rows that match nobody. Deriving from the roster instead
  * guarantees every option is always a value someone can actually be filtered
- * by. The scanner counter filter uses this same catalogue and exact role values.
+ * by. The scanner counter filter uses this same catalog and exact role values.
  */
 export type RoleFilterValue = string | null;
 

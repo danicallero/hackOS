@@ -828,7 +828,7 @@ function MenuRow({
         ) : (
           // Mount the SwiftUI host only once the row is measured and pin its
           // width: a host sized from an earlier intrinsic width keeps a narrow
-          // frame, centring the row off to the left and swallowing taps.
+          // frame, centering the row off to the left and swallowing taps.
           <MenuView
             actions={actions}
             onPressAction={({ nativeEvent }) => onSelect(nativeEvent.event)}

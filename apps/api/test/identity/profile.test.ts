@@ -1131,7 +1131,7 @@ describe("self-service account removal (H54)", () => {
     expect(replay.headers["idempotency-replayed"]).toBe("true");
   });
 
-  it("allows a pending-exit request to be cancelled before staff record the exit", async () => {
+  it("allows a pending-exit request to be canceled before staff record the exit", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
     const user = await createUser({ email: "cancel-pending@example.test", emailVerified: false });
@@ -1253,7 +1253,7 @@ describe("self-service account removal (H54)", () => {
       ).json(),
     ).toEqual({ status: "active" });
 
-    // A delayed retry from the cancelled request must not finalize a newer
+    // A delayed retry from the canceled request must not finalize a newer
     // pending request that has a different lifecycle key.
     const secondRequest = await a.inject({
       method: "POST",

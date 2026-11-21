@@ -7,7 +7,7 @@ import { useServerResource } from "./use-server-resource";
 
 export const FOOD_INTOLERANCES_KEY = ["public", "food-intolerances"] as const;
 
-/** `cache` bypasses the browser's 60 s public cache after staff edits the catalogue. */
+/** `cache` bypasses the browser's 60 s public cache after staff edits the catalog. */
 export const fetchFoodIntolerances = (signal?: AbortSignal, cache?: RequestCache) =>
   api
     .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances", { signal, cache })

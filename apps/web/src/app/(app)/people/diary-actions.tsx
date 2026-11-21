@@ -48,7 +48,7 @@ export interface DiaryHandlers {
 
 const NOTE_MAX = 500;
 
-/** Favourite toggle; only rendered for an entry that is already saved. */
+/** Favorite toggle; only rendered for an entry that is already saved. */
 function StarButton({
   mark,
   name,
@@ -115,7 +115,7 @@ function DiaryMenu({
 }
 
 /**
- * Trailing actions of a saved person row (#935): Favourite and the overflow
+ * Trailing actions of a saved person row (#935): Favorite and the overflow
  * menu. Clicks never reach the row link underneath, including those from the
  * menu, whose portal still bubbles through this React subtree.
  */
@@ -141,7 +141,7 @@ export function PersonActions({
   );
 }
 
-/** A favourites-only toggle for the toolbar of People and Companies. */
+/** A favorites-only toggle for the toolbar of People and Companies. */
 export function FavouritesToggle({
   pressed,
   onPressedChange,

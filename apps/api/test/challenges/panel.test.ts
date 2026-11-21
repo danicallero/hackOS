@@ -137,7 +137,7 @@ describe("judging panel builder (H44)", () => {
 
   /**
    * The panel freezes on the first *evaluation*, not on the judging
-   * schedule and not on a queue existing: organisers fix questions in the
+   * schedule and not on a queue existing: organizers fix questions in the
    * last minutes before the first team walks in, and nothing is at risk
    * until an answer has been given.
    */

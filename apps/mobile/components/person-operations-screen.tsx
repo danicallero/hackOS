@@ -273,7 +273,7 @@ export function PersonOperationsScreen({
   // The hero spans the viewport while the content keeps its readable column.
   const [viewportWidth, setViewportWidth] = useState(0);
   const [headerWidth, setHeaderWidth] = useState(0);
-  // H44/H48: the photo's colours, or the assigned mascot's colour without one.
+  // H44/H48: the photo's colors, or the assigned mascot's color without one.
   const noPhotoTint = mascotBackgroundRgb(userId);
   const nameColor = useImageHeroForeground(person?.photoUrl, dark, noPhotoTint);
   const [loadState, setLoadState] = useState<PersonLoadState>("loading");
@@ -989,7 +989,7 @@ export function PersonOperationsScreen({
             style={{ gap: 2 }}
           >
             {/* Staff match the photo to the person in front of them (#934); the
-                header is the person profile's: blurred photo hero, centred avatar.
+                header is the person profile's: blurred photo hero, centered avatar.
                 The hero bleeds past the content column to the viewport edges. */}
             <View
               pointerEvents="none"

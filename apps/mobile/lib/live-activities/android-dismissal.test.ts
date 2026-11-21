@@ -211,7 +211,7 @@ describe("Android Live Update dismissals (#966)", () => {
     expect(deletes(apiFetch)).toHaveLength(2);
   });
 
-  it("honours a dismissal recorded while no JS ran, in the headless push path", async () => {
+  it("honors a dismissal recorded while no JS ran, in the headless push path", async () => {
     const { apply, sync, apiFetch, posted, recorded } = load();
     recorded["queue:judging"] = "waiting";
     await apply.applyAndroidLiveUpdate({

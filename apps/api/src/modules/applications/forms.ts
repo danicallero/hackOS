@@ -11,7 +11,7 @@ import type { FormSection, TemplateField } from "./schemas.js";
 import type { ApplicationRow } from "./types.js";
 
 /**
- * Persist an explicit minimising policy for every field.  The field schema is
+ * Persist an explicit minimizing policy for every field.  The field schema is
  * intentionally open to future retention modes, but this service only copies
  * values whose submitted definition says `anonymous_audit`.
  */

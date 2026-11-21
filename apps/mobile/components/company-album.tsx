@@ -24,7 +24,7 @@ const GRID_GAP = 12;
 
 /**
  * Companies (#935): a sticker album of the sponsor stands an attendee can
- * collect by scanning them. Collected badges are in full colour and zoom into the
+ * collect by scanning them. Collected badges are in full color and zoom into the
  * company page; the rest stay as locked silhouettes with their names, so
  * attendees know who is left to find.
  */
@@ -146,7 +146,7 @@ function AlbumProgress({ collected, total }: { collected: number; total: number 
 }
 
 /**
- * Drains the colour from whatever sits under it (the parent must `isolation: "isolate"`).
+ * Drains the color from whatever sits under it (the parent must `isolation: "isolate"`).
  * React Native's `filter` has no grayscale on iOS, and expo-image has no such prop.
  */
 export function Desaturate() {
@@ -167,7 +167,7 @@ export function Desaturate() {
 }
 
 /**
- * A round sticker: the logo on white in full colour once collected; until then
+ * A round sticker: the logo on white in full color once collected; until then
  * the same disc with the logo desaturated and faded, no lock or extra copy.
  */
 function Medallion({

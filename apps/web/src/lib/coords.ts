@@ -1,6 +1,6 @@
 /**
  * Venue coordinate parsing (H45/H47 event settings, H28 Wallet pass location).
- * Organisers copy coordinates from Google Maps or Wikipedia, which hand out
+ * Organizers copy coordinates from Google Maps or Wikipedia, which hand out
  * anything from "43.333168, -8.410542" to DMS like 43°19′58″N 8°24′38″O — the
  * API only speaks signed decimal degrees, so the settings page converts here.
  *

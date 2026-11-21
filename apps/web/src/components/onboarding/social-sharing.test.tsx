@@ -229,7 +229,7 @@ describe("drawShareCard", () => {
     expect(texts(calls).some((t) => typeof t === "string" && t.includes("@"))).toBe(false);
   });
 
-  it("puts the photo in the tile where the Wallet pass has its QR (centred square crop)", () => {
+  it("puts the photo in the tile where the Wallet pass has its QR (centered square crop)", () => {
     const photo = image(300, 200);
     const withPhoto = recordingContext();
     drawShareCard(withPhoto.ctx, options({ photo }));

@@ -10,14 +10,14 @@ export const PROFILE_AVATAR_COLLAPSE_DISTANCE = 120;
 export const PROFILE_AVATAR_MERGE_PROGRESS = 108 / 540;
 
 /**
- * The Telegram mask starts its morph with the avatar's centre this far below
+ * The Telegram mask starts its morph with the avatar's center this far below
  * the camera cutout's lower edge (mask units; 300 units span the avatar).
  */
 const MORPH_START_DEPTH = 234;
 
 /**
  * Scroll distance the avatar rides up with the content, unchanged, before the
- * morph starts: from its expanded centre (`start`, scroll offset 0) to the
+ * morph starts: from its expanded center (`start`, scroll offset 0) to the
  * pose where the Telegram mask begins, `MORPH_START_DEPTH` below the target's
  * lower edge. An avatar far below the camera would otherwise cover that gap
  * within the morph's first frames and shoot up much faster than the text. 0
@@ -126,7 +126,7 @@ export function profileAvatarSimpleReleaseOffset(
 /**
  * Transform for the in-content avatar at `offset` past the true top: a
  * `translateY` that cancels the scroll while it holds still, and a scale
- * about its centre that reaches `minScale` exactly at the release offset.
+ * about its center that reaches `minScale` exactly at the release offset.
  * Reduce Motion skips the shrink and hold, so it just scrolls with the page.
  */
 export function profileAvatarSimpleTransform(
@@ -267,7 +267,7 @@ export function pickHolePunchCutout(
     if (!best || rect.top < best.top) best = rect;
   }
   if (!best) return null;
-  // A hole punch is a circle: morph into the largest circle centred in the
+  // A hole punch is a circle: morph into the largest circle centered in the
   // measured rect, so a padded or slightly oval report never widens the target.
   const diameter = Math.min(best.width, best.height);
   return {
@@ -333,7 +333,7 @@ export function resolveProfileCameraTarget({
 
   if (!isLandscape && platform === "ios" && safeAreaTop >= 44) {
     // H7: the notch is attached to y=0, not floating below the status bar.
-    // A centred 150 x 30 pt target fits inside both notch generations; the
+    // A centered 150 x 30 pt target fits inside both notch generations; the
     // safe-area bottom (44/47 pt) extends below the hardware and leaves a gap.
     const width = 150;
     return {
@@ -373,9 +373,9 @@ export function profileAvatarMaskFrame(
   const endWidth = reduceMotion ? target.height : target.width;
   const width = expandedSize + (endWidth - expandedSize) * value;
   const height = expandedSize + (target.height - expandedSize) * value;
-  // The frame centre travels linearly from the start centre to the target
-  // centre, exactly like the morph path's canvas, so the clip, the image and
-  // the black backing share one centre line at every progress.
+  // The frame center travels linearly from the start center to the target
+  // center, exactly like the morph path's canvas, so the clip, the image and
+  // the black backing share one center line at every progress.
   const centerX =
     start.left +
     start.width / 2 +
@@ -565,12 +565,12 @@ function profileAvatarNeck(progress: number) {
 }
 
 /**
- * Where the avatar image sits at `progress` (#935): a square centred on the
+ * Where the avatar image sits at `progress` (#935): a square centered on the
  * mask's blob and covering it, joined with the neck that stretches up to the
  * island. The blob, not the linear mask frame, carries the picture: the mask
  * reaches the island at a fixed progress whatever the start's distance, so on
  * a page whose avatar sits lower (a native header above it) the linear frame
- * trails below the clip and would pull the photo off its centre. After the
+ * trails below the clip and would pull the photo off its center. After the
  * blob ends, its last square travels on to the island.
  */
 export function profileAvatarContentFrame(
@@ -687,12 +687,12 @@ export function profileAvatarMorphPath(
 /*
  * Android hole-punch gooey morph (`modules/profile-gooey`): the avatar stays
  * a circle, rides up with the scroll while it shrinks uniformly, darkens and
- * blurs into a black disc the size of the lens, centred under it, and then a
+ * blurs into a black disc the size of the lens, centered under it, and then a
  * black liquid neck fuses it into the lens. The native view only draws the
  * frame computed here.
  */
 
-/** A circle in view-local dp: centre and diameter. */
+/** A circle in view-local dp: center and diameter. */
 export type ProfileGooeyCircle = { x: number; y: number; diameter: number };
 
 /** Progress at which the shrinking avatar reaches the lens size. */
@@ -732,7 +732,7 @@ export function profileGooeyProgress(scrollOffset: number, distance: number): nu
  * never stops rising:
  * - Its bottom edge moves up with the content (`distance` is the scroll
  *   offset of progress 1), keeping its gap to the text below, or along an
- *   ease-in path to the lens centre when that is higher, so it lands in the
+ *   ease-in path to the lens center when that is higher, so it lands in the
  *   lens at progress 1 at the latest. Meanwhile it shrinks uniformly to the
  *   end diameter by `PROFILE_GOOEY_SHRINK_END` and glides to the lens column.
  * - It blurs and darkens (`darkness`) with the shrink, almost black
@@ -781,7 +781,7 @@ export function profileGooeyFrame(
   const pill = merging
     ? clamp01((0.6 * stageGap - lensGap) / (0.6 * stageGap + holeDiameter / 2))
     : 0;
-  // 0 at the staging gap, 1 once the disc sits on the lens centre.
+  // 0 at the staging gap, 1 once the disc sits on the lens center.
   const rise = merging
     ? clamp01((stageGap - lensGap) / (stageGap + endDiameter / 2 + holeDiameter / 2))
     : 0;

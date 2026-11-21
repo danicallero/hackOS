@@ -41,7 +41,7 @@ describe("minimum supported build (#999)", () => {
     expect(deviceUserAgentHeaders({ modelName: null })).toEqual({});
   });
 
-  it("recognises only the documented 426 contract", () => {
+  it("recognizes only the documented 426 contract", () => {
     expect(isUpgradeRequired(426, "upgrade_required")).toBe(true);
     expect(isUpgradeRequired(426, undefined)).toBe(false);
     expect(isUpgradeRequired(400, "upgrade_required")).toBe(false);

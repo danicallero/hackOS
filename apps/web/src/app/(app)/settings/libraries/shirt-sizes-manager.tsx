@@ -1,6 +1,6 @@
 "use client";
 
-// T-shirt size catalogue (H12), rendered inside the Libraries page's tab.
+// T-shirt size catalog (H12), rendered inside the Libraries page's tab.
 // Same shared-reference-list shape as food intolerances and universities —
 // the options every shirt-size picker in the app renders (applications,
 // invite claim, profile self-edit, staff user-edit) — stored as a single

@@ -18,7 +18,7 @@ const MENU_ONLY_WIDTH = 44;
  * One saved person in the diary (#935). The whole row opens the profile with
  * a full-width pressed state; trailing controls are siblings layered on top,
  * so pressing them never also opens the profile (a native menu inside a
- * Pressable would bubble its tap). The star only marks a favourite; the menu
+ * Pressable would bubble its tap). The star only marks a favorite; the menu
  * holds the note and an explicit "Remove from diary".
  */
 export function DiaryPersonRow({

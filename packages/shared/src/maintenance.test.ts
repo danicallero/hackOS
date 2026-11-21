@@ -7,7 +7,7 @@ import {
 } from "./maintenance";
 
 describe("maintenance contract (#539)", () => {
-  it("recognises only the restore-lock error", () => {
+  it("recognizes only the restore-lock error", () => {
     expect(isMaintenanceError(503, "maintenance_in_progress")).toBe(true);
     expect(isMaintenanceError(503, "service_unavailable")).toBe(false);
     expect(isMaintenanceError(500, "maintenance_in_progress")).toBe(false);

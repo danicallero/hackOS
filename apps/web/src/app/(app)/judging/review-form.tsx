@@ -406,7 +406,7 @@ export function ReviewForm({
   };
   const textFieldReadOnly = (field: string) => canJudge && !ownedFields.has(field);
 
-  // Same shape as the application review: the project in a centred window and
+  // Same shape as the application review: the project in a centered window and
   // the evaluation docked beside it on wide screens, below it on narrow ones.
   const renderPanel = (floating: boolean, fill = false, column = false) => (
     <aside

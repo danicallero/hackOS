@@ -520,7 +520,7 @@ describe("organizer settings", () => {
     };
   }
 
-  it("validates, audits, replays idempotently and honours names and dates", async () => {
+  it("validates, audits, replays idempotently and honors names and dates", async () => {
     const organizer = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
     const meal = await activity({});
     const workshop = await activity({ category: "activity" });
@@ -737,6 +737,10 @@ describe("GET /api/logistics/dietary", () => {
       `INSERT INTO food_intolerances (label) VALUES ('{"es":"Gluten","en":"Gluten"}'::jsonb) RETURNING id`,
     );
     const gluten = rows[0].id as number;
+    const { rows: veganRows } = await pool.query(
+      `INSERT INTO food_intolerances (label) VALUES ('{"es":"Vegana","en":"Vegan"}'::jsonb) RETURNING id`,
+    );
+    const vegan = veganRows[0].id as number;
     const celiac = await person("participant");
     const noteOnly = await person("sponsor");
     const clean = await person("mentor");
@@ -762,8 +766,11 @@ describe("GET /api/logistics/dietary", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body).toMatchObject({ people: 4, withRestrictions: 1, withNotes: 2 });
+    expect(body.peopleByKind).toEqual({ participant: 1, sponsor: 1, mentor: 1, staff: 1 });
+    // The whole catalog, so nobody-declared entries read as 0 rather than missing.
     expect(body.byIntolerance).toEqual([
       { id: gluten, label: { es: "Gluten", en: "Gluten" }, n: 1 },
+      { id: vegan, label: { es: "Vegana", en: "Vegan" }, n: 0 },
     ]);
     expect(body.entries.map((e: { userId: number }) => e.userId).sort()).toEqual(
       [celiac, noteOnly].sort(),

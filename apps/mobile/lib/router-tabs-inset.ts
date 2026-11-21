@@ -68,7 +68,7 @@ export function routerTabBarVerticalBudget(
   windowHeight: number,
   bottomPadding: number,
   windowWidth = 0,
-  /** The labelled tablet rail lists every destination: height is the only limit. */
+  /** The labeled tablet rail lists every destination: height is the only limit. */
   tabletRail = false,
 ): { direct: number; withoutOverflow: number } {
   const room =

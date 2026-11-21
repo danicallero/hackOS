@@ -1,6 +1,6 @@
 /**
  * Multi-edition contract (docs/multi-edition-plan.md). One installation hosts
- * one edition per year; people and catalogues are global, event data belongs
+ * one edition per year; people and catalogs are global, event data belongs
  * to an edition. Clients send the edition they are viewing on every request.
  */
 

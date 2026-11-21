@@ -154,13 +154,13 @@ describe("H61 knowledge catalogue", () => {
         .json()
         .topics.map((t: { name: string }) => t.name);
     expect(await names(asker)).toEqual(["InVenue"]);
-    // A helper preparing a profile sees the whole catalogue, unless a request form asks.
+    // A helper preparing a profile sees the whole catalog, unless a request form asks.
     const preparing = await createUserWithCapabilities(helperCaps);
     expect(await names(preparing)).toEqual(expect.arrayContaining(["InVenue", "Away"]));
     expect(await names(preparing, "?available=1")).toEqual(["InVenue"]);
   });
 
-  it("rejects catalogue access without a help desk role", async () => {
+  it("rejects catalog access without a help desk role", async () => {
     const nobody = await createUser();
     expect((await call("GET", "/api/helpdesk/topics", nobody)).statusCode).toBe(403);
   });
@@ -391,7 +391,7 @@ describe("H63 helper profile detail", () => {
     });
   });
 
-  it("returns the public-profile entry honouring switches, without scan consent or diary rows", async () => {
+  it("returns the public-profile entry honoring switches, without scan consent or diary rows", async () => {
     const p = await createUserWithCapabilities(participantCaps);
     const t = await topic("Swift", p);
     const h = await helper([t]);
@@ -1443,7 +1443,7 @@ describe("H66 resolved request as presence checkpoint", () => {
     expect((await userHours(p, { actorId: null })).intervals).toHaveLength(0);
   });
 
-  it("counts nothing for a cancelled request", async () => {
+  it("counts nothing for a canceled request", async () => {
     const { p } = await resolved({ door: true, cancel: true });
     const tl = await timeline(p);
     expect(tl.signals.map((s) => s.source)).toEqual(["door"]);
@@ -1759,7 +1759,7 @@ describe("H64 opening hours", () => {
     expect(refused.statusCode).toBe(409);
     expect(refused.json()).toMatchObject({ error: { details: { code: "helpdesk_closed" } } });
 
-    // Everything else keeps working: the existing request can be cancelled.
+    // Everything else keeps working: the existing request can be canceled.
     const cancel = await call("POST", `/api/helpdesk/requests/${created.json().id}/cancel`, p);
     expect(cancel.statusCode).toBe(200);
 
@@ -1827,7 +1827,7 @@ describe("user management edits a person's helper profile", () => {
   });
 });
 
-describe("knowledge catalogue management (H61)", () => {
+describe("knowledge catalog management (H61)", () => {
   it("lists usage, renames, merges and deletes only unused topics", async () => {
     const manager = await createUserWithCapabilities([CAPABILITIES.HELPDESK_MANAGE]);
     const helperUser = await createUserWithCapabilities(helperCaps);

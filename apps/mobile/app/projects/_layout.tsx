@@ -55,7 +55,7 @@ export default function ProjectsLayout() {
         options={{
           headerBlurEffect: "none",
           headerShadowVisible: false,
-          // An opaque bar would paint over the sheet's grabber: stay transparent, page colour behind.
+          // An opaque bar would paint over the sheet's grabber: stay transparent, page color behind.
           contentStyle: { backgroundColor: colors.background },
           headerTransparent: true,
           ...sheetPresentation,

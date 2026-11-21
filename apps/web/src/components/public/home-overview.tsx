@@ -14,7 +14,7 @@ import type {
 } from "./public-types";
 import { EventPhaseDisplay, useEventPhase } from "./timer";
 
-/** H41/H45/H47: the event overview owns event information; programme and inbox keep their own views. */
+/** H41/H45/H47: the event overview owns event information; program and inbox keep their own views. */
 export function HomeOverview({
   event,
   screenAnnouncements,

@@ -27,7 +27,7 @@ describe("permission helpers", () => {
   });
 
   it("labels a role-assignment-triggered rule by its source role, not the (null) trigger_event (H8)", () => {
-    // Mimics the real catalogue entry ("{roleName} is assigned") closely
+    // Mimics the real catalog entry ("{roleName} is assigned") closely
     // enough to exercise interpolation without importing the JSON locale.
     const t = (key: string, values?: Record<string, string | number>) => {
       const template = key === "triggerSourceRoleAssigned" ? "{roleName} is assigned" : key;

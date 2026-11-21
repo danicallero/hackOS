@@ -17,7 +17,7 @@ export interface PickedPhoto {
   height: number;
 }
 
-/** Centred square crop, then at most PHOTO_EDGE px per side, as JPEG. */
+/** Centered square crop, then at most PHOTO_EDGE px per side, as JPEG. */
 export async function preparePhoto(picked: PickedPhoto): Promise<string> {
   const side = Math.min(picked.width, picked.height);
   let context = ImageManipulator.manipulate(picked.uri).crop({

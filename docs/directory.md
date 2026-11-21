@@ -74,13 +74,13 @@ no role, attendance kind or networking opt-in is needed) may keep a mentor
 profile: a published flag plus expertise values for the current `event_key`.
 Bio, headline, photo and links stay in the public profile; there is no second copy.
 
-| Route | Access | Behaviour |
+| Route | Access | Behavior |
 |---|---|---|
 | `GET/PUT /api/me/mentor-profile` | authenticated | `{ eligible, published, expertise: {id,label}[] }`; PUT takes `{ published }` |
 | `GET/PUT /api/users/:id/mentor-profile` | `users:read` / `users:write` | same shape, audited with source `admin` |
 
 - `expertise` is the person's help desk knowledge topics (`helper_topics`, edited with
-  `PUT /api/me/helper-profile`): one catalogue, curated in Libraries › Knowledge areas.
+  `PUT /api/me/helper-profile`): one catalog, curated in Libraries › Knowledge areas.
   The former mentor expertise library was retired (migration `0804`).
 - Without the capability PUT answers 403 `details.code: mentor_profile_not_eligible`.
   Stored data is never deleted: it is neither listed nor offered while ineligible and
@@ -264,7 +264,7 @@ a test account. The same rule decides whether a scan saves the person
 People without an available photo use the original HackUDC mascots. Both clients
 call `mascotAvatarChoice(userId)` from `@hackos/shared/mascot-avatars`: two salted
 32-bit FNV-1a hashes independently select one of 31 transparent square compositions
-and one of six background colours. Numeric and string forms of the same id agree;
+and one of six background colors. Numeric and string forms of the same id agree;
 renaming, refresh, session and platform do not change the result. Nothing is saved,
 no API field changes, and no identity is sent to an image service. Components with
 no known user id fall back to a normalized display-name seed; real person data
@@ -276,7 +276,7 @@ component. `assets/mascots/` retains the supplied original PNGs. Rebuild composi
 with `python3 scripts/generate-mascot-avatars.py` (Pillow): crop/scale/mirror/rotate
 existing pixels only, with no generative artwork. The gull and shell top variants
 rotate 180° to look down from the upper edge; the shell sits slightly lower to
-balance its visual centre. Real photos take priority;
+balance its visual center. Real photos take priority;
 failed or still-loading private photos show the same mascot. The photo editor's
 remove action and visibility switches still refer only to an uploaded photo.
 The onboarding social-sharing card uses the same user-id selection and background
@@ -340,7 +340,7 @@ and challenges. Empty rows are omitted. A 404 (hidden or missing) shows
 refetches on `domain.changed` for the `directory` topic. Only attendees who
 saved the person, or who is a shown speaker or company representative, may
 open it; the API answers the same 404 to anyone else. A person opened without
-a diary entry shows no CV row, favourite star, note or remove action: those
+a diary entry shows no CV row, favorite star, note or remove action: those
 need the reader's diary entry.
 
 The profile hero (H48) blurs the person's photo behind the header, using the
@@ -348,7 +348,7 @@ avatar's own URL and plain request (no CORS fetch), so the private photo is
 loaded and cached only as the avatar already is: enlarged and blurred until no
 shape survives, under the veil and fade of the project record's `AmbientBackdrop`
 (see [`projects.md`](./projects.md) § Project surfaces). Without a photo it keeps the
-single-colour wash (`photoColor` when the API sends one, else the assigned mascot background). Company rows use the dark
+single-color wash (`photoColor` when the API sends one, else the assigned mascot background). Company rows use the dark
 logo variant on dark backgrounds, including the helper affiliation row. Back links
 follow the shared in-app history stack, so profiles and companies return to their
 actual origin. Company representative links also carry `?company=<id>` as the
@@ -394,7 +394,7 @@ but never start it: turning `directoryVisible` on answers 409
 public TV graph. Removal-pending accounts are refused (owner
 404 at the caller gate, 409 in the service; staff 409).
 
-A card's challenges exclude cancelled and disqualified queue entries.
+A card's challenges exclude canceled and disqualified queue entries.
 
 ## Realtime and caching
 

@@ -207,7 +207,10 @@ function WorkspaceGroup({
         {alwaysOpen ? (
           // The icon rail and mobile sheet expose every destination directly;
           // their workspace labels have no disclosure action.
-          <SidebarGroupLabel>
+          // On the icon rail the label must leave the flow entirely: the primitive's
+          // transparent `-mt-8` label would sit over the previous group's last item
+          // and swallow its hover and clicks.
+          <SidebarGroupLabel className="group-data-[collapsible=icon]:sr-only">
             <Icon className="mr-2 size-4 shrink-0" />
             {t(workspace.label)}
           </SidebarGroupLabel>
@@ -298,7 +301,7 @@ export function AppSidebar() {
     <Sidebar variant="floating" collapsible="icon">
       {/* `contents` keeps the sidebar's flex layout while exposing it as a landmark (#1177). */}
       <nav aria-label={t("navigationPrimary")} className="contents">
-        <SidebarHeader className="h-14 shrink-0 justify-center border-b px-3">
+        <SidebarHeader className="h-14 shrink-0 justify-center border-b px-3 group-data-[collapsible=icon]:px-2">
           <SidebarMenu className="flex-row items-center">
             <SidebarMenuItem className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
               <SidebarMenuButton
@@ -320,7 +323,7 @@ export function AppSidebar() {
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            <SidebarMenuItem className="ml-auto group-data-[collapsible=icon]:mx-auto">
+            <SidebarMenuItem className="ml-auto group-data-[collapsible=icon]:ml-0">
               <SidebarToggle hasUnreadNotifications={unreadCount > 0} />
             </SidebarMenuItem>
           </SidebarMenu>

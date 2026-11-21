@@ -802,7 +802,7 @@ describe("send_back / requeue / re_enter (H33)", () => {
     expect(await getEntry(e1).then((e) => e.status)).toBe("called");
   });
 
-  it("requeue: called -> waiting honouring top|bottom; cannot requeue in_room straight to waiting", async () => {
+  it("requeue: called -> waiting honoring top|bottom; cannot requeue in_room straight to waiting", async () => {
     const { challengeId, roomId } = await setup();
     const { repoId: r1 } = await createRepoWithTeam();
     const { repoId: r2 } = await createRepoWithTeam();

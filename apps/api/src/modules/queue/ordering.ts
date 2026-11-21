@@ -38,7 +38,7 @@ import { GROUP_SIBLING_CHALLENGE_IDS_SQL } from "./groups.js";
  * changes.
  *
  * Every function here must run inside a transaction that already holds the
- * entry lock (`SELECT ... FOR UPDATE`), so two concurrent moves serialise
+ * entry lock (`SELECT ... FOR UPDATE`), so two concurrent moves serialize
  * instead of interleaving their renumbering.
  */
 

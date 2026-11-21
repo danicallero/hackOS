@@ -5,7 +5,7 @@ import { useLocale } from "@/lib/i18n";
 /**
  * H22–H26: manual code entry as UIKit's own text-field alert, the same prompt
  * Settings and Wallet use. Camera, diary, badge assignment and replacement all
- * share it (#935). Alert text fields cannot be capitalised or disabled, so the
+ * share it (#935). Alert text fields cannot be capitalized or disabled, so the
  * value is upper-cased and an empty one is ignored on submit.
  */
 export function ScannerCodeEntry({

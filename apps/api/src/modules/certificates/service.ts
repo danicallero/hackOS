@@ -54,7 +54,7 @@ const EVENT_INFO_SQL = `
     LEFT JOIN editions e ON e.event_key = current_edition()
    WHERE ec.id = 1`;
 
-/** #1083: the organisation-wide certificate policy (one row). */
+/** #1083: the organization-wide certificate policy (one row). */
 export interface CertificateSettings {
   /** Verified venue hours needed for automatic issue; null switches it off. */
   minHours: number | null;

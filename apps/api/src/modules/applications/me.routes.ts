@@ -52,7 +52,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Get my response for one form",
         description:
-          "Returns the caller's own answers, deletion eligibility (can_delete_draft) and the immutable form snapshot they answered, including for a closed form. Retired library questions are hidden in editable drafts so deleting a required catalogue cannot strand an application. Submitted definitions remain unchanged. Internal accepted/rejected status is masked as 'review' until the decision is sent (H12, H14).",
+          "Returns the caller's own answers, deletion eligibility (can_delete_draft) and the immutable form snapshot they answered, including for a closed form. Retired library questions are hidden in editable drafts so deleting a required catalog cannot strand an application. Submitted definitions remain unchanged. Internal accepted/rejected status is masked as 'review' until the decision is sent (H12, H14).",
         params: idParamSchema,
       },
     },

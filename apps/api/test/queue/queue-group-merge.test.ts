@@ -203,7 +203,7 @@ describe("merging challenges into a shared queue", () => {
     await pool.query(`UPDATE queue_entries SET status = 'called' WHERE id = $1`, [entryId]);
 
     // A queue that exists, and is being called from, is still configurable —
-    // organisers merge in the last minutes before the first team is judged.
+    // organizers merge in the last minutes before the first team is judged.
     const res = await merge(enterpriseId, challengeIds, "Still in time");
     expect(res.statusCode).toBe(201);
     expect(await queueGroupOf(challengeIds[0]!)).toBe(await queueGroupOf(challengeIds[1]!));
@@ -652,7 +652,7 @@ describe("splitting back apart", () => {
 });
 
 describe("concurrency and idempotency", () => {
-  it("serialises a form edit behind the first submitted evaluation", async () => {
+  it("serializes a form edit behind the first submitted evaluation", async () => {
     const { pool } = await import("../../src/db/pool.js");
     const { upsertAttemptReview } = await import("../../src/modules/queue/judging.js");
     const { updateQueueGroup } = await import("../../src/modules/queue/group-merge.js");
@@ -724,7 +724,7 @@ describe("concurrency and idempotency", () => {
       merge(enterpriseId, challengeIds, "First"),
       merge(enterpriseId, challengeIds, "Second"),
     ]);
-    // Whichever order they serialise in, both describe the same single group.
+    // Whichever order they serialize in, both describe the same single group.
     expect([a.statusCode, b.statusCode]).toEqual([201, 201]);
     expect(a.json().id).toBe(b.json().id);
 
@@ -740,7 +740,7 @@ describe("concurrency and idempotency", () => {
     expect(memberships[0].n).toBe(3);
   });
 
-  it("serialises two different merges of one enterprise without losing a challenge", async () => {
+  it("serializes two different merges of one enterprise without losing a challenge", async () => {
     const { pool } = await import("../../src/db/pool.js");
     const { enterpriseId, challengeIds } = await createEnterpriseChallenges(4);
     const [c1, c2, c3, c4] = challengeIds as [number, number, number, number];

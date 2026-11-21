@@ -81,7 +81,7 @@ describe("operator layout", () => {
     expect(scanFrameSize(1400, 900)).toBe(SCAN_FRAME.large);
   });
 
-  it("centres list content with equal gutters, filling an expanded window", () => {
+  it("centers list content with equal gutters, filling an expanded window", () => {
     expect(operatorListColumn(390)).toEqual({
       alignSelf: "center",
       maxWidth: 720,

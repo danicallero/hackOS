@@ -59,7 +59,7 @@ Delivery reaches one of three mutually exclusive targets, resolved by
   selected dictionary IDs. Either filter can stand alone. Both are resolved in
   one query at fan-out time, so scheduled notices follow current role
   assignments and dietary declarations rather than a stale recipient snapshot.
-  The role picker gets its minimal catalogue from
+  The role picker gets its minimal catalog from
   `GET /api/announcements/targeting-options`, scoped to
   `ANNOUNCEMENTS_MANAGE` rather than `PERMISSIONS_MANAGE`; intolerance choices
   come from the existing public food-intolerance dictionary.

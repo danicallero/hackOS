@@ -20,7 +20,7 @@ live in `apps/api/src/modules/sponsors/stands.ts` (printable QR SVGs in
 ## Privacy rules
 
 **Documented exception to "private diary" (#934, #935).** The diary list, notes
-and favourites stay private. But the *existence* of a connection (not who saved
+and favorites stay private. But the *existence* of a connection (not who saved
 whom, when, or any note) feeds the public TV connections graph: a person pair
 is an edge while either side keeps the entry, so removing a contact leaves the
 line while the other person keeps theirs. Sponsor/company scans show up as
@@ -39,7 +39,7 @@ photographed or copied. Organizer privacy review is required before launch.
 - **Hidden profiles reveal nothing.** Scanning someone whose public profile
   is not shared answers `profile_not_shared` (409) with no name or id, and
   stores nothing.
-- **Live, never cached.** Only the owner's own choices are stored (favourite,
+- **Live, never cached.** Only the owner's own choices are stored (favorite,
   private note). The card is projected on every read, so a person who hides
   their profile later, loses event access or is removed shows as unavailable
   (`person: null`), and a sponsor hidden again shows `sponsor: null`. The
@@ -84,7 +84,7 @@ photographed or copied. Organizer privacy review is required before launch.
 | --- | --- |
 | `owner_id` | The attendee whose diary this is. |
 | `target_user_id` / `enterprise_id` | Exactly one is set: a saved person or a saved sponsor. |
-| `starred` | Favourite; favourites list first. |
+| `starred` | Favorite; favorites list first. |
 | `note` | Private note, ≤500 characters, trimmed, empty clears it. Newlines allowed, other control characters rejected. |
 
 Partial unique indexes on `(owner_id, target_user_id)` and
@@ -133,7 +133,7 @@ is the staff decision that attendees can collect a company by scanning its
 tags. Only `sponsors:manage` changes it. **Default:** off for new
 enterprises, so a sponsor without a stand never shows up in the album; the
 migration turned it on for every enterprise that already had a tag, which
-kept their behaviour unchanged. `GET /api/me/diary/sponsors` lists every
+kept their behavior unchanged. `GET /api/me/diary/sponsors` lists every
 revealed scannable company, tagged or not: one without tags yet (staff mark it
 scannable first, then generate its tags) shows as a locked slot, and the app
 cannot collect it until a tag exists.
@@ -147,7 +147,7 @@ the current person and the explicit company link independently.
 A combined tag saves both available destinations in one transaction, returning
 the person as the primary entry and the company entry in optional
 `relatedEntries`. A new destination answers 201; a repeat of both answers 200,
-keeping notes and favourites. Person resolution checks current badge assignment
+keeping notes and favorites. Person resolution checks current badge assignment
 before history, rechecks after locking the accounts, and retries a concurrent
 reassignment with the latest holder. NFC UID case is normalized; ticket tokens
 remain case-sensitive. Company rows are share-locked during resolution.
@@ -250,13 +250,13 @@ read model. Clients update from the mutation response and refetch on focus.
 ## Web
 
 `/people` (`apps/web/src/app/(app)/people/event-diary.tsx`) is the diary,
-labelled Diary in the personal nav ([`navigation.md`](./navigation.md)). It
+labeled Diary in the personal nav ([`navigation.md`](./navigation.md)). It
 keeps people and companies apart: people are contacts, a company is a stand
 to collect. Tabs (`?tab=`): People (default) and Companies; an old
 `?tab=directory` link opens People.
 
-**Save and Favourite are separate.** Scanning adds a person or stand to the
-diary. Favourite only marks a saved entry and drives the Favourites filters;
+**Save and Favorite are separate.** Scanning adds a person or stand to the
+diary. Favorite only marks a saved entry and drives the Favorites filters;
 un-favouriting never removes anything. Removal is the explicit "Remove from
 diary" in the row's `…` menu (with confirmation), next to Add/Edit note
 (dialog, 500 characters). Controls are disabled while their request runs and
@@ -264,20 +264,20 @@ every write sends an `Idempotency-Key`.
 
 - **People** lists the person entries of `GET /api/me/diary` with a local
   search (name, headline, project, challenges, location and the private note,
-  accent- and case-insensitive) and a Favourites toggle. Rows show the avatar,
+  accent- and case-insensitive) and a Favorites toggle. Rows show the avatar,
   name, headline, project, challenges and location (`personColumns`,
   `PersonMobileRow` in `people/person-row.tsx`) with the trailing actions:
-  Favourite and `…`. The whole row opens `/people/<userId>` (desktop row click; on narrow screens a stretched link
+  Favorite and `…`. The whole row opens `/people/<userId>` (desktop row click; on narrow screens a stretched link
   with a full-width hover/pressed state); the trailing controls never trigger
   it. Someone who no longer shares a profile shows one quiet line, has no
   link, and can still be removed.
 - **Companies** reads `GET /api/me/diary/sponsors`: a progress ring with
   "collected of total", then an album of round logo badges. Collected stands
-  are in colour (a star marks favourites); the rest are muted and dashed with
+  are in color (a star marks favorites); the rest are muted and dashed with
   a lock. A badge opens a dialog with the public card (description, website,
-  challenges) and, once collected, the collection date, the note, Favourite,
+  challenges) and, once collected, the collection date, the note, Favorite,
   Edit note and Remove. Uncollected badges explain how to collect them. A
-  Favourites toggle narrows the album to starred stands.
+  Favorites toggle narrows the album to starred stands.
 
 The page refetches on the `directory` topic's `domain.changed` and when the
 window regains focus. Without event access it shows access denied.
@@ -335,7 +335,7 @@ exposed by CORS).
 
 ## Mobile
 
-The Diary destination (People with search, favourites and
+The Diary destination (People with search, favorites and
 full profiles; Companies as a collectible stand album) and its scan flow are
 described in [`mobile.md`](./mobile.md#event-diary-935). Staff with
 `sponsors:manage` link NFC tags and wristbands to companies by tapping them
@@ -349,7 +349,7 @@ transaction (`scrubRelationships`), the subject's own diary and every entry in
 other diaries that points at them; the H54 trigger rejects new writes for a
 pending or anonymized owner or target. The personal export bundle includes
 the subject's own entries as `diary` (saved people by user id, sponsors by id
-and name, favourite, note, timestamps). Entries that other attendees hold
+and name, favorite, note, timestamps). Entries that other attendees hold
 about the subject are those attendees' private data and are not exported.
 
 ## Editions

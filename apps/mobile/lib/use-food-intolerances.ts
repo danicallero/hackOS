@@ -9,7 +9,7 @@ export interface Intolerance {
 
 const INTOLERANCES_CACHE_KEY = "food-intolerances";
 
-/** Public dietary catalogue, with the last successful copy kept on device. */
+/** Public dietary catalog, with the last successful copy kept on device. */
 export function useFoodIntolerances(enabled = true) {
   const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
 

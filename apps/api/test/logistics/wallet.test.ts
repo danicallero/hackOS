@@ -610,7 +610,7 @@ describe("H28 Apple Wallet PassKit", () => {
     });
     expect(quiet.statusCode).toBe(204);
 
-    // Event config changes (what an organiser edits before wondering why
+    // Event config changes (what an organizer edits before wondering why
     // their iPhone won't refresh)…
     const manager = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
     const put = await app.inject({

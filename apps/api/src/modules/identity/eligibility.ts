@@ -349,7 +349,7 @@ export async function cancelPendingAccountRemoval(
     user.removal_action !== "anonymize" ||
     !user.removal_requires_exit
   ) {
-    throw new ConflictError("This account-removal request can no longer be cancelled.", {
+    throw new ConflictError("This account-removal request can no longer be canceled.", {
       code: "removal_not_cancellable",
     });
   }
@@ -402,7 +402,7 @@ export async function cancelPendingAccountRemoval(
         code: "removal_expired",
       });
     }
-    throw new ConflictError("This account-removal request can no longer be cancelled.", {
+    throw new ConflictError("This account-removal request can no longer be canceled.", {
       code: "removal_not_cancellable",
     });
   }

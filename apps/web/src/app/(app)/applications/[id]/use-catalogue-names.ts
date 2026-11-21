@@ -6,7 +6,7 @@ import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import { answerValues } from "./response-filters";
 
-/** `university:<id>` / `degree:<id>` -> catalogue name, for every id the loaded answers mention. */
+/** `university:<id>` / `degree:<id>` -> catalog name, for every id the loaded answers mention. */
 export function useCatalogueNames(
   rows: ResponseRow[],
   template: TemplateField[] | null,
@@ -28,7 +28,7 @@ export function useCatalogueNames(
             ),
           ];
           const key = kind === "university" ? "universities" : "degrees";
-          // H13: bounded batches also resolve historical catalogue selections.
+          // H13: bounded batches also resolve historical catalog selections.
           for (let start = 0; start < ids.length; start += 100) {
             const data = await api.get<Record<string, Array<{ id: number; name: string }>>>(
               `/api/public/${key}`,

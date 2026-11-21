@@ -86,7 +86,7 @@ function orderInitialQueueRepos(
 
 /**
  * Add one repo to one challenge without changing the order of any existing
- * team. A queue reset is the only operation allowed to revive a cancelled
+ * team. A queue reset is the only operation allowed to revive a canceled
  * entry; an ordinary cancellation or disqualification remains respected on a
  * later regeneration.
  */

@@ -54,7 +54,7 @@ export interface DiaryEntry {
 /** Refetch on focus only when the list is older than this. */
 const FOCUS_REFRESH_MS = 30_000;
 
-/** The API orders favourites first, then newest; keep that after local edits. */
+/** The API orders favorites first, then newest; keep that after local edits. */
 function sortEntries(entries: DiaryEntry[]): DiaryEntry[] {
   return [...entries].sort(
     (a, b) =>

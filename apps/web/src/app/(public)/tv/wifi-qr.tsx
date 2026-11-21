@@ -31,7 +31,7 @@ export function WifiQr({
     <div className={cn("rounded-[0.75em] bg-white p-[0.75em] shadow-sm", className)}>
       <QRCodeSVG
         value={wifiJoinCode(wifi)}
-        // Read from metres away by phones held at an angle: the stronger error
+        // Read from meters away by phones held at an angle: the stronger error
         // correction survives that better than the density saving is worth.
         level="Q"
         marginSize={0}

@@ -137,7 +137,7 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
         body: projectFormSchema,
         summary: "Define project form",
         description:
-          "Creates an audited immutable project form version with organizer-defined questions, question-owned libraries and optional YouTube presentation. Removing a library requires its UUID in library_deletions and deletes all catalogue values transactionally. Existing submission snapshots retain their original version (#1007,H16,H54).",
+          "Creates an audited immutable project form version with organizer-defined questions, question-owned libraries and optional YouTube presentation. Removing a library requires its UUID in library_deletions and deletes all catalog values transactionally. Existing submission snapshots retain their original version (#1007,H16,H54).",
       },
     },
     (q) => saveNativeForm(q.userId as number, q.body),

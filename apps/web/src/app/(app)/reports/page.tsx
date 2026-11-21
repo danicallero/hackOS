@@ -1,6 +1,6 @@
 "use client";
 
-// H18 report inbox: attendee reports of projects and public profiles, closed by organisers.
+// H18 report inbox: attendee reports of projects and public profiles, closed by organizers.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import Link from "next/link";

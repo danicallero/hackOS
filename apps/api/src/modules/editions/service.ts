@@ -23,8 +23,8 @@ import type { QueueEntryRow } from "../queue/types.js";
  * another edition snapshots them on the previous edition and restores saved
  * windows and onboarding, or starts a new edition with empty values. People's data is never
  * copied. Closing is one transaction: project drafts become not_submitted,
- * pending queue entries are cancelled (not evaluated), open/claimed help
- * requests are cancelled, help windows end and judging sessions end — with
+ * pending queue entries are canceled (not evaluated), open/claimed help
+ * requests are canceled, help windows end and judging sessions end — with
  * no notification of any kind. Reopening only restores the ability to edit.
  */
 
@@ -155,7 +155,7 @@ export interface EditionPatch {
 
 /**
  * Rename or re-date an edition. The current edition's name and dates live in
- * event_config (event settings) and are mirrored to the catalogue by trigger.
+ * event_config (event settings) and are mirrored to the catalog by trigger.
  */
 export async function updateEdition(
   actorId: number,

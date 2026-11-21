@@ -168,7 +168,7 @@ describe("POST /api/challenges/:challengeId/repos/bulk-add|bulk-remove (H21)", (
     );
     expect(removeAudits.rows[0].n).toBe(3);
 
-    // Re-adding revives the cancelled entries (same rows) at the bottom, in repo order.
+    // Re-adding revives the canceled entries (same rows) at the bottom, in repo order.
     expect((await call("bulk-add")).json()).toEqual({ total: 3, added: 3, alreadyEnrolled: 0 });
     const revived = await pool.query(
       `SELECT repo_id, status, position FROM queue_entries WHERE challenge_id = $1 ORDER BY position`,

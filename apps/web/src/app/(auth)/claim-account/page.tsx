@@ -227,7 +227,7 @@ function ClaimInner() {
           <SubmitButton
             onClick={() =>
               // H9/H10/#188: every invitation kind lands somewhere specific
-              // after signing in — login honours the `next` param.
+              // after signing in — login honors the `next` param.
               router.push(withReturnPath("/login", destinationForKind(lookup.kind)))
             }
           >

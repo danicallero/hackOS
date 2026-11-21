@@ -11,7 +11,7 @@ describe("person mascot assignment (#934, H55)", () => {
     expect(mascotAvatarChoice(undefined, "  ANA  ")).toEqual(mascotAvatarChoice(null, "ana"));
   });
 
-  it("distributes artwork, colours and their combinations across sequential user ids", () => {
+  it("distributes artwork, colors and their combinations across sequential user ids", () => {
     const drawings = Array(MASCOT_AVATARS.length).fill(0);
     const colors = Array(MASCOT_BACKGROUNDS.length).fill(0);
     const combinations = new Set<string>();

@@ -21,7 +21,7 @@ export const nativeStackScreenOptions = {
   headerBackButtonDisplayMode: "minimal",
   headerBackButtonMenuEnabled: false,
   // H55: Android draws its bar like `AndroidDetailHeader` (glass back circle,
-  // bold title on the page colour, no Material elevation), so native-bar
+  // bold title on the page color, no Material elevation), so native-bar
   // screens match the ones that draw their own header.
   ...(process.env.EXPO_OS === "android"
     ? {
@@ -51,7 +51,7 @@ export function useTabStackScreenOptions() {
     () => ({
       ...nativeStackScreenOptions,
       // H55: the tablet TabSlot already clears its sidebar, including native headers.
-      // One page colour for every tab screen (not the fixed-black navigation canvas).
+      // One page color for every tab screen (not the fixed-black navigation canvas).
       contentStyle: {
         backgroundColor: colors.background,
         paddingLeft: (side.tabletRail || slotPadsSide) && side.edge === "left" ? 0 : left,

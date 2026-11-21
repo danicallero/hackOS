@@ -108,7 +108,7 @@ export function GrantRulesPanel({
   scopedRole,
   disabled = false,
 }: {
-  /** Full role catalogue for the role picker — unused (and omittable) when `scopedRole` is set. */
+  /** Full role catalog for the role picker — unused (and omittable) when `scopedRole` is set. */
   roles?: RoleSummary[];
   /** Scopes the list/create/edit to rules targeting this one role and locks the role picker to it (H8). */
   scopedRole?: RoleSummary;
@@ -118,7 +118,7 @@ export function GrantRulesPanel({
   const { t } = useLocale();
   const [rules, setRules] = useState<RoleGrantRule[]>([]);
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
-  // The role catalogue for the "when role assigned" source-role picker
+  // The role catalog for the "when role assigned" source-role picker
   // (H8 role-assignment-as-trigger) — fetched here regardless of
   // `roles`/`scopedRole` so this mode works whether the panel is scoped to
   // one role or (unscoped, legacy path) shows the full role picker too.

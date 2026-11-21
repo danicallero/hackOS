@@ -207,12 +207,12 @@ cases, whichever onRequest hook was awaiting when the client left:
 | When the client disconnects | What happens |
 | --- | --- |
 | Before admission, while an earlier async hook (the auth-context session lookup) is still running | Fastify's `onRequestAbort` hook marks the request closed; the admission hook also checks the socket state. The request is never counted in flight, never acquires a slot, and the lifecycle stops there, so its handler does not run. |
-| While queued for admission | The wait is cancelled and the request leaves the queue. If a slot is granted at the same moment, it is returned immediately and the handler does not run. |
+| While queued for admission | The wait is canceled and the request leaves the queue. If a slot is granted at the same moment, it is returned immediately and the handler does not run. |
 | During the handler | The response `close` event (or `onRequestAbort`) releases the slot and the in-flight gauge. The handler's late completion releases nothing a second time. |
 
 Aborted requests never record a completed-response metric (#891).
 
-As defence in depth, every slot has a maximum hold time,
+As defense in depth, every slot has a maximum hold time,
 `REQUEST_ADMISSION_MAX_HOLD_MS` (default 300000, five minutes). A slot held
 longer is force-released once: the next waiter is admitted, the request stops
 counting in flight, `hackos_http_request_admission_lease_expired_total{lane}`

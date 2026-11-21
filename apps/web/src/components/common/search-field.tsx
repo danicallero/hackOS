@@ -20,7 +20,7 @@ export interface SearchFieldProps {
   inputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
-/** Labelled shadcn search input with one shared icon, clear action and focus behavior; `/` focuses it (#1182). */
+/** Labeled shadcn search input with one shared icon, clear action and focus behavior; `/` focuses it (#1182). */
 export function SearchField({
   id,
   label,

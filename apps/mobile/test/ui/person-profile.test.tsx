@@ -392,7 +392,7 @@ it("offers a retry when the CV download fails for another reason", async () => {
   fetchSpy.mockRestore();
 });
 
-it("toggles the favourite of the saved entry", async () => {
+it("toggles the favorite of the saved entry", async () => {
   await renderMobile(<PersonProfileScreen />);
   await fireEvent.press(await screen.findByRole("button", { name: "diaryFavourite" }));
   await waitFor(() =>

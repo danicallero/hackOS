@@ -166,7 +166,7 @@ describe("enterprise management (H43-H45)", () => {
     );
   });
 
-  it("admin controls visibility, and the public reveal honours priority", async () => {
+  it("admin controls visibility, and the public reveal honors priority", async () => {
     const a = await getApp();
     const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
 

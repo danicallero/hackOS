@@ -1,7 +1,7 @@
 import { heroTint } from "./hero-tint";
 
 describe("hero tint", () => {
-  it("fades the logo colour to transparent in both schemes", () => {
+  it("fades the logo color to transparent in both schemes", () => {
     for (const dark of [false, true]) {
       expect(heroTint("#3366cc", dark).gradient).toMatch(
         /^linear-gradient\(to bottom, rgba\(\d+,\d+,\d+,0\.\d+\) 0%, rgba\(\d+,\d+,\d+,0\.\d+\) 45%, rgba\(\d+,\d+,\d+,0\) 100%\)$/,
@@ -9,7 +9,7 @@ describe("hero tint", () => {
     }
   });
 
-  it("uses the logo colour as is in light mode and darkens it in dark mode", () => {
+  it("uses the logo color as is in light mode and darkens it in dark mode", () => {
     expect(heroTint("#3366cc", false).gradient).toContain("rgba(51,102,204,0.8)");
     expect(heroTint("#3366cc", true).gradient).toContain("rgba(31,61,122,0.85)");
   });

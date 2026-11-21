@@ -1,7 +1,7 @@
 import { type Question, questionnaireSchema, validateAnswers } from "@hackos/shared/questions";
 import { describe, expect, it } from "vitest";
 
-/** Pure unit tests for the shared question catalogue (H44). No DB. */
+/** Pure unit tests for the shared question catalog (H44). No DB. */
 
 const i18n = (t: string) => ({ en: t, es: t, gl: t });
 

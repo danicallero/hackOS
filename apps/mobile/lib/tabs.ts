@@ -20,7 +20,7 @@ export function has(capabilities: string[], capability: string): boolean {
   return capabilities.includes(capability) || capabilities.includes(CAPABILITIES.ADMIN_ALL);
 }
 
-/** H19/H20: the authenticated shell already requires event access. Projects must be reachable before queue enrolment. */
+/** H19/H20: the authenticated shell already requires event access. Projects must be reachable before queue enrollment. */
 export function canSeeMyQueue(_capabilities: string[], _context: PersonalTabContext): boolean {
   return true;
 }

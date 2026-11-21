@@ -40,7 +40,7 @@ export function registerFormLibrariesModule(app: FastifyInstance) {
         params,
         summary: "Read a question library",
         description:
-          "Authenticated catalogue for one dynamic question. Entries are scoped to the caller’s fixture boundary. No per-user proposal or selection limit (H11/H16).",
+          "Authenticated catalog for one dynamic question. Entries are scoped to the caller’s fixture boundary. No per-user proposal or selection limit (H11/H16).",
       },
     },
     async (q) => {
@@ -73,7 +73,7 @@ export function registerFormLibrariesModule(app: FastifyInstance) {
           [q.params.id],
         );
         if (!locked.rowCount) throw new NotFoundError("Field library not found");
-        // Profile-scope catalogues (mentor expertise) are extended by eligible holders only.
+        // Profile-scope catalogs (mentor expertise) are extended by eligible holders only.
         if (locked.rows[0].profile && !(await isMentorEligible(db, q.userId as number)))
           throw new ForbiddenError("The mentor profile needs the permission to offer help", {
             code: MENTOR_NOT_ELIGIBLE,
@@ -182,7 +182,7 @@ export function registerFormLibrariesModule(app: FastifyInstance) {
           body,
           summary: "Curate a question library in bulk",
           description:
-            "Renames, deletes or merges values for one field belonging to this form. Updates working answers, preserves submitted snapshots, locks the catalogue and audits the whole batch in one transaction (H11/H16/H53).",
+            "Renames, deletes or merges values for one field belonging to this form. Updates working answers, preserves submitted snapshots, locks the catalog and audits the whole batch in one transaction (H11/H16/H53).",
         },
       },
       async (q) =>

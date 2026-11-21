@@ -3,7 +3,7 @@ import { isSvg, svgTintSource } from "./svg-tint";
 
 const bytes = (text: string) => Uint8Array.from(text, (c) => c.charCodeAt(0));
 
-test("recognises SVG documents, with or without an XML prolog", () => {
+test("recognizes SVG documents, with or without an XML prolog", () => {
   expect(isSvg(bytes('<svg xmlns="http://www.w3.org/2000/svg"/>'))).toBe(true);
   expect(isSvg(bytes('<?xml version="1.0"?>\n<svg/>'))).toBe(true);
   expect(isSvg(Uint8Array.of(0x89, 0x50, 0x4e, 0x47))).toBe(false);
@@ -18,7 +18,7 @@ test("hands over the largest embedded raster", () => {
   expect(source).toEqual({ kind: "raster", bytes: bytes("the larger raster") });
 });
 
-test("reads paint colours from attributes and styles", () => {
+test("reads paint colors from attributes and styles", () => {
   const source = svgTintSource(
     `<svg><path fill="#e30613"/><path style="fill:#e30613;stroke:#fff"/><rect fill="none"/><circle stroke="rgb(0, 0, 0)"/></svg>`,
   );
@@ -28,6 +28,6 @@ test("reads paint colours from attributes and styles", () => {
   expect(pickDominantColor(source.rgba)).toBe("#e30613");
 });
 
-test("an SVG with no colour or raster offers nothing", () => {
+test("an SVG with no color or raster offers nothing", () => {
   expect(svgTintSource('<svg><path d="M0 0"/></svg>')).toBeNull();
 });

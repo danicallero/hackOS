@@ -16,7 +16,7 @@ describe("project text (H16)", () => {
     expect(normalizeProjectMarkdown(text)).toBe(text);
   });
 
-  it("summarises without headings or markup", () => {
+  it("summarizes without headings or markup", () => {
     expect(projectSummary(flat, "Black Vault")).toBe(
       "We keep losing notes. It files them. A phone app.",
     );

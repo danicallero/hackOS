@@ -27,7 +27,7 @@ function schemeHex(light: string, dark: string) {
   return Appearance.getColorScheme() === "dark" ? dark : light;
 }
 
-/** H55: navigation requires string colours; these match the semantic page canvas. */
+/** H55: navigation requires string colors; these match the semantic page canvas. */
 export const navigationCanvas = { light: "#f2f2f7", dark: "#000000" } as const;
 
 interface ColorSpec {
@@ -39,7 +39,7 @@ interface ColorSpec {
 /**
  * Platform semantic tokens: UIKit on iOS, the matching fixed pair on Android,
  * fixed fallbacks on web. Android entries are thunks so `colors` can resolve
- * them per access against the *current* scheme (memoised per scheme below) —
+ * them per access against the *current* scheme (memoized per scheme below) —
  * UIKit's dynamic colors re-resolve themselves, Android's cannot, and reading
  * them once at module load froze the palette to whatever scheme the app
  * launched in.
@@ -194,7 +194,7 @@ const SPECS = {
     web: "#8e8e93",
   },
   onIconTile: {
-    // Fixed white: the tile is grey in both appearances.
+    // Fixed white: the tile is gray in both appearances.
     ios: () => "#ffffff",
     android: () => schemeHex("#ffffff", "#ffffff"),
     web: "#ffffff",

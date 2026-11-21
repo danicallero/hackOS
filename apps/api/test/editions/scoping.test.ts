@@ -14,7 +14,7 @@ import {
 } from "../helpers.js";
 
 /**
- * Release-review scoping fixes (H8, H28): the global role catalogue is only
+ * Release-review scoping fixes (H8, H28): the global role catalog is only
  * mutable from the current edition, application rows resolve only in the
  * viewed edition, invitations and profile locks are per edition, and
  * sponsor/judge/public-surface lookups ignore other editions' enterprises.
@@ -51,8 +51,8 @@ async function responseIn(appId: number, status = "review"): Promise<{ id: numbe
   return { id: rows[0].id, user };
 }
 
-describe("role catalogue mutations (bug 1)", () => {
-  it("rejects catalogue mutations from a non-current edition, allows them in the current one", async () => {
+describe("role catalog mutations (bug 1)", () => {
+  it("rejects catalog mutations from a non-current edition, allows them in the current one", async () => {
     const a = await getApp();
     await createEdition("old");
     const roleId = await createRole([]);

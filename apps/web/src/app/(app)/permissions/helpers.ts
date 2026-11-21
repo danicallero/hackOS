@@ -8,7 +8,7 @@ export { ALL_TRIGGER_EVENTS };
  * Human label for a trigger_event constant (H8). The registry itself
  * (packages/shared/src/role-grant-triggers.ts) is the single source of the
  * event strings; this maps each one to its own translated label, the same
- * pattern prettifyCapability uses for the capability catalogue below.
+ * pattern prettifyCapability uses for the capability catalog below.
  */
 const TRIGGER_EVENT_LABEL_KEYS: Record<string, MessageKey> = {
   [TRIGGER_EVENTS.SPONSOR_ENTERPRISE_LINKED]: "triggerEventSponsorEnterpriseLinked",

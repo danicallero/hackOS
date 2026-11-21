@@ -452,7 +452,7 @@ function JointGroupSegments({
         const lowerNode = nodes[nodes.length - 1];
         const upperEdge = upperNode.offsetTop + upperNode.offsetHeight;
         const lowerPadding = Number.parseFloat(getComputedStyle(lowerNode).paddingTop) || 0;
-        // Keep the upper room aligned with its neighbours, then let the L's
+        // Keep the upper room aligned with its neighbors, then let the L's
         // background continue through one padding gutter before it steps out.
         // Reading the rendered padding keeps the SVG in sync with the wrapper.
         const shoulderY = upperEdge + lowerPadding;
@@ -818,7 +818,7 @@ function WifiView({
           <TvHeader title={t("modeWifi")} icon={WifiHighIcon} eventName={event.name} />
           <TvBody className="items-center justify-center">
             {/* Two equal ways in — scan it, or read it — set side by side and
-                centred as one block, rather than a small card adrift in a
+                centered as one block, rather than a small card adrift in a
                 large screen. The QR's white plate is the only "card" here;
                 a second frame around everything would just add noise. */}
             <div

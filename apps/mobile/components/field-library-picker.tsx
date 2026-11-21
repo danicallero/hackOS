@@ -11,9 +11,9 @@ import { RowButton } from "./project-ui";
 import { SymbolView } from "./symbol";
 
 /**
- * H11/H16: one question catalogue, unlimited proposals and selections. The
+ * H11/H16: one question catalog, unlimited proposals and selections. The
  * field shows its selection as one row; choosing opens a sheet with search, so
- * a long catalogue never stretches the form.
+ * a long catalog never stretches the form.
  */
 export function FieldLibraryPicker({
   libraryId,
@@ -36,7 +36,7 @@ export function FieldLibraryPicker({
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(Boolean(libraryId));
   const [retry, setRetry] = useState(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: retry explicitly repeats the catalogue request.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: retry explicitly repeats the catalog request.
   useEffect(() => {
     if (!libraryId) return;
     setLoading(true);

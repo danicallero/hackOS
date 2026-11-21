@@ -29,7 +29,7 @@ import { compactQueueGroupPositions } from "./ordering.js";
  *   merely once a queue exists or is being called from. Positions get
  *   renumbered into one key space and the judging form is replaced, neither
  *   of which is safe once an answer has been given, and both of which
- *   organisers legitimately do minutes before the first team walks in.
+ *   organizers legitimately do minutes before the first team walks in.
  * - Rooms follow their challenges only when a source group is emptied. A room
  *   serving a source group that still has unselected challenges stays there;
  *   rooms from an emptied group are repointed at the target rather than
@@ -216,7 +216,7 @@ export async function listManageableQueueGroups(
  * Lock every queue group of one enterprise, lowest id first, for the whole
  * transaction. Merge and split both move `queue_group_challenges` rows
  * between an enterprise's groups and renumber positions across them, so two
- * concurrent calls on the same enterprise have to serialise; taking the locks
+ * concurrent calls on the same enterprise have to serialize; taking the locks
  * in id order means two calls touching overlapping groups can never deadlock.
  * Evaluation-sensitive operations then lock queue entries in id order before
  * checking whether the first evaluation exists. Review submission takes the
@@ -661,7 +661,7 @@ export async function setQueueGroupRooms(input: {
     );
 
     // Lock the rooms in id order so two enterprises claiming the same room
-    // serialise rather than deadlock. When clearing every room, lock the
+    // serialize rather than deadlock. When clearing every room, lock the
     // group's current links too; otherwise a concurrent replacement can
     // commit while we wait and its former group would be absent from the
     // invalidation snapshot.

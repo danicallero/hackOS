@@ -93,7 +93,7 @@ the account language.
     "In room" node is reached only at `in_room`, which fills the track.
   - **Decision:** no throttling or quantization. A call already moves every
     waiting team's `position`, and `queueTotal` stays the same then (a called
-    team still counts); it changes only when a team joins or is cancelled.
+    team still counts); it changes only when a team joins or is canceled.
     `calledAhead` changes only when a team ahead in the same room enters it,
     a handful of pushes per room. Both stay within the queue's existing
     one-push-per-transition cadence.
@@ -719,7 +719,7 @@ Submission deadline:
 
 Red is reserved for the closing state and marks the symbol and the "Not
 submitted" status only; the countdown and the window bar keep their primary and
-neutral colours on every surface.
+neutral colors on every surface.
 
 Accreditation desk:
 
@@ -739,7 +739,7 @@ which `expo-widgets` enables on iOS 18+ (`supplementalActivityFamilies([.small,
 .medium])`) and which renders each layout's `bannerSmall` instead of the
 Dynamic Island compact views. There is one composition for every kind: glyph
 and title in secondary, one 26 pt hero (a native timer that ticks without
-pushes, or the count, room or "Submitted"), at most one status line. Colour is
+pushes, or the count, room or "Submitted"), at most one status line. Color is
 sparing: the phase accent tints the glyph only, Always-On drops it, and red is
 used once, for a known draft's "Not submitted" line in the last 15 minutes.
 Text is single-line with scaling, and Dynamic Type is capped at `xLarge`. The
@@ -833,7 +833,7 @@ and `deploy/README.md`.
   per-key ranges). `kinds.test.ts` also proves each timing moves its
   consumer (deadline lead, closing window, accreditation window both sides).
 - `notifications/automation.test.ts`: the schedule reminder switch and lead
-  (access, override only, audit, ranges) and that the reminder job honours both.
+  (access, override only, audit, ranges) and that the reminder job honors both.
 - `logistics/schedule-live-activity-toggle.test.ts`: the roster toggle's PATCH
   (audit, early tick, 403 for `schedule:read`).
 - `preferences.test.ts`: per-kind preferences (entitlement, partial and

@@ -312,7 +312,7 @@ export default function NetworkingProfileScreen() {
     const manageCv = editing && current.cv?.source === "upload";
     const actions = (
       <View style={{ gap: 14 }}>
-        {/* The scanner's tile row: their favourite and note tiles, greyed and
+        {/* The scanner's tile row: their favorite and note tiles, grayed and
               inert here since they belong to whoever scans you (#934). */}
         <View style={{ flexDirection: "row", gap: 10 }}>
           <View

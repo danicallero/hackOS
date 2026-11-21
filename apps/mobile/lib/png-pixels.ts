@@ -4,7 +4,7 @@ import { unzlibSync } from "fflate";
  * Decodes a small 8- or 16-bit, non-interlaced PNG into 8-bit RGBA bytes. It only has to
  * read the thumbnails `expo-image-manipulator` writes for logo tints (H44), so
  * the app does not ship a native graphics library just to read 24x24 pixels.
- * iOS writes wide-colour (P3) photos as 16-bit PNGs; their high bytes are kept.
+ * iOS writes wide-color (P3) photos as 16-bit PNGs; their high bytes are kept.
  * Throws on anything else; the tint cache treats that as "no colour".
  */
 export function decodePngRgba(png: Uint8Array): {
@@ -42,7 +42,7 @@ export function decodePngRgba(png: Uint8Array): {
     offset += 12 + length;
   }
   const channels = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }[colorType];
-  if (!channels || !width || !height) throw new Error("Unsupported PNG colour type");
+  if (!channels || !width || !height) throw new Error("Unsupported PNG color type");
 
   const compressed = new Uint8Array(data.reduce((sum, part) => sum + part.length, 0));
   let at = 0;

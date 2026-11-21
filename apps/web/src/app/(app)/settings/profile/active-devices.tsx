@@ -31,7 +31,7 @@ interface DeviceSession {
 // (apps/mobile/lib/client-build.ts); older builds send the platform default.
 const APP_USER_AGENT = /^hackOS(?:\/\S+)? \(([^;)]+)/;
 
-/** "Safari · macOS" from a user-agent string; empty when nothing is recognisable. */
+/** "Safari · macOS" from a user-agent string; empty when nothing is recognizable. */
 export function deviceName(userAgent: string | null | undefined): string {
   if (!userAgent) return "";
   const appModel = APP_USER_AGENT.exec(userAgent)?.[1]?.trim();

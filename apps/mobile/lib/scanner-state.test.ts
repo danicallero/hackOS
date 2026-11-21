@@ -26,7 +26,7 @@ describe("scanner transaction presentation", () => {
     expect(scannerTransactionState(scan("pending", "Network request failed"))).toBe("saved");
   });
 
-  it("distinguishes acknowledgement from business rejection", () => {
+  it("distinguishes acknowledgment from business rejection", () => {
     expect(scannerTransactionState(scan("acknowledged"))).toBe("confirmed");
     expect(scannerTransactionState(scan("failed", "Badge revoked"))).toBe("attention");
   });

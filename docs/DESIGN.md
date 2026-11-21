@@ -6,7 +6,7 @@ humans and agents: every section opens with a one-line summary, tokens carry
 their intent and boundaries (not just values), and components come with the
 decision logic for when to use them.
 
-Product behaviour stays owned by `plan/historias-hackos.md` (H1–H59). This doc
+Product behavior stays owned by `plan/historias-hackos.md` (H1–H59). This doc
 owns *how things look, read, and feel*.
 
 ## Product brief
@@ -66,10 +66,10 @@ view; edition values in `apps/web/src/styles/theme.css`, Tailwind mappings in
 `apps/web/src/app/globals.css`.**
 
 Style only with semantic tokens (`bg-background`, `text-muted-foreground`,
-`border`, `text-destructive`, …). Colour meaning comes from semantic tones
+`border`, `text-destructive`, …). Color meaning comes from semantic tones
 (`success`/`warning`/`danger`/`info`/`brand`/`neutral`,
 `apps/web/src/lib/tones.ts`) — badges, meters, and charts all take a `tone`,
-so a colour means the same thing everywhere.
+so a color means the same thing everywhere.
 
 Status washes are translucent, not solid fills. Text on a warning wash uses
 the foreground appropriate to the rendered surface: dark text in light mode
@@ -85,7 +85,7 @@ Each row: value → intent → boundary.
 | Spacing scale | 4, 8, 12, 16, 24, 32, 48 px | 8px between tightly related controls, 16px within a section, 24px between sections. Never off-grid values. |
 | Accent | one interactive accent | CTAs and active states only. Never decorative, never a background wash. One per view. |
 | Error recovery | Brand blue, ink and red | The branded full-page error illustration uses the active edition palette. Do not reuse it for regular warnings or inline errors. |
-| Status colours | via `tones.ts` | Reserved for actual state (queue, decision, sync). Never used to make neutral UI "more colorful". |
+| Status colors | via `tones.ts` | Reserved for actual state (queue, decision, sync). Never used to make neutral UI "more colorful". |
 | Page title | 24/32 Rockwell regular (`type-page-title`) | One per page, in `PageHeader`. Every `<h1>` uses it, including auth, public and system pages (maintenance, pending removal, legal, company tag). Never inside cards. |
 | Section title | 18/24 Rockwell regular (`type-section-title`) | Titles a `Section`/`SectionCard`. Not a substitute for the page title. |
 | Body | 14/20 regular | Default text. |
@@ -101,7 +101,7 @@ Each row: value → intent → boundary.
 
 - **Radius roles.** `rounded-md` (6 px) for fields and menu items, `rounded-lg` (8 px) for every content surface, row wash and bubble, `rounded-full` for buttons, avatars and dots. Do not use `rounded-xl` or `rounded-2xl` outside the TV surfaces.
 - **Big numbers.** A metric is a `StatCard`. Where a numeral sits inside a section or other composition (a `dl`, a progress sentence), it uses the StatCard treatment: `text-2xl font-semibold tabular-nums`. `text-3xl` numerals are not used on web outside TV.
-- **Selected editor.** The question or field currently being edited is marked by `border-primary/60` plus `ring-1 ring-primary/30`, never a coloured left stripe (`border-l-*`). Loading placeholders use `Skeleton`, never hand-rolled `animate-pulse` blocks.
+- **Selected editor.** The question or field currently being edited is marked by `border-primary/60` plus `ring-1 ring-primary/30`, never a colored left stripe (`border-l-*`). Loading placeholders use `Skeleton`, never hand-rolled `animate-pulse` blocks.
 
 Shared page and section title rows align icons and counters to the visible
 capital height (`heading-row`), rather than the different fonts’ line boxes.
@@ -122,7 +122,7 @@ Motion, contrast and transparency follow the system preferences, in
   the sidebar); the global reduced-motion rule removes it. Animate only
   opacity/transform/height in app motion; durations stay 120-200 ms.
 - `prefers-contrast: more` darkens `--border` and `--muted-foreground` and
-  makes `--ring` the full foreground colour, in both themes.
+  makes `--ring` the full foreground color, in both themes.
 - `prefers-reduced-transparency: reduce` makes blurred or translucent surfaces
   (public top bar, notification trigger, sheet) opaque. The dimming scrim
   behind modals is not a surface and stays.
@@ -157,7 +157,7 @@ Motion, contrast and transparency follow the system preferences, in
   provider.
 
 Uppercase/letter-spacing is not a hierarchy tool — use scale, weight, and
-colour; reserve uppercase for real codes (badge IDs, room codes).
+color; reserve uppercase for real codes (badge IDs, room codes).
 
 ### Edition standard: HackUDC 2027
 
@@ -355,7 +355,7 @@ and Phosphor's `Icon` type (aliased as `PhosphorIcon` where needed).
 
 Import individual icons from `@phosphor-icons/react/dist/csr/<Name>` inside
 client modules and `@phosphor-icons/react/dist/ssr/<Name>` in server-compatible
-modules. These direct imports avoid compiling the entire catalogue in Next.js.
+modules. These direct imports avoid compiling the entire catalog in Next.js.
 Server variants do not read React context; their default weight is `regular`.
 Client defaults live in `components/providers.tsx`'s `IconContext`: `regular`,
 24 px, `currentColor`. Keep existing `size-*` utilities for contextual sizing:
@@ -504,7 +504,7 @@ Every dashboard-style panel is a `SectionCard` (#300); a panel that re-builds
 title/description/action out of `CardHeader` also re-invents the spacing and
 re-introduces the description-restates-the-title pattern.
 Public marketing cards may use more whitespace but keep the same radius and
-colour tokens.
+color tokens.
 
 Use `SectionCard variant="plain"` for open page sections: it retains the
 heading, actions and semantic section without a border, background, inset
@@ -533,7 +533,7 @@ ordinary text, not status pills; reserve badges for meaningful changing state.
   overlap, select the deepest matching leaf — never show two selected rows.
 - Children revealed by an expanded workspace are indented one navigation level
   (`pl-8`) from their group heading. The indent is structural, not another
-  colour treatment; it disappears in the icon rail, where every item returns
+  color treatment; it disappears in the icon rail, where every item returns
   to the shared icon alignment.
 - Workspace expansion is independent, not an accordion: opening a different
   category must not close the category containing the current route. Navigation
@@ -546,7 +546,7 @@ ordinary text, not status pills; reserve badges for meaningful changing state.
   than expand. The chevron follows the same motion, and all of it disables for
   `prefers-reduced-motion`.
 - Use vertical breathing room around category changes and workspace headings;
-  do not solve categorisation with repeated heavy dividers or all-caps labels.
+  do not solve categorization with repeated heavy dividers or all-caps labels.
   In the collapsed icon rail the labels reduce to non-interactive separators
   and every destination remains directly reachable.
 - The footer is an account utility row: identity combines name/email with a small `UserAvatar`, repeated in the
@@ -554,7 +554,7 @@ ordinary text, not status pills; reserve badges for meaningful changing state.
   deterministic HackUDC mascot and its independently selected background. The appearance
   control sits at the row's trailing edge. The account menu contains Profile,
   the quick language switcher, and Sign out. On the icon rail, text can hide
-  but the account action remains a labelled control, showing the same photo
+  but the account action remains a labeled control, showing the same photo
   or deterministic mascot.
 
 ```tsx
@@ -603,7 +603,7 @@ it reads as stray text there, so it leads the line below.
   appearance controls stay together below navigation; language is a quick
   setting in the account menu. The top bar is reserved for orientation and the
   sidebar control.
-- **Keep return navigation direct.** Project detail headers provide a labelled
+- **Keep return navigation direct.** Project detail headers provide a labeled
   back arrow to their project list. Do not hide this primary return path in an
   overflow menu. Other records retain browser history and sidebar navigation.
 - **Descriptions are exceptional.** Add one only for a policy, risk,
@@ -639,7 +639,7 @@ shared implementations. Geometry lives in `styles/surfaces.css`.
 | Task / real web examples | Composition | Width / scroll |
 | --- | --- | --- |
 | Scan, filter, compare, select: Users, Applications, Audit, Projects, Challenges, Enterprises, Activities and Accreditation/Presence | Header → optional tabs → search/filter toolbar → count/selection feedback → one table or drill-down list → pagination | `PageLayout` (content), max 1280 px, matching Users. Use `workspace` only when columns require more space. Document scroll. Never constrain a table tab to the width of its sibling form. |
-| Read or edit one subject: challenge editors, compact catalogues | Header → optional category tabs → open sections → one save owner per form | `PageLayout width="reading"`, max 896 px. Fields themselves stay in one or two readable columns; never stretch a single text field across a wide dashboard. Document scroll. |
+| Read or edit one subject: challenge editors, compact catalogs | Header → optional category tabs → open sections → one save owner per form | `PageLayout width="reading"`, max 896 px. Fields themselves stay in one or two readable columns; never stretch a single text field across a wide dashboard. Document scroll. |
 | Operate live data: queue operations, schedule grid, logistics analytics | Header → compact scope/data controls → operational surfaces | `width="workspace"`, available shell width. Document scroll unless simultaneous panes require a fixed workspace. |
 | Judge while watching queue and evaluation | Header/scope controls → sibling panes; queue and evaluation are separate bounded units | Existing judging desktop breakpoint (`xl`): fixed viewport, `min-h-0` throughout, scroll only pane bodies, fixed pane actions. Below it, normal document flow. No page-scroll trap on small/zoomed screens. |
 | A small amount of content | Same header and alignment, open content and useful next action | Do not center everything vertically, inflate cards or add filler descriptions. Empty space is acceptable. |
@@ -692,9 +692,9 @@ build a universal page component with domain flags.
 | --- | --- |
 | `PageLayout` | Content 1280 px, reading 896 px, or a genuinely wider operational workspace. One canvas; shell owns viewport padding. |
 | `PageHeader` | One page title with optional real identity, metadata/state and page actions. |
-| `SearchField` | Labelled search input, decorative search icon and accessible clear action that returns focus to the input. `/` focuses it (§9). |
+| `SearchField` | Labeled search input, decorative search icon and accessible clear action that returns focus to the input. `/` focuses it (§9). |
 | `ListToolbar` | Users-style broad search, shared `FilterMenu`, trailing view/export actions and optional feedback; active chips occupy a separate row. `searchOwnRowWhenNarrow` gives the search its own row when the toolbar itself is narrower than 42 rem and the actions are wide (Schedule, application responses). It measures the toolbar, not the viewport: the sidebar takes its share of a mid-width window. |
-| `PageToolbar` | Lower-level labelled control region for specialized operational controls that do not fit the list composition. |
+| `PageToolbar` | Lower-level labeled control region for specialized operational controls that do not fit the list composition. |
 | `TabBar` | One segmented selector using Radix Tabs. `full` distributes width; `content` hugs labels. Same selection/focus behavior. |
 | `SectionCard` | Common heading/state/actions/body; `plain` for related open sections, bounded default for independent objects. |
 | `FormActions` | Actual save status first, secondary actions then Save last; one pending spinner, owned by the submit button. Save is the scope's ⌘S target (§9). |
@@ -739,7 +739,7 @@ reset; do not silently replace one selection with another.
 On narrow application lists, show one readable record row with identity, status
 and relevant metadata instead of requiring a horizontal scroll through a single
 record. Keep bulk selection separate from the button that opens the record.
-Group related exports under one labelled menu; two identical download icons
+Group related exports under one labeled menu; two identical download icons
 without context are not an adequate mobile adaptation.
 
 ### Headers, controls and tabs
@@ -760,7 +760,7 @@ without context are not an adequate mobile adaptation.
   earns space when it explains policy, risk, consequence or an unfamiliar state.
 - Header actions affect the page/record. `PageToolbar` controls affect the data
   immediately below. Search first, filters next, view/column settings last.
-  On mobile they wrap or become labelled icon controls; filter chips occupy
+  On mobile they wrap or become labeled icon controls; filter chips occupy
   their own horizontally scrollable row. Never hide the only way to clear filters.
 - Selection actions replace/augment the data toolbar only while selection
   exists, with its count. A row's actions belong to its trailing cell/menu;
@@ -795,7 +795,7 @@ without context are not an adequate mobile adaptation.
 | Interaction | Surface and behavior |
 | --- | --- |
 | Create/edit one bounded record from a list (room, schedule item, invite, announcement) | `SidePanelEditor`; retain list filters/selection/scroll behind it. Its header and action footer stay fixed, its body scrolls. One save/submit owner. |
-| Short creation with a few related fields, a decision, or acknowledgement | `Modal` only if it fits a short interaction. A modal is not a miniature settings page. |
+| Short creation with a few related fields, a decision, or acknowledgment | `Modal` only if it fits a short interaction. A modal is not a miniature settings page. |
 | Destructive or irreversible operation | `AlertModal`, name the target and consequence; cancel is secondary, only confirmation is destructive. |
 | Multi-section creation/editor, deep detail, version history, shareable workflow | Dedicated route, e.g. challenge creation, project details and application builder. Navigate with a real link where possible; keep native browser history useful. |
 | Secondary explanation/detail attached to a section | Explicit inline disclosure. Large expansion/collapse preserves the trigger's viewport anchor. |
@@ -860,7 +860,7 @@ Keep actual multi-record objects independently bounded when ownership matters.
 | Short form fully visible with its submit action | Normal-flow footer. No floating bar needed. |
 | Long page editor/settings category | Sticky footer inside the owning form/section (`stickyFooter` / `.form-action-footer`), opaque surface and top hairline. Save and persistent `SaveStatus` travel together. Respect safe areas and allow focused final fields to scroll clear. |
 | Side editor / fixed operational pane | Fixed footer outside the scrolling body; no nested sticky bar. |
-| Long, frequently extended operational table | Keep its existing compact trailing sticky create action (Schedule/Rooms). Do not add a floating create button to every short/paginated catalogue. |
+| Long, frequently extended operational table | Keep its existing compact trailing sticky create action (Schedule/Rooms). Do not add a floating create button to every short/paginated catalog. |
 | Immediate cell edit / autosave | Show saving/saved/error at the cell or its shared scope, not a page-level claim that unrelated data is saved. |
 
 The first-visit cookie notice floats over the viewport, so it publishes its
@@ -940,7 +940,7 @@ open inside the side editor. All shared modals/panels consume the same geometry,
 and all shared category tabs use the same presentation.
 
 Judging deliberately keeps its fixed desktop split workspace. Permissions keeps
-its role tree/editor split. Verification keeps a small centered acknowledgement;
+its role tree/editor split. Verification keeps a small centered acknowledgment;
 public/auth pages and TV/kiosk surfaces have their own existing contracts.
 Specialized application-review tooling retains its dedicated rich review modal
 and file viewer; this does not establish a default for new detail workflows.
@@ -1000,7 +1000,7 @@ sheet, preserving enough of the parent list or workspace to maintain context.
 Its title/description header and action footer stay fixed; only the form body
 scrolls. The trigger belongs at the trailing edge of its action group so the
 direction of travel (page → panel) is visually predictable. On narrow screens,
-the same primitive may use the platform's full-height sheet behaviour rather
+the same primitive may use the platform's full-height sheet behavior rather
 than squeezing a desktop panel into the viewport.
 
 **Never put a table, a live-updating list, or a record's primary content in a
@@ -1018,7 +1018,7 @@ anything else.
 | Report a failed load/submit in place | `ContextualError` (+ retry) | A toast alone |
 | Inline notice about the surrounding content (error, warning, success) | `Alert` with `variant` `destructive`, `warning` or `success`, plus `AlertTitle`/`AlertDescription`; one tint (`/40` border, `/10` fill) for every tone. Keep the role the situation needs (`role="status"` for non-urgent updates) | Hand-rolled `border-warning/40 bg-warning/10` boxes with their own opacities |
 | Confirm a completed action | Toast (Sileo) | A modal interrupting the flow |
-| Communicate entity status | `StatusBadge` with a `tone` and its dot, or an `icon` replacing the dot (queue states: `QueueStatusBadge`); `StatusDot` is the shared quiet dot/label presentation. Neither needs a pill or outline. | Coloured prose, custom pills, badges for static metadata |
+| Communicate entity status | `StatusBadge` with a `tone` and its dot, or an `icon` replacing the dot (queue states: `QueueStatusBadge`); `StatusDot` is the shared quiet dot/label presentation. Neither needs a pill or outline. | Colored prose, custom pills, badges for static metadata |
 | A dashboard metric | `StatCard` (delta/footer slots for meters/sparklines); compact definition lists for supporting scanner totals, with the primary count emphasized | An identical card for every supporting count |
 | Comparative data, sorting, bulk selection | `DataTable<T>` | Custom table markup |
 | A horizontal tab bar | `TabBar` (scrolls itself when the triggers outgrow the container) | Bare `TabsList` with a per-page `overflow-x-auto` wrapper or `flex-wrap`, which the fixed pill height clips |
@@ -1043,7 +1043,7 @@ never a forked second version.
 
 ## 6. Tables, forms, and states
 
-**Summary: keyboard-real rows, labelled search, visible save state,
+**Summary: keyboard-real rows, labeled search, visible save state,
 skeleton loading, contextual errors, one-CTA empty states.**
 
 Tables and lists:
@@ -1077,7 +1077,7 @@ Tables and lists:
   table's persisted sort (the picker edits the primary key).
   A fixed-layout table keeps a minimum width (14 rem per unsized column plus
   the sized ones) and scrolls rather than letting a flexible column collapse
-  under its neighbour. Size a status column for its longest translated label.
+  under its neighbor. Size a status column for its longest translated label.
 - Record metadata in a header is label + value (`Grants` muted, `Participant`
   in foreground weight), not a lowercase sentence fragment.
 - Bulk actions appear only after selection and state what set they affect.
@@ -1140,7 +1140,7 @@ Forms:
 Loading / empty / error:
 
 - Loading uses structural skeletons matching the layout they replace. On
-  mobile, `components/skeleton.tsx` draws them as `Section`-shaped grey blocks
+  mobile, `components/skeleton.tsx` draws them as `Section`-shaped gray blocks
   that breathe gently (static under Reduce Motion) and the real content fades
   in; what a list already knew (a name, a photo) renders instead of a skeleton.
 - A failed region keeps its error and retry in that region; toasts are never
@@ -1176,7 +1176,7 @@ capability→workspace mapping: [`navigation.md`](./navigation.md).**
   applications, My project, My queue, Inbox, Profile (with the Wallet inside). Concepts that
   aren't available yet don't become permanent empty nav items.
 - Work area: capability-gated workspaces — Applications, Projects, Live
-  judging, Logistics, Programme, Sponsors, Event setup,
+  judging, Logistics, Program, Sponsors, Event setup,
   Access and audit. A participant who also judges keeps their personal queue
   *and* gains Live judging.
 - Keep the last workspace per device; order time-critical work above
@@ -1213,7 +1213,7 @@ product bug, not a styling choice.**
 
 ## 9. Accessibility
 
-**Summary: keyboard-complete, labelled, announced, and never colour-alone.**
+**Summary: keyboard-complete, labeled, announced, and never color-alone.**
 
 - Keyboard: every interactive element reachable and operable; visible focus on
   buttons, rows, tabs, menus, dialogs; dialogs return focus to their trigger.
@@ -1222,7 +1222,7 @@ product bug, not a styling choice.**
   `SidebarInset` and anything embedded in a shell are plain containers, never a
   second `main`. Both shells start with `SkipLink` (`skipToContent`), the first
   Tab stop, which moves focus to that main. The app sidebar is the
-  `navigationPrimary` `nav`; the cookie notice is a labelled `aside`.
+  `navigationPrimary` `nav`; the cookie notice is a labeled `aside`.
 - Headings: one `h1` per destination and no skipped levels. A fixed workspace
   without room for a `PageHeader` (Judging) keeps a visually hidden `h1`; an
   open section that its tab already names (Profile) keeps a visually hidden
@@ -1237,11 +1237,11 @@ product bug, not a styling choice.**
   indicator; static headings stay out of the Tab sequence. In scrollable
   sidebar lists, keep the whole focus ring inside the row so overflow cannot
   clip it.
-- Labels: all inputs labelled independently of placeholders; helper/error text
+- Labels: all inputs labeled independently of placeholders; helper/error text
   associated via `aria-describedby`.
 - Announcements: critical form errors and sync failures are announced; busy
   states are programmatically exposed and prevent accidental repeat submits.
-- Never rely on colour alone for queue, decision, connection, or scan state.
+- Never rely on color alone for queue, decision, connection, or scan state.
 - Mobile text follows Dynamic Type at every size, including AX1–AX5: content
   text wraps and its container grows (no fixed heights or truncation around
   it). Primary row labels and choices release single-line limits when
@@ -1256,7 +1256,7 @@ product bug, not a styling choice.**
 - Pointer targets are at least 24×24 CSS px everywhere and 44 px on coarse
   pointers (§2 Controls); `axe` `target-size` must report nothing on the
   dense tables (`/schedule`, `/users`).
-- Honour `prefers-reduced-motion`, `prefers-contrast: more` and
+- Honor `prefers-reduced-motion`, `prefers-contrast: more` and
   `prefers-reduced-transparency` through the global rules in §2, not per
   component; verify with Chrome's media emulation in both themes.
 
@@ -1394,7 +1394,7 @@ timestamp. Only `datetime-local` input values use `toDatetimeLocal` /
 workspaces with per-device persistence; conventions in
 [`apps/web/README.md`](../apps/web/README.md).**
 
-- File organisation: when a route outgrows a single `page.tsx`, follow the
+- File organization: when a route outgrows a single `page.tsx`, follow the
   "Page structure" rule in `apps/web/README.md` — split by independently
   meaningful parts (tabs, modals, decision logic), never by line count alone.
 - Landing-derived edition identity; light and dark both fully supported via
@@ -1416,7 +1416,7 @@ workspaces with per-device persistence; conventions in
 - Errors from the API surface `ApiError.message` verbatim (already
   human-readable and localized server-side).
 - Domain models/pure logic live in `lib/<domain>.ts` with colocated
-  `*.test.ts(x)` (vitest) — visual behaviour that encodes state machines
+  `*.test.ts(x)` (vitest) — visual behavior that encodes state machines
   (workflow tabs, judging access, nav gating) is unit-tested, not just eyeballed.
 
 ## 11b. TV / kiosk surfaces
@@ -1425,7 +1425,7 @@ workspaces with per-device persistence; conventions in
 scale so the same view fills a 1080p panel, a 4K wall and a portrait totem.**
 
 Venue screens (`apps/web/src/app/(public)/tv/`) are read-only, unattended, and
-viewed from across a room. Full behaviour in [`tv-screens.md`](./tv-screens.md);
+viewed from across a room. Full behavior in [`tv-screens.md`](./tv-screens.md);
 the rules that bind UI work:
 
 - **Never scroll the page.** `TvScreen` is `h-dvh` with `overflow-hidden`.
@@ -1452,16 +1452,16 @@ the rules that bind UI work:
   (`WifiQr` carries its own white plate), generated locally — never through an
   external QR service, which both breaks on a venue with no uplink and hands the
   venue Wi-Fi password to a third party.
-- **Data visualisations are silent and guided.** The connections graph
+- **Data visualizations are silent and guided.** The connections graph
   (`(public)/tv/connections-view.tsx`) has no legend or stats row. A camera
   tours the network on a timer — overview, then one community at a time with
   its names and companies, the rest faded; there is no caption. Never hover, focus or roam. Labels are collision-free and capped,
   node positions stay stable between refreshes, the tour pauses while the page
   is hidden, and `prefers-reduced-motion` steps without animating. All
-  people share one colour and are sized strongly by degree; companies are their
+  people share one color and are sized strongly by degree; companies are their
   logo (negative variant on dark, neutral initial disc as fallback). Dark is the
   hero look, with a tuned light variant.
-- Semantic tokens and both colour schemes apply as everywhere else — venues run
+- Semantic tokens and both color schemes apply as everywhere else — venues run
   screens in both.
 
 ## 12. Mobile specifics
@@ -1471,8 +1471,8 @@ Wallet button, native confirmations — plus offline-first scanner UX. Full
 architecture: [`mobile.md`](./mobile.md).**
 
 - **One token set, Apple look everywhere.** `apps/mobile/theme` is the only
-  source of visual values; import from `@/theme`. Colours (`colors`) are UIKit
-  semantic colours on iOS and the same palette as fixed light/dark pairs on
+  source of visual values; import from `@/theme`. Colors (`colors`) are UIKit
+  semantic colors on iOS and the same palette as fixed light/dark pairs on
   Android (never Material You, never a Material ripple). `space` (4-pt grid plus
   the 6/10 UIKit half-steps), `radius` (`chip` 10, `control` 12, `container` 14, `sheet` 22,
   `full` capsule, always with `borderCurve: "continuous"`). One radius per role:
@@ -1484,7 +1484,7 @@ architecture: [`mobile.md`](./mobile.md).**
   styles, plus `compact` 14) and `motion` (durations and springs) are in
   `theme/tokens.ts`. Font weight stops at 700. Text is `AppText` (or `type.*`
   spread into a style); screens
-  do not write font sizes, hex colours or radii. Android colours resolve at read
+  do not write font sizes, hex colors or radii. Android colors resolve at read
   time, so never freeze a `colors.*` value at module scope. Use
   `secondaryLabel` for readable supporting text; reserve `tertiaryLabel` for
   placeholders, disabled content and non-text decoration. Semantic label tokens
@@ -1503,7 +1503,7 @@ architecture: [`mobile.md`](./mobile.md).**
   Navigation stays the custom `RouterTabs` shell with the overflow menu; this
   system does not change it.
 - **Drift ratchet.** `pnpm check:mobile-tokens` fails when a file gains raw hex
-  colours, `fontSize` or `borderRadius` literals beyond
+  colors, `fontSize` or `borderRadius` literals beyond
   `scripts/mobile-token-baseline.json`. Migrating a file lowers its count; run
   `node scripts/check-mobile-tokens.mjs --update` to record it. Migrate a screen
   when you touch it. The font-size budget is zero (#1165); the guard checks
@@ -1519,7 +1519,7 @@ architecture: [`mobile.md`](./mobile.md).**
   `useTabStackScreenOptions` and the root navigator), never the fixed-black
   navigation canvas. Top-level titles share one bar row beside a rail
   (`useBarTitleOptions`). A capped form column in an expanded window starts at
-  the leading edge under the native title instead of floating centred.
+  the leading edge under the native title instead of floating centered.
   Nothing may remount or reset on a resize, because foldables resize mid-task. Details in
   [`mobile.md`](./mobile.md#foldables-and-large-screens).
   On iOS, landscape windows at least 600 pt tall use a leading navigation rail;
@@ -1558,7 +1558,7 @@ architecture: [`mobile.md`](./mobile.md).**
   (`lib/operations-navigation.ts` `resolveOperationsNavigationAction`):
   selecting the section you're already in is a **no-op**; selecting another
   always uses `router.replace()`, never `push()` — a tab switch, not a
-  stack push, so overflow screens never stack duplicates and back behaviour
+  stack push, so overflow screens never stack duplicates and back behavior
   stays sane. Direct tabs use the headless Expo Router tab state (`JUMP_TO`)
   and emit `tabPress`, preserving each tab's stack and its scroll-to-top/live-
   activity handlers. Within a section, deeper screens push normally on top of it.
@@ -1594,7 +1594,7 @@ architecture: [`mobile.md`](./mobile.md).**
   are the exception: their tinted hero runs to the top edge and content scrolls
   under the status bar with no band, as on iOS.
 - **One Android header look.** Every Android bar leads with the 44pt glass
-  back circle and a bold 22pt title on the page colour, with no Material arrow
+  back circle and a bold 22pt title on the page color, with no Material arrow
   or elevation: `nativeStackScreenOptions` gives native bars this through
   `AndroidStackBack` (so a screen that needs the default back passes
   `nativeStackScreenOptions.headerLeft`, never `headerLeft: undefined`, and
@@ -1611,7 +1611,7 @@ architecture: [`mobile.md`](./mobile.md).**
   (including three-button ones), `AppSwitch`, `AppActivityIndicator`,
   `AppRefreshControl`, `DateTimeField` (wheel sheet on Android) and never
   `ToastAndroid`, `elevation`, `android_ripple` or `@expo/ui/jetpack-compose`.
-  Text-cursor and selection colours come from the Android theme
+  Text-cursor and selection colors come from the Android theme
   (`plugins/withAndroidAppleTheme.js`, needs a native rebuild).
 - **Semantic colors resolve per platform, per scheme.** `theme/colors.ts` is the
   only place that knows which system palette a token comes from: UIKit's dynamic
@@ -1690,8 +1690,8 @@ HIG](https://developer.apple.com/design/human-interface-guidelines/live-activiti
   Always-On removes the seconds field and its spacing, leaving `4m` or `<1m` below a minute;
   waking restores seconds. Never render a seconds placeholder.
 - The submission window's elapsed bar remains visible after submission.
-- Keep semantic colour, dynamic light/dark Lock Screen accents and reduced
-  luminance handling. Colour never replaces a state label or symbol. Continuous
+- Keep semantic color, dynamic light/dark Lock Screen accents and reduced
+  luminance handling. Color never replaces a state label or symbol. Continuous
   progress bars share a treatment; the queue retains its meaningful stage track.
 - Watch (`.small` family, `bannerSmall`): glyph + title in secondary, one 26 pt
   hero, at most one 13 pt status line; the accent tints the glyph only and
@@ -1715,12 +1715,12 @@ Every UI change, web or mobile:
   roles.
 - Covers loading, empty, error, success, disabled, and permission-denied
   states.
-- Provides keyboard, focus, accessible-name, and announcement behaviour.
+- Provides keyboard, focus, accessible-name, and announcement behavior.
 - Updates Spanish, Galician, and English together.
 - Uses shared tokens and primitives — extends the shared layer rather than
   forking.
 - Includes responsive verification, and real-device verification where
-  native/offline behaviour applies.
+  native/offline behavior applies.
 - Adds or updates tests for state transitions and interaction semantics.
 - Keeps cross-surface UI hooks in `@hackos/shared/ui-test-ids` when a flow needs
   a stable contract across locales; tests prefer accessible roles and names,
@@ -1730,7 +1730,7 @@ Every UI change, web or mobile:
 
 | Concern | Where |
 | --- | --- |
-| Edition colour/radius/type tokens | `apps/web/src/styles/theme.css` |
+| Edition color/radius/type tokens | `apps/web/src/styles/theme.css` |
 | Tailwind token mapping and type classes | `apps/web/src/app/globals.css` |
 | Interactive component preview | `apps/web/src/app/(public)/design-system/page.tsx` |
 | Tones | `apps/web/src/lib/tones.ts` |
@@ -1761,7 +1761,7 @@ The system never does these. Treat a diff that introduces one as a bug:
 1. No role-based UI. `me.role` is display-only; gating is always by
    capability or association fact (`queue:status`, `isEnterpriseJudge`,
    `isSponsorRep`).
-2. No hardcoded colours (hex/oklch) or off-token spacing in components.
+2. No hardcoded colors (hex/oklch) or off-token spacing in components.
 3. No hardcoded user-facing strings — everything through the i18n dictionary,
    all three locales at once.
 4. No story IDs, capability keys, or API/database concepts in user-facing
@@ -1772,7 +1772,7 @@ The system never does these. Treat a diff that introduces one as a bug:
    `SelectTrigger size="content"` is the only wrapping opt-in.
 8. No mouse-only interactions: no clickable rows without keyboard semantics,
    no hover-only data.
-9. No colour-alone state communication, and no toast-only critical failures.
+9. No color-alone state communication, and no toast-only critical failures.
 10. No descriptions that restate the title or enumerate visible content;
    no "Soon" badges as attention devices.
 11. No UI that makes a locally queued scan look server-confirmed, or an
@@ -1796,7 +1796,7 @@ deadlines orange and other neutral gray. Category identity is stable across date
 filters, grid/agenda, light/dark themes, and never depends on audience or list order.
 Event metadata retains the category label; filter options repeat its color marker.
 
-Authenticated personal sections use labelled rounded navigation buttons for sibling
+Authenticated personal sections use labeled rounded navigation buttons for sibling
 routes (Home and Projects). Within a destination, use the existing rectangular
 TabBar for local views such as Inbox Messages/Preferences. Do not duplicate primary
 actions below this navigation: they belong beside the page title in PageHeader.

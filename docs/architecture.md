@@ -310,7 +310,7 @@ release admission and the in-flight gauge without recording a completed HTTP
 response; a request disconnected while queued cancels its admission wait.
 A client that disconnects while an earlier `onRequest` hook (the session
 lookup) is still running is never admitted at all, and every lease is
-force-released after `REQUEST_ADMISSION_MAX_HOLD_MS` as defence in depth
+force-released after `REQUEST_ADMISSION_MAX_HOLD_MS` as defense in depth
 (#1367). A request queued longer than `REQUEST_ADMISSION_MAX_WAIT_MS` is
 answered 503 with `Retry-After`, and pooled-connection checkouts pass a
 lane-aware gate of the pool's size, so admission can admit more requests than

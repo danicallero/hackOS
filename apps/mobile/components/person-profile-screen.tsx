@@ -82,7 +82,7 @@ type State =
  * into the diary only by a badge scan, so there is no Save here. The API
  * answers 404 for a hidden profile and for a person the reader may not open,
  * so both show the same unavailable state. The diary entry carries the
- * reader's favourite and note.
+ * reader's favorite and note.
  */
 export function PersonProfileScreen({
   source = "diary",
@@ -99,7 +99,7 @@ export function PersonProfileScreen({
   const insets = useSafeAreaInsets();
   const tabBarBottomInset = useRouterTabBarBottomInset();
   // iOS pads the content itself instead of an automatic inset under the
-  // transparent header: a cancelled swipe-to-dismiss changes that inset for a
+  // transparent header: a canceled swipe-to-dismiss changes that inset for a
   // moment and left the page shifted, half-collapsing the avatar.
   const avatarCollapse = useProfileAvatarCollapse(undefined, { insetAdjusted: false });
   // The bar's blur and title appear only once the large name has scrolled under it.
@@ -124,7 +124,7 @@ export function PersonProfileScreen({
   // Opened without a scan (a speaker or representative), there is no CV, star or note.
   const showCv = source !== "diary" || entry !== null;
   const usesCustomAndroidHeader = process.env.EXPO_OS === "android";
-  // The zoom transition's cancelled swipe-to-dismiss leaves the native back
+  // The zoom transition's canceled swipe-to-dismiss leaves the native back
   // button hidden, so these screens always draw their own glass circle.
   const floatingBack = true;
 
@@ -259,7 +259,7 @@ export function PersonProfileScreen({
   // H61: only the help desk shows a helper's role; the seed carries it until the helper loads.
   const roleName =
     helper?.visibleRoleName ?? (person || source !== "helpDesk" ? null : seed?.roleName);
-  // H44/H48: the photo's colours, or the same colour as the assigned mascot.
+  // H44/H48: the photo's colors, or the same color as the assigned mascot.
   const noPhotoTint = mascotBackgroundRgb(shown?.userId, shown?.displayName);
   const nameColor = useImageHeroForeground(shown?.photoUrl, dark, noPhotoTint);
 

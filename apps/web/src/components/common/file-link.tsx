@@ -4,7 +4,7 @@
 // object keys (uploads/…): the link points at the API's proxy download route,
 // which streams the bytes only after re-checking the caller's session
 // (owner-or-staff) on that request — so the URL is useless to anyone not
-// authorised, even if copied and shared. External URLs (the "file-url" field
+// authorized, even if copied and shared. External URLs (the "file-url" field
 // kind, or public logos) are linked through directly.
 
 import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";

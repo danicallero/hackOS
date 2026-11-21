@@ -41,7 +41,7 @@ interface Area {
 }
 
 /**
- * Knowledge areas (H61): the one catalogue behind a mentor's areas and the help
+ * Knowledge areas (H61): the one catalog behind a mentor's areas and the help
  * desk's topics. Helpers add areas from their own profile; staff with
  * `helpdesk:manage` rename and merge duplicates here and delete an area nobody
  * uses (one in use is merged into another instead).

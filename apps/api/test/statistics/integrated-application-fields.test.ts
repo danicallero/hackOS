@@ -92,7 +92,7 @@ describe("application fields integrated into Logistics", () => {
     );
   });
 
-  it("charts degree answers by catalogue name, not the stored id (H13, H54)", async () => {
+  it("charts degree answers by catalog name, not the stored id (H13, H54)", async () => {
     const viewer = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
     const applicant = await createUser();
     const degree = await pool.query<{ id: number }>(

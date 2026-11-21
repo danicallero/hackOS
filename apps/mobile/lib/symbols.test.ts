@@ -38,7 +38,7 @@ describe("Android symbol aliases (H55)", () => {
     expect(icons.filter((icon) => !androidSymbolName(icon))).toEqual([]);
   });
 
-  it("covers the diary favourite toggle", () => {
+  it("covers the diary favorite toggle", () => {
     expect(androidSymbolName("star")).toBe("star_border");
     expect(androidSymbolName("star.fill")).toBe("star");
   });

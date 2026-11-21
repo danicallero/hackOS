@@ -52,7 +52,7 @@ export const AttendeeActivityLayout = withLiveActivityKit(
       return capped(kit.fallback(props.name, "calendar"));
     }
     const labels = props.labels;
-    // Same colour logic as the staff activity: the island is always dark, the
+    // Same color logic as the staff activity: the island is always dark, the
     // Lock Screen accent is dynamic, Always-On drops the accent.
     const { islandAccent } = kit;
     const { neutral } = kit;
@@ -180,7 +180,7 @@ export const AttendeeActivityLayout = withLiveActivityKit(
     // camera, one unit (`2h`, `38m`) at a fixed 12 pt and narrow enough for
     // the vertical island of a foldable; the category symbol sits opposite.
     const compactTrailing = glyph(islandAccent, 15);
-    // The accent countdown to the start, then "Live" (one colour with the
+    // The accent countdown to the start, then "Live" (one color with the
     // symbol, so both sides read as one piece of information).
     const liveText = (size: number) =>
       liveLabel ? (

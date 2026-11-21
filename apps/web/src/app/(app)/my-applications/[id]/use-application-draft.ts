@@ -69,7 +69,7 @@ export function useApplicationDraft({
     stopped.current = true;
     setDiscarding(true);
     try {
-      // Wait for writes already sent, then delete. Cancelling fetch alone cannot
+      // Wait for writes already sent, then delete. Canceling fetch alone cannot
       // prevent a server-side autosave from committing after deletion (H12).
       await Promise.allSettled([...pendingWrites.current]);
       await api.delete(`/api/applications/${applicationId}/response`);

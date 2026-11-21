@@ -345,7 +345,7 @@ it("accepts a badge accredited offline on this device and ties the scan to that 
   mockQueue = [{ id: "scan-1", status: "acknowledged" }];
 });
 
-it("gives an unrecognised badge the error haptic", async () => {
+it("gives an unrecognized badge the error haptic", async () => {
   jest.mocked(haptic).mockClear();
   jest.mocked(findPersonByBadge).mockResolvedValueOnce({ person: null, revoked: false });
   await renderMobile(<ActivityScannerScreen />);

@@ -290,7 +290,7 @@ distributed to other Expo Router apps without importing hackOS code.
   editor) opens a native menu (#934): Take photo, Choose from library and, when
   a photo exists, Remove photo (`components/profile-photo-menu.tsx`, one hook
   `lib/use-profile-photo.ts`). The picker crops square (`allowsEditing`), then
-  `lib/profile-photo.ts` re-crops the centre square, downsizes to 1024 px and
+  `lib/profile-photo.ts` re-crops the center square, downsizes to 1024 px and
   re-encodes as JPEG at 0.8, far under the API's 5 MB cap, and posts it as
   multipart `file` to `POST /api/me/photo` (removal is `DELETE`), each attempt
   under its own `Idempotency-Key`. The avatar shows a spinner meanwhile and
@@ -339,7 +339,7 @@ distributed to other Expo Router apps without importing hackOS code.
     union and section matching from that registry; never duplicate the list or
     cast a new route into the helper. Exhaustive tests iterate every registered
     destination so a future pseudo-tab cannot silently inherit another
-    section's `noop` behaviour.
+    section's `noop` behavior.
 
   Do not re-implement these as plain `push()` calls or stack-style route
   launches. That regresses the back stack and duplicates overflow pages —
@@ -393,7 +393,7 @@ and navigation labels shrink to fit.
 
 Responsive layout: `theme/layout.ts` (size-class gutters, readable widths),
 `theme/layout-screens.ts` (scanner/operator column, stat block and action
-layouts), `theme/layout-participant.ts` (`useParticipantLayout`: centred
+layouts), `theme/layout-participant.ts` (`useParticipantLayout`: centered
 form/list/grid columns) and `lib/pane-width.ts` (list pane share, column
 counts, badge-beside-title rule). Pure functions, so every layout decision is
 unit-tested; screens never branch on a device model.
@@ -410,9 +410,9 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
 - **Other breakpoints.** All live in `lib/window-size.ts`, named, each with the verified
   layout that keeps it off 600/840: `TABLET_TAB_BAR_MIN_WIDTH` (700, so the portrait Fold
   inner display at ~673 dp keeps the phone tab bar), `TABLET_LANDSCAPE_MIN_*` (1100 × 800,
-  the labelled tablet rail; a Duo book at 951 dp keeps the 64 dp column) and
+  the labeled tablet rail; a Duo book at 951 dp keeps the 64 dp column) and
   `ANDROID_LIST_DETAIL_MIN_*` (640 × 600, two panes on the Fold inner display in portrait).
-  `SideRegion.tabletRail` marks the labelled rail; nothing infers it from the column width.
+  `SideRegion.tabletRail` marks the labeled rail; nothing infers it from the column width.
   Android has no reserved-region API, so it reserves `ANDROID_RAIL_COLUMN_SIZE` (76 dp,
   the whole symbol bar plus a gap) in route content.
 - **Hardware keyboard.** `modules/hardware-shortcuts` (iOS: iPad keyboard, Mac Designed for
@@ -435,7 +435,7 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   modal route). Compact/medium content is capped at 720 dp, expanded content at
   960 dp. Large landscape windows (at least 1100 × 800 dp) give the root
   navigator the whole window instead: navigation belongs at the display edge,
-  not inside a centred reading column. Schedule uses a 420 dp list beside a
+  not inside a centered reading column. Schedule uses a 420 dp list beside a
   detail pane capped at 760 dp; smaller expanded windows retain the 380 dp list.
   The Scanner uses the same list/detail rule (`lib/scan-pane.ts`): where
   `listDetailLayout().enabled`, the reader stays on the left and a scanned badge or QR opens that
@@ -445,7 +445,7 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   windows still push the route.
   "View people" opens the people finder over the scanner pane only. Rows show
   every person's account photo, whether or not their public profile shares it; the person
-  screen uses the person profile's header (blurred photo hero bleeding to the viewport edges, centred
+  screen uses the person profile's header (blurred photo hero bleeding to the viewport edges, centered
   avatar, name and email) and the meal/activity scan result shows the same photo. On iOS the pane is its own
   native stack (`components/pane-people-stack.ios.tsx`, an independent react-navigation tree):
   its root bar carries the title, role filter and sync status, `People` is pushed with the native
@@ -470,7 +470,7 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   with their content without double-padding screens, sheets through `SheetFrame` (which measures the
   sheet's own safe area). Backgrounds still fill the display. The DEV badge clears the
   same side.
-- **Auth and status screens.** `AuthScreen` (`components/auth-ui.tsx`) centres its form with
+- **Auth and status screens.** `AuthScreen` (`components/auth-ui.tsx`) centers its form with
   `authFrameExtra` (`lib/auth-frame.ts`): on the window beside the system's column, or on the
   first page of a book pose (the crease is in window points; a left column is subtracted because
   the screen's content starts after it). Rule: that extra and the 24 pt gutters pad a full-width
@@ -491,7 +491,7 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   names), with the overflow circle underneath; the number of direct tabs follows the
   height left below the indicators (`routerTabBarVerticalBudget`). Landscape iOS
   windows with at least 600 pt of height also reserve a leading rail. Large
-  landscape windows (at least 1100 × 800 dp) use a 200 dp sidebar with labelled
+  landscape windows (at least 1100 × 800 dp) use a 200 dp sidebar with labeled
   destinations; smaller windows keep the 64 dp symbol rail.
   Portrait and narrow split-screen windows restore the bottom bar without
   remounting the screen. A system-owned foldable column takes precedence.
@@ -501,12 +501,12 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   screens span the full window, so the system moves their icon items (back, bell,
   add, edit) into the same column, above the tab bar; custom views in a toolbar (the
   filter) stay horizontal.
-- **System behaviour kept.** `MainActivity` already declares
+- **System behavior kept.** `MainActivity` already declares
   `configChanges="...|screenSize|screenLayout|smallestScreenSize|orientation"`, so
   resizing never recreates the activity, and `windowSoftInputMode="adjustResize"`.
   Insets come from `react-native-safe-area-context`, per edge.
 
-**Bar colour.** The navigation theme paints the same page background behind
+**Bar color.** The navigation theme paints the same page background behind
 floating bars and sidebars, avoiding a visible seam with the navigation library's
 default canvas on iPad and Duo. Help desk, Activities, Contacts, My projects and Schedule reuse `fixedScrollHeaderOptions`
 (`lib/screen-header-options.ts`) with a fixed `SCREEN_TITLE` leading title and native soft
@@ -525,7 +525,7 @@ both in window points, `null` before iOS 27.1 or when no region is active; `getV
 left app gets the column on its left edge while its safe-area insets stay 0, so `useSideInsets`
 (`lib/vertical-bar-edge.ts`) folds a 64 pt column into the insets from that edge. The profile avatar's
 collapse uses the island region as its morph target (it sits in the side column on a foldable
-iPhone, not at the top centre). `lib/fold-region.ts` has `useDivisionRegion()` and `AdaptiveFrame` spans both pages of a vertical fold (book pose) and Schedule and Gallery put the list before the crease and the detail after it (`bookCrease()`, `listDetailLayout(..., crease)`). The pose is polled every 400 ms (`POSE_POLL_MS`) because moving the hinge changes neither the window size nor the traits, so the native event alone left the previous pose on screen. A horizontal
+iPhone, not at the top center). `lib/fold-region.ts` has `useDivisionRegion()` and `AdaptiveFrame` spans both pages of a vertical fold (book pose) and Schedule and Gallery put the list before the crease and the detail after it (`bookCrease()`, `listDetailLayout(..., crease)`). The pose is polled every 400 ms (`POSE_POLL_MS`) because moving the hinge changes neither the window size nor the traits, so the native event alone left the previous pose on screen. A horizontal
 fold (laptop or tabletop) is not avoided: the whole display stays available so lists scroll to the real bottom edge. Schedule and Gallery
 show list and detail side by side on expanded windows (840 dp and up). The module is a native dependency: it needs a
 rebuilt development client, and without it every call reports "no region".
@@ -559,7 +559,7 @@ only for its framework-neutral principles.
   heading remains the localized "Sign in" label for visual and screen-reader
   orientation. Missing credentials are reported inline and focus moves to the
   first field that needs attention instead of hiding validation behind a disabled
-  submit button. The password field has a 52-point, screen-reader-labelled reveal
+  submit button. The password field has a 52-point, screen-reader-labeled reveal
   action, and password recovery keeps a 44-point hit target. At standard text
   sizes, the composition is centered. Opening the keyboard shifts only the
   form upward with a compositor transform; its layout and the account/application
@@ -760,7 +760,7 @@ they are not device screenshots or proof of native toolbar behavior.
   The screen follows the other form modals: grouped sections (No restrictions,
   intolerances, a dedicated Dietary notes section matching the web
   `foodIntoleranceNotes` field, read-only while No restrictions is on), a
-  centred title, and floating close/confirm glass buttons instead of bottom
+  centered title, and floating close/confirm glass buttons instead of bottom
   action buttons.
   "Edit networking profile" (#934, #935), always shown in the same section, opens the
   `app/networking-profile.tsx` modal (`components/networking-profile-screen.tsx`,
@@ -789,11 +789,11 @@ they are not device screenshots or proof of native toolbar behavior.
   `ProfilePhotoMenu`. Small eyes (`VisibilityToggle`, a `switch` role) sit on
   the name (full surname), the photo, the project and challenges rows and the CV
   tile; closed (`eye.slash`) means scanners do not get it, and the element stays
-  on screen greyed instead of disappearing (while projects are hidden the card
-  carries none, so the last ones seen, or a placeholder row, are shown greyed).
+  on screen grayed instead of disappearing (while projects are hidden the card
+  carries none, so the last ones seen, or a placeholder row, are shown grayed).
   Saving is `PUT /api/me/public-profile` under one `Idempotency-Key` per change
   set; the response replaces the preview. Social links are rows in the same card
-  (network tile, network name, value), up to six. Tiles are neutral grey with a
+  (network tile, network name, value), up to six. Tiles are neutral gray with a
   monochrome glyph (`components/social-glyph.tsx`, inlined Phosphor paths,
   since SF Symbols has no brand marks); the read-only card rows use the same
   tiles. Tapping the tile or name opens the network picker, the
@@ -917,7 +917,7 @@ they are not device screenshots or proof of native toolbar behavior.
   yesterday, a weekday name for the rest of the week, and a short date beyond
   that.
   Load failures render through one component (`components/status-notice.tsx`): a full-width
-  capsule with a short message and a trailing action. No connection is `OfflineNotice` (grey,
+  capsule with a short message and a trailing action. No connection is `OfflineNotice` (gray,
   "Offline mode", Reconnect), shown once per visible screen however many requests failed and
   also used by the scanners; a real server error is `ErrorNotice` (red, Retry). The action
   swaps in place between its label, a spinner (at least 500 ms) and a red cross, and survives
@@ -1126,7 +1126,7 @@ they are not device screenshots or proof of native toolbar behavior.
   (tap or drag) and the lens settles alongside; the animation never holds the
   navigation back. A refracting "lifted" lens like the system
   bar's is not reachable with `expo-glass-effect` (its clear glass blurs the
-  centre); a native lens is tracked in #1360. A tap or held press
+  center); a native lens is tracked in #1360. A tap or held press
   without movement runs that cell's normal press, a drag only switches, while
   the
   separate Others circle remains its own menu (native `MenuView` on iOS; a
@@ -1224,11 +1224,11 @@ title on the bar row (`headerTitleAlign` is Android-only, and react-native-scree
 4.26 does not expose iOS 26's `inlineLarge` large-title mode), so the
 navigation title is empty and "Agenda" is a leading `Stack.Toolbar.View` with
 `hidesSharedBackground` (28pt heavy, `accessibilityRole="header"`). That title
-uses a fixed black or white from the app's colour scheme, not the dynamic
-label colour: iOS 26 flips a bar item's light/dark appearance with what
-scrolls behind it, which turned a dynamic-colour title white for a moment over
+uses a fixed black or white from the app's color scheme, not the dynamic
+label color: iOS 26 flips a bar item's light/dark appearance with what
+scrolls behind it, which turned a dynamic-color title white for a moment over
 the blue scan pill (Activities has the same fix). The native search
-(`headerSearchBarOptions`, `integratedButton` placement) and the favourites
+(`headerSearchBarOptions`, `integratedButton` placement) and the favorites
 star, a native `Stack.Toolbar.Button` (`star` / `star.fill`) drawn as the same
 circle as the search button, sit on the right, with a wallet button after them (`wallet.pass`) that opens the
 badge/ticket wallet in a full-screen modal (`WalletModal` in
@@ -1236,7 +1236,7 @@ badge/ticket wallet in a full-screen modal (`WalletModal` in
 Account's overlay, H28), opened on the badge (`initialPurpose="badge"`), the
 card someone you meet scans; Account opens on the ticket. The ticket and badge
 cards keep fixed sides (ticket left, badge right): a swipe left goes to the
-badge, and each card's slide follows from its own index. The wallet button stays on Companies. On iOS 26, search uses the same native `integratedButton` as Schedule: expanding it replaces the toolbar actions, and cancelling restores them. Android and earlier iOS use
+badge, and each card's slide follows from its own index. The wallet button stays on Companies. On iOS 26, search uses the same native `integratedButton` as Schedule: expanding it replaces the toolbar actions, and canceling restores them. Android and earlier iOS use
 `LegacyScreenHeader`: the title, a glass star toggle, the wallet button and the search button that
 expands into the field. Search and the star apply to People only, and only
 once it has someone to search; on Companies the native search and the star are
@@ -1245,11 +1245,11 @@ Below the header, the scroll content starts with the shared scan pill
 (`BadgeLinkActions`, as on the scanner screens), then the People | Companies
 control, then the list.
 
-**People** lists the `kind: "person"` entries of `GET /api/me/diary` (favourites
+**People** lists the `kind: "person"` entries of `GET /api/me/diary` (favorites
 first, then newest) and a quiet unavailable row for a hidden profile. Saving
 and favouriting are separate: the star (`components/favourite-star.tsx`, drawn
 as a filled/outline path on Android, whose Material font only has the outline
-glyph) only marks a saved person and drives the Favourites filter; the row menu
+glyph) only marks a saved person and drives the Favorites filter; the row menu
 holds Note (500 characters; `components/diary-note-editor.tsx` is a native
 page sheet with circular Cancel and Save and a field above the keyboard, the
 same editor for people and stands) and an explicit "Remove from diary" with
@@ -1268,8 +1268,8 @@ never slides behind the clock.
 
 **Company screen (H44, H45, H59).** `app/companies/[id].tsx`
 (`components/company-profile-screen.tsx`) reads `GET /api/enterprises/:id/profile`
-and follows Apple Music's artist page: a hero washed in the logo shown (the negative one in dark mode) by `ImageHero` (`components/ambient-hero.tsx`, below); lists and other screens still read a logo's single colour (`useCompanyLogoTint`: the negative logo in dark mode, falling back to the positive logo's colour when the negative is white or mono and has none), computed on the device by `lib/image-tint.ts` (`expo-image-manipulator` scales the logo to a 24x24 PNG in the cache, `lib/png-pixels.ts` decodes its RGBA with `fflate`, 8- or 16-bit since iOS writes wide-colour photos as 16-bit PNGs; an SVG logo, which the platform decoders cannot read, gives the largest raster it embeds, else its fill/stroke colours, via `lib/svg-tint.ts`; `pickDominantColor` ignores transparent and near-white/black pixels and favours saturated buckets; nothing is stored server-side), darkened in dark mode,
-neutral grey when null, and picks the white or black foreground for the name by
+and follows Apple Music's artist page: a hero washed in the logo shown (the negative one in dark mode) by `ImageHero` (`components/ambient-hero.tsx`, below); lists and other screens still read a logo's single color (`useCompanyLogoTint`: the negative logo in dark mode, falling back to the positive logo's color when the negative is white or mono and has none), computed on the device by `lib/image-tint.ts` (`expo-image-manipulator` scales the logo to a 24x24 PNG in the cache, `lib/png-pixels.ts` decodes its RGBA with `fflate`, 8- or 16-bit since iOS writes wide-color photos as 16-bit PNGs; an SVG logo, which the platform decoders cannot read, gives the largest raster it embeds, else its fill/stroke colors, via `lib/svg-tint.ts`; `pickDominantColor` ignores transparent and near-white/black pixels and favors saturated buckets; nothing is stored server-side), darkened in dark mode,
+neutral gray when null, and picks the white or black foreground for the name by
 luminance), the logo in a rounded
 card with a soft shadow (the negative logo in dark mode when present; artwork
 that runs into its own edges is drawn at 84% so it never touches the card,
@@ -1287,13 +1287,13 @@ Sponsor tiles without a negative variant keep the positive artwork on a white gr
 `PersonAvatar` reuses `useImageBleed` to render edge-touching logos at 84%;
 logos with built-in margin keep their full size. Person photos remain cropped circles.
 
-**Image tint (H44, H48).** `lib/image-tint.ts` keeps an in-memory colour per
+**Image tint (H44, H48).** `lib/image-tint.ts` keeps an in-memory color per
 image URL. `PersonAvatar` calls `prefetchImageTint(uri)` for every logo and
 photo a list renders, so the tint is computed before the page opens: in-flight
 work is deduplicated, at most two decodes run at once, each after interactions.
 The page's `useImageTint` reads the cache synchronously, so a prefetched hero
 is already tinted; an uncached one shows the neutral hero and fades the tint in.
-Colours are not persisted, so a photo hidden later leaves no trace after a
+Colors are not persisted, so a photo hidden later leaves no trace after a
 restart. The same decode also records whether the artwork reaches its own
 edges (`useImageBleed`); the company album's round medallions shrink such a
 logo from 74% to 62% so the circle does not cut its corners.
@@ -1317,7 +1317,7 @@ for a requester, request id. A loaded profile seeds itself and the people or
 companies it lists. Nothing there is written to disk, and `useMe` clears it
 with `clearProfileSeeds` on sign-out and session loss, next to
 `clearPersistedPhotos`. On open, the screen draws the seeded header (avatar or
-logo, name, headline, hero, a helper's role badge) on the first frame and grey
+logo, name, headline, hero, a helper's role badge) on the first frame and gray
 section placeholders below (`components/skeleton.tsx`: `SkeletonGroup` breathes
 gently, static under Reduce Motion; `SkeletonSection` has a `Section`'s shape);
 the loaded sections then fade in (`RevealView`). Without a seed (a deep link)
@@ -1332,7 +1332,7 @@ native profile-avatar morph use the same transparent mascot composition and
 background as the web, selected by the person's id through
 `@hackos/shared/mascot-avatars`. The photo editor, account tab, diary, helper,
 speaker and team-member surfaces pass this id; a real photo replaces the mascot
-once loaded. A no-photo person header uses the assigned avatar background colour. Missing or unavailable people keep their generic symbol. Assets,
+once loaded. A no-photo person header uses the assigned avatar background color. Missing or unavailable people keep their generic symbol. Assets,
 selection algorithm and regeneration are documented in [`directory.md`](./directory.md#default-avatars-934-h55).
 
 **Image heroes (H44, H45, H48).** Person, company, challenge and project
@@ -1340,16 +1340,16 @@ pages wash their header in their image (photo, logo, the company's logo, the
 first project image) with `ImageHero`: the image itself, enlarged and softly blurred
 while retaining broad logo shapes (iOS `BlurView` with a full-strength
 ultra-thin material matching the appearance, Android a 32 pt style `filter` blur;
-below Android 12 the single-colour wash), under a veil of the page colour
+below Android 12 the single-color wash), under a veil of the page color
 (`ambientVeil`: 20% light, 45% dark, accounting for the native material
-already adding its own wash; the profile headline uses the label colour
-there instead of grey) and masked to fade into the page, so each side keeps its own
-colour and labels keep the page's colour. It is the same request as the avatar
+already adding its own wash; the profile headline uses the label color
+there instead of gray) and masked to fade into the page, so each side keeps its own
+color and labels keep the page's color. It is the same request as the avatar
 or logo on the page: iOS blurs the rendered backdrop, so SVG logos and
 raster photos have the same blur regardless of their source resolution;
 Android blurs the untransformed image instead of fetching a transformed one, and private photos
 stay in memory only (#934). Without an image the hero is `heroTint`'s wash
-(blue for people, projects and challenges, grey for an uncollected company).
+(blue for people, projects and challenges, gray for an uncollected company).
 Every hero is 620pt tall and starts 300pt above the content to cover the
 pull-down bounce; `heroTint` holds full strength over that first 45% so the
 tint is strongest at the screen's top edge, then fades. On iOS a profile's role
@@ -1362,16 +1362,16 @@ status bar.
 `app/people/[id].tsx` (`components/person-profile-screen.tsx`) is a saved
 person's full profile from `GET /api/directory/:userId` (the only directory
 route left; there is no list and no Save, since only a scan adds someone):
-large photo or initials, name, headline, Favourite / Note / CV tiles (the Note
+large photo or initials, name, headline, Favorite / Note / CV tiles (the Note
 tile reads "Edit note" once a note exists, and the note section appears only
 then), bio, links, location (a `mappin`), project, challenges and
 "Remove from diary", which then returns to the diary. iOS uses the transparent native detail
 header (`transparentDetailHeaderOptions`, as the scanner's person detail), so
-no bar covers the centred avatar; Android floats its own glass back button.
+no bar covers the centered avatar; Android floats its own glass back button.
 That public photo uses the same `ProfileAvatarCollapse` overlay as the signed-in
 account: Reanimated maps 120 pt of upward scroll to the shared mask and dark
 cover progress. An avatar that starts farther from the camera than the pose
-where Telegram's mask begins (its centre 234/300 of its size below the cutout's
+where Telegram's mask begins (its center 234/300 of its size below the cutout's
 lower edge) first rides up with the content, unchanged and at the text's own
 speed, for that extra distance (`profileAvatarCarryDistance`); the in-content
 avatar stays visible through that carry and the mask takes over only as the
@@ -1419,7 +1419,7 @@ On iOS, the target uses window-space safe-area geometry because UIKit does not
 expose the Dynamic Island frame to apps. The hardware island is 126 x 37.33 pt
 with its top at `safeAreaTop - 48` (11 pt on a 59 pt inset, 14 pt on a 62 pt
 inset; screens 393/402/430/440 wide). The target is that rectangle inset 1 pt on
-every side (124 x 35.33 pt, horizontally centred on the window) so the shrinking
+every side (124 x 35.33 pt, horizontally centered on the window) so the shrinking
 avatar and black backing hide inside the island instead of poking out. The
 avatar and target are both measured in the same `measureInWindow` coordinate
 space, and the host is re-measured about 450 and 900 ms after layout so a screen
@@ -1429,11 +1429,11 @@ retried if it moved meanwhile, because Fabric measures the committed shadow tree
 (whose scroll state trails the live offset); otherwise a programmatic scroll,
 such as the alerts gear's jump to notification preferences, would leave the
 mask drawn away from the avatar. The
-mask frame centre travels linearly from the avatar centre to the target centre,
+mask frame center travels linearly from the avatar center to the target center,
 matching the Telegram path canvas, so the image, mask and backing stay on one
-centre line and end on the island centre. The Telegram blob rises and narrows
+center line and end on the island center. The Telegram blob rises and narrows
 faster than that linear frame, so while it exists the image is a square
-centred on the blob's real bounds (`profileAvatarContentFrame`), plus the neck
+centered on the blob's real bounds (`profileAvatarContentFrame`), plus the neck
 above it, never exposing the backing at its top. The image also carries its
 own clip (`profileAvatarContentRadii`): until the neck forms (morph progress
 0.15) the mask is exactly the circle inscribed in that square, so the image is
@@ -1442,7 +1442,7 @@ and no frame shows it square while the native mask catches up; the top corners
 then straighten as the neck fills the top of the frame. The image never follows the
 linear frame: the mask reaches the island at a fixed progress whatever the
 start's distance, so on a lower avatar (the person profile under its header)
-the linear frame trails below the clip and would pull the photo off centre.
+the linear frame trails below the clip and would pull the photo off center.
 Once the blob ends its last square eases into the island. The
 lower-lip track of the path (bezier handles included) is narrowed to the
 straight run of the island's lower edge (`width - height`; a circular hole
@@ -1453,7 +1453,7 @@ The morph only runs where a real camera cutout exists:
 - **iPhone with Dynamic Island** (safe-area top >= 55 pt, portrait): the island
   geometry above, unchanged.
 - **iPhone with a notch** (44/47 pt top safe area, portrait; H7): the same
-  scroll-driven mask merges into a centred 150 × 30 pt target attached to the
+  scroll-driven mask merges into a centered 150 × 30 pt target attached to the
   screen's top edge. It fits inside the hardware notch, rather than ending at
   the safe-area bottom below it, so the neck meets the notch without a visible
   gap. Top-connected system occlusion regions use this target too; only floating
@@ -1466,7 +1466,7 @@ The morph only runs where a real camera cutout exists:
   (API 31) each rect is tightened to the cutout's own shape
   (`DisplayCutout.getCutoutPath()` clipped to that rect), because OEMs often pad
   the reported rects. The target is a circle (a hole punch is round): the largest
-  circle centred in the measured rect, so its diameter sets the morph width. A rect is a hole
+  circle centered in the measured rect, so its diameter sets the morph width. A rect is a hole
   punch when both sides are <= 72 dp and it sits in the top 96 dp, so centered
   and off-center punches (and small waterdrops) work; the topmost one wins. Wide
   notches and side cutouts are ignored. **This needs a new native Android build**
@@ -1513,7 +1513,7 @@ and the native view exists; every other case keeps the paths above unchanged
 - **Timeline** (`profileGooeyFrame`, a pure function of progress and the
   scroll distance, so scrolling back retraces it exactly). The avatar never
   stops rising: its bottom edge moves up with the content, keeping its gap to
-  the text below, or along an ease-in path to the lens centre when that is
+  the text below, or along an ease-in path to the lens center when that is
   higher, so it is in the lens by progress 1. It stays a circle and shrinks
   uniformly towards its top to 1 dp inside the lens by 0.55
   (`PROFILE_GOOEY_SHRINK_END`), gliding to the lens column; until then it also
@@ -1529,7 +1529,7 @@ and the native view exists; every other case keeps the paths above unchanged
   underlay that fills the rim the blur leaves translucent, with a black wash of
   `darkness` on top; above it the ink draws only the lens. Once fully black,
   the ink's own avatar disc, neck, pill and drip replace it at the same size
-  and position, so there is never a second blob or a coloured halo.
+  and position, so there is never a second blob or a colored halo.
   Android 12+ (API 31) records the ink into a reused `RenderNode`, blurs it with
   `RenderEffect` and composites it through an alpha-threshold color matrix
   (liquid edges); the avatar goes through a second reused node with the
@@ -1540,7 +1540,7 @@ and the native view exists; every other case keeps the paths above unchanged
 
 Differences from Telegram Android's profile header: Telegram reads the cutout
 from the private `config_mainBuiltInDisplayCutout` resource and drops
-non-centred cutouts, we use the public `DisplayCutout` API (off-centre punches
+non-centered cutouts, we use the public `DisplayCutout` API (off-center punches
 work); Telegram ends the avatar at half the lens width and moves it in one
 straight line, we end at the lens size and stage it under the lens first so a
 large photo never stretches toward the camera; Telegram's goo is a
@@ -1555,10 +1555,10 @@ a JS-only reload is not enough the first time), sign in, open Others ›
 Account and scroll up slowly: the photo (or initials) should stay a perfect
 circle, shrink as one picture while darkening and blurring into a black disc
 the size of the lens just below it, then rise with a liquid neck and disappear
-into the lens, with no second blob or coloured halo at any point. Scroll back down slowly to watch the droplet come out and
+into the lens, with no second blob or colored halo at any point. Scroll back down slowly to watch the droplet come out and
 regrow; release mid-way to check it snaps to a rest; repeat quickly with a
 fling. Repeat on a person profile (Diary › a person). Check dark mode, with
-a centred punch hole on an emulator (the system image's Pixel overlays carry
+a centered punch hole on an emulator (the system image's Pixel overlays carry
 the real cutout: `adb shell cmd overlay enable
 com.android.internal.emulation.pixel_9` plus `adb shell wm size 1080x2424`;
 the emulator reports the hole to apps but does not paint it black), and with Remove animations on (plain circle collapse, no
@@ -1598,14 +1598,14 @@ rebuilt development client and store build.
 
 **Companies** is a sticker album (`components/company-album.tsx`) from
 `GET /api/me/diary/sponsors`: a progress ring with collected / total, then a
-three-column grid in the API's order (sponsor priority, then name, as the public logo grid; collected and uncollected interleaved). Collected companies are full-colour logos on a white disc
+three-column grid in the API's order (sponsor priority, then name, as the public logo grid; collected and uncollected interleaved). Collected companies are full-color logos on a white disc
 and zoom (`Link.AppleZoom` on the disc, `AppleZoomTarget` on the company page's logo card) into
 the company page. When the reader has scanned that stand, the page also shows
-a "Collected <date>" line, Favourite / Note (or Edit note), the note and "Remove from collection" (same
-`PATCH`/`DELETE` below, read from `GET /api/me/diary/sponsors`); without a scan they are absent. Companies in the album that are not collected yet are the same disc with the logo desaturated and faded (`Desaturate`, a saturation blend overlay: RN's `filter` has no grayscale on iOS), on the page too with a neutral hero and "Visit their booth to collect it"; they open the page like collected ones, while companies outside the album (not scannable) keep the normal full-colour look. The album lists
+a "Collected <date>" line, Favorite / Note (or Edit note), the note and "Remove from collection" (same
+`PATCH`/`DELETE` below, read from `GET /api/me/diary/sponsors`); without a scan they are absent. Companies in the album that are not collected yet are the same disc with the logo desaturated and faded (`Desaturate`, a saturation blend overlay: RN's `filter` has no grayscale on iOS), on the page too with a neutral hero and "Visit their booth to collect it"; they open the page like collected ones, while companies outside the album (not scannable) keep the normal full-color look. The album lists
 every revealed scannable company, even before its tags are generated. The zoom source is a plain
 untransformed view (the scan celebration animates inside it), so open and dismiss zoom work.
-Stand favourites and notes use the same `PATCH`/`DELETE /api/me/diary/:entryId`.
+Stand favorites and notes use the same `PATCH`/`DELETE /api/me/diary/:entryId`.
 
 Scanning follows R008: the primary "Scan with NFC" control opens the existing
 reader immediately (`lib/nfc-reader.ts`, UID only, never writes or claims the
@@ -1614,7 +1614,7 @@ tag; `lib/nfc-uid.ts` normalization), one tap from the list. "Scan QR code"
 "Enter code" opens the shared `ScannerCodeEntry` with `appearance="system"`
 (the light/dark card of the note editor, not the dark camera card) and a title
 that fits badges and stand tags alike. On hardware without NFC the primary
-control becomes "Scan QR code". Cancelling any
+control becomes "Scan QR code". Canceling any
 input sends nothing. Each scan is `POST /api/me/diary/scan` with a fresh
 `Idempotency-Key`. A saved person is pinned in a Saved section at the top of
 People; a collected stand switches to Companies, where its badge springs in
@@ -1654,7 +1654,7 @@ labels the overlay with it. The API reports `created` only as the status code
 loaded diary entries. Not verified on a device.
 
 Scanning a stand (QR, NFC or a `/s/<code>` link) plays `components/company-celebration.tsx` instead:
-the logo springs in over a wash of its own colour (`useImageTint`) with pulsing rings and a rising
+the logo springs in over a wash of its own color (`useImageTint`) with pulsing rings and a rising
 haptic beat (about 3 s), and the company page opens underneath as it fades. Tap to skip.
 
 `apiFetch` returns API timestamps as `Date` objects (Better Auth's client JSON
@@ -1780,7 +1780,7 @@ simulator build yet.
 
 ### Help desk (H61–H67)
 
-API contract: [`help-desk-contract.md`](./help-desk-contract.md); behaviour:
+API contract: [`help-desk-contract.md`](./help-desk-contract.md); behavior:
 [`help-desk.md`](./help-desk.md). Every value shown is read from the API;
 nothing is derived locally except form validation (`lib/help-desk.ts`).
 
@@ -1822,7 +1822,7 @@ an open request is unaffected. Hours are edited on web only.
 
 **Native chrome.** The tab root uses the reusable fixed title described above; pushed pages and sheets retain their native titles. Every help desk page and sheet uses one header
 configuration, the People/Account one: a transparent native header with the
-soft scroll-edge effect, no `headerStyle` colour and no custom blur, with the
+soft scroll-edge effect, no `headerStyle` color and no custom blur, with the
 `ScrollView` as the screen's direct child. Sheets (`new-request`,
 `help-topics`) share `helpSheetOptions` (`lib/navigation.ts`) and the
 `withNativeHeaderSheet` route wrapper (`components/adaptive-frame.tsx`, also
@@ -1833,11 +1833,11 @@ transparent *sheet* bar, `HelpPage` pads sheets by `HeaderHeightContext`.
 `components/searchable-picker.tsx`).** Inset-grouped `Section`s, `NavRow` /
 `InfoRow`, `PersonAvatar` rows and `EmptyState`. Request and helper rows are
 Contacts-style rows (avatar or status symbol, title, secondary line, chevron);
-status is a symbol plus label, not a pill. Catalogue selection (`TopicField`)
+status is a symbol plus label, not a pill. Catalog selection (`TopicField`)
 is one row that opens `app/help-topics.tsx`, built on the same
 `SearchablePickerSheet` / `CheckRow` as the project challenge picker; request
 forms filter to knowledge areas currently offered by helpers present at the
-venue, while helper profiles use the full catalogue. The form and the sheet share
+venue, while helper profiles use the full catalog. The form and the sheet share
 one draft through `lib/help-topic-selection.ts`. Loading
 and live refresh live in `lib/use-help-resource.ts`: the last response stays on
 screen and only a user pull spins the refresh control.
@@ -1890,9 +1890,9 @@ enabled. Ordinary help pages and Android modals retain the full-height wrapper.
 
 **Requests (H64–H66).** New request (sheet, Close / Send), always for the person sending it: details and location in one
 group, Knowledge topics and Challenge rows in another, and a "Prefer a sponsor"
-switch with its one-line consequence. "Other" is its own group above the catalogue in the topic
+switch with its one-line consequence. "Other" is its own group above the catalog in the topic
 picker (`app/help-topics.tsx`, laid out like the challenge picker's None; the
-draft in `lib/help-topic-selection.ts` carries `other`). Other and catalogue
+draft in `lib/help-topic-selection.ts` carries `other`). Other and catalog
 topics exclude each other (choosing one clears the other); the API still gets
 `other: true` with `topicIds: []`. The form row shows the choice; requests
 only list knowledge areas currently offered by helpers present at the venue.
@@ -1999,7 +1999,7 @@ scanning keeps queue status and statistics above the input actions; the general
 scanner's queue-sync capsule uses the same native toolbar as the activity scanner, with a separate circular filter and an 8-point gap. Both screens reserve the same header height above the statistics. Scanner and activity
 people-directory actions use the same person-with-magnifier symbol. On iOS
 26+, People Finder keeps the native large-title contract: its title starts
-left-aligned, collapses to the centred compact title while scrolling, and uses
+left-aligned, collapses to the centered compact title while scrolling, and uses
 UIKit's automatic list inset with a transparent header so the title is not
 painted over by a separate opaque layer. On older iOS and Android it uses the
 shared fallback header with a custom back button, filter menu, and search
@@ -2151,7 +2151,7 @@ fallback, including the inline magnifying-glass search transition and native
 filtering/marker helpers sit in `lib/activity-list.ts`
 (`lib/activity-list.test.ts`). Each row shows its start time and its real
 kind pill (`scheduleTypeLabel`, so a talk no longer reads "Activity"), and
-the activity closest to the current time is outlined and labelled
+the activity closest to the current time is outlined and labeled
 "Now"/"Next" — "Now" only while it started within the last two hours, since
 the scanner snapshot carries no end time. Two things kept the list visibly
 flickering and snapping back under the large title: the `RefreshControl` was
@@ -2258,7 +2258,7 @@ the statistics and camera/manual actions. The idle instruction is Tap to scan
 using its published inset once plus 4 points. Earlier iOS and Android place both controls at
 the same safe-area offset in the floating header.
 The activity result panel is centered with equal top/bottom padding and uses an opaque semantic content surface: the
-outcome in its tone above the person's centred photo (with the outcome symbol as a badge), name and email, then the
+outcome in its tone above the person's centered photo (with the outcome symbol as a badge), name and email, then the
 person's scan or serving count as a large number under a hairline. Dietary details sit in an amber panel with
 restriction tags, and scroll. The per-person
 count has no visible caption (its meaning remains in the accessibility label).
@@ -2427,11 +2427,11 @@ the layouts read `environment.isStale` as live. See
 `widgets/deadline-activity.tsx` (`DeadlineActivity`) and
 `widgets/accreditation-activity.tsx` (`AccreditationActivity`) are
 `'widget'` layouts serialized into the `ExpoWidgetsTarget` extension, so they
-use only `@expo/ui/swift-ui` and declare every helper and colour inside the
+use only `@expo/ui/swift-ui` and declare every helper and color inside the
 function. Never write a regex literal in a layout: serialization drops its
 backslashes (`/\s+/` became `/s+/` and the compact island showed "Roo" for
 "Room B"); `test/widget-serialization.test.ts` enforces it (#1171). The compact island hugs its content (HIG: as narrow as possible, snug
-against the camera): slots are sized to their text and centred, and the queue
+against the camera): slots are sized to their text and centered, and the queue
 shows a short room code ("Aula 3.0" -> "A3.0", "Room B" -> "RB"). The called
 Lock Screen banner shows the room without its location, and the count-up sits
 left-aligned under "Called". Pieces every kind repeats live in `widgets/live-activity-kit.tsx`
@@ -2450,8 +2450,8 @@ modifier lists or single elements, never wrapper components or fragments
 activity keeps its own JSX tree and content. The names must equal
 `LIVE_ACTIVITY_WIDGET_NAMES`. Each state
 answers one question with one hero value; everything else is secondary.
-Colours: waiting/upcoming = systemBlue, called = systemGreen (go), in room =
-neutral grey; Always-On drops the accent fills. Lock Screen colours are
+Colors: waiting/upcoming = systemBlue, called = systemGreen (go), in room =
+neutral gray; Always-On drops the accent fills. Lock Screen colors are
 dynamic (`{ dynamic: { light, dark } }`, light green `#248A3D` for contrast)
 because the layout's `environment.colorScheme` does not reliably match the
 Lock Screen's appearance; the Dynamic Island is always dark. Following
@@ -2502,7 +2502,7 @@ and `null` (not in hackOS yet) shows nothing. The desk's end time is a clock
 symbol and the time, because the contract has no label for it.
 
 **Queue stage track.** Three nodes (In line → Called → In room) and two
-segments; completed parts take the phase colour and the current node is
+segments; completed parts take the phase color and the current node is
 larger with a halo. Waiting is the long part of the journey, so the first
 segment takes two thirds of the width: with no GeometryReader (and
 `containerRelativeFrame` needing iOS 17), the row is built from three equally
@@ -2630,7 +2630,7 @@ rank change alone changes the props signature, so it re-applies the score.
 | --- | --- | --- | --- |
 | Queue waiting | `#4·12m`; `#4` when the ETA is unknown or both overflow | **~12 min** · #4 (unknown: **Estimating…**) / +N more queues · challenge | Wait ~12 min (blue) · Position #4; stage track |
 | Queue called | room (truncated) | Go to **Room B** / location · "Called" + count-up from `calledAt`; heads-up only on the transition | Go to Room B (green) · Called + count-up; location; stage track |
-| Queue in room | room | In room · **Room B** / location · challenge | In room · Room B (grey); stage track at the end |
+| Queue in room | room | In room · **Room B** / location · challenge | In room · Room B (gray); stage track at the end |
 | Staff upcoming | countdown to `startsAt` | name / `hh:mm–hh:mm · location` · "Starts in" + countdown | Starts in + countdown (blue); time · location |
 | Staff live (H24/H25) | `142/180`; `scanned` when that overflows or without `accredited` | **142**/180 scanned / name · location | Scanned `142/180` (blue); location; scanned-share track (elapsed time without `accredited`) + **Scan**; "Ends in" countdown |
 | Attendee upcoming (H59) | countdown to `startsAt` in one unit (`2h`, `38m`) on the camera's leading side, category glyph opposite | "Starts in" + countdown (leading, as in Luma's pre-event activity) · category glyph / name / `hh:mm–hh:mm · location` | Starts in + countdown (blue, leading) · glyph; name; time · location |
@@ -2640,18 +2640,18 @@ rank change alone changes the props signature, so it re-applies the score.
 | Deadline submitted | countdown (time left) | Submitted · "Closes in" + countdown; check, green; no track | Submitted (green) · Closes in + a small countdown |
 | Accreditation (H22) | accredited count | **412**/600 accredited / +23 last 10 min · 380 inside · title; accredited-share track; **Scan** | Accredited `412/600` (blue) · Last 10 min · Inside; share track + **Scan** |
 
-**Tracks.** Like the iOS bars: each stage fills in its colour up to the
-current value and the rest of it stays grey, stages separated by the segment
-gaps, with a round tracker (white disc, glyph in the phase colour) at the
+**Tracks.** Like the iOS bars: each stage fills in its color up to the
+current value and the rest of it stays gray, stages separated by the segment
+gaps, with a round tracker (white disc, glyph in the phase color) at the
 current value (`trackSegments`). The queue has two stages,
 In line and Called, the first two thirds of the width as on iOS, filled in
-the phase colour (blue waiting, green called, grey in the room); the tracker sits at `queueStageFill` of the current stage, the iOS
+the phase color (blue waiting, green called, gray in the room); the tracker sits at `queueStageFill` of the current stage, the iOS
 formulas: `(queueTotal − position + 1) / (queueTotal + 1)` of the first
 stage while waiting, `2 / (calledAhead + 3)` of the second once called (at
 the stage start without the counts), and at the end in the room, with the door as the end icon. Live staff activities track
 the scanned share `scanned / accredited` (the elapsed time when an older
 server sends no `accredited`); live attendee items the time elapsed between start and end,
-the deadline the hacking window's elapsed time (in its phase colour), and the
+the deadline the hacking window's elapsed time (in its phase color), and the
 desk the accredited share `accredited / eligible`, all as of the post.
 
 **Orchestration (`lib/live-activities/`).**
@@ -2751,7 +2751,7 @@ device with `enabled: false`.
 (`app/(tabs)/others/notification-settings/live-activities.tsx`,
 `components/live-activity-kinds-screen.tsx`): one row per kind the account
 receives (`GET /api/me/live-activities/preferences`, in the person's order;
-kinds the account is not entitled to are not listed), labelled with the
+kinds the account is not entitled to are not listed), labeled with the
 `liveActivityKind*` mobile copy keys, each with its switch and a drag handle.
 Dragging a handle (gesture-handler `Pan` + Reanimated, fixed-height slots,
 scroll disabled while dragging) sets the person's priority: the top kinds
@@ -2840,8 +2840,8 @@ custom views, so the poster picks one of two renderings per post
 
 | Device | Rendering |
 | --- | --- |
-| Android 16+ (API 36), `canPostPromotedNotifications()` and `hasPromotableCharacteristics()` | **Promoted Live Update** (default): hero datum as title with the number in bold, round badge as large icon (white glyph on the phase colour), segmented `ProgressStyle` track, chip text, single Scan action |
-| Android 16+ with promotion revoked (user/OEM) or a build the system would not promote; Android 8–15 (API 26–35) | **Custom card**: `DecoratedCustomViewStyle` with collapsed and expanded layouts (`res/layout/hackos_live_update_card_*.xml`): header, 34 sp metrics (one in the phase colour), meal stats row, the same track drawn as a bitmap with stage labels, a capsule Scan button inside the card, chronometers for countdowns/count-ups |
+| Android 16+ (API 36), `canPostPromotedNotifications()` and `hasPromotableCharacteristics()` | **Promoted Live Update** (default): hero datum as title with the number in bold, round badge as large icon (white glyph on the phase color), segmented `ProgressStyle` track, chip text, single Scan action |
+| Android 16+ with promotion revoked (user/OEM) or a build the system would not promote; Android 8–15 (API 26–35) | **Custom card**: `DecoratedCustomViewStyle` with collapsed and expanded layouts (`res/layout/hackos_live_update_card_*.xml`): header, 34 sp metrics (one in the phase color), meal stats row, the same track drawn as a bitmap with stage labels, a capsule Scan button inside the card, chronometers for countdowns/count-ups |
 | < 8 (API 24–25) | `isSupported()` is false; `show` posts nothing |
 
 **Lock screen (verified on the Android 16 emulator).** A promoted Live Update
@@ -2861,7 +2861,7 @@ expanded layout, trailing the bar on one row; no system action is added, so
 no text-button row duplicates it (the collapsed card has no button). Promoted
 path: SystemUI draws the single action as a text button under the content.
 Promoted notifications cannot be colorized, and Android 16 strips
-colour/background spans from action titles and does not draw action icons
+color/background spans from action titles and does not draw action icons
 (tested), so a filled pill beside the track is impossible there; the label
 is bold, the only styling that survives. The same kind and phase therefore
 always looks the same within a path; the two looks differ only between the
@@ -2875,9 +2875,9 @@ an id's first post).
 - Built with `NotificationCompat` (androidx.core 1.17: `ProgressStyle`,
   `setShortCriticalText`, `setRequestPromotedOngoing`). `MetricStyle` is
   Android 17-era and absent from compileSdk 36, so it is not used.
-- Colours: blue (waiting, upcoming, live, deadline open), green (called,
-  submitted), grey (in room), red (deadline closing), amber (a draft's "Not
-  submitted" on the card), a lighter grey for the unfilled rest of a track. Text colours are resources with
+- Colors: blue (waiting, upcoming, live, deadline open), green (called,
+  submitted), gray (in room), red (deadline closing), amber (a draft's "Not
+  submitted" on the card), a lighter gray for the unfilled rest of a track. Text colors are resources with
   `values-night` variants, resolved by SystemUI (`RemoteViews.setColor` on
   API 31+), so the card follows the shade's light/dark mode; bitmaps (badge,
   tracker, card track) use the mode at post time.
@@ -2898,7 +2898,7 @@ an id's first post).
   popup and the popup opens the deep link (`hackos://queue`, the scan link).
   The chip is hidden while hackOS is in the foreground, and it shows the
   icon alone while its own heads-up or popup is on screen and for a moment
-  after the app leaves the foreground (system behaviour, verified on the
+  after the app leaves the foreground (system behavior, verified on the
   Android 16 emulator).
 - Channels: `hackos_live_updates` (default importance, no sound/vibration)
   for routine updates; `hackos_live_updates_alert` (high importance) only
@@ -2971,7 +2971,7 @@ an id's first post).
 - **44 pt hit area (#1168).** A control whose visible shape is smaller than 44 pt
   (inline search/clear glyphs, 28–40 pt text fields and rows, compact retry
   buttons) keeps its look and reaches 44×44 through `hitSlop` — extended away
-  from neighbouring controls, never into them — or `minHeight`/`minWidth` when
+  from neighboring controls, never into them — or `minHeight`/`minWidth` when
   the layout has room. Decorative badges and the sheet grabber are exempt.
 - `lib/haptics.ts` — best-effort Expo Haptics feedback for custom controls and
   meaningful outcomes. Selection/light feedback is used for custom toggles,
@@ -2988,7 +2988,7 @@ an id's first post).
 
   | Outcome | Haptic | Where |
   |---|---|---|
-  | Code recognised and accepted | success | general scanner, activity scanner (server-confirmed), person screen (acknowledged) |
+  | Code recognized and accepted | success | general scanner, activity scanner (server-confirmed), person screen (acknowledged) |
   | Stored offline, not yet confirmed | medium (light was too faint to feel) | activity scanner, person screen |
   | Already registered (repeat needs a decision) | warning | activity scanner |
   | Server rejected the scan | error | activity scanner, person screen |
@@ -3043,7 +3043,7 @@ idempotency replay), or `pending -> failed` for an explicit 4xx business
 rejection. Network failures leave it `pending` and stop ordered replay until a
 later foreground/15s/manual sync. Failed items stay visible and can be reset to
 `pending`. Accreditation never applies its badge mapping locally before the
-acknowledgement. Badge rotation, presence, meals, and activities apply local
+acknowledgment. Badge rotation, presence, meals, and activities apply local
 operational feedback immediately, then the post-replay full snapshot converges
 them to server truth.
 
@@ -3060,7 +3060,7 @@ statistics requests. Sync verdicts update only the matching result, and local
 activity counts remain part of repeat detection when a server snapshot is stale.
 Scanner replay, snapshot and badge-assignment requests time out after five seconds;
 network timeouts retain the original idempotency key and queue the mutation.
-Badge assignment remains authoritative only after server acknowledgement. Contact
+Badge assignment remains authoritative only after server acknowledgment. Contact
 scans and their separate replay queue use the same request deadline and retain
 their existing offline fallback.
 
@@ -3073,14 +3073,14 @@ thumb, `success` (green) on track, `separator` off track, in both themes.
 
 ### Contacts toolbar grouping
 
-Contacts orders the actions Ticket, Favourites, Search from left to right,
-groups Favourites and Search together, and keeps the wallet/ticket button
+Contacts orders the actions Ticket, Favorites, Search from left to right,
+groups Favorites and Search together, and keeps the wallet/ticket button
 on a separate native background (`separateBackground`). Search still opens the
 native iOS search controller, kept mounted in stacked placement and focused on
 demand from the grouped search action. All toolbar actions stay mounted while
 searching; blur or cancel ends search without rebuilding the toolbar. Legacy headers use the same
 grouping with their existing search field. People/Companies switching, saved
-contacts, favourites and wallet actions retain their existing behavior.
+contacts, favorites and wallet actions retain their existing behavior.
 
 ## Shared client models (#1001)
 
@@ -3096,14 +3096,14 @@ trimming/null decisions and the unchanged announcement fallback policy.
 
 Dynamic forms render `library` fields with a searchable native checklist and an
 inline proposal action. Selections and new proposals have no count limit. The
-catalogue belongs to its question; curation remains in the web form editor.
+catalog belongs to its question; curation remains in the web form editor.
 Read-only projects display the saved names, including historical answers after
-catalogue deletion. See [question-owned libraries](./form-libraries.md).
+catalog deletion. See [question-owned libraries](./form-libraries.md).
 
 
 ### Responsive Account and Wallet (H28, H55)
 
-Account uses the Contacts native toolbar pattern beside a rail or on iPad: leading title, trailing Wallet action, matching canvas and no root back action. Its form remains a centred 720 pt reading column. Wallet uses two stable panes when its measured viewport reaches 720 pt: compact Ticket/Badge selector and QR on the left, holder and pass actions on the right; narrower windows stack those groups. Resizing preserves the selected credential. The personal queue keeps its back action without a redundant My queue title.
+Account uses the Contacts native toolbar pattern beside a rail or on iPad: leading title, trailing Wallet action, matching canvas and no root back action. Its form remains a centered 720 pt reading column. Wallet uses two stable panes when its measured viewport reaches 720 pt: compact Ticket/Badge selector and QR on the left, holder and pass actions on the right; narrower windows stack those groups. Resizing preserves the selected credential. The personal queue keeps its back action without a redundant My queue title.
 
 Android navigation responds to the current window. Compact passport proportions use a rail; tall covers keep the phone bottom bar. Opened windows at least 640 × 600 dp use list/detail panes, including portrait folds; narrower or short landscape windows keep one pane. This is window geometry, not physical hinge occlusion detection. The overflow hub uses the same visible-tab budget as the bar, lists only hidden destinations, and redirects to Account when none remain.
 
@@ -3111,7 +3111,7 @@ The native Account and Contacts bars stay transparent in either orientation, pre
 
 The root iOS back recognizer covers side navigation and the bottom dock outside child stacks; native stacks retain their content gesture. A dock back swipe never starts inside the direct tab group: the group's gesture activates on touch-down and blocks it, so drags there always scrub; outside the group the dock still accepts the back swipe. It rejects vertical drags and short horizontal movements. Contacts uses the measured native-header height with manual scroll padding to avoid restoring an obsolete automatic top inset. Projects uses a leading toolbar title immediately, without waiting for a large-title scroll event.
 
-Project detail validates required project collections before mounting the editor (H20). A malformed response uses the existing retryable RequestFeedback state. Gallery removes the unused detail column when there are no results, centres its empty detail placeholder, and avoids inheriting the large-title offset for its embedded project header. The New project sheet uses matching header/body backgrounds with native X/check toolbar actions.
+Project detail validates required project collections before mounting the editor (H20). A malformed response uses the existing retryable RequestFeedback state. Gallery removes the unused detail column when there are no results, centers its empty detail placeholder, and avoids inheriting the large-title offset for its embedded project header. The New project sheet uses matching header/body backgrounds with native X/check toolbar actions.
 
 Android draws its own headers instead of the native bar on Gallery, My Projects, the People finder, project detail and activity detail (H8, H18, H22-H26). Lists use `LegacyScreenHeader` (28 pt title, circular `LegacyBackButton`, filter and the same magnifier search as People); detail screens use `AndroidDetailHeader` and pad their body with `useAndroidDetailHeaderInset()`. The People finder never opens its search on arrival, from the scanner, an activity or the tab: the magnifier opens it. The read-only project view skips `ScrollViewMarker` on Android, where it threw "[RNScreens] Failed to insert view" and showed "problem loading the project" until Reload. iOS keeps its native headers.
 
@@ -3129,7 +3129,7 @@ The owner preview uses `identityAccessory` for its role label.
 
 The layout follows Apple's [Lists and tables](https://developer.apple.com/design/human-interface-guidelines/lists-and-tables)
 and [Color](https://developer.apple.com/design/human-interface-guidelines/color)
-guidance: scan-friendly text hierarchy and an accessible presence description. Role capsules are neutral, using system label colour.
+guidance: scan-friendly text hierarchy and an accessible presence description. Role capsules are neutral, using system label color.
 
 
 Request rows show one status symbol and label. My requests omit the viewer's name
@@ -3167,6 +3167,6 @@ One installation hosts one edition per year (`docs/multi-edition-plan.md`). The 
 - **Viewed edition** (`lib/edition.ts`): in-memory only, `null` means the current edition. It resets on every cold start, on sign-in (`signIn.email`) and on sign-out, never persisted. `apiFetch`, the realtime stream, photo and file downloads send `X-Edition` only while a non-current edition is selected.
 - **Scanners are always current.** `scannerFetch` (live scans, offline replay, snapshot sync) passes `currentEdition: true`, so `apiFetch` never adds the header: a closed edition cannot be scanned. Closed editions also drop the scanner capabilities server-side, so those tabs disappear by capability.
 - **Switching** (`switchEdition` in `lib/me-context.tsx`): checks `GET /api/me/editions` against the new edition, clears the user's cached reads, refetches `/api/me` (tabs and capabilities follow) and bumps an epoch that remounts the authenticated tree. A failure restores the previous edition. The offline profile is only cached while viewing the current edition.
-- **Selector**: a labelled `Edition` row in Account's Profile section using the same native menu as Language; shown only when `shouldShowEditionSelector` (more than one edition).
+- **Selector**: a labeled `Edition` row in Account's Profile section using the same native menu as Language; shown only when `shouldShowEditionSelector` (more than one edition).
 - **Read-only notice**: `EditionClosedNotice` at the top of Account while `me.edition.status` is `closed`. `edition_closed` errors map to `editionClosedError` in `apiErrorCopy`.
 - **Project detail** shows an `Edition` row when the project payload carries `edition` and more than one edition exists. The app has no certificates screen yet, so nothing to group there.

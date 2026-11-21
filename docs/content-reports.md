@@ -3,7 +3,7 @@
 hackOS shows attendee-written content to other attendees: project pages in the
 gallery (name, description, images, team) and the public profile of a person
 saved in an event diary (headline, bio, links, photo). Any attendee can report
-either one; organisers review the reports in the web app. There is no direct
+either one; organizers review the reports in the web app. There is no direct
 messaging between users, so reports cover published content only.
 The generated API documentation groups all three endpoints under `reports`.
 
@@ -26,7 +26,7 @@ The mobile app offers **Report** at the bottom of a gallery project and on a
 saved person's card. It asks for a reason in a native sheet, sends the report
 and confirms.
 
-## The organiser inbox
+## The organizer inbox
 
 `GET /api/content-reports?status=open|actioned|dismissed|all` lists up to 200
 reports, open first. Project reports need `projects:edit` and profile reports
@@ -38,7 +38,7 @@ content and two actions.
 was edited or hidden with its own tool) or `dismissed`, with an optional note.
 It is audited (`content_report.actioned` / `content_report.dismissed`, the note
 as the reason) and answers 409 when the report is already closed. Closing does
-not change the content: organisers edit a project or hide a profile with the
+not change the content: organizers edit a project or hide a profile with the
 existing tools (`users:write` profile moderation, `projects:edit`).
 
 ## Data

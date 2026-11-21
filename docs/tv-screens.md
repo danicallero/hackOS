@@ -1,6 +1,6 @@
 # TV screens (H41, H42)
 
-How the venue's screens decide what to show, how organisers drive them, and
+How the venue's screens decide what to show, how organizers drive them, and
 what each mode renders. Code lives in `apps/api/src/modules/queue/tv*.ts` and
 `apps/web/src/app/(public)/tv/`; the control panel is
 `apps/web/src/app/(app)/tv/control/`.
@@ -11,7 +11,7 @@ There is exactly one public route, `/tv`, and every screen in the venue shows
 the same thing — that is the product decision, not a limitation to route
 around. What changes over the event is *which* view is on it: the combined
 live screen for most of the day or the judging rooms grid while judging runs.
-Announcements are a content layer managed from **Programme → Announcements**:
+Announcements are a content layer managed from **Program → Announcements**:
 they can reserve space inside the current view or temporarily occupy the full
 screen without becoming a manually selectable TV mode.
 
@@ -74,10 +74,10 @@ are all there is. Display rules:
 
 - Plain SVG drawn by `connections-graph.tsx` (no chart library), styled after
   org-roam-ui: flat dark canvas (always dark, whatever the theme), thin translucent
-  straight links (lower opacity on hubs), every person the same single flat colour (no glow), radius from
+  straight links (lower opacity on hubs), every person the same single flat color (no glow), radius from
   `personRadius(degree)` (power law `2.9*d^0.568` through a tanh soft cap at 34 px at 1000 px
   height: leaf ~5.8 px diameter, 4 → 12.6, 10 → 20.8, 50 → 44.6, 120 → 58.4; fixed scale, never
-  normalised to the snapshot; no controls). Communities steer only the camera and dimming, never colour.
+  normalized to the snapshot; no controls). Communities steer only the camera and dimming, never color.
 - Companies are drawn *as* their logo (SVG `<image>`, no frame), always bigger
   than any person, with no name label (their logo is the node). The negative logo is used on dark
   canvases, the plain one on light; each URL is probed off-DOM, a failed variant
@@ -95,8 +95,8 @@ are all there is. Display rules:
   community, only show the overview.
 - Layout (`layoutGraph`, community-aware): `detectSections` communities (hub votes
   diluted by degree so hubs do not merge groups) get anchors on an ellipse around the
-  centre, biggest first (`communityAnchors`); people gravitate to their anchor. Logos are
-  never the centre of gravity: each sits on a ring outside the community ring
+  center, biggest first (`communityAnchors`); people gravitate to their anchor. Logos are
+  never the center of gravity: each sits on a ring outside the community ring
   (`COMPANY_RING`), at the angle of its dominant group (>= 60 % of its people) or, when its
   people are spread over many groups, in an even slot between groups (`placeCompanyAngles`
   keeps a minimum angular gap). Logos are seeded on their ring slot, pulled strongly to it,
@@ -137,7 +137,7 @@ are all there is. Display rules:
   clip fades to nothing. A link is full strength (`linkAlpha` "focus") only when both
   ends are lit; any other link is "dim" (2.5 %), so no long line crosses the screen.
   All of it eases on the same rAF loop (opacity, scale, width).
-  A new node starts on the centroid of its on-screen neighbours, else on its own laid-out
+  A new node starts on the centroid of its on-screen neighbors, else on its own laid-out
   spot (`spawnPoint`), and nothing is seeded before the box is measured (a zero-size world
   is all origin: that made logos appear in the top-left corner on load). An update that
   replaces nearly every id (the hourly id rotation) is a crossfade in place: new nodes
@@ -152,7 +152,7 @@ are all there is. Display rules:
   and a collision radius scale with each node's drawn radius, so logos repel clearly
   more than people and keep their distance from each other and from dots:
   positions are seeded from the node id, kept by id across polls, new nodes start
-  next to their neighbours, and the simulation runs a bounded number of steps
+  next to their neighbors, and the simulation runs a bounded number of steps
   then stops. Node ids rotate server-side, so a rotation re-seeds the layout once.
   A poll retargets the camera from where it currently is, so it never resets
   mid-transition.
@@ -193,7 +193,7 @@ indefinite message disappears from already-open screens immediately.
 
 ### The live screen's payload
 
-Both an override and a slot item carry the same shape, normalised by
+Both an override and a slot item carry the same shape, normalized by
 `liveConfigFrom()` in `apps/web/src/lib/tv.ts` — every field falls back to its
 default rather than disappearing, so a malformed payload never blanks a wall:
 
@@ -268,7 +268,7 @@ Nobody can scroll, zoom, or squint at a TV, and the same page has to work on a
 1080p panel, a 4K wall and a portrait totem. Two mechanisms, deliberately:
 
 - **`TvScreen`** (`tv-screen.tsx`) — the frame for every mode, with one shared
-  `TvHeader`. The rooms grid selects the compact header and keeps its specialised
+  `TvHeader`. The rooms grid selects the compact header and keeps its specialized
   fitting strategy below that universal chrome.
   It is exactly one screen tall (`h-dvh`, never scrolls) and sets a root font
   size from `useTvScale()` (see the short-side rule below). Views
@@ -290,7 +290,7 @@ Nobody can scroll, zoom, or squint at a TV, and the same page has to work on a
   group's rectangular bounding box. The shared-queue heading remains above its
   first room, preserving the same hierarchy used by smaller shared queues. That
   room card stretches to the bottom of the shared outer row, aligned with its
-  neighbours; the L's inner shoulder starts after the lower segment's padding
+  neighbors; the L's inner shoulder starts after the lower segment's padding
   gutter, so the connecting fill never visually touches the room card edge.
 
 Scaling is off the **short side** (`min(width, height) / 1080`): a portrait

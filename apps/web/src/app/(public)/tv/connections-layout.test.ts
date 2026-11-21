@@ -175,7 +175,7 @@ describe("layoutGraph", () => {
     expect(drift(next)).toBeLessThan(0.15);
   });
 
-  it("places a new node next to the neighbour it connects to", () => {
+  it("places a new node next to the neighbor it connects to", () => {
     const base = sampleGraph(40);
     const first = layoutGraph(base.nodes, base.edges);
     const nodes = [...base.nodes, { id: "new", kind: "person" as const, label: "N", degree: 1 }];
@@ -493,7 +493,7 @@ describe("community layout", () => {
     const ring = communityAnchors(6);
     expect(communityAnchors(6)).toEqual(ring);
     expect(ring).toHaveLength(6);
-    // Same normalised radius from the centre, evenly spaced, first (biggest) at the top.
+    // Same normalized radius from the center, evenly spaced, first (biggest) at the top.
     const norm = ring.map((p) => Math.hypot((p.x - 0.5) / 0.4, (p.y - 0.5) / 0.3));
     for (const r of norm) expect(r).toBeCloseTo(1, 6);
     expect(ring[0].y).toBeLessThan(0.5);

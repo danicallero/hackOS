@@ -178,7 +178,7 @@ Concrete triggers — if your change does X, update Y:
 A change to what a screen looks like is not done until reviewers can see it:
 run the app and post screenshots of the changed states in a PR comment
 (`docs/ui-testing.md` § Screenshots on UI PRs). Passing component tests do not
-substitute — they assert behaviour, not spacing or alignment.
+substitute — they assert behavior, not spacing or alignment.
 
 New routes are not exempt from having real docs: a route registered without an
 explicit `description` in its schema shows a visible

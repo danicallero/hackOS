@@ -83,7 +83,7 @@ export async function judgingStartsAt(): Promise<Date | null> {
 /**
  * A judging panel is editable until its queue produces its **first
  * evaluation** — not from the scheduled start of judging, and not once a
- * queue merely exists. Organisers fix questions in the last minutes before
+ * queue merely exists. Organizers fix questions in the last minutes before
  * the first team walks in, and nothing is at risk until an answer has been
  * given. See `queue/evaluation-lock.ts`.
  */

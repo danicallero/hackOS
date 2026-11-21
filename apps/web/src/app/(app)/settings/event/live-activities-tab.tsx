@@ -3,7 +3,7 @@
 // Live Activities category (#966, H8): which Live Activity kinds exist, which
 // roles see each one, whether it is on, and their priority — list position is
 // priority, highest first, and only the top `maxConcurrent` a person qualifies
-// for are shown at once. Modelled on the roles manager (list + editor, mobile
+// for are shown at once. Modeled on the roles manager (list + editor, mobile
 // drill-down), but every edit stays in this category's one draft and save
 // footer (R011): the PUT replaces the whole configuration.
 

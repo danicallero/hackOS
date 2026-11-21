@@ -66,5 +66,5 @@ export function badgeFitsBesideTitle(textWidth: number, stackedText: boolean): b
   return !stackedText && textWidth >= MIN_INLINE_BADGE_TEXT_WIDTH;
 }
 
-/** Widest a form or single-column settings page grows; wider windows centre it. */
+/** Widest a form or single-column settings page grows; wider windows center it. */
 export const FORM_MAX_WIDTH = 560;

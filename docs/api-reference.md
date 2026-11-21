@@ -79,7 +79,7 @@ other module's exported function instead), and, if it does background work, a
 
 ### editions (multi-edition · H8, H53)
 
-The edition catalogue and lifecycle: `GET /api/me/editions` (editions the caller may view; clients show a selector only when there is more than one), `GET/POST /api/editions`, `PATCH /api/editions/:eventKey` and `POST /api/editions/:eventKey/activate|close|reopen` (event:manage, audited, idempotent). Closing stops submissions (drafts become `not_submitted`), cancels pending queue entries and open/claimed help requests, ends judging sessions and help windows, and notifies nobody. See [multi-edition plan](./multi-edition-plan.md) and [Edition scope](#edition-scope-multi-edition) below.
+The edition catalog and lifecycle: `GET /api/me/editions` (editions the caller may view; clients show a selector only when there is more than one), `GET/POST /api/editions`, `PATCH /api/editions/:eventKey` and `POST /api/editions/:eventKey/activate|close|reopen` (event:manage, audited, idempotent). Closing stops submissions (drafts become `not_submitted`), cancels pending queue entries and open/claimed help requests, ends judging sessions and help windows, and notifies nobody. See [multi-edition plan](./multi-edition-plan.md) and [Edition scope](#edition-scope-multi-edition) below.
 
 ### onboarding (HackUDC 2027 onboarding)
 
@@ -267,28 +267,28 @@ update validate the complete resulting template against the sections, and the
 anchor is preserved in the immutable form-version JSON alongside the other
 field definitions. No database migration is needed for this layout metadata.
 
-The form catalogue also supports curated university-degree IDs and city
+The form catalog also supports curated university-degree IDs and city
 suggestions. The city picker (`apps/web/src/lib/city-search.ts`) answers from a
 bundled offline index of Spanish cities first (~1,200, GeoNames, CC BY 4.0; rebuild with
 `apps/web/scripts/build-city-data.mjs`), and only when that has no match asks
 Photon/OpenStreetMap (`en` for English, `default` for Spanish/Galician, since
 the public server rejects `es`/`gl`), then Open-Meteo geocoding if Photon fails
-or is empty. Each live service gets five seconds; stale requests are cancelled.
+or is empty. Each live service gets five seconds; stale requests are canceled.
 It exposes loading, empty and failure states and supports keyboard selection.
 Leaving the field never discards the text: a pending search is awaited, an
 exact city match is selected, and otherwise the text is kept in the manual
 city/province/country fields (H12). City labels are stored as text while degree
-answers retain the catalogue ID. The degree catalogue follows the university
+answers retain the catalog ID. The degree catalog follows the university
 catalogue's authenticated-proposal and staff-curation boundary.
 Universities and degrees referenced by application answers cannot be deleted,
 including drafts and answers tied to older immutable form versions. The routes
 return 409 (`details.reason = university_in_use` or
 `details.code = degree_in_use`); clients show localized guidance to consolidate
-into another catalogue value first. Account removal detaches degree/university
-proposal authorship while preserving catalogue entries used by other applicants.
+into another catalog value first. Account removal detaches degree/university
+proposal authorship while preserving catalog entries used by other applicants.
 
 Staff can merge
-duplicate degree rows transactionally: every answer using the source catalogue
+duplicate degree rows transactionally: every answer using the source catalog
 ID moves to the retained ID before the duplicate is deleted, and the audited
 result reports the number of updated answers (#846).
 
@@ -319,7 +319,7 @@ lives in identity but follows the profile's photo switch. Full detail:
 
 ### helpdesk (H61–H67)
 Help desk: helper profiles (`/api/me/helper-profile`, projected from the
-public profile so the bio is shared), the self-service knowledge catalogue,
+public profile so the bio is shared), the self-service knowledge catalog,
 planned availability, browsing helpers, help requests with H65 routing to
 available present helpers (with admin-set opening hours for new requests), single-winner claims and organizer coverage under
 `/api/helpdesk`. Full detail: [`help-desk.md`](./help-desk.md); client
@@ -396,7 +396,7 @@ eligibility is read from the identity role graph's `event_access` bit, so
 losing one of several event-bearing roles keeps access while losing the last
 one stops live ticket exposure and voids active wallet passes. Presence has three
 signal sources: door `in`/`out`, activity scans, and resolved help requests
-(H66, `kind: "help"`, `source: "help"`, category `helpdesk`; cancelled requests
+(H66, `kind: "help"`, `source: "help"`, category `helpdesk`; canceled requests
 count for nothing). A resolved request is an in-person checkpoint at
 `resolved_at` for the claimer and the requester: it can secure and renew a
 certainty window that a door entry or activity opened, but with no live window
@@ -545,7 +545,7 @@ configurable back-field list and per-field visibility. See
 [`event-config-wallet.md`](./event-config-wallet.md).
 
 ### exports (H54, H56)
-The export centre brings together the operational CSVs, the configurable batch
+The export center brings together the operational CSVs, the configurable batch
 application export, activity attendance, presence-register data and the
 existing statistics/judging downloads. Operational CSV exports (attendance,
 meals, applications, staff scan stats and activity attendance) remain gated by
@@ -569,7 +569,7 @@ meals, applications, staff scan stats and activity attendance) remain gated by
 The ZIP always contains the selected CSV columns. Headers use field keys rather
 than translated question text or application names; repeated keys receive
 numeric suffixes in selection order (`key`, `key (2)`). The university is only
-available as the university form answer, exported as its catalogue name. `documents=all` includes
+available as the university form answer, exported as its catalog name. `documents=all` includes
 every saved file found in each response's immutable form snapshot;
 `documents=shared` additionally requires the field's
 `shareable_with_sponsors` policy and the applicant's explicit
@@ -586,17 +586,17 @@ application exports in Applications, attendance and presence exports in their
 Logistics workspaces, aggregate statistics in Statistics, judging exports in
 the judging queue, and a role-filterable user roster in Users. Each opens in
 the shared editor side panel so scope and output columns are chosen before the
-download begins; there is no standalone export-centre route. Application export
+download begins; there is no standalone export-center route. Application export
 fields are grouped by profile, response metadata and individual form. Each group
 can be selected or cleared at once and expanded to adjust individual fields;
 search reveals matching fields and group selection affects only those matches.
 
 ### certificates (#1083)
-Attendance certificates issued by the organisation and verifiable by public
+Attendance certificates issued by the organization and verifiable by public
 code. Full detail: [`certificates.md`](./certificates.md).
 
 ### form-libraries
-Question-owned catalogues (universities, degrees, knowledge topics) with
+Question-owned catalogs (universities, degrees, knowledge topics) with
 participant proposals and `users:write` curation. Full detail: [`form-libraries.md`](./form-libraries.md).
 
 ### github
@@ -609,7 +609,7 @@ The multiplexed `/api/realtime/stream` and its per-scope access checks. Full
 detail: [`realtime-transport.md`](./realtime-transport.md).
 
 ### reports (H18)
-Attendee reports of projects and public profiles, and the organiser inbox that
+Attendee reports of projects and public profiles, and the organizer inbox that
 closes them. Full detail: [`content-reports.md`](./content-reports.md).
 
 ### rsvps
@@ -664,7 +664,7 @@ the same way:
 | `public` | Anonymous, tagged with an `AnonymousAccessCategory` (health / public-content / public-announcement / public-tv / public-invalidation) for the audit script to bucket by risk. |
 | `token` | A single-purpose token proves the caller, not a session (invite accept, spot confirmation, scoped wallet access, Apple PassKit). |
 | `authenticated` | Any signed-in user; the handler scopes further by `req.userId`. |
-| `capability` | `capability` / `allOf` / `anyOf` against the catalogue above — exactly one of the three. |
+| `capability` | `capability` / `allOf` / `anyOf` against the catalog above — exactly one of the three. |
 | `contextual` | A named resolver loads and cross-checks the actual target resource (never trusts a parent id supplied by the caller) before deciding access — used for anything scoped to "my own X" or "X I have a relationship to" (e.g. a sponsor's own enterprise, an upload's owner). |
 
 `registerRoutePolicyInfrastructure` validates every declared policy at route
@@ -680,7 +680,7 @@ omission.
 ### Edition scope (multi-edition)
 
 One installation hosts several editions ([plan](./multi-edition-plan.md)).
-People, profiles, preferences, roles' definitions and catalogues are global;
+People, profiles, preferences, roles' definitions and catalogs are global;
 event data carries `event_key` (directly, or through its parent row).
 
 - **Viewed edition.** Clients send `X-Edition: <event_key>`; without it the
@@ -701,10 +701,10 @@ event data carries `event_key` (directly, or through its parent row).
 - **Closed editions are read-only.** One shared pre-handler rejects every
   mutation of a closed viewed edition with `409 edition_closed`, unless the
   route policy declares `edition: "global"` (account, profile, preferences,
-  devices, catalogues, the edition lifecycle) or the caller is the global
+  devices, catalogs, the edition lifecycle) or the caller is the global
   superadmin. Routes writing the current edition's singleton settings declare
   `edition: "current"` and are rejected while another edition is viewed; so are
-  mutations of the global role catalogue (role create/update/position/
+  mutations of the global role catalog (role create/update/position/
   capabilities/delete/restore/reset and grant rules), whose authority must come
   from the current edition. Application, response and decision routes resolve
   rows only in the viewed edition (another edition's id is a 404). A
@@ -860,7 +860,7 @@ resyncs, so existing live queries are not refetched on every navigation (#1227).
 
 The near-static public pickers (`/api/public/universities`, `/api/public/degrees`,
 `/api/public/food-intolerances`) send `Cache-Control: public, max-age=60,
-stale-while-revalidate=300` (#1227). Staff catalogue managers read them with
+stale-while-revalidate=300` (#1227). Staff catalog managers read them with
 `cache: "no-cache"` so an edit shows immediately.
 
 ### Background work
@@ -1004,4 +1004,4 @@ labels entries with no captured details explicitly. Response links resolve the
 form into a permitted review/decision workspace and retain the selected response
 in the URL, independent of table filters.
 
-The global writer/read policy, actor selection, request correlation, action catalogue and autosave boundaries are defined in [Audit trail](./audit-trail.md).
+The global writer/read policy, actor selection, request correlation, action catalog and autosave boundaries are defined in [Audit trail](./audit-trail.md).

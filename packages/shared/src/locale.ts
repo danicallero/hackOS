@@ -1,5 +1,5 @@
 /**
- * Canonical language catalogue (H7): the single source of truth for which
+ * Canonical language catalog (H7): the single source of truth for which
  * locales hackOS supports, shared by web, mobile, and the API's email/push
  * renderer so no surface can drift onto its own list.
  */

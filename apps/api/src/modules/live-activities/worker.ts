@@ -75,7 +75,7 @@ const ACTIVITY_UPDATE_THROTTLE_SECONDS = 30;
 const TICK_LOCK_KEY = 966_001;
 /**
  * An unchanged queue state is re-sent after this long, so a team waiting
- * without any visible change is not greyed out (its `stale-date` is 30 min
+ * without any visible change is not grayed out (its `stale-date` is 30 min
  * ahead, `liveActivityStaleDate`).
  */
 const OPEN_ENDED_REFRESH_MS = LIVE_ACTIVITY_OPEN_ENDED_STALE_MS / 2;

@@ -195,7 +195,7 @@ function ScrollEdgeMarker({
   );
 }
 
-/** The first image of a project, whose colours wash its page hero (H18, H48). */
+/** The first image of a project, whose colors wash its page hero (H18, H48). */
 function useProjectHero(files: ProjectFile[] | undefined) {
   const dark = useColorScheme() === "dark";
   const first = files?.find((file) => file.mimeType.startsWith("image/"));

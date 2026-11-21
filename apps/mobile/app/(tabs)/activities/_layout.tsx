@@ -44,7 +44,7 @@ export default function ActivitiesLayout() {
           // list's first rows — keep the native opaque app bar (H59).
           headerShown: glassAvailable,
           headerLargeTitle: process.env.EXPO_OS === "ios",
-          // Large titles start left-aligned and collapse to the centred
+          // Large titles start left-aligned and collapse to the centered
           // compact title as People scrolls; automatic list insets keep the
           // first row below the title while the header remains transparent.
           headerTransparent: true,

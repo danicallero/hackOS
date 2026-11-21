@@ -91,7 +91,7 @@ describe("participantLayout", () => {
 });
 
 describe("participantLayout form alignment (H55, R028)", () => {
-  it("starts a form at the leading edge in an expanded window, centres it elsewhere", () => {
+  it("starts a form at the leading edge in an expanded window, centers it elsewhere", () => {
     const { participantLayout } = require("@/theme/layout-participant");
     expect(participantLayout(1400, 1, "form").content.alignSelf).toBe("flex-start");
     expect(participantLayout(1400, 1, "list").content.alignSelf).toBe("center");

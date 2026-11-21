@@ -1247,7 +1247,7 @@ export async function roomPace(
       ? Math.max(0, (remainingMinutes * roomCount - activeWork) / pendingCount - preparationMinutes)
       : null;
 
-  // H39: honour the judging end time. When the desired pace won't fit every
+  // H39: honor the judging end time. When the desired pace won't fit every
   // pending team before schedule_end_at, the effective time per team is
   // squeezed down to what would fit. The learned finish estimate can still
   // exceed the close while judges adapt to that goal. Never
@@ -1255,7 +1255,7 @@ export async function roomPace(
   //
   // This is ADVISORY ONLY: `effectiveMinutesPerTeam` is the target the judge's
   // timer counts down from. Going over it never auto-closes or force-ends an
-  // evaluation — the frontend just recolours the timer as an over-time cue.
+  // evaluation — the frontend just recolors the timer as an over-time cue.
   // Nothing server-side ends a judging session on a clock.
   const autoAdjusted = insufficientTime && suggestedMinutesPerTeam !== null;
   const effectiveMinutesPerTeam = autoAdjusted
@@ -1302,7 +1302,7 @@ export async function roomPace(
 /**
  * Every challenge queue this repo is (or was) part of — a project can submit
  * to several challenges, each with its own `queue_entries` row, so the
- * judging card's "current challenge" label understates it. Cancelled entries
+ * judging card's "current challenge" label understates it. Canceled entries
  * are excluded (never actually queued); disqualified/completed ones stay so
  * the judge sees the project's full standing across challenges.
  */

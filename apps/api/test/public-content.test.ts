@@ -165,7 +165,7 @@ describe("public content catalog (H48, H49)", () => {
   });
 });
 
-describe("public catalogue HTTP caching (#1227)", () => {
+describe("public catalog HTTP caching (#1227)", () => {
   it.each([
     "/api/public/universities",
     "/api/public/degrees",

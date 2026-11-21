@@ -34,7 +34,7 @@ export function registerDiaryRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Read my event diary",
         description:
-          "The caller's saved people and sponsor stands, favourites first, then newest. Each entry carries the person's current public profile card or the sponsor's current public card (name, logo, description with its per-language `descriptionTranslations`, website, published challenges); either is null while the profile is hidden or the sponsor is not revealed. Private to the caller; requires event access (#935).",
+          "The caller's saved people and sponsor stands, favorites first, then newest. Each entry carries the person's current public profile card or the sponsor's current public card (name, logo, description with its per-language `descriptionTranslations`, website, published challenges); either is null while the profile is hidden or the sponsor is not revealed. Private to the caller; requires event access (#935).",
       },
     },
     async (req) => listDiary(ownerOf(req)),
@@ -48,7 +48,7 @@ export function registerDiaryRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Read my sponsor stand collection",
         description:
-          "The sponsor stands the caller can collect by scanning them: every revealed sponsor staff marked scannable (listed even before its tags exist), plus revealed sponsors the caller already collected even if their tags were removed since. Hidden sponsors are never listed or counted. Returns `total`, `collected` and `items`: the public sponsor card with `entry` (the caller's diary entry id, favourite, note and collection time) or null while not yet collected; ordered like the public logo grid: sponsor priority (1 first, unset last), then name, whether collected or not. Stand tag codes are never exposed. Private to the caller; requires event access (#935).",
+          "The sponsor stands the caller can collect by scanning them: every revealed sponsor staff marked scannable (listed even before its tags exist), plus revealed sponsors the caller already collected even if their tags were removed since. Hidden sponsors are never listed or counted. Returns `total`, `collected` and `items`: the public sponsor card with `entry` (the caller's diary entry id, favorite, note and collection time) or null while not yet collected; ordered like the public logo grid: sponsor priority (1 first, unset last), then name, whether collected or not. Stand tag codes are never exposed. Private to the caller; requires event access (#935).",
       },
     },
     async (req) => listSponsorCollection(ownerOf(req)),
@@ -67,7 +67,7 @@ export function registerDiaryRoutes(app: FastifyInstance): void {
         body: scanBody,
         summary: "Save a scanned person or stand",
         description:
-          "Resolves a current badge, ticket, company NFC tag, QR token or tag link and saves every currently available destination in one transaction. A UID may be both a person's badge and a company's tag: returns the person as the primary diary entry and the saved company in optional `relatedEntries`. Without an explicit tag link, a representative's badge never grants their company. 201 if either entry is new, otherwise 200; retries preserve notes and favourites. Person resolution uses the latest server assignment and rechecks it after locking, never the old holder in badge history. A hidden/revoked/self person does not prevent collecting an available company, nor does an unavailable company prevent saving a shared person. If nothing can be saved: diary_code_unknown (404), badge_revoked/profile_not_shared/stand_unavailable/diary_self (409); errors reveal no private identity. Requires event access, 20 scans/minute, Idempotency-Key. Person scans are reciprocal only when the scanner also shares a profile; company scans remain one-way. No diary notifications or staff-readable social audit (#935).",
+          "Resolves a current badge, ticket, company NFC tag, QR token or tag link and saves every currently available destination in one transaction. A UID may be both a person's badge and a company's tag: returns the person as the primary diary entry and the saved company in optional `relatedEntries`. Without an explicit tag link, a representative's badge never grants their company. 201 if either entry is new, otherwise 200; retries preserve notes and favorites. Person resolution uses the latest server assignment and rechecks it after locking, never the old holder in badge history. A hidden/revoked/self person does not prevent collecting an available company, nor does an unavailable company prevent saving a shared person. If nothing can be saved: diary_code_unknown (404), badge_revoked/profile_not_shared/stand_unavailable/diary_self (409); errors reveal no private identity. Requires event access, 20 scans/minute, Idempotency-Key. Person scans are reciprocal only when the scanner also shares a profile; company scans remain one-way. No diary notifications or staff-readable social audit (#935).",
       },
     },
     async (req, reply) => {

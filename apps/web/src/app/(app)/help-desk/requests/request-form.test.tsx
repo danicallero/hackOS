@@ -96,7 +96,7 @@ describe("request editing (H64/H65)", () => {
     expect(api.patch).not.toHaveBeenCalled();
     expect(document.querySelector("[role=alertdialog]")).toBeNull();
   });
-  it("clears sponsor preference when the challenge is removed and allows cancelling the queue warning", async () => {
+  it("clears sponsor preference when the challenge is removed and allows canceling the queue warning", async () => {
     await act(async () => root.render(<RequestForm request={request} onSaved={vi.fn()} />));
     await act(async () =>
       userEvent.click(getByRole(container, "combobox", { name: "helpDeskChallenge" })),

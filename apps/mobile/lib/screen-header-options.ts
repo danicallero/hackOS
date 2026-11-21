@@ -31,7 +31,7 @@ export function screenTitleElement(
  * H55: a fixed section title with UIKit's scroll-edge blur, clear at rest.
  * Keep the native title populated: UIKit uses the navigation item to extend
  * its edge effect under the bar. A leading toolbar title supplies the visible
- * SCREEN_TITLE text; the centred copy is transparent instead of duplicated.
+ * SCREEN_TITLE text; the centered copy is transparent instead of duplicated.
  * The screen's first native child must remain its ScrollView or FlatList.
  */
 export function fixedScrollHeaderOptions(title: string, leadingTitle = true) {

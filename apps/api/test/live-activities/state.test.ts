@@ -242,7 +242,7 @@ describe("myLiveActivities", () => {
       queueTotal: 4,
     });
 
-    // A cancelled team and a synthetic (H54) team are not part of the queue.
+    // A canceled team and a synthetic (H54) team are not part of the queue.
     const { rows } = await pool.query<{ id: number; repo_id: number }>(
       `SELECT id, repo_id FROM queue_entries
         WHERE challenge_id = $1 AND status = 'completed' ORDER BY id`,
