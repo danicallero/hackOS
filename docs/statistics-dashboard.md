@@ -122,7 +122,10 @@ filter every category or series, including entries outside the scrolling legend.
 Pointer legend changes update the checkboxes, and theme changes preserve selection.
 
 City questions add a fourth view, `globe` (their default; the shared
-`STATISTICS_VISUALIZATIONS` schema rejects it on any other kind). `city-globe.tsx`
+`STATISTICS_VISUALIZATIONS` schema rejects it on any other kind). Bars, pie
+and line views of a city question plot only cities with two or more people
+(unless none has) and say how many one-person cities are left to the globe,
+which always shows every answer. `city-globe.tsx`
 draws an ECharts `geo` component through a d3 orthographic projection on the
 canvas renderer, with Natural Earth 110m countries from `world-atlas`, a
 heat-map layer and a dot per city whose tooltip gives the exact count. Dragging

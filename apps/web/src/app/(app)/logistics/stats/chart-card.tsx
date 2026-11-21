@@ -110,6 +110,17 @@ export function ChartCard({
   const [expanded, setExpanded] = useState(false);
   // A globe preference never leaks into a panel that cannot draw one.
   const shownType = chartType === "globe" && !allowGlobe ? "bar" : chartType;
+  // H27: a city question's long tail of one-person towns swamps bars, pies and
+  // lines; those charts keep cities with two or more people, the globe keeps all.
+  const plotted =
+    allowGlobe && rows.some((row) => row.n > 1) ? rows.filter((row) => row.n > 1) : rows;
+  const singles = rows.length - plotted.length;
+  const singlesNote =
+    singles > 0 ? (
+      <p className="text-muted-foreground mt-2 text-sm">
+        {t("cityChartSingles", { count: singles })}
+      </p>
+    ) : null;
   const typeSelect = onChartTypeChange && (
     <ChartTypeSelect
       title={title}
@@ -145,7 +156,7 @@ export function ChartCard({
         ) : shownType === "globe" ? (
           <CityGlobe data={rows} title={title} />
         ) : (
-          <StatsChart data={rows} type={shownType} title={title} />
+          <StatsChart data={plotted} type={shownType} title={title} note={singlesNote} />
         )}
       </SectionCard>
       <Modal
@@ -158,7 +169,13 @@ export function ChartCard({
         {shownType === "globe" ? (
           <CityGlobe data={rows} title={title} height={FULLSCREEN_CHART_HEIGHT} />
         ) : (
-          <StatsChart data={rows} type={shownType} title={title} height={FULLSCREEN_CHART_HEIGHT} />
+          <StatsChart
+            data={plotted}
+            type={shownType}
+            title={title}
+            height={FULLSCREEN_CHART_HEIGHT}
+            note={singlesNote}
+          />
         )}
       </Modal>
     </>
