@@ -292,12 +292,14 @@ export function registerRsvpRoutes(app: FastifyInstance): void {
         summary: "All dietary restrictions",
         description:
           "Global catering view: every current attendee (active, non-anonymized, with a current attendance kind) who declared " +
-          "food intolerances or dietary notes, with kind, enterprise, intolerance labels and the free-text notes, plus the " +
-          "per-intolerance counts and totals. Carries per-person dietary data, so it needs the meal-plans:export " +
+          "food intolerances or dietary notes, with kind, enterprise, intolerance labels and the free-text notes, plus " +
+          "totals, everyone considered per kind (`peopleByKind`) and the count for every catalog intolerance, including " +
+          "those nobody declared (`byIntolerance`, n = 0). Carries per-person dietary data, so it needs the meal-plans:export " +
           "capability. This read-only view does not create audit entries. A synthetic review operator only sees test accounts.",
         response: {
           200: z.object({
             people: z.number(),
+            peopleByKind: z.partialRecord(z.enum(ATTENDANCE_KINDS), z.number()),
             withRestrictions: z.number(),
             withNotes: z.number(),
             byIntolerance: z.array(

@@ -106,7 +106,8 @@ export function RsvpOverview() {
               />
             </button>
             {expanded && (
-              <div id={panelId} className="border-t border-border/60 px-4 py-4">
+              <div id={panelId} className="space-y-4 border-t border-border/60 px-4 py-4">
+                <Dietary summary={summary} />
                 <People summary={summary} />
               </div>
             )}
@@ -128,6 +129,39 @@ function Counts({ summary }: { summary: RsvpSummary }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+/**
+ * What catering needs for this activity: intolerance counts and how many
+ * wrote notes, among the people attending (aggregates only, no names).
+ */
+function Dietary({ summary }: { summary: RsvpSummary }) {
+  const { t, language } = useLocale();
+  const intolerances = summary.intolerances ?? [];
+  if (intolerances.length === 0 && !summary.withNotes) return null;
+  const items = [
+    ...intolerances.map((i) => ({
+      key: String(i.id),
+      label: i.label[language] ?? i.label.en ?? i.label.es ?? Object.values(i.label)[0] ?? "",
+      n: i.n,
+    })),
+    ...(summary.withNotes
+      ? [{ key: "notes", label: t("dietaryWithNotes"), n: summary.withNotes }]
+      : []),
+  ];
+  return (
+    <section className="space-y-1.5">
+      <h3 className="text-muted-foreground text-sm">{t("rsvpDietaryAttending")}</h3>
+      <dl className="flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums">
+        {items.map((item) => (
+          <div key={item.key} className="flex items-baseline gap-1.5">
+            <dt>{item.label}</dt>
+            <dd className="font-medium">{item.n}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 

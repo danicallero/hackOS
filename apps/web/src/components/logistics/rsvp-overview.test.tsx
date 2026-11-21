@@ -125,6 +125,7 @@ describe("DietaryOverview search", () => {
   it("finds attendees without case or accent sensitivity", async () => {
     mocks.get.mockResolvedValue({
       people: 2,
+      peopleByKind: { participant: 2 },
       withRestrictions: 0,
       withNotes: 0,
       byIntolerance: [],
@@ -157,39 +158,108 @@ describe("DietaryOverview search", () => {
   });
 });
 
+const dietary = {
+  people: 5,
+  peopleByKind: { participant: 3, sponsor: 2 },
+  withRestrictions: 1,
+  withNotes: 2,
+  byIntolerance: [
+    { id: 1, label: { es: "Gluten" }, n: 1 },
+    { id: 2, label: { es: "Lactosa" }, n: 0 },
+  ],
+  entries: [
+    {
+      userId: 1,
+      name: "Ana",
+      surname: "Celíaca",
+      kind: "participant",
+      enterprise: null,
+      intolerances: [{ id: 1, label: { es: "Gluten" } }],
+      notes: "sin trazas",
+    },
+    {
+      userId: 2,
+      name: "Beto",
+      surname: "Kiwi",
+      kind: "sponsor",
+      enterprise: "Acme",
+      intolerances: [],
+      notes: "alergia al kiwi",
+    },
+    {
+      userId: 3,
+      name: "Carla",
+      surname: "Sinnotas",
+      kind: "participant",
+      enterprise: null,
+      intolerances: [{ id: 1, label: { es: "Gluten" } }],
+      notes: null,
+    },
+  ],
+};
+const tallyRow = (text: RegExp) =>
+  [...container.querySelectorAll("li > button")].find((b) =>
+    text.test(b.textContent ?? ""),
+  ) as HTMLButtonElement;
+
 describe("DietaryOverview", () => {
-  it("filters by intolerance and searches names, intolerances and notes", async () => {
-    mocks.get.mockResolvedValue({
-      people: 5,
-      withRestrictions: 1,
-      withNotes: 2,
-      byIntolerance: [{ id: 1, label: { es: "Gluten" }, n: 1 }],
-      entries: [
-        {
-          userId: 1,
-          name: "Ana",
-          surname: "Celíaca",
-          kind: "participant",
-          enterprise: null,
-          intolerances: [{ id: 1, label: { es: "Gluten" } }],
-          notes: "sin trazas",
-        },
-        {
-          userId: 2,
-          name: "Beto",
-          surname: "Kiwi",
-          kind: "sponsor",
-          enterprise: "Acme",
-          intolerances: [],
-          notes: "alergia al kiwi",
-        },
-      ],
-    });
+  it("tallies the whole catalog and filters the list from a tally row", async () => {
+    mocks.get.mockResolvedValue(dietary);
     await mount(<DietaryOverview />);
-    expect(container.textContent).toContain("sin trazas");
-    expect(container.textContent).toContain("alergia al kiwi");
-    await click(/Gluten · 1/);
+    expect(tallyRow(/^Gluten2$/)).toBeDefined();
+    // Nobody declared it, but it is in the catalog: shown as 0 and not selectable.
+    expect(tallyRow(/^Lactosa0$/).disabled).toBe(true);
+    await act(async () => tallyRow(/^Gluten/).click());
+    expect(tallyRow(/^Gluten/).getAttribute("aria-pressed")).toBe("true");
     expect(container.textContent).toContain("Ana Celíaca");
     expect(container.textContent).not.toContain("Beto Kiwi");
+    await act(async () => tallyRow(/^Gluten/).click());
+    expect(container.textContent).toContain("Beto Kiwi");
+  });
+
+  it("lists only the people who wrote notes from the notes row", async () => {
+    mocks.get.mockResolvedValue(dietary);
+    await mount(<DietaryOverview />);
+    await act(async () => tallyRow(/^dietaryWithNotes2$/).click());
+    expect(container.textContent).toContain("alergia al kiwi");
+    expect(container.textContent).toContain("sin trazas");
+    expect(container.textContent).not.toContain("Carla Sinnotas");
+  });
+
+  it("scopes the tally and the list to one attendee type", async () => {
+    mocks.get.mockResolvedValue(dietary);
+    await mount(<DietaryOverview />);
+    await click(/rsvpKindSponsor · 2/);
+    expect(tallyRow(/^Gluten/).textContent).toBe("Gluten0");
+    expect(tallyRow(/^dietaryWithNotes/).textContent).toBe("dietaryWithNotes1");
+    expect(container.textContent).toContain("Beto Kiwi");
+    expect(container.textContent).not.toContain("Ana Celíaca");
+  });
+});
+
+describe("RsvpOverview dietary breakdown", () => {
+  it("shows intolerance and notes counts among those attending when expanded", async () => {
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === "/api/logistics/rsvps")
+        return {
+          activities: [
+            {
+              activityId: 9,
+              scheduleId: 1,
+              name: "Comida",
+              ...counts,
+              intolerances: [{ id: 1, label: { es: "Vegana" }, n: 3 }],
+              withNotes: 2,
+            },
+          ],
+        };
+      return { people: [] };
+    });
+    await mount(<RsvpOverview />);
+    expect(container.textContent).not.toContain("rsvpDietaryAttending");
+    await click(/Comida sábado/);
+    expect(container.textContent).toContain("rsvpDietaryAttending");
+    expect(container.textContent).toContain("Vegana3");
+    expect(container.textContent).toContain("dietaryWithNotes2");
   });
 });

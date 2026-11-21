@@ -101,15 +101,21 @@ The facade still requires every open meal in a self submission.
 - **RSVP** (Logistics › RSVP, `/logistics/rsvps`; `logistics:stats` or
   `meal-plans:export`): only schedule entries asked to at least one kind, in
   time order, with the live Sí / No / No lo sé / Sin respuesta counts and,
-  expanded, who answered what (`GET /api/logistics/rsvps/:activityId/people`:
-  name, kind, enterprise, answer, unanswered included; no dietary data). The
+  expanded, the intolerance and notes counts among those attending (from the
+  summary's aggregates, so what to order per meal) and who answered what
+  (`GET /api/logistics/rsvps/:activityId/people`: name, kind, enterprise,
+  answer, unanswered included; no dietary data). The
   view is read-only: it never asks, edits or requires anything. An activity
   that is not asking anyone is marked in Manage Schedule (or while creating
   it) and only then appears here.
 - **Alimentación** tab (`meal-plans:export`): `GET /api/logistics/dietary` lists
-  every current attendee with intolerances or notes, the per-intolerance counts
-  and totals; the web filters by intolerance and searches names, companies and
-  notes. This read-only view does not create audit entries.
+  every current attendee with intolerances or notes, the count for every catalog
+  intolerance (0 included), totals and everyone considered per kind
+  (`peopleByKind`). The web scopes everything to one attendee type, shows the
+  catalog as a bar tally with a final "Con notas" row, and each tally row
+  filters the list (notes row: only people who wrote notes); search covers
+  names, companies, intolerances and notes. This read-only view does not create
+  audit entries.
 - Attendees change their answers in the onboarding RSVP step (listed only
   while they still have an open item to answer) and in My profile › RSVP
   (always available with event access). Mobile Account uses the same
