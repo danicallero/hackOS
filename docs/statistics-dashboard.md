@@ -137,7 +137,9 @@ bounding box (and so the globe's size) constant while it turns.
 Answers carry no coordinates, so `lib/city-geocode.ts` places them offline
 against the CityPicker index (`lib/data/cities.json`, GeoNames; it also
 stores each row's coordinates, a district flag and every country's capital;
-rebuild with `apps/web/scripts/build-city-data.mjs`). A city matches by name
+rebuild with `apps/web/scripts/build-city-data.mjs`; in Galicia, Catalonia and
+the Basque Country it also includes every municipality of 1k+ at its seat,
+since GeoNames lists many seats such as Xove without population). A city matches by name
 within its country, preferring the answer's region by shared words (so
 "Castilla y León" finds "Castille and León") and then a town over a district.
 A leading article is ignored when the exact name misses ("O Porriño" finds

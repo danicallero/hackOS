@@ -73,6 +73,14 @@ describe("city geocoding for the statistics globe (H27)", () => {
     expect(places[1]?.lat).toBeCloseTo(43.37, 1);
   });
 
+  it("places municipalities whose seat GeoNames lists without population", async () => {
+    const index = await loadCityIndex();
+    const { places } = placeCities(index, [{ label: "Xove, Galicia, España", n: 1 }]);
+    expect(places[0]).toMatchObject({ approximate: false });
+    expect(places[0]?.lat).toBeCloseTo(43.69, 1);
+    expect(places[0]?.lon).toBeCloseTo(-7.51, 1);
+  });
+
   it("falls back to the answer's region before the country's capital", async () => {
     const index = await loadCityIndex();
     const { places } = placeCities(index, [{ label: "Aldea Perdida, Galicia, España", n: 1 }]);
