@@ -130,7 +130,8 @@ largest one) and a dot per city whose tooltip gives the exact count. Dragging
 rotates the globe; zoom buttons scale it; the first view centers on the
 people-weighted mean and frames 90% of them (the whole globe when they are
 spread over most of a hemisphere). The heat kernel spans a fixed arc of the
-sphere, so it grows with the zoom. Only the visible hemisphere is drawn. A hidden, evenly spaced point set over the whole sphere keeps the geo
+sphere, so it grows with the zoom; it is translucent and the country borders
+are drawn again above it, so a dense cluster never hides the land. Only the visible hemisphere is drawn. A hidden, evenly spaced point set over the whole sphere keeps the geo
 bounding box (and so the globe's size) constant while it turns.
 
 Answers carry no coordinates, so `lib/city-geocode.ts` places them offline
@@ -139,7 +140,9 @@ stores each row's coordinates, a district flag and every country's capital;
 rebuild with `apps/web/scripts/build-city-data.mjs`). A city matches by name
 within its country, preferring the answer's region by shared words (so
 "Castilla y León" finds "Castille and León") and then a town over a district.
-A city outside the index is shown at its country's capital; an unrecognizable
+A leading article is ignored when the exact name misses ("O Porriño" finds
+GeoNames' "Porriño"). A city outside the index is shown at the largest indexed
+place of its region, else at its country's capital; an unrecognizable
 country is counted in a "not placed on the map" line under the globe. No
 answer is sent to a third-party geocoder.
 

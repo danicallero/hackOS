@@ -65,7 +65,10 @@ const DEGREES_PER_PIXEL = 0.35;
 const WHOLE_GLOBE_BELOW = 1.5;
 // Heat kernel spans about this arc of the sphere, so it follows the zoom
 // instead of covering a whole country when the globe is small.
-const HEAT_ARC = Math.sin((1.2 * Math.PI) / 180);
+const HEAT_ARC = Math.sin((0.8 * Math.PI) / 180);
+// The heat stays translucent and the borders are drawn over it, so the land
+// underneath a dense cluster (all of Galicia) still reads as a map.
+const HEAT_MAX_OPACITY = 0.7;
 
 echarts.use([
   CanvasRenderer,
@@ -355,6 +358,29 @@ function globeOption(
   );
   const max = Math.max(1, ...places.map((place) => place.n));
   const dotSize = (n: number) => 3 + 7 * Math.sqrt(n / max);
+  const geo = {
+    map: MAP_NAME,
+    projection: {
+      project: (point: number[]) =>
+        projection(point as [number, number]) ?? [Number.NaN, Number.NaN],
+      unproject: (point: number[]) => projection.invert?.(point as [number, number]) ?? [0, 0],
+      // biome-ignore lint/suspicious/noExplicitAny: d3 and ECharts stream types describe the same protocol.
+      stream: projection.stream as any,
+    },
+    layoutCenter: ["50%", "50%"],
+    layoutSize: size,
+    zoom,
+    center: [0, 0],
+    roam: false,
+    silent: true,
+    regions: [
+      {
+        name: SPHERE_REGION,
+        silent: true,
+        itemStyle: { opacity: 0, borderWidth: 0 },
+      },
+    ],
+  } satisfies GeoComponentOption;
 
   return {
     animation: false,
@@ -368,30 +394,18 @@ function globeOption(
         style: { fill: palette.ocean, stroke: palette.border, lineWidth: 1 },
       },
     ],
-    geo: {
-      map: MAP_NAME,
-      projection: {
-        project: (point: number[]) =>
-          projection(point as [number, number]) ?? [Number.NaN, Number.NaN],
-        unproject: (point: number[]) => projection.invert?.(point as [number, number]) ?? [0, 0],
-        // biome-ignore lint/suspicious/noExplicitAny: d3 and ECharts stream types describe the same protocol.
-        stream: projection.stream as any,
+    geo: [
+      {
+        ...geo,
+        itemStyle: { areaColor: palette.land, borderColor: palette.border, borderWidth: 0.6 },
       },
-      layoutCenter: ["50%", "50%"],
-      layoutSize: size,
-      zoom,
-      center: [0, 0],
-      roam: false,
-      silent: true,
-      itemStyle: { areaColor: palette.land, borderColor: palette.border, borderWidth: 0.6 },
-      regions: [
-        {
-          name: SPHERE_REGION,
-          silent: true,
-          itemStyle: { opacity: 0, borderWidth: 0 },
-        },
-      ],
-    },
+      // Borders again, above the heat (series sit at z 2).
+      {
+        ...geo,
+        z: 3,
+        itemStyle: { areaColor: "transparent", borderColor: palette.border, borderWidth: 0.6 },
+      },
+    ],
     visualMap: {
       show: false,
       type: "continuous",
@@ -420,8 +434,10 @@ function globeOption(
       {
         type: "heatmap",
         coordinateSystem: "geo",
-        pointSize: Math.max(4, Math.min(48, radius * HEAT_ARC)),
-        blurSize: Math.max(6, Math.min(64, radius * HEAT_ARC * 1.4)),
+        // Read by ECharts' heatmap layer (HeatmapView) but missing from its types.
+        ...({ maxOpacity: HEAT_MAX_OPACITY } as object),
+        pointSize: Math.max(4, Math.min(32, radius * HEAT_ARC)),
+        blurSize: Math.max(6, Math.min(44, radius * HEAT_ARC * 1.4)),
         silent: true,
         // Square root keeps a few people visible beside the largest city.
         data: visible.map((place) => [place.lon, place.lat, Math.sqrt(place.n)]),

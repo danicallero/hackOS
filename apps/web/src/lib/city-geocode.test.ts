@@ -57,4 +57,27 @@ describe("city geocoding for the statistics globe (H27)", () => {
     ]);
     expect(places.map((place) => Math.round(place.lat))).toEqual([41, 41, 40]);
   });
+
+  it("ignores a leading article the index spells differently", async () => {
+    const index = await loadCityIndex();
+    const { places } = placeCities(index, [
+      { label: "O Porriño, Galicia, España", n: 2 },
+      { label: "La Coruña, Galicia, España", n: 1 },
+    ]);
+    expect(places).toEqual([
+      expect.objectContaining({ approximate: false }),
+      expect.objectContaining({ approximate: false }),
+    ]);
+    expect(places[0]?.lat).toBeCloseTo(42.16, 1);
+    expect(places[0]?.lon).toBeCloseTo(-8.62, 1);
+    expect(places[1]?.lat).toBeCloseTo(43.37, 1);
+  });
+
+  it("falls back to the answer's region before the country's capital", async () => {
+    const index = await loadCityIndex();
+    const { places } = placeCities(index, [{ label: "Aldea Perdida, Galicia, España", n: 1 }]);
+    expect(places[0]).toMatchObject({ approximate: true });
+    // Galicia's largest indexed place (Vigo), not Madrid.
+    expect(places[0]?.lon).toBeLessThan(-7);
+  });
 });

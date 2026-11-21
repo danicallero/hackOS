@@ -2,8 +2,10 @@ import { normalizeSearchText } from "@/lib/search-text";
 
 // H27: places city answers on the statistics globe without any network call.
 // Answers are matched against the bundled GeoNames index (the one behind
-// CityPicker); a city outside the index falls back to its country's capital,
-// so foreign attendees still count towards their region of the world.
+// CityPicker), ignoring a leading article ("O Porriño" vs GeoNames' "Porriño").
+// A city outside the index falls back to the largest indexed place of its
+// region, then to its country's capital, so every attendee still counts
+// towards the right part of the map.
 
 interface CityIndex {
   countries: string[];
@@ -49,6 +51,9 @@ const key = (text: string) =>
   normalizeSearchText(text)
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
+// Galician, Spanish and Catalan articles that GeoNames and answers disagree on.
+const ARTICLE = /^(?:o|a|os|as|el|la|los|las|els|les|l) (?=\S)/;
+const bare = (spelling: string) => spelling.replace(ARTICLE, "");
 // "Castilla y León" and "Castille and León" share "leon"; short words such as
 // "y"/"and"/"de" do not count.
 const words = (text: string) =>
@@ -116,6 +121,15 @@ export function placeCities(
   rows: Array<{ label: string; n: number }>,
 ): PlacedCities {
   const byName = new Map<string, Candidate[]>();
+  const byBareName = new Map<string, Candidate[]>();
+  const regions: Candidate[] = [];
+  const add = (map: Map<string, Candidate[]>, spelling: string, candidate: Candidate) => {
+    const list = map.get(spelling) ?? [];
+    // Rows are sorted by population, so the first candidate is the largest.
+    if (!list.includes(candidate)) list.push(candidate);
+    map.set(spelling, list);
+  };
+  const seenRegions = new Set<string>();
   for (const [name, ascii, region, country, lat, lon, district] of index.rows) {
     const candidate: Candidate = {
       region: words(index.regions[region] ?? ""),
@@ -125,10 +139,12 @@ export function placeCities(
       lon,
     };
     for (const spelling of ascii ? [name, ascii] : [name]) {
-      const list = byName.get(key(spelling)) ?? [];
-      // Rows are sorted by population, so the first candidate is the largest.
-      list.push(candidate);
-      byName.set(key(spelling), list);
+      add(byName, key(spelling), candidate);
+      add(byBareName, bare(key(spelling)), candidate);
+    }
+    if (!seenRegions.has(`${country}:${region}`)) {
+      seenRegions.add(`${country}:${region}`);
+      regions.push(candidate);
     }
   }
 
@@ -138,9 +154,11 @@ export function placeCities(
     if (row.n <= 0) continue;
     const parts = parseCityLabel(row.label);
     const code = parts.country ? countryCodeFor(parts.country) : null;
-    const candidates = (byName.get(key(parts.city)) ?? []).filter(
-      (candidate) => !code || candidate.country === code,
-    );
+    const inCountry = (candidate: Candidate) => !code || candidate.country === code;
+    const exact = (byName.get(key(parts.city)) ?? []).filter(inCountry);
+    const candidates = exact.length
+      ? exact
+      : (byBareName.get(bare(key(parts.city))) ?? []).filter(inCountry);
     const province = words(parts.province);
     const match =
       candidates.find((candidate) => [...province].some((word) => candidate.region.has(word))) ??
@@ -153,6 +171,22 @@ export function placeCities(
         lat: match.lat,
         lon: match.lon,
         approximate: false,
+      });
+      continue;
+    }
+    const region = province.size
+      ? regions.find(
+          (candidate) =>
+            inCountry(candidate) && [...province].some((word) => candidate.region.has(word)),
+        )
+      : undefined;
+    if (region) {
+      places.push({
+        label: row.label,
+        n: row.n,
+        lat: region.lat,
+        lon: region.lon,
+        approximate: true,
       });
       continue;
     }
