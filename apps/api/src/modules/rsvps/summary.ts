@@ -297,6 +297,8 @@ export async function rsvpPeople(actorId: number, activityId: number): Promise<R
 
 export interface DietaryOverview {
   people: number;
+  /** Everyone considered, per attendance kind (kinds with nobody are omitted). */
+  peopleByKind: Partial<Record<AttendanceKind, number>>;
   withRestrictions: number;
   withNotes: number;
   byIntolerance: Array<{ id: number; label: Record<string, string>; n: number }>;
@@ -316,6 +318,7 @@ export interface DietaryOverview {
  * catering: the same people the RSVP counts consider (active, non-anonymized,
  * current attendance kind, reviewer-fixture boundary). Only people with
  * something to report are listed; `people` is everyone considered.
+ * `byIntolerance` covers the whole catalog, so an entry nobody declared shows 0.
  */
 export async function dietaryOverview(actorId: number): Promise<DietaryOverview> {
   const eventKey = await currentEventKey(pool);
@@ -341,9 +344,14 @@ export async function dietaryOverview(actorId: number): Promise<DietaryOverview>
       ORDER BY u.surname NULLS LAST, u.name NULLS LAST, u.id`,
     [eventKey],
   );
-  const byIntolerance = new Map<number, { id: number; label: Record<string, string>; n: number }>();
+  const { rows: catalog } = await pool.query<{ id: number; label: Record<string, string> }>(
+    `SELECT id, label FROM food_intolerances ORDER BY id`,
+  );
+  const byIntolerance = new Map(catalog.map((item) => [item.id, { ...item, n: 0 }]));
+  const peopleByKind: DietaryOverview["peopleByKind"] = {};
   const entries: DietaryOverview["entries"] = [];
   for (const row of rows) {
+    peopleByKind[row.kind] = (peopleByKind[row.kind] ?? 0) + 1;
     const intolerances = row.labels ?? [];
     if (intolerances.length === 0 && !row.notes) continue;
     for (const item of intolerances) {
@@ -363,6 +371,7 @@ export async function dietaryOverview(actorId: number): Promise<DietaryOverview>
   }
   return {
     people: rows.length,
+    peopleByKind,
     withRestrictions: entries.filter((e) => e.intolerances.length > 0).length,
     withNotes: entries.filter((e) => e.notes).length,
     byIntolerance: [...byIntolerance.values()].sort((a, b) => b.n - a.n || a.id - b.id),
