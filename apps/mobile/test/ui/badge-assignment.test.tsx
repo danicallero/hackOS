@@ -68,6 +68,7 @@ const mockPerson = {
   userId: 21,
   name: "Badge",
   surname: "Tester",
+  photoUrl: "/api/users/21/photo?v=badge",
   email: "badge@example.test",
   role: "participant",
   eventAccess: true,
@@ -119,6 +120,7 @@ jest.mock("@/lib/scanner-db", () => ({
 jest.mock("@/lib/api", () => ({
   apiFetch: jest.fn().mockRejectedValue(new Error("Offline")),
   ApiError: class ApiError extends Error {},
+  getCurrentSessionCookie: () => "session=1",
 }));
 jest.mock("@/lib/use-presence-summary", () => ({
   usePresenceSummary: () => ({
@@ -256,6 +258,16 @@ it("offers QR in the native iOS replacement dialog and retains the badge being r
       11,
     ),
   );
+});
+
+it("shows the person's photo beside their name (#934)", async () => {
+  await renderMobile(<PersonOperationsScreen />);
+  await screen.findByText("badge@example.test");
+  expect(
+    JSON.stringify(
+      screen.getByTestId("person-avatar-image", { includeHiddenElements: true }).props.source,
+    ),
+  ).toContain("/api/users/21/photo?v=badge");
 });
 
 it("starts NFC on the first press when linking an existing attendee", async () => {

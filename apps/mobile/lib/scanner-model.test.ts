@@ -1,4 +1,5 @@
 import {
+  pendingActivityScans,
   pendingBadgeClaim,
   requestForPendingScan,
   revokedBadgesFromSnapshot,
@@ -243,5 +244,41 @@ describe("queued badge claims (H22, H25, H54)", () => {
       }),
     );
     expect(scan.body.expectedUserId).toBe(5);
+  });
+});
+
+describe("pendingActivityScans (H26)", () => {
+  const person = { userId: 7, badgeId: null, ticketToken: "T-7" };
+  const activity = (extra: Partial<Extract<PendingScan["payload"], { kind: "activity" }>>) =>
+    pending({
+      kind: "activity",
+      activityId: 3,
+      allowRepeat: false,
+      scannedAt: "2026-01-01T00:00:00.000Z",
+      ...extra,
+    });
+
+  it("counts a queued scan of a badge accredited on this device as the same person", () => {
+    const queue = [activity({ badgeId: "NEW-BADGE", expectedUserId: 7 })];
+    expect(pendingActivityScans(queue, 3, person, "NEW-BADGE")).toBe(1);
+  });
+
+  it("matches the scanned code, the ticket or the expected owner", () => {
+    const queue = [
+      activity({ badgeId: "B-1" }),
+      activity({ ticketToken: "T-7" }),
+      activity({ badgeId: "OTHER", expectedUserId: 7 }),
+    ];
+    expect(pendingActivityScans(queue, 3, person, "B-1")).toBe(3);
+  });
+
+  it("ignores other activities, other people and settled scans", () => {
+    const queue = [
+      activity({ activityId: 4, badgeId: "B-1" }),
+      activity({ badgeId: "B-2" }),
+      { ...activity({ badgeId: "B-1" }), status: "acknowledged" as const },
+      { ...activity({ badgeId: "B-1" }), status: "failed" as const },
+    ];
+    expect(pendingActivityScans(queue, 3, person, "B-1")).toBe(0);
   });
 });

@@ -199,6 +199,12 @@ const SPECS = {
     android: () => schemeHex("#ffffff", "#ffffff"),
     web: "#ffffff",
   },
+  /** Count/alert badge label on a filled red or orange badge: white in both appearances. */
+  onBadge: {
+    ios: () => "#ffffff",
+    android: () => schemeHex("#ffffff", "#ffffff"),
+    web: "#ffffff",
+  },
 } satisfies Record<string, ColorSpec>;
 
 type Palette = { [K in keyof typeof SPECS]: ColorValue } & {

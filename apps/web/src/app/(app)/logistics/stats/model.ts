@@ -1,3 +1,4 @@
+import type { StatisticsVisualization } from "@hackos/shared/forms";
 import type { PublicEvent } from "@/components/public/public-types";
 import { apiErrorText } from "@/lib/api-error-text";
 import type { I18nText, MessageKey, Translate } from "@/lib/i18n";
@@ -130,7 +131,7 @@ export interface ApplicationStats {
       options: Array<{ value: string; label: I18nText }>;
       statistics?: {
         label?: I18nText;
-        visualization?: "bar" | "pie" | "line";
+        visualization?: StatisticsVisualization;
         aggregation?: "count" | "sum" | "average";
         transformation?: "none" | "age" | "study_level";
       } | null;

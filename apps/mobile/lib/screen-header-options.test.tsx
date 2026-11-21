@@ -52,7 +52,11 @@ describe("pane header options (H55)", () => {
   });
 
   it("gives every trailing action its own glass circle, with a gap between", () => {
-    const status = queueStatusBarItem({ hasAttention: false, label: "Ready", onPress: jest.fn() });
+    const status = queueStatusBarItem({
+      health: { attention: 0, saved: 0 },
+      label: "Ready",
+      onPress: jest.fn(),
+    });
     const filter = filterMenuBarItem({
       accessibilityLabel: "Filter",
       active: false,
@@ -75,12 +79,22 @@ describe("pane header options (H55)", () => {
 
   it("builds a real button item for the status and a menu item for the role filter", () => {
     const onPress = jest.fn();
-    const status = queueStatusBarItem({ hasAttention: true, label: "Attention", onPress });
+    // The symbol never changes; the badge carries the queue state.
+    const status = queueStatusBarItem({
+      health: { attention: 1, saved: 3 },
+      label: "Attention",
+      onPress,
+    });
     expect(status).toMatchObject({
       type: "button",
       label: "Attention",
-      icon: { type: "sfSymbol", name: "exclamationmark.triangle.fill" },
+      icon: { type: "sfSymbol", name: "arrow.triangle.2.circlepath" },
+      badge: { value: "!" },
     });
+    expect(
+      queueStatusBarItem({ health: { attention: 0, saved: 3 }, label: "Ready", onPress }).badge
+        ?.value,
+    ).toBe("3");
     status.onPress();
     expect(onPress).toHaveBeenCalledTimes(1);
 
@@ -98,9 +112,13 @@ describe("pane header options (H55)", () => {
     expect(filter.menu.items.map((item) => item.state)).toEqual(["off", "on"]);
     filter.menu.items[1]?.onPress();
     expect(onSelect).toHaveBeenCalledWith("role:Staff");
-    expect(queueStatusBarItem({ hasAttention: false, label: "Ready", onPress }).icon?.name).toBe(
-      "arrow.triangle.2.circlepath",
-    );
+    const idle = queueStatusBarItem({
+      health: { attention: 0, saved: 0 },
+      label: "Ready",
+      onPress,
+    });
+    expect(idle.icon?.name).toBe("arrow.triangle.2.circlepath");
+    expect(idle).not.toHaveProperty("badge");
   });
 
   it("shows the status label in a wide pane and only its symbol in a narrow one", () => {
@@ -108,7 +126,7 @@ describe("pane header options (H55)", () => {
     expect(statusShowsLabel(STATUS_LABEL_MIN_PANE_WIDTH - 1, false)).toBe(false);
     expect(statusShowsLabel(900, true)).toBe(false);
     const wide = queueStatusBarItem({
-      hasAttention: false,
+      health: { attention: 0, saved: 0 },
       label: "Ready",
       onPress: jest.fn(),
       showLabel: true,
