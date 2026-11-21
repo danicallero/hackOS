@@ -57,6 +57,7 @@ describe("statistics layout", () => {
   it("chooses an appropriate chart default for each data shape", () => {
     expect(defaultStatsChartType("applications-over-time")).toBe("line");
     expect(defaultStatsChartType("field:consent", "checkbox")).toBe("pie");
+    expect(defaultStatsChartType("field:home", "city")).toBe("globe");
     expect(defaultStatsChartType("shirt-sizes")).toBe("bar");
   });
 });

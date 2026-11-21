@@ -1,4 +1,6 @@
-// Rebuilds src/lib/data/cities.json, the offline city index behind CityPicker.
+// Rebuilds src/lib/data/cities.json, the offline city index behind CityPicker
+// and the statistics globe (which also reads each row's coordinates and the
+// per-country capitals used when a city is not in the index).
 // Source: GeoNames cities1000 + admin1CodesASCII (CC BY 4.0, geonames.org).
 // Run: node scripts/build-city-data.mjs
 // Kept: Spanish cities of 15k+, plus every place of 1k+ in Galicia, Catalonia
@@ -16,7 +18,7 @@ const MIN_POPULATION = 15000;
 // GeoNames lists "Laracha" without its article and O Burgo (Culleredo) at 0
 // population; both are common origins, so they are fixed up by hand.
 const RENAMES = { Laracha: "A Laracha" };
-const EXTRAS = [["O Burgo", "Galicia"]];
+const EXTRAS = [["O Burgo", "Galicia", 43.33, -8.37]];
 const base = "https://download.geonames.org/export/dump";
 const dir = mkdtempSync(join(tmpdir(), "cities-"));
 
@@ -44,10 +46,14 @@ const index = (list, value) => {
 };
 
 const rows = [];
+const capitals = {};
 for (const line of readFileSync(join(dir, "cities1000.txt"), "utf8").split("\n")) {
   if (!line) continue;
   const f = line.split("\t");
-  const [, name, ascii, , , , , , cc, , a1, , , , population] = f;
+  const [, name, ascii, , lat, lon, , featureCode, cc, , a1, , , , population] = f;
+  // Two decimals (~1 km) is plenty for a heat map and keeps the file small.
+  const point = [Math.round(lat * 100) / 100, Math.round(lon * 100) / 100];
+  if (featureCode === "PPLC") capitals[cc] = point;
   if (cc !== COUNTRY) continue;
   const region = admin1.get(`${cc}.${a1}`) ?? "";
   const min = HOME_REGIONS.has(region) ? HOME_MIN_POPULATION : MIN_POPULATION;
@@ -58,14 +64,24 @@ for (const line of readFileSync(join(dir, "cities1000.txt"), "utf8").split("\n")
     index(regions, region),
     index(countries, cc),
     Number(population),
+    ...point,
+    // Districts (PPLX) such as Madrid's "Salamanca" must not outrank the city.
+    featureCode === "PPLX" ? 1 : 0,
   ]);
 }
-for (const [name, region] of EXTRAS) {
-  rows.push([name, 0, index(regions, region), index(countries, COUNTRY), 0]);
+for (const [name, region, lat, lon] of EXTRAS) {
+  rows.push([name, 0, index(regions, region), index(countries, COUNTRY), 0, lat, lon, 0]);
 }
 rows.sort((a, b) => b[4] - a[4]);
 writeFileSync(
   new URL("../src/lib/data/cities.json", import.meta.url),
-  JSON.stringify({ countries, regions, rows: rows.map(([n, a, r, c]) => [n, a, r, c]) }),
+  JSON.stringify({
+    countries,
+    regions,
+    rows: rows.map(([n, a, r, c, , lat, lon, district]) =>
+      district ? [n, a, r, c, lat, lon, 1] : [n, a, r, c, lat, lon],
+    ),
+    capitals: Object.fromEntries(Object.entries(capitals).sort(([a], [b]) => a.localeCompare(b))),
+  }),
 );
 console.log(`${rows.length} cities`);

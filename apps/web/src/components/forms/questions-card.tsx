@@ -377,6 +377,10 @@ export function QuestionsCard({
           ? field.options
           : [{ value: "", label: { ...EMPTY_I18N } }]
         : undefined,
+      // H27: only city questions can be charted on the globe.
+      ...(field?.statistics?.visualization === "globe" && kind !== "city"
+        ? { statistics: { ...field.statistics, visualization: undefined } }
+        : {}),
     });
   };
 
