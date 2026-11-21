@@ -3,14 +3,17 @@ import {
   countryCode as countryCodeFor,
   countryName,
   placeKey,
+  spanishCommunity,
+  spanishProvinceCapital,
 } from "@hackos/shared/places";
 
 // H27: places city answers on the statistics globe without any network call.
 // Answers are matched against the bundled GeoNames index (the one behind
 // CityPicker), ignoring a leading article ("O Porriño" vs GeoNames' "Porriño").
-// A city outside the index falls back to the largest indexed place of its
-// region, then to its country's capital, so every attendee still counts
-// towards the right part of the map.
+// A city outside the index falls back to its Spanish province's capital
+// ("Baio, La Coruña" → A Coruña), then the largest indexed place of its
+// region, then its country's capital, so every attendee still counts towards
+// the right part of the map.
 
 interface CityIndex {
   countries: string[];
@@ -130,10 +133,12 @@ export function placeCities(
     const candidates = exact.length
       ? exact
       : (byBareName.get(bare(placeKey(parts.city))) ?? []).filter(inCountry);
-    const province = words(canonicalRegion(parts.province, parts.country));
-    const region = `${code ?? placeKey(parts.country)}:${placeKey(
-      canonicalRegion(parts.province, parts.country),
-    )}`;
+    // A Spanish province compares (and totals its heat) as its community.
+    const regionName =
+      spanishCommunity(parts.province, parts.country) ??
+      canonicalRegion(parts.province, parts.country);
+    const province = words(regionName);
+    const region = `${code ?? placeKey(parts.country)}:${placeKey(regionName)}`;
     const match =
       candidates.find((candidate) => [...province].some((word) => candidate.region.has(word))) ??
       candidates.find((candidate) => !candidate.district) ??
@@ -145,6 +150,21 @@ export function placeCities(
         lat: match.lat,
         lon: match.lon,
         approximate: false,
+        region,
+      });
+      continue;
+    }
+    const capitalName = spanishProvinceCapital(parts.province, parts.country);
+    const provinceCapital = capitalName
+      ? (byName.get(placeKey(capitalName)) ?? []).find(inCountry)
+      : undefined;
+    if (provinceCapital) {
+      places.push({
+        label: row.label,
+        n: row.n,
+        lat: provinceCapital.lat,
+        lon: provinceCapital.lon,
+        approximate: true,
         region,
       });
       continue;

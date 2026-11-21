@@ -148,8 +148,10 @@ since GeoNames lists many seats such as Xove without population). A city matches
 within its country, preferring the answer's region (compared in the canonical
 spelling of `@hackos/shared/places`, then by shared words) and then a town over a district.
 A leading article is ignored when the exact name misses ("O Porriño" finds
-GeoNames' "Porriño"). A city outside the index is shown at the largest indexed
-place of its region, else at its country's capital; an unrecognizable
+GeoNames' "Porriño"). A city outside the index is shown at its Spanish province's
+capital ("Baio, La Coruña" → A Coruña), else at the largest indexed place of its
+region, else at its country's capital; a province totals its heat with the rest
+of its community; an unrecognizable
 country is counted in a "not placed on the map" line under the globe. No
 answer is sent to a third-party geocoder.
 

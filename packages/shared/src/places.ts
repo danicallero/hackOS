@@ -117,11 +117,109 @@ for (const [canonical, aliases] of Object.entries(SPANISH_REGIONS)) {
   for (const spelling of [canonical, ...aliases]) spanishRegion.set(placeKey(spelling), canonical);
 }
 
-/** A Spanish community in its canonical name; any other province trimmed as given. */
+/**
+ * Spain's other provinces (one-province communities are already above):
+ * canonical name → its community, its capital as the bundled city index
+ * spells it, and the other spellings answers use.
+ */
+export const SPANISH_PROVINCES: Record<
+  string,
+  { community: string; capital: string; aliases: string[] }
+> = {
+  "A Coruña": { community: "Galicia", capital: "A Coruña", aliases: ["La Coruña", "Coruña"] },
+  Lugo: { community: "Galicia", capital: "Lugo", aliases: [] },
+  Ourense: { community: "Galicia", capital: "Ourense", aliases: ["Orense"] },
+  Pontevedra: { community: "Galicia", capital: "Pontevedra", aliases: [] },
+  Álava: {
+    community: "País Vasco",
+    capital: "Gasteiz / Vitoria",
+    aliases: ["Araba", "Araba/Álava", "Álava/Araba"],
+  },
+  Gipuzkoa: {
+    community: "País Vasco",
+    capital: "Donostia / San Sebastián",
+    aliases: ["Guipúzcoa", "Guipuzkoa"],
+  },
+  Bizkaia: { community: "País Vasco", capital: "Bilbao", aliases: ["Vizcaya", "Biscay"] },
+  Barcelona: { community: "Cataluña", capital: "Barcelona", aliases: [] },
+  Girona: { community: "Cataluña", capital: "Girona", aliases: ["Gerona"] },
+  Lleida: { community: "Cataluña", capital: "Lleida", aliases: ["Lérida"] },
+  Tarragona: { community: "Cataluña", capital: "Tarragona", aliases: [] },
+  Alicante: {
+    community: "Comunidad Valenciana",
+    capital: "Alicante",
+    aliases: ["Alacant", "Alicante/Alacant"],
+  },
+  Castellón: {
+    community: "Comunidad Valenciana",
+    capital: "Castelló de la Plana",
+    aliases: ["Castelló", "Castellón/Castelló", "Castellón de la Plana"],
+  },
+  Almería: { community: "Andalucía", capital: "Almería", aliases: [] },
+  Cádiz: { community: "Andalucía", capital: "Cadiz", aliases: [] },
+  Córdoba: { community: "Andalucía", capital: "Córdoba", aliases: [] },
+  Granada: { community: "Andalucía", capital: "Granada", aliases: [] },
+  Huelva: { community: "Andalucía", capital: "Huelva", aliases: [] },
+  Jaén: { community: "Andalucía", capital: "Jaén", aliases: [] },
+  Málaga: { community: "Andalucía", capital: "Málaga", aliases: [] },
+  Sevilla: { community: "Andalucía", capital: "Sevilla", aliases: ["Seville"] },
+  Huesca: { community: "Aragón", capital: "Huesca", aliases: [] },
+  Teruel: { community: "Aragón", capital: "Teruel", aliases: [] },
+  Zaragoza: { community: "Aragón", capital: "Zaragoza", aliases: ["Saragossa"] },
+  "Las Palmas": { community: "Canarias", capital: "Las Palmas de Gran Canaria", aliases: [] },
+  "Santa Cruz de Tenerife": {
+    community: "Canarias",
+    capital: "Santa Cruz de Tenerife",
+    aliases: ["Tenerife"],
+  },
+  Albacete: { community: "Castilla-La Mancha", capital: "Albacete", aliases: [] },
+  "Ciudad Real": { community: "Castilla-La Mancha", capital: "Ciudad Real", aliases: [] },
+  Cuenca: { community: "Castilla-La Mancha", capital: "Cuenca", aliases: [] },
+  Guadalajara: { community: "Castilla-La Mancha", capital: "Guadalajara", aliases: [] },
+  Toledo: { community: "Castilla-La Mancha", capital: "Toledo", aliases: [] },
+  Ávila: { community: "Castilla y León", capital: "Ávila", aliases: [] },
+  Burgos: { community: "Castilla y León", capital: "Burgos", aliases: [] },
+  León: { community: "Castilla y León", capital: "León", aliases: [] },
+  Palencia: { community: "Castilla y León", capital: "Palencia", aliases: [] },
+  Salamanca: { community: "Castilla y León", capital: "Salamanca", aliases: [] },
+  Segovia: { community: "Castilla y León", capital: "Segovia", aliases: [] },
+  Soria: { community: "Castilla y León", capital: "Soria", aliases: [] },
+  Valladolid: { community: "Castilla y León", capital: "Valladolid", aliases: [] },
+  Zamora: { community: "Castilla y León", capital: "Zamora", aliases: [] },
+  Badajoz: { community: "Extremadura", capital: "Badajoz", aliases: [] },
+  Cáceres: { community: "Extremadura", capital: "Cáceres", aliases: [] },
+};
+const spanishProvince = new Map<string, string>();
+for (const [canonical, { aliases }] of Object.entries(SPANISH_PROVINCES)) {
+  for (const spelling of [canonical, ...aliases])
+    spanishProvince.set(placeKey(spelling), canonical);
+}
+
+/**
+ * A Spanish community or province in its canonical name ("La Coruña" →
+ * "A Coruña"); any other province trimmed as given.
+ */
 export function canonicalRegion(province: string, country: string): string {
-  if (countryCode(country) === "ES")
-    return spanishRegion.get(placeKey(province)) ?? province.trim();
-  return province.trim();
+  if (countryCode(country) !== "ES") return province.trim();
+  const key = placeKey(province);
+  return spanishRegion.get(key) ?? spanishProvince.get(key) ?? province.trim();
+}
+
+/** The Spanish community a province or community answer belongs to. */
+export function spanishCommunity(province: string, country: string): string | null {
+  if (countryCode(country) !== "ES") return null;
+  const key = placeKey(province);
+  const community = spanishRegion.get(key);
+  if (community) return community;
+  const canonical = spanishProvince.get(key);
+  return canonical ? (SPANISH_PROVINCES[canonical]?.community ?? null) : null;
+}
+
+/** The capital of a Spanish province answer, as the city index spells it. */
+export function spanishProvinceCapital(province: string, country: string): string | null {
+  if (countryCode(country) !== "ES") return null;
+  const canonical = spanishProvince.get(placeKey(province));
+  return canonical ? (SPANISH_PROVINCES[canonical]?.capital ?? null) : null;
 }
 
 export function canonicalCityAnswer(answer: CityAnswer): CityAnswer {
