@@ -28,6 +28,7 @@ import { HourglassIcon } from "@phosphor-icons/react/dist/csr/Hourglass";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
 import { ShieldSlashIcon } from "@phosphor-icons/react/dist/csr/ShieldSlash";
 import { TimerIcon } from "@phosphor-icons/react/dist/csr/Timer";
+import { UserMinusIcon } from "@phosphor-icons/react/dist/csr/UserMinus";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DragHandle,
@@ -81,6 +82,7 @@ const DEFAULT_OVERVIEW_TONES: Record<string, StatTone> = {
   confirmed: "success",
   rejected: "danger",
   rate: "success",
+  declined: "warning",
   expired: "warning",
   available: "info",
   time: "neutral",
@@ -790,6 +792,21 @@ function OverviewPanel({
         className="h-full"
       />
     ),
+    declined: (dragHandle) => (
+      <StatCard
+        label={t("declinedPlaces")}
+        value={overview?.declined ?? "—"}
+        icon={UserMinusIcon}
+        tone={kpiTones["overview:kpi:declined"] ?? DEFAULT_OVERVIEW_TONES.declined}
+        action={cardAction(
+          "declined",
+          t("declinedPlaces"),
+          DEFAULT_OVERVIEW_TONES.declined,
+          dragHandle,
+        )}
+        className="h-full"
+      />
+    ),
     expired: (dragHandle) => (
       <StatCard
         label={t("expiredConfirmations")}
@@ -851,11 +868,18 @@ function OverviewPanel({
           role="status"
           aria-label={t("loading")}
         >
-          {["submitted", "confirmed", "rejected", "rate", "pending", "expired", "able", "time"].map(
-            (key) => (
-              <Skeleton key={key} className="h-28 rounded-lg" />
-            ),
-          )}
+          {[
+            "submitted",
+            "confirmed",
+            "rejected",
+            "rate",
+            "declined",
+            "expired",
+            "able",
+            "time",
+          ].map((key) => (
+            <Skeleton key={key} className="h-28 rounded-lg" />
+          ))}
         </div>
       ) : error && !stats ? (
         <div className="space-y-3 rounded-lg border border-destructive/30 p-5" role="alert">
@@ -887,7 +911,7 @@ function OverviewPanel({
           <SortableContext items={kpiOrder} strategy={sizePreservingRectSortingStrategy}>
             <div className="grid gap-3 @sm:grid-cols-2 @lg:grid-cols-3 @2xl:grid-cols-4">
               {kpiOrder.map((key) => (
-                <SortableOverviewKpi key={key} id={key} label={key} wide={key === "time"}>
+                <SortableOverviewKpi key={key} id={key} label={key}>
                   {(dragHandle) => cards[key]?.(dragHandle)}
                 </SortableOverviewKpi>
               ))}
@@ -913,12 +937,10 @@ function OverviewPanel({
 function SortableOverviewKpi({
   id,
   label,
-  wide,
   children,
 }: {
   id: string;
   label: string;
-  wide: boolean;
   children: (dragHandle: React.ReactNode) => React.ReactNode;
 }) {
   const { t } = useLocale();
@@ -932,7 +954,6 @@ function SortableOverviewKpi({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "min-w-0 motion-reduce:transition-none!",
-        wide && "@sm:col-span-2 @lg:col-span-1 @2xl:col-span-2",
         isDragging &&
           "[&>*]:opacity-0 rounded-lg outline-2 outline-dashed outline-primary bg-primary/5",
       )}

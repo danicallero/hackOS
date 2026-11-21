@@ -104,6 +104,7 @@ export interface ApplicationStats {
     submitted: number;
     confirmed: number;
     rejected: number;
+    declined: number;
     expired_confirmations: number;
     still_able_to_confirm: number;
     confirmation_rate: number | null;

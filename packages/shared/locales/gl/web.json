@@ -2724,6 +2724,7 @@
   "submittedApplications": "Solicitudes enviadas",
   "rejected": "Rexeitadas",
   "expiredConfirmations": "Confirmacións caducadas",
+  "declinedPlaces": "Prazas rexeitadas",
   "stillAbleToConfirm": "Aínda poden confirmar",
   "pendingConfirmation": "Confirmación pendente",
   "confirmationRate": "Taxa de confirmación",
