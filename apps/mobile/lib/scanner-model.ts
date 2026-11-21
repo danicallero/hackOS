@@ -186,3 +186,33 @@ export function pendingBadgeClaim(
   }
   return null;
 }
+
+/**
+ * H26: scans of this activity still waiting in this device's queue for one person, so a
+ * second offline scan is flagged as a repeat even when the local roster could not tie the
+ * first one to them (a badge accredited on this device, not yet synced). `scannedCode` is
+ * the badge or ticket just read: a queued scan of the same code is the same person.
+ */
+export function pendingActivityScans(
+  queue: readonly PendingScan[],
+  activityId: number,
+  person: Pick<ScannerPerson, "userId" | "badgeId" | "ticketToken">,
+  scannedCode: string,
+): number {
+  let count = 0;
+  for (const scan of queue) {
+    if (scan.status !== "pending") continue;
+    const { payload } = scan;
+    if (payload?.kind !== "activity" || payload.activityId !== activityId) continue;
+    const code = payload.ticketToken ?? payload.badgeId;
+    if (
+      payload.expectedUserId === person.userId ||
+      code === scannedCode ||
+      (payload.badgeId !== undefined && payload.badgeId === person.badgeId) ||
+      (payload.ticketToken !== undefined && payload.ticketToken === person.ticketToken)
+    ) {
+      count += 1;
+    }
+  }
+  return count;
+}

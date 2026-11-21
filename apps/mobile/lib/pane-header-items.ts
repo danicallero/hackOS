@@ -22,6 +22,8 @@ export interface PaneBarButton {
   /** Omitted when the label is shown: a bar item draws its title or its symbol, not both. */
   icon?: Icon;
   tintColor?: ColorValue;
+  /** A native bar-item badge (iOS 26+). */
+  badge?: QueueBadge;
   onPress: () => void;
 }
 
@@ -53,19 +55,29 @@ export type PaneBarItem = PaneBarButton | PaneBarMenu | PaneBarSpacing;
 /** Space between neighbouring trailing actions, so each stays its own glass circle. */
 export const PANE_BAR_ITEM_GAP = 8;
 
-export const QUEUE_STATUS_SYMBOL = {
-  attention: "exclamationmark.triangle.fill",
-  ready: "arrow.triangle.2.circlepath",
-} as const;
+/** The sync button keeps one symbol; its badge carries the queue state. */
+export const QUEUE_STATUS_SYMBOL = "arrow.triangle.2.circlepath";
 
-/** The sync-status symbol and tint: the warning triangle when a scan needs attention. */
-export function queueStatusPresentation(hasAttention: boolean): {
-  icon: (typeof QUEUE_STATUS_SYMBOL)[keyof typeof QUEUE_STATUS_SYMBOL];
-  tint: ColorValue | undefined;
-} {
-  return hasAttention
-    ? { icon: QUEUE_STATUS_SYMBOL.attention, tint: colors.destructive }
-    : { icon: QUEUE_STATUS_SYMBOL.ready, tint: undefined };
+export interface QueueBadge {
+  value: string;
+  style: { backgroundColor: ColorValue; color: ColorValue };
+}
+
+/**
+ * The sync button's badge: `!` while a scan was rejected, else the number of
+ * scans saved on this device and not yet confirmed, else none.
+ */
+export function queueStatusBadge(health: { attention: number; saved: number }): QueueBadge | null {
+  if (health.attention > 0) {
+    return { value: "!", style: { backgroundColor: colors.destructive, color: colors.onBadge } };
+  }
+  if (health.saved > 0) {
+    return {
+      value: health.saved > 99 ? "99+" : String(health.saved),
+      style: { backgroundColor: colors.warning, color: colors.onBadge },
+    };
+  }
+  return null;
 }
 
 /** A pane at least this wide shows the status with its label; narrower ones show the symbol only. */
@@ -78,23 +90,23 @@ export function statusShowsLabel(paneWidth: number, accessibilityText: boolean):
 
 /** The Ready / needs-attention control; pressing it opens the queue sheet. */
 export function queueStatusBarItem({
-  hasAttention,
+  health,
   label,
   onPress,
   showLabel = false,
 }: {
-  hasAttention: boolean;
+  health: { attention: number; saved: number };
   label: string;
   onPress: () => void;
   showLabel?: boolean;
 }): PaneBarButton {
-  const { icon, tint } = queueStatusPresentation(hasAttention);
+  const badge = queueStatusBadge(health);
   return {
     type: "button",
     label,
     accessibilityLabel: label,
-    ...(showLabel ? {} : { icon: { type: "sfSymbol" as const, name: icon } }),
-    ...(tint ? { tintColor: tint } : {}),
+    ...(showLabel ? {} : { icon: { type: "sfSymbol" as const, name: QUEUE_STATUS_SYMBOL } }),
+    ...(badge ? { badge } : {}),
     onPress,
   };
 }

@@ -18,21 +18,25 @@ import {
 } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ImageHero, useImageHeroForeground } from "@/components/ambient-hero";
 import { BadgeLinkActions } from "@/components/badge-link-actions";
 import { BadgeReplacementDialog } from "@/components/badge-replacement-dialog";
 import { EmptyState, InfoRow, Section, Separator, StatusPill } from "@/components/native-ui";
 import { NfcReader } from "@/components/nfc-reader";
+import { PersonAvatar } from "@/components/person-avatar";
 import { formatMinutes, PresenceManagement } from "@/components/presence-management";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { QrCamera } from "@/components/QrCamera";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { SymbolView } from "@/components/symbol";
+import { useColorScheme } from "@/components/useColorScheme";
 import { alert } from "@/lib/alert";
 import { ApiError } from "@/lib/api";
 import { errorText } from "@/lib/api-error-reason";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
+import { mascotBackgroundRgb } from "@/lib/mascot-avatar";
 import { useMeContext } from "@/lib/me-context";
 import { transparentDetailHeaderOptions } from "@/lib/navigation";
 import type { PresenceDivergence } from "@/lib/presence-timeline";
@@ -44,6 +48,7 @@ import { scannerFetch } from "@/lib/scanner-request";
 import { submitScannerMutation } from "@/lib/scanner-sync";
 import type { ScannerPerson, ScannerSnapshot, ScanPayload } from "@/lib/scanner-types";
 import { useSideRegion } from "@/lib/side-region";
+import { isPadIdiom } from "@/lib/tabs";
 import { useNfcSupported } from "@/lib/use-nfc-supported";
 import { usePresenceSummary } from "@/lib/use-presence-summary";
 import { useScannerSync } from "@/lib/use-scanner";
@@ -219,6 +224,8 @@ export function PersonOperationsScreen({
   }, [embedded, navigation]);
 
   const sideRegion = useSideRegion();
+  const dark = useColorScheme() === "dark";
+  const avatarSize = isPadIdiom() ? 144 : 112;
   const trueTop = useTrueTopScroll(scrollRef);
   const { me } = useMeContext();
   const ownerUserId = me?.id;
@@ -263,6 +270,12 @@ export function PersonOperationsScreen({
     [embedded, focusSignalKey, insets.top, topInset],
   );
   const [person, setPerson] = useState<PersonDetails | null>(null);
+  // The hero spans the viewport while the content keeps its readable column.
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const [headerWidth, setHeaderWidth] = useState(0);
+  // H44/H48: the photo's colours, or the assigned mascot's colour without one.
+  const noPhotoTint = mascotBackgroundRgb(userId);
+  const nameColor = useImageHeroForeground(person?.photoUrl, dark, noPhotoTint);
   const [loadState, setLoadState] = useState<PersonLoadState>("loading");
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [attendeeRole, setAttendeeRole] = useState<"participant" | "mentor" | null>(null);
@@ -943,6 +956,7 @@ export function PersonOperationsScreen({
         ref={scrollViewportRef}
         accessibilityElementsHidden={badgeInputOpen}
         importantForAccessibility={badgeInputOpen ? "no-hide-descendants" : "auto"}
+        onLayout={(event) => setViewportWidth(event.nativeEvent.layout.width)}
         style={{ backgroundColor: colors.background, flex: 1 }}
       >
         <ScrollView
@@ -970,31 +984,71 @@ export function PersonOperationsScreen({
             <RequestFeedback error={loadError} onRetry={() => void load()} />
           ) : null}
 
-          <View style={{ gap: 2 }}>
-            {embedded ? (
-              <TitleReporter title={fullName} onTitle={onTitle} />
-            ) : (
-              <Text
-                selectable
-                accessibilityRole="header"
-                numberOfLines={accessibilityText ? undefined : 1}
-                style={{ ...type.title, color: colors.label, fontWeight: "700" }}
-              >
-                {fullName}
-              </Text>
-            )}
-            {person.email ? (
-              <Text
-                selectable
-                numberOfLines={1}
-                style={{ ...type.subhead, color: colors.secondaryLabel }}
-              >
-                {person.email}
-              </Text>
-            ) : null}
+          <View
+            onLayout={(event) => setHeaderWidth(event.nativeEvent.layout.width)}
+            style={{ gap: 2 }}
+          >
+            {/* Staff match the photo to the person in front of them (#934); the
+                header is the person profile's: blurred photo hero, centred avatar.
+                The hero bleeds past the content column to the viewport edges. */}
+            <View
+              pointerEvents="none"
+              style={{
+                height: 0,
+                marginHorizontal: -Math.max(CONTENT_PADDING, (viewportWidth - headerWidth) / 2),
+              }}
+            >
+              <ImageHero
+                uri={person.photoUrl}
+                dark={dark}
+                fallback={noPhotoTint}
+                testID="person-hero"
+              />
+            </View>
+            <View style={{ alignItems: "center", gap: 14 }}>
+              <PersonAvatar
+                testID="person-avatar"
+                userId={person.userId}
+                name={fullName}
+                uri={person.photoUrl ?? null}
+                size={avatarSize}
+              />
+              <View style={{ alignItems: "center", gap: 4, paddingHorizontal: 8 }}>
+                {embedded ? (
+                  <TitleReporter title={fullName} onTitle={onTitle} />
+                ) : (
+                  <Text
+                    selectable
+                    accessibilityRole="header"
+                    numberOfLines={accessibilityText ? undefined : 2}
+                    style={{
+                      ...type.title,
+                      color: nameColor ?? colors.label,
+                      fontWeight: "700",
+                      textAlign: "center",
+                    }}
+                  >
+                    {fullName}
+                  </Text>
+                )}
+                {person.email ? (
+                  <Text
+                    selectable
+                    numberOfLines={1}
+                    style={{
+                      ...type.callout,
+                      color: person.photoUrl ? colors.label : colors.secondaryLabel,
+                      textAlign: "center",
+                    }}
+                  >
+                    {person.email}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
             {rolePill && (sideRegion.edge || embedded) ? (
               // The overlay below would cover the name beside a side column.
-              <View style={{ alignSelf: "flex-start", marginTop: 6 }}>
+              <View style={{ alignSelf: "center", marginTop: 6 }}>
                 <StatusPill tone={rolePill.tone}>{rolePill.label}</StatusPill>
               </View>
             ) : null}

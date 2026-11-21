@@ -444,7 +444,9 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   route hands a deep link or a people-list/history tap to the scanner as `personId` params. Compact
   windows still push the route.
   "View people" opens the people finder over the scanner pane only. Rows show
-  every person's account photo, whether or not their public profile shares it. On iOS the pane is its own
+  every person's account photo, whether or not their public profile shares it; the person
+  screen uses the person profile's header (blurred photo hero bleeding to the viewport edges, centred
+  avatar, name and email) and the meal/activity scan result shows the same photo. On iOS the pane is its own
   native stack (`components/pane-people-stack.ios.tsx`, an independent react-navigation tree):
   its root bar carries the title, role filter and sync status, `People` is pushed with the native
   large title, back item, integrated search and filter, and the route's header is hidden
@@ -2073,6 +2075,12 @@ queue before a sync is attempted, and are replayed with that persisted scan ID
 when the app next regains a server connection — including after a cold restart.
 Scans at meals and registrable activities are attendance events, so every
 locally queued repeat is accepted on replay without a confirmation conflict.
+Before queuing, a scan asks Add another / Do not add whenever the person already
+has a scan of this activity: the server count plus this device's unsynced queue
+entries for them (`pendingActivityScans` in `lib/scanner-model.ts`, matched by
+scanned code, badge, ticket or expected owner), or the local roster count,
+whichever is higher. The queue term covers offline repeats the roster could not
+tie to the person, such as a badge accredited on this device and not yet synced.
 A scan rejected as "timestamp must be in the past" (device clock running
 ahead of the server's) is corrected once by the measured clock skew — read
 from the API's `Date` response header in `lib/api.ts` — and retried before
@@ -2239,16 +2247,20 @@ Activities sums the same `/api/scanner/role-stats` occupancy buckets as Scanner,
 without the Scanner role filter, and refreshes on focus, sync and logistics events.
 A failed refresh clears the server count and uses the roster fallback.
 On iOS 26+, both scanners' queue status lives in a native trailing
-toolbar view, aligned with the native Back button. Its pressable icon and text
-show only Ready or Needs attention (a rejected scan); background sync and pending
-scans do not change the header label. Tapping it opens the Device queue sheet,
+toolbar view, aligned with the native Back button. Its symbol is always the
+sync arrows; a native badge carries the queue state: the number of scans saved
+on this device and not yet confirmed, or `!` (red) while a scan was rejected
+(`queueStatusBadge` in `lib/pane-header-items.ts`). The accessible label stays
+Ready or Needs attention. Tapping it opens the Device queue sheet,
 where the detailed queue state remains visible. The NFC symbol is centered between
 the statistics and camera/manual actions. The idle instruction is Tap to scan
 (es/gl: Toca para escanear); the three bottom actions sit just above the tab bar,
 using its published inset once plus 4 points. Earlier iOS and Android place both controls at
 the same safe-area offset in the floating header.
-The activity result panel is centered with equal top/bottom padding and uses an opaque semantic content surface with open,
-scrollable dietary details and separate tinted restriction tags. The per-person
+The activity result panel is centered with equal top/bottom padding and uses an opaque semantic content surface: the
+outcome in its tone above the person's centred photo (with the outcome symbol as a badge), name and email, then the
+person's scan or serving count as a large number under a hairline. Dietary details sit in an amber panel with
+restriction tags, and scroll. The per-person
 count has no visible caption (its meaning remains in the accessibility label).
 The count is orange for a repeat awaiting a decision and green only after server confirmation.
 Decision actions sit side by side, stacking for narrow screens or larger text. Liquid
@@ -2977,7 +2989,7 @@ an id's first post).
   | Outcome | Haptic | Where |
   |---|---|---|
   | Code recognised and accepted | success | general scanner, activity scanner (server-confirmed), person screen (acknowledged) |
-  | Stored offline, not yet confirmed | light | activity scanner, person screen |
+  | Stored offline, not yet confirmed | medium (light was too faint to feel) | activity scanner, person screen |
   | Already registered (repeat needs a decision) | warning | activity scanner |
   | Server rejected the scan | error | activity scanner, person screen |
   | Unknown or revoked code | error | general and activity scanner |
