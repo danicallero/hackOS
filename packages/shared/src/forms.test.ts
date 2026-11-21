@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { EMAIL_MAX_LENGTH, isSimpleEmail, isSimpleUrl, URL_MAX_LENGTH } from "./forms.js";
+import {
+  EMAIL_MAX_LENGTH,
+  isSimpleEmail,
+  isSimpleUrl,
+  templateFieldSchema,
+  URL_MAX_LENGTH,
+} from "./forms.js";
 
 describe("text condition shapes (#1110)", () => {
   it("accepts a local@domain email and rejects malformed ones", () => {
@@ -33,5 +39,19 @@ describe("text condition shapes (#1110)", () => {
     expect(isSimpleEmail(`a@${".".repeat(100_000)} `)).toBe(false);
     expect(isSimpleUrl(`a${".".repeat(100_000)} `)).toBe(false);
     expect(performance.now() - started).toBeLessThan(50);
+  });
+});
+
+describe("statistics visualization (H27)", () => {
+  const field = (kind: string) => ({
+    key: "home",
+    kind,
+    label: { en: "Home", es: "Origen", gl: "Orixe" },
+    statistics: { enabled: true, visualization: "globe" },
+  });
+
+  it("offers the globe only to city questions", () => {
+    expect(templateFieldSchema.safeParse(field("city")).success).toBe(true);
+    expect(templateFieldSchema.safeParse(field("text")).success).toBe(false);
   });
 });

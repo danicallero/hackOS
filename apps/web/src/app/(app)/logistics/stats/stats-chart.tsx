@@ -24,7 +24,9 @@ import { SVGRenderer } from "echarts/renderers";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale } from "@/lib/i18n";
 
-export type StatsChartType = "bar" | "pie" | "line";
+/** `globe` is rendered by `CityGlobe`, never by `StatsChart`. */
+export type StatsChartType = "bar" | "pie" | "line" | "globe";
+export type PlotChartType = Exclude<StatsChartType, "globe">;
 
 export interface StatsChartDatum {
   label: string;
@@ -77,7 +79,7 @@ export function StatsChart({
   height,
 }: {
   data: StatsChartDatum[];
-  type: StatsChartType;
+  type: PlotChartType;
   title: string;
   height?: number | string;
 }) {
@@ -222,7 +224,7 @@ export function StatsChart({
   );
 }
 
-function chartLegendName(row: StatsChartDatum, type: StatsChartType, title: string): string {
+function chartLegendName(row: StatsChartDatum, type: PlotChartType, title: string): string {
   return type === "line"
     ? row.series || title
     : row.series
@@ -232,7 +234,7 @@ function chartLegendName(row: StatsChartDatum, type: StatsChartType, title: stri
 
 function createStatsChartOption(
   data: StatsChartDatum[],
-  type: StatsChartType,
+  type: PlotChartType,
   title: string,
   palette: ChartPalette,
   selected: Record<string, boolean>,
@@ -520,7 +522,7 @@ function readChartPalette(element: HTMLDivElement): ChartPalette {
   };
 }
 
-function resolveThemeColor(
+export function resolveThemeColor(
   element: HTMLDivElement,
   token: string,
   context: CanvasRenderingContext2D,

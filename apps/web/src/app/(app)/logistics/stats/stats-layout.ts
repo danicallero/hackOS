@@ -1,7 +1,7 @@
 import type { StatTone } from "@/components/common/stat-card";
 import type { StatsChartType } from "./stats-chart";
 
-const CHART_TYPES: StatsChartType[] = ["bar", "pie", "line"];
+const CHART_TYPES: StatsChartType[] = ["bar", "pie", "line", "globe"];
 const STAT_TONES: StatTone[] = ["neutral", "success", "danger", "warning", "info"];
 const OVERVIEW_KPI_KEYS = [
   "submitted",
@@ -44,6 +44,7 @@ export function defaultStatsChartType(panelKey: string, fieldKind?: string): Sta
     return "line";
   }
   if (fieldKind === "checkbox") return "pie";
+  if (fieldKind === "city") return "globe";
   return "bar";
 }
 

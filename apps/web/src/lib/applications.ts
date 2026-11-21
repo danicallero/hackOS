@@ -9,6 +9,7 @@
 // applications form uses FIELD_KINDS below and i18n labels {en,es,gl}
 // (plan/07 §2).
 
+import type { StatisticsVisualization } from "@hackos/shared/forms";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import type { Translate } from "@/lib/i18n";
 import type { Tone } from "@/lib/tones";
@@ -73,7 +74,7 @@ export interface FieldOption {
 interface StatisticsConfig {
   enabled: boolean;
   label?: I18nText;
-  visualization?: "bar" | "pie" | "line";
+  visualization?: StatisticsVisualization;
   aggregation?: "count" | "sum" | "average";
   transformation?: "none" | "age" | "study_level";
   program_years?: number;

@@ -70,6 +70,8 @@ interface DistributionDefinition {
   title: string;
   rows: StatsChartDatum[];
   defaultChart: StatsChartType;
+  /** City answers can be drawn on the globe. */
+  allowGlobe?: boolean;
 }
 
 const STAT_TONES: StatTone[] = ["neutral", "success", "danger", "warning", "info"];
@@ -326,6 +328,7 @@ export function BeforePanels({
         key={key}
         title={definition.title}
         rows={definition.rows}
+        allowGlobe={definition.allowGlobe === true}
         chartType={effectiveLayout.charts[key] ?? definition.defaultChart}
         tone={effectiveLayout.tones[key] ?? "neutral"}
         onChartTypeChange={(chartType) =>
@@ -637,6 +640,7 @@ function buildDistributionDefinitions(
       defaultChart:
         distribution.field.statistics?.visualization ??
         defaultStatsChartType(key, distribution.field.kind),
+      allowGlobe: distribution.field.kind === "city",
       rows: distribution.buckets.map((bucket) => ({
         label: statisticsBucketLabel(
           bucket.value,
@@ -956,12 +960,14 @@ function Distribution({
   chartType,
   onChartTypeChange,
   tone,
+  allowGlobe,
 }: {
   title: string;
   rows: StatsChartDatum[];
   chartType: StatsChartType;
   onChartTypeChange: (chartType: StatsChartType) => void;
   tone: StatTone;
+  allowGlobe: boolean;
 }) {
   return (
     <ChartCard
@@ -970,6 +976,7 @@ function Distribution({
       chartType={chartType}
       onChartTypeChange={onChartTypeChange}
       tone={tone}
+      allowGlobe={allowGlobe}
     />
   );
 }

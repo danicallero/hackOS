@@ -5,6 +5,7 @@ import { ArrowsOutSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsOutSim
 import { ChartBarIcon } from "@phosphor-icons/react/dist/csr/ChartBar";
 import { ChartLineIcon } from "@phosphor-icons/react/dist/csr/ChartLine";
 import { ChartPieIcon } from "@phosphor-icons/react/dist/csr/ChartPie";
+import { GlobeHemisphereWestIcon } from "@phosphor-icons/react/dist/csr/GlobeHemisphereWest";
 import { useState } from "react";
 import { IconButton } from "@/components/common/icon-button";
 import { Modal } from "@/components/common/modal";
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { CityGlobe } from "./city-globe";
 import { StatsChart, type StatsChartDatum, type StatsChartType } from "./stats-chart";
 
 const FULLSCREEN_CHART_HEIGHT = "clamp(320px, calc(100dvh - 12rem), 900px)";
@@ -27,10 +29,12 @@ function ChartTypeSelect({
   title,
   value,
   onChange,
+  allowGlobe,
 }: {
   title: string;
   value: StatsChartType;
   onChange: (chartType: StatsChartType) => void;
+  allowGlobe: boolean;
 }) {
   const { t } = useLocale();
   return (
@@ -61,6 +65,14 @@ function ChartTypeSelect({
             {t("chartTypeLine")}
           </span>
         </SelectItem>
+        {allowGlobe && (
+          <SelectItem value="globe">
+            <span className="flex items-center gap-2">
+              <GlobeHemisphereWestIcon aria-hidden="true" />
+              {t("chartTypeGlobe")}
+            </span>
+          </SelectItem>
+        )}
       </SelectContent>
     </Select>
   );
@@ -70,7 +82,8 @@ function ChartTypeSelect({
  * H27: every statistics chart (before, during, after) is a card whose chart can
  * be opened full screen — the same view the meal detail already offers — so
  * organisers can project or inspect it. When `onChartTypeChange` is given the
- * viewer can switch bar/pie/line in the card and in the full-screen view.
+ * viewer can switch bar/pie/line in the card and in the full-screen view;
+ * city answers (`allowGlobe`) can also be shown on a globe.
  */
 export function ChartCard({
   title,
@@ -81,11 +94,13 @@ export function ChartCard({
   icon,
   state,
   className,
+  allowGlobe = false,
 }: {
   title: string;
   rows: StatsChartDatum[];
   chartType: StatsChartType;
   onChartTypeChange?: (chartType: StatsChartType) => void;
+  allowGlobe?: boolean;
   tone?: StatTone;
   icon?: PhosphorIcon;
   state?: React.ReactNode;
@@ -93,8 +108,15 @@ export function ChartCard({
 }) {
   const { t } = useLocale();
   const [expanded, setExpanded] = useState(false);
+  // A globe preference never leaks into a panel that cannot draw one.
+  const shownType = chartType === "globe" && !allowGlobe ? "bar" : chartType;
   const typeSelect = onChartTypeChange && (
-    <ChartTypeSelect title={title} value={chartType} onChange={onChartTypeChange} />
+    <ChartTypeSelect
+      title={title}
+      value={shownType}
+      onChange={onChartTypeChange}
+      allowGlobe={allowGlobe}
+    />
   );
   return (
     <>
@@ -120,8 +142,10 @@ export function ChartCard({
       >
         {rows.length === 0 ? (
           <p className="text-muted-foreground text-pretty text-sm">{t("noDistributionData")}</p>
+        ) : shownType === "globe" ? (
+          <CityGlobe data={rows} title={title} />
         ) : (
-          <StatsChart data={rows} type={chartType} title={title} />
+          <StatsChart data={rows} type={shownType} title={title} />
         )}
       </SectionCard>
       <Modal
@@ -131,7 +155,11 @@ export function ChartCard({
         className="h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] sm:max-w-none"
         headerActions={typeSelect}
       >
-        <StatsChart data={rows} type={chartType} title={title} height={FULLSCREEN_CHART_HEIGHT} />
+        {shownType === "globe" ? (
+          <CityGlobe data={rows} title={title} height={FULLSCREEN_CHART_HEIGHT} />
+        ) : (
+          <StatsChart data={rows} type={shownType} title={title} height={FULLSCREEN_CHART_HEIGHT} />
+        )}
       </Modal>
     </>
   );

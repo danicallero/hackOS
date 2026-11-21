@@ -66,7 +66,9 @@ const optionSchema = z.object({
  * the deployment/form snapshot as the source of truth for both the response
  * validator and the reporting catalog.
  */
-export const STATISTICS_VISUALIZATIONS = ["bar", "pie", "line"] as const;
+/** `globe` places each answer on a world heat map, so only city questions offer it. */
+export const STATISTICS_VISUALIZATIONS = ["bar", "pie", "line", "globe"] as const;
+export type StatisticsVisualization = (typeof STATISTICS_VISUALIZATIONS)[number];
 export const STATISTICS_AGGREGATIONS = ["count", "sum", "average"] as const;
 export const STATISTICS_TRANSFORMATIONS = ["none", "age", "study_level"] as const;
 
@@ -209,6 +211,9 @@ export const templateFieldSchema = z
   })
   .refine((f) => !f.judging_link || f.kind === "text", {
     message: "only a text field can be a judging link",
+  })
+  .refine((f) => f.statistics?.visualization !== "globe" || f.kind === "city", {
+    message: "only a city field can use the globe visualization",
   });
 
 export const libraryDeletionsSchema = z.array(z.uuid());

@@ -2,6 +2,7 @@
 
 // Editor card for one application question (H11): label, kind, options, validation, retention.
 
+import type { StatisticsVisualization } from "@hackos/shared/forms";
 import { ArrowDownIcon } from "@phosphor-icons/react/dist/csr/ArrowDown";
 import { ArrowUpIcon } from "@phosphor-icons/react/dist/csr/ArrowUp";
 import { CaretUpIcon } from "@phosphor-icons/react/dist/csr/CaretUp";
@@ -512,13 +513,15 @@ export function FieldEditor({
                       {t("statisticsVisualizationLabel")}
                     </Label>
                     <Select
-                      value={field.statistics?.visualization ?? "bar"}
+                      value={
+                        field.statistics?.visualization ?? (field.kind === "city" ? "globe" : "bar")
+                      }
                       onValueChange={(visualization) =>
                         onChange({
                           statistics: {
                             ...(field.statistics ?? { enabled: true }),
                             enabled: true,
-                            visualization: visualization as "bar" | "pie" | "line",
+                            visualization: visualization as StatisticsVisualization,
                           },
                         })
                       }
@@ -530,6 +533,9 @@ export function FieldEditor({
                         <SelectItem value="bar">{t("chartTypeBar")}</SelectItem>
                         <SelectItem value="pie">{t("chartTypePie")}</SelectItem>
                         <SelectItem value="line">{t("chartTypeLine")}</SelectItem>
+                        {field.kind === "city" && (
+                          <SelectItem value="globe">{t("chartTypeGlobe")}</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
