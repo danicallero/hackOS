@@ -259,6 +259,12 @@ describe("applications CRUD (H11)", () => {
           kind: "city",
           required: false,
         },
+        {
+          key: "birthplace",
+          label: { es: "Nacimiento", gl: "Nacemento", en: "Birthplace" },
+          kind: "city",
+          required: false,
+        },
       ],
     });
 
@@ -270,6 +276,7 @@ describe("applications CRUD (H11)", () => {
         responses: {
           motivation: "Spain",
           origin: { city: " Girona ", province: "Catalonia", country: "Spain" },
+          birthplace: { city: "Baio", province: "La Coruña", country: "España" },
         },
       },
     });
@@ -282,6 +289,7 @@ describe("applications CRUD (H11)", () => {
     expect(rows[0]?.responses).toEqual({
       motivation: "Spain",
       origin: { city: "Girona", province: "Cataluña", country: "España" },
+      birthplace: { city: "Baio", province: "A Coruña", country: "España" },
     });
   });
 

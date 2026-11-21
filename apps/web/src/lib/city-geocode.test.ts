@@ -99,4 +99,21 @@ describe("city geocoding for the statistics globe (H27)", () => {
     expect(places[0]?.region).toBe(places[1]?.region);
     expect(places[2]?.region).not.toBe(places[0]?.region);
   });
+
+  it("places an unknown town at its Spanish province's capital", async () => {
+    const index = await loadCityIndex();
+    const { places } = placeCities(index, [
+      { label: "Baio, La Coruña, España", n: 1 },
+      { label: "Aldea Perdida, Orense, Spain", n: 1 },
+      { label: "Lugar, Gipuzkoa, España", n: 1 },
+    ]);
+    expect(places.map((place) => place.approximate)).toEqual([true, true, true]);
+    expect(places[0]?.lat).toBeCloseTo(43.37, 1);
+    expect(places[0]?.lon).toBeCloseTo(-8.4, 1);
+    expect(places[1]?.lat).toBeCloseTo(42.34, 1);
+    expect(places[2]?.lon).toBeCloseTo(-1.97, 1);
+    // A province totals its heat with the rest of its community.
+    const [vigo] = placeCities(index, [{ label: "Vigo, Galicia, España", n: 1 }]).places;
+    expect(places[0]?.region).toBe(vigo?.region);
+  });
 });
