@@ -5,11 +5,11 @@ const px = (r: number, g: number, b: number, a = 255) => [r, g, b, a];
 const repeat = (pixel: number[], n: number) => Array.from({ length: n }, () => pixel).flat();
 
 describe("pickDominantColor", () => {
-  it("returns a solid colour as is", () => {
+  it("returns a solid color as is", () => {
     expect(pickDominantColor(repeat(px(51, 102, 204), 64))).toBe("#3366cc");
   });
 
-  it("takes a small vivid accent over a large grey or white body", () => {
+  it("takes a small vivid accent over a large gray or white body", () => {
     expect(
       pickDominantColor([
         ...repeat(px(255, 255, 255), 300),
@@ -19,7 +19,7 @@ describe("pickDominantColor", () => {
     ).toBe("#f07814");
   });
 
-  it("does not blend two vivid colours into a muddy one", () => {
+  it("does not blend two vivid colors into a muddy one", () => {
     expect(
       pickDominantColor([...repeat(px(220, 30, 30), 30), ...repeat(px(30, 30, 220), 20)]),
     ).toBe("#dc1e1e");
@@ -77,14 +77,14 @@ describe("logoTouchesEdge", () => {
 
   it("flags artwork that reaches the edge", () => {
     expect(logoTouchesEdge(repeat(brand, 256), 16, 16)).toBe(true);
-    // Half the border is a coloured box, half white (a box logo beside its wordmark).
+    // Half the border is a colored box, half white (a box logo beside its wordmark).
     const halves = Array.from({ length: 256 }, (_, i) =>
       i % 16 < 8 ? brand : px(255, 255, 255),
     ).flat();
     expect(logoTouchesEdge(halves, 16, 16)).toBe(true);
   });
 
-  it("flags a mixed grey border", () => {
+  it("flags a mixed gray border", () => {
     expect(logoTouchesEdge(framed(16, 1, px(128, 128, 128), brand), 16, 16)).toBe(true);
   });
 });

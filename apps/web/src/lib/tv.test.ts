@@ -37,7 +37,7 @@ describe("liveConfigFrom", () => {
     });
   });
 
-  it("keeps recognised values and drops unusable ones", () => {
+  it("keeps recognized values and drops unusable ones", () => {
     const config = liveConfigFrom({
       timer: { show: true, target: "hackingEndsAt", label: "  ", endsAt: "2026-03-01T10:00:00Z" },
       schedule: { show: true, upcoming: 3 },
@@ -49,7 +49,7 @@ describe("liveConfigFrom", () => {
     expect(config.schedule.upcoming).toBe(3);
     expect(config.wifi.showPassword).toBe(false);
 
-    // An unknown target can't be honoured, so the countdown keeps working.
+    // An unknown target can't be honored, so the countdown keeps working.
     expect(liveConfigFrom({ timer: { target: "whenever" } }).timer.target).toBe("auto");
     expect(liveConfigFrom({ schedule: { upcoming: 0 } }).schedule.upcoming).toBe(
       DEFAULT_LIVE_CONFIG.schedule.upcoming,

@@ -11,7 +11,7 @@ import { asUser, createUser, createUserWithCapabilities, useTestApp } from "../h
  * single blanket gate: EVENT_MANAGE (identity/timing), VENUE_MANAGE
  * (venue/Wi-Fi), WALLET_MANAGE (Apple Wallet pass), PRESENCE_MANAGE,
  * INVITES_MANAGE (sponsor/staff invite-claim requirements), INTOLERANCES_MANAGE
- * (the shirt-size catalogue). GET /api/event is readable by anyone holding at
+ * (the shirt-size catalog). GET /api/event is readable by anyone holding at
  * least one of them.
  */
 
@@ -403,7 +403,7 @@ describe("event config (H45/H47)", () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it("round-trips the shirt-size catalogue via INTOLERANCES_MANAGE (H12)", async () => {
+  it("round-trips the shirt-size catalog via INTOLERANCES_MANAGE (H12)", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.INTOLERANCES_MANAGE]);
     const put = await a.inject({

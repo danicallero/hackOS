@@ -21,8 +21,8 @@ function luminance([r, g, b]: RGB): number {
 }
 
 /**
- * Hero tint from a logo's or photo's dominant colour (`color`, "#rrggbb"; null
- * falls back to a neutral grey): a gradient fading to transparent over the screen background,
+ * Hero tint from a logo's or photo's dominant color (`color`, "#rrggbb"; null
+ * falls back to a neutral gray): a gradient fading to transparent over the screen background,
  * plus the foreground (white or black) that reads on the tint at the strongest
  * point of the gradient. Dark mode darkens the tint so it does not glare.
  */
@@ -53,8 +53,8 @@ export function heroTint(
 
 /**
  * The veil over an ambient (blurred photo) hero (H44): the page's light or
- * dark ground at partial strength, so the photo's colours show while the
- * page's own label colours stay readable on it.
+ * dark ground at partial strength, so the photo's colors show while the
+ * page's own label colors stay readable on it.
  */
 export function ambientVeil(dark: boolean): string {
   // H44, H48: the native material already adds a wash; avoid bleaching the image twice.

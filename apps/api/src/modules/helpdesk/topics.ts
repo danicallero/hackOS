@@ -7,7 +7,7 @@ import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.
 import type { HelpTopic } from "./helpers.js";
 
 /**
- * H61 shared knowledge catalogue, self-service like the university picker:
+ * H61 shared knowledge catalog, self-service like the university picker:
  * anyone who offers or requests help can add a missing topic; equivalent
  * names (case, accents, spacing) resolve to the existing row. "Other" is not a
  * topic — requests carry `other` instead.
@@ -37,7 +37,7 @@ function toTopic(row: { id: number; name: string }): HelpTopic {
 }
 
 /**
- * `availableWhere` limits the catalogue to topics some listed helper who is in the
+ * `availableWhere` limits the catalog to topics some listed helper who is in the
  * venue offers (an SQL condition over `hp` and `u`, from helpers.ts); a request
  * can only be about what someone can help with right now.
  */
@@ -153,7 +153,7 @@ export async function mergeTopic(
 ): Promise<HelpTopic> {
   if (sourceId === targetId) throw new BadRequestError("Choose a different topic to merge into");
   return withTransaction(async (client) => {
-    // The catalogue is global: a merge re-points rows of every edition,
+    // The catalog is global: a merge re-points rows of every edition,
     // including closed ones.
     await withClosedEditionWrites(client, async () => {});
     const { rows } = await client.query<{ id: number; name: string }>(
@@ -193,7 +193,7 @@ export interface ManagedTopic extends HelpTopic {
   requests: number;
 }
 
-/** The whole catalogue with how much each topic is used, for its manager (H61). */
+/** The whole catalog with how much each topic is used, for its manager (H61). */
 export async function listManagedTopics(): Promise<ManagedTopic[]> {
   const { rows } = await pool.query<{
     id: number;

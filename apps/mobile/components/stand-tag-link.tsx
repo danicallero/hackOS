@@ -41,7 +41,7 @@ export function useStandTagLink(onLinked: (stand: LinkTarget, tag: StandTag) => 
 
   useEffect(() => {
     // Only a real background ends the read: presenting the Core NFC sheet
-    // itself makes the app `inactive`, and cancelling then closed it at once.
+    // itself makes the app `inactive`, and canceling then closed it at once.
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "background") session.current?.cancel();
     });

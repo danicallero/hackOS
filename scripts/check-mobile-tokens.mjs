@@ -1,4 +1,4 @@
-// Design-token ratchet for apps/mobile (H55, H59): raw hex colours, font sizes
+// Design-token ratchet for apps/mobile (H55, H59): raw hex colors, font sizes
 // and radii may not grow past the per-file baseline in
 // scripts/mobile-token-baseline.json. Migrating a file to `@/theme` lowers its
 // count; run with --update to record the lower numbers. docs/DESIGN.md §12.

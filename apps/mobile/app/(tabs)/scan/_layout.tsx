@@ -43,7 +43,7 @@ export default function ScannerLayout() {
           // list's first rows — keep the native opaque app bar (H59).
           headerShown: glassAvailable,
           headerLargeTitle: process.env.EXPO_OS === "ios",
-          // Keep the native large-title collapse (left at rest, centred when
+          // Keep the native large-title collapse (left at rest, centered when
           // the list scrolls) while reserving the header's height for rows.
           headerTransparent: true,
           headerShadowVisible: false,

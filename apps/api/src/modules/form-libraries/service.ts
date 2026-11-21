@@ -96,7 +96,7 @@ export async function replaceLibraryAnswers(
     );
 }
 
-/** H11/H16: accepting answers never creates catalogue entries implicitly. */
+/** H11/H16: accepting answers never creates catalog entries implicitly. */
 export async function validateLibraryAnswers(
   db: Queryable,
   fields: TemplateField[],
@@ -136,14 +136,14 @@ export async function validateLibraryAnswers(
     const answers = responses[field.key];
     if (!Array.isArray(answers) || answers.some((value) => typeof value !== "string"))
       throw new BadRequestError("Invalid library answer");
-    if (!existing.has(field.library_id)) continue; // Historical form versions retain answers after their catalogue is retired.
+    if (!existing.has(field.library_id)) continue; // Historical form versions retain answers after their catalog is retired.
     const names = namesByLibrary.get(field.library_id);
     if (answers.some((value) => !names?.has(value)))
       throw new ConflictError("Library values have changed; reload the form");
   }
 }
 
-/** H11: retiring a required catalogue must not strand a draft on an unanswerable question. */
+/** H11: retiring a required catalog must not strand a draft on an unanswerable question. */
 export async function activeLibraryFields(db: Queryable, fields: TemplateField[]) {
   const ids = fields.flatMap((field) =>
     field.kind === "library" && field.library_id ? [field.library_id] : [],

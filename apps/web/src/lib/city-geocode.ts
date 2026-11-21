@@ -32,7 +32,7 @@ export interface CityPlace {
 
 export interface PlacedCities {
   places: CityPlace[];
-  /** Answers whose country could not be recognised either. */
+  /** Answers whose country could not be recognized either. */
   unplaced: number;
 }
 
@@ -59,7 +59,7 @@ const words = (text: string) =>
   );
 
 // Country names are stored as the participant's browser localized them, or as
-// a geocoder returned them; recognise the languages attendees actually use.
+// a geocoder returned them; recognize the languages attendees actually use.
 const COUNTRY_NAME_LANGUAGES = ["es", "gl", "en", "pt", "ca", "eu", "fr", "it", "de"];
 let countryCodes: Map<string, string> | null = null;
 function countryCodeFor(name: string): string | null {

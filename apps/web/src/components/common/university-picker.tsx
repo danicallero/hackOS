@@ -134,7 +134,7 @@ export function UniversityPicker({
     onBlur?.();
     setResolvedLabel({ id: String(u.id), name: u.name });
     // A changed selection is just that: it must not leave the previous search
-    // text around to look like a second catalogue proposal.
+    // text around to look like a second catalog proposal.
     setQuery("");
     setOpen(false);
   }
@@ -153,7 +153,7 @@ export function UniversityPicker({
     } catch (err) {
       // The session can expire after this authenticated-only action becomes
       // available. Point back to sign-in rather than presenting it as a
-      // catalogue-validation failure.
+      // catalog-validation failure.
       toast.error(
         err instanceof ApiError && err.status === 401
           ? t("signIn")

@@ -234,7 +234,7 @@ export function ChallengeDetailScreen() {
     );
   }, [navigation, android]);
   const dark = useColorScheme() === "dark";
-  // H45: the company logo's colours wash the header, blue without a usable logo.
+  // H45: the company logo's colors wash the header, blue without a usable logo.
   const logo = challenge ? (challenge.company?.logoUrl ?? null) : undefined;
   const titleColor = useImageHeroForeground(logo, dark, NO_PHOTO_TINT);
   const openProjects = useCallback(

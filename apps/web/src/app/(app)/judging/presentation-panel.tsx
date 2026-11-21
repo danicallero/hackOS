@@ -477,7 +477,7 @@ function Fact({
   children,
 }: {
   label: string;
-  /** Context a judge rarely needs: regular weight, softer colour. */
+  /** Context a judge rarely needs: regular weight, softer color. */
   quiet?: boolean;
   className?: string;
   children: React.ReactNode;

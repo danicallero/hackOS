@@ -57,7 +57,7 @@ export async function buildApp(): Promise<App> {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
-  // Public catalogues remain anonymously embeddable. Viewer-dependent project
+  // Public catalogs remain anonymously embeddable. Viewer-dependent project
   // and winner projections also accept credentials from configured app origins.
   // Every other route keeps the configured credentialed-origin boundary.
   const corsOrigins = config.CORS_ORIGINS.split(",")
@@ -74,7 +74,7 @@ export async function buildApp(): Promise<App> {
     // X-Edition carries the viewed edition (docs/multi-edition-plan.md).
     allowedHeaders: ["content-type", "idempotency-key", "x-edition"],
     // Response headers the browser must be able to read cross-origin: rate
-    // limit backoff (H3), idempotent-replay signalling, per-file export
+    // limit backoff (H3), idempotent-replay signaling, per-file export
     // failures (H56) the web client surfaces so staff can act on them, and the
     // original file name of a CV the web viewer downloads from a blob (#935).
     exposedHeaders: [

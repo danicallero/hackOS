@@ -57,7 +57,7 @@ keep their raw value, and every label helper falls back
 `isMealActivityKind` / `MEAL_ACTIVITY_KINDS` replace every hardcoded
 `'meal'` comparison — including the SQL in `stats.ts` and `scanner-sync.ts`,
 which filter with `a.category = ANY($1::text[])`. Marking a second category
-`scan: "meal"` therefore gives it meal behaviour end to end (forced
+`scan: "meal"` therefore gives it meal behavior end to end (forced
 `requires_scan`, the meals scanner list, offline meal batches, meal stats,
 the meal-vs-activity pill on web and mobile) with no further code change.
 

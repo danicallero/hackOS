@@ -10,7 +10,7 @@ import { GROUP_SIBLING_CHALLENGE_IDS_SQL } from "./groups.js";
  * gave. That moment is the **first submitted evaluation**, not the scheduled
  * start of judging and not the generation of a queue: an event whose queues
  * are built and whose teams are lining up has nothing to lose from a
- * corrected question or a merge, and organisers routinely fix both in the
+ * corrected question or a merge, and organizers routinely fix both in the
  * last minutes before the first team walks in.
  *
  * Scope is the **queue group**, because that is what a judging form belongs

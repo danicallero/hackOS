@@ -14,7 +14,7 @@ Migration: `0901_help_desk.sql` includes the complete unmerged PR schema, challe
 | `helpdesk:offer` | Mentor, Sponsor, Organizer, Day Staff, Event Director | Own helper profile and availability, helper inbox, claim/release/resolve |
 | `helpdesk:request` | Participant, Event Director | Browse helpers, open/cancel/resolve own requests |
 | `helpdesk:coverage` | Organizer, Event Director | Coverage view (H67) |
-| `helpdesk:manage` | Event Director | Rename, merge and delete unused catalogue topics (Libraries › Knowledge areas); set the opening hours (H64) |
+| `helpdesk:manage` | Event Director | Rename, merge and delete unused catalog topics (Libraries › Knowledge areas); set the opening hours (H64) |
 
 **Eligibility.** A helper is eligible while they hold `helpdesk:offer`, or
 have an accepted or confirmed application response to a form whose granted
@@ -23,7 +23,7 @@ role carries it. Application roles are granted only on confirmation
 profile right after acceptance (H61) without event access. Eligibility is
 evaluated on every read: an ineligible helper's card disappears from
 browsing, routing and coverage even if it was published, and they cannot
-claim. The catalogue (`GET /api/helpdesk/topics`) also accepts eligible
+claim. The catalog (`GET /api/helpdesk/topics`) also accepts eligible
 helpers for the same reason; `POST` (adding a topic) is limited to eligible
 helpers and `helpdesk:manage`, so requesters get 403 `helper_not_eligible`.
 
@@ -41,7 +41,7 @@ granting, the seeded Mentor role, else `staff`.
 the bio and every other field are edited only in the public profile editor, and
 `PUT /api/me/helper-profile` takes `published`, `topicIds` and, optionally, `challengeIds` (any eligible helper: the visible challenges they want alerts and inbox limited to, stored in `helper_profile_challenges`; omitted keeps the set, `[]` clears it, unknown or hidden ids are 400). Turning publication on also sets the public profile's `directory_visible` in the same transaction (audited as `directoryVisible`); unpublishing never unshares. `GET` adds `suggestedInterval` (hacking window, else event window) for prefilling availability, plus `challengeIds`, `challenges` and `challengeOptions`. `PUT /api/me/helper-profile/availability` rejects (400 `availability_before_window`) an interval starting before `suggestedInterval.startsAt`; with no window there is no limit. The helper
 detail (`GET /api/helpdesk/helpers/:userId`) returns the directory's own entry
-as `profile`, honouring the person's per-field switches; publication is the
+as `profile`, honoring the person's per-field switches; publication is the
 consent for help desk readers, who also get the CV (while `share_cv` is on)
 and photo routes for that helper. Publishing does not change
 per-field sharing switches; publishing enables `directory_visible`, and sharing a public
@@ -74,10 +74,10 @@ hatched and cannot be marked. A stretch drawn over existing ones absorbs them (a
 24 hours. The Add availability button and the keyboard-activated stretches are the
 keyboard route. A helper's page shows the same lines read-only.
 
-## Knowledge catalogue
+## Knowledge catalog
 
 `help_topics` is one self-service list shared by profiles and requests, like
-the university picker: eligible helpers and catalogue managers can add a topic, and
+the university picker: eligible helpers and catalog managers can add a topic, and
 equivalent names (case, accents, spacing; `name_key`) resolve to the existing
 row instead of a duplicate. "Other" is not a row — requests carry `other` —
 and its translations are reserved. `helpdesk:manage` renames topics and
@@ -98,7 +98,7 @@ closed, end of the current continuous opening when open; touching windows
 count as one) and `suggestedInterval` (hacking window, else event window).
 Outside the windows only `POST /api/helpdesk/requests` is refused (409
 `helpdesk_closed`, checked in the creating transaction, `details.nextChangeAt`
-when known); claims, resolution, cancelling or editing existing requests,
+when known); claims, resolution, canceling or editing existing requests,
 browsing and helper settings are unaffected. Idempotent retries of an
 already created request replay the original response. Writes wake the
 payload-free `domain:helpdesk` refresh.
@@ -118,7 +118,7 @@ team requests, and teammates neither see nor act on each other's requests
 (0902 dropped `help_requests.repo_id`). Opening one requires event access. At
 most one request is active (open or claimed) per person (a partial unique
 index plus a locked check), so
-double submits cannot open two. Cancelling withdraws the request and keeps its
+double submits cannot open two. Canceling withdraws the request and keeps its
 audited history; it does not physically delete the record.
 
 **Routing (H65)** runs once, at creation, inside the creating transaction:
@@ -215,12 +215,12 @@ requests that no available helper covers.
 Anonymization deletes the helper profile (topics and availability cascade)
 and routed-audience rows, clears `help_topics.proposed_by`, and detaches the
 person from requests: their requests lose description, location and
-requester and are cancelled if active; a claim they held returns to `open`. The data
+requester and are canceled if active; a claim they held returns to `open`. The data
 export includes `helperProfile` and the requests they opened.
 
 ## Knowledge areas and staff edits
 
-The catalogue is also a mentor's list of areas (`GET /api/me/mentor-profile`
+The catalog is also a mentor's list of areas (`GET /api/me/mentor-profile`
 reads the same topics). `GET /api/helpdesk/topics/manage` (`helpdesk:manage`)
 lists every topic with `helpers` and `requests` counts for the manager in
 Libraries › Knowledge areas; `DELETE /api/helpdesk/topics/:id` removes a topic
@@ -238,7 +238,7 @@ consent (403 `helper_publish_own_consent`).
 A request form lists only the knowledge areas that a published helper who is in
 the venue now (door scan, H24) offers: `GET /api/helpdesk/topics` answers
 requesters, and any call with `available=1`, with those; eligible helpers and
-managers otherwise get the whole catalogue. Only eligible helpers create areas
+managers otherwise get the whole catalog. Only eligible helpers create areas
 (`POST /api/helpdesk/topics`); managers rename, merge and delete unused ones.
 
 ## Who may request help
@@ -256,7 +256,7 @@ keyed `(user_id, event_key)`: a helper published in 2027 is not listed in 2028
 until they publish again, and their topics, challenge limits and availability
 live in that edition's profile. Helper browsing, coverage, open windows, the
 request lists, the helper inbox and routing all use `current_edition()` (the
-viewed edition). The topic catalogue is global, so topic proposals and manager
+viewed edition). The topic catalog is global, so topic proposals and manager
 edits are allowed in any edition and a merge re-points rows of every edition.
 Writes in a closed edition answer 409 `edition_closed`; the opening-hours
 schedule is a current-edition setting.

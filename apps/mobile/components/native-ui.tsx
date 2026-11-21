@@ -1022,7 +1022,7 @@ export function FloatingGlassButton({
 }
 
 /**
- * Fill colours for a small input dialog (note, code entry) over a dimmed
+ * Fill colors for a small input dialog (note, code entry) over a dimmed
  * page. Light mode keeps the grouped page tone with white fields; in dark
  * mode the grouped page is black, so the card steps up to the surface tone
  * and its field to the elevated one, or the card vanishes into the dim.

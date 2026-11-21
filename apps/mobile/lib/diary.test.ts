@@ -42,7 +42,7 @@ function entry(id: number, overrides: Partial<DiaryEntry> = {}): DiaryEntry {
 }
 
 describe("diary ordering (#935)", () => {
-  it("puts favourites first, then the most recently saved", () => {
+  it("puts favorites first, then the most recently saved", () => {
     const sorted = sortDiaryEntries([entry(1), entry(2, { starred: true }), entry(3)]);
     expect(sorted.map((item) => item.id)).toEqual([2, 3, 1]);
   });

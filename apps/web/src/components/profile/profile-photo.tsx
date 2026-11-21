@@ -82,7 +82,7 @@ export function ProfilePhoto({
           </DropdownMenu>
         ) : (
           // A label around the file input, not a button calling `input.click()`: the
-          // tap opens the picker natively, which iOS browsers honour where a scripted
+          // tap opens the picker natively, which iOS browsers honor where a scripted
           // click on the hidden input was reported to do nothing (H15 share step).
           <label
             className={cn(

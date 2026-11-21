@@ -9,13 +9,13 @@ import { windowSizeClass } from "@/lib/window-size";
 import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 import { readableContentWidth, screenGutter } from "@/theme/layout";
 
-/** Widest the scanner body column grows per size class; wider windows centre the column. */
+/** Widest the scanner body column grows per size class; wider windows center the column. */
 export const OPERATOR_COLUMN_MAX = { compact: 440, medium: 520, expanded: 720 } as const;
 
 /** The column holds the stat block on one row from this width (primary + two equal columns). */
 export const STAT_ROW_MIN_WIDTH = 440;
 
-/** Three labelled actions sit side by side from this column width (three 220pt buttons + gaps), so "Enter code manually" never wraps. */
+/** Three labeled actions sit side by side from this column width (three 220pt buttons + gaps), so "Enter code manually" never wraps. */
 export const ACTION_ROW_MIN_WIDTH = 680;
 
 /** Below this window height the reader surface shrinks and the whole body scrolls. */
@@ -107,7 +107,7 @@ export interface ListColumnStyle {
 
 /**
  * Content-container style for an operator list or form: the same gutter on both edges and a
- * reading column that stays centred; expanded windows use their full width.
+ * reading column that stays centered; expanded windows use their full width.
  */
 export function operatorListColumn(
   windowWidth: number,

@@ -10,7 +10,7 @@ import { isSvg, svgTintSource } from "./svg-tint";
 
 const SAMPLE = 24;
 
-/** What an image's pixels say: its colour, and whether its artwork runs into its edges (H44). */
+/** What an image's pixels say: its color, and whether its artwork runs into its edges (H44). */
 export interface ImageReading {
   color: string | null;
   bleed: boolean;
@@ -20,8 +20,8 @@ let sampleSequence = 0;
 
 /**
  * Download the image, let the platform scale it to 24x24 as a PNG and read its
- * colour and edges. An SVG is read through `svgTintSource`: its embedded
- * raster, else its paint colours. The original and the thumbnail are cache files removed
+ * color and edges. An SVG is read through `svgTintSource`: its embedded
+ * raster, else its paint colors. The original and the thumbnail are cache files removed
  * straight away, so a hidden photo is not left on disk.
  */
 async function decodeImageTint(uri: string): Promise<ImageReading | null> {
@@ -60,7 +60,7 @@ async function decodeImageTint(uri: string): Promise<ImageReading | null> {
 type Listener = () => void;
 
 /**
- * In-memory colour per image URL (null = no usable colour), with in-flight
+ * In-memory color per image URL (null = no usable color), with in-flight
  * work deduplicated and at most `concurrency` decodes running, each started
  * through `schedule` (off the interaction path) so lists never stutter.
  */
@@ -114,7 +114,7 @@ export function createTintCache<T = string>(
 
   return {
     prefetch,
-    /** undefined = not computed (yet); null = computed, no usable colour. */
+    /** undefined = not computed (yet); null = computed, no usable color. */
     get: (uri: string | null | undefined) => (uri ? done.get(uri) : null),
     subscribe(uri: string, listener: Listener) {
       const set = listeners.get(uri) ?? new Set();
@@ -134,7 +134,7 @@ const cache = createTintCache(decodeImageTint, (run) => {
   InteractionManager.runAfterInteractions(run);
 });
 
-/** Compute a logo's or photo's colour in the background, before its page opens. */
+/** Compute a logo's or photo's color in the background, before its page opens. */
 export function prefetchImageTint(uri: string | null | undefined): void {
   void cache.prefetch(uri);
 }
@@ -144,19 +144,19 @@ export function getCachedImageTint(uri: string | null | undefined): string | nul
   return reading === undefined ? undefined : (reading?.color ?? null);
 }
 
-/** Forget every colour (sign-out): a photo hidden later must not linger. */
+/** Forget every color (sign-out): a photo hidden later must not linger. */
 export function clearImageTints(): void {
   cache.clear();
 }
 
 /**
- * The image's colour for a page hero. A prefetched colour is there on the very
+ * The image's color for a page hero. A prefetched color is there on the very
  * first render (`fromCache`), so the hero draws already tinted; otherwise the
- * colour arrives later and the hero fades in. null = no image or colour.
+ * color arrives later and the hero fades in. null = no image or color.
  */
 export function useImageTint(uri: string | null | undefined): {
   color: string | null;
-  /** True once the colour is known to be there or not: no image, or it was decoded (or failed). */
+  /** True once the color is known to be there or not: no image, or it was decoded (or failed). */
   settled: boolean;
   fromCache: boolean;
 } {
@@ -189,9 +189,9 @@ export function useImageBleed(uri: string | null | undefined): boolean {
 }
 
 /**
- * A company's colour (H44), read from the logo the viewer sees: the negative
- * artwork on dark grounds. A negative that lost the brand colours (white or
- * mono) has none, so the positive logo's colour is used instead.
+ * A company's color (H44), read from the logo the viewer sees: the negative
+ * artwork on dark grounds. A negative that lost the brand colors (white or
+ * mono) has none, so the positive logo's color is used instead.
  */
 export function useCompanyLogoTint(
   logo: { logoUrl: string | null | undefined; logoNegativeUrl?: string | null } | null,

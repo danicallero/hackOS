@@ -82,7 +82,7 @@ body:has([data-hero-bleed]) [data-slot="sidebar-inner"] {
 }
 
 /* Hero links (back, website) hover with a foreground tint like `row-link`:
-   the opaque quiet-button fill reads as a grey slab over a tinted or image
+   the opaque quiet-button fill reads as a gray slab over a tinted or image
    backdrop (H48). */
 @media (hover: hover) and (pointer: fine) {
   [data-hero-content] .button-interaction:hover {

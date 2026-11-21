@@ -193,8 +193,8 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | GET | `/api/helpdesk/requests/mine` | capability:helpdesk:request |
 | GET | `/api/helpdesk/schedule` | authenticated |
 | PUT | `/api/helpdesk/schedule` | capability:helpdesk:manage + email-verification:caller + edition:current |
-| GET | `/api/helpdesk/topics` | contextual:helpdesk-catalogue |
-| POST | `/api/helpdesk/topics` | contextual:helpdesk-catalogue + email-verification:caller + edition:global |
+| GET | `/api/helpdesk/topics` | contextual:helpdesk-catalog |
+| POST | `/api/helpdesk/topics` | contextual:helpdesk-catalog + email-verification:caller + edition:global |
 | DELETE | `/api/helpdesk/topics/:id` | capability:helpdesk:manage + email-verification:caller + edition:global |
 | PATCH | `/api/helpdesk/topics/:id` | capability:helpdesk:manage + email-verification:caller + edition:global |
 | POST | `/api/helpdesk/topics/:id/merge` | capability:helpdesk:manage + email-verification:caller + edition:global |

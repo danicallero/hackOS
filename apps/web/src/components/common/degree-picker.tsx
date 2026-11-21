@@ -2,7 +2,7 @@
 
 import { CaretUpDownIcon } from "@phosphor-icons/react/dist/csr/CaretUpDown";
 // Curated degree autocomplete. It mirrors the university directory's proposal
-// limits on the API and stores only the stable catalogue id in a response.
+// limits on the API and stores only the stable catalog id in a response.
 import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { Popover as PopoverPrimitive } from "radix-ui";

@@ -114,7 +114,7 @@ describe("GET /api/tv/connections eligibility", () => {
     expect((await graphRaw()).body.edges).toHaveLength(1);
   });
 
-  it("shows every visible person by name, honouring show_surname, and omits people not sharing", async () => {
+  it("shows every visible person by name, honoring show_surname, and omits people not sharing", async () => {
     const shown = await person({ showSurname: true, name: "Sol", surname: "Pérez" });
     const initial = await person({ name: "Rio", surname: "Vega" });
     const hidden = await person({ visible: false, name: "Hidden" });
@@ -402,7 +402,7 @@ describe("bound and density", () => {
          ON a.n <> b.n AND ((b.n - a.n + $1) % $1) BETWEEN 1 AND 40`,
       [N],
     );
-    // Autovacuum would have analysed a table this size in production.
+    // Autovacuum would have analyzed a table this size in production.
     await pool.query("ANALYZE diary_entries, users, user_roles, user_public_profiles");
     const started = performance.now();
     const { body, raw } = await graphRaw();

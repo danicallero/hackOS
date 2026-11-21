@@ -55,7 +55,7 @@ export function isScheduled(availableFrom: string | null): boolean {
   return !Number.isNaN(at.getTime()) && at.getTime() > Date.now();
 }
 
-/** Normalise a possibly-null i18n value from the API into an editable I18nText. */
+/** Normalize a possibly-null i18n value from the API into an editable I18nText. */
 export function asI18n(value: unknown, fallbackEn: string): I18nText {
   if (value && typeof value === "object") {
     const v = value as Partial<I18nText>;

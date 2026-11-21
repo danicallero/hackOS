@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import copyFragments from "./social-sharing.locales.json";
 
 /**
- * Personalised "I'm going" share card. The PNG is drawn in the browser from
+ * Personalized "I'm going" share card. The PNG is drawn in the browser from
  * the attendee's own name and (optionally) photo plus the shipped brand
  * artwork under `/onboarding`; nothing is sent to an image service, no URL
  * carrying a token is shared, and every action (download, copy, share) needs
@@ -108,7 +108,7 @@ const FALLBACK_SANS = "system-ui, -apple-system, Segoe UI, sans-serif";
 /** The Apple Wallet pass strip (apps/api/assets/apple-wallet/strip@3x.png): lighthouse and HackUDC 2027 wordmark. */
 export const SHARE_ART = {
   strip: "/onboarding/pass-strip.png",
-  /** The pass's organizer logo (apple-wallet/logo@2x.png), recoloured ink for the blue body. */
+  /** The pass's organizer logo (apple-wallet/logo@2x.png), recolored ink for the blue body. */
   organizer: "/onboarding/gpul-logo.png",
   /** Emilia, the seagull of the 404 page: perches on the pass. */
   seagull: "/onboarding/emilia.png",
@@ -576,7 +576,7 @@ function drawSeagull(ctx: Ctx, o: DrawCardOptions, passW: number, height: number
  * Vertical formats follow the landscape hierarchy (event line, name, role),
  * all left-aligned on one margin: the text block on top, the tilted pass
  * anchored to the right below it as the focal point, the host as the call to
- * action centred under the pass. The column is centred inside the format's safe
+ * action centered under the pass. The column is centered inside the format's safe
  * band, so no format has dead space at one end. Story keeps the
  * top ~250 px and bottom ~340 px free of content (the bands Instagram overlays);
  * portrait and square keep a margin so the 3:4 profile-grid crop does not cut
@@ -721,7 +721,7 @@ export function drawShareCard(ctx: Ctx, o: DrawCardOptions): void {
       wide ? 2 : 3,
       2,
     );
-    // Landscape and Square: the text block sits at the top-left. Square centres gull, pass and
+    // Landscape and Square: the text block sits at the top-left. Square centers gull, pass and
     // the host beneath it as one group.
     const groupTop = (height - (gull + passH + 70)) / 2 - 30;
     drawPosterRows(ctx, rows, margin, wide ? 128 : 64, "left");
@@ -843,7 +843,7 @@ export async function renderShareImage(options: DrawCardOptions): Promise<Blob> 
 }
 
 /**
- * Draws the personalised card for `format`; re-renders when any input changes.
+ * Draws the personalized card for `format`; re-renders when any input changes.
  * Shared by the share step and the read-only preview offered after confirming
  * a place (H15), so both always show the same artwork.
  */

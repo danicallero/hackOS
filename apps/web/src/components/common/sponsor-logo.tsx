@@ -4,7 +4,7 @@ import { useLogoBleed } from "@/lib/company";
 import { cn } from "@/lib/utils";
 
 /**
- * Renders the appropriate sponsor logo for the active colour scheme. Artwork
+ * Renders the appropriate sponsor logo for the active color scheme. Artwork
  * that runs into its own edges (no built-in margin) is drawn slightly smaller,
  * so it never touches its tile or slot (H44).
  */

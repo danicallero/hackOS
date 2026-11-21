@@ -96,7 +96,7 @@ class ProfileGooeyView(context: Context, appContext: AppContext) : ExpoView(cont
     super.onDetachedFromWindow()
   }
 
-  /** The child's display list scaled about its centre onto the animated circle. */
+  /** The child's display list scaled about its center onto the animated circle. */
   private fun drawAvatar(canvas: Canvas, child: View) {
     val scale = avatarDiameter * density / child.width
     canvas.save()
@@ -108,7 +108,7 @@ class ProfileGooeyView(context: Context, appContext: AppContext) : ExpoView(cont
   }
 
   /**
-   * Each shape is painted separately, so overlaps union instead of cancelling.
+   * Each shape is painted separately, so overlaps union instead of canceling.
    * Until the avatar has darkened to black only the lens is drawn.
    */
   private fun drawInk(canvas: Canvas) {
@@ -126,7 +126,7 @@ class ProfileGooeyView(context: Context, appContext: AppContext) : ExpoView(cont
     }
     if (hr > 0f && pill > 0f) {
       // The neck fattens into a straight-sided pill: a band between the two
-      // centres as wide as `pill` times the smaller circle, so the union of
+      // centers as wide as `pill` times the smaller circle, so the union of
       // lens, band and avatar reads as one capsule that shortens into the lens.
       val half = min(hr, ar) * pill
       canvas.drawRect(hx - half, min(hy, ay), hx + half, max(hy, ay), inkPaint)

@@ -12,7 +12,7 @@ function buttonOrder(buttons: AlertButton[]): AlertButton[] {
   return buttons[1]?.style === "cancel" ? [buttons[1], buttons[0]] : buttons;
 }
 
-// Read per render: Android colours resolve against the current scheme (theme/colors.ts).
+// Read per render: Android colors resolve against the current scheme (theme/colors.ts).
 const centered = () => ({ color: colors.label, textAlign: "center" }) as const;
 
 function Divider({ vertical }: { vertical?: boolean }) {

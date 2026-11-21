@@ -683,7 +683,7 @@ describe("no save by id", () => {
 });
 
 describe("reading and editing the diary", () => {
-  it("lists favourites first and reflects current visibility", async () => {
+  it("lists favorites first and reflects current visibility", async () => {
     const ana = await person("Ana");
     const bea = await person("Bea");
     const acme = await enterprise("Acme");

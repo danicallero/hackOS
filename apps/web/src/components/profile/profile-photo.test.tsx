@@ -64,7 +64,7 @@ describe("ProfilePhoto (#934)", () => {
     expect(session.refresh).toHaveBeenCalled();
   });
 
-  it("offers photo upload as a labelled button beside the share card", async () => {
+  it("offers photo upload as a labeled button beside the share card", async () => {
     vi.mocked(apiUpload).mockResolvedValue({ image: "/api/users/7/photo?v=shared" });
     await act(async () => root.render(<ProfilePhoto variant="button" />));
     expect(container.querySelector("label")?.textContent).toBe("uploadPhoto");

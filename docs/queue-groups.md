@@ -113,7 +113,7 @@ room_enterprises >── rooms ──< room_queue_groups >── queue_groups
    release checks must repair them before serving traffic.
 
 With a valid membership row, nothing is merged automatically: today's
-per-challenge queue behaviour is exactly what N separate 1:1 groups describe.
+per-challenge queue behavior is exactly what N separate 1:1 groups describe.
 Merging challenges into a shared group is an explicit admin action — see
 "Merging" below.
 
@@ -258,7 +258,7 @@ The merge itself, in one transaction:
 1. **Locks every one of the enterprise's `queue_groups` rows, lowest id
    first.** Merge and split both move memberships between an enterprise's
    groups and renumber positions across them, so concurrent calls have to
-   serialise; a fixed lock order means two overlapping merges cannot deadlock.
+   serialize; a fixed lock order means two overlapping merges cannot deadlock.
 2. **Refuses a group spanning enterprises.** The database already refuses it
    (the database constraint trigger); the service check exists so the caller gets a
    400 instead of a `23514`.
@@ -288,7 +288,7 @@ about a single-challenge enterprise's scoring changes.
 `criteria-merge.ts` folds the member panels into it: a de-duplicating union in
 author order, where two questions are the same question when their labels
 match in **any** of `en`/`es`/`gl` after case/whitespace/accent/trailing-
-punctuation normalisation, or (for a question with no label) when their keys
+punctuation normalization, or (for a question with no label) when their keys
 match. Keys are preserved wherever possible, since `attempt_review.scores` is
 keyed by them; only a key claimed by two genuinely different questions is
 renamed (`nota` → `nota-2`). Nothing semantic is attempted — the admin's

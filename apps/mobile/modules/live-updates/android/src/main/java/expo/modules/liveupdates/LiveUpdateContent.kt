@@ -43,7 +43,7 @@ data class LiveUpdateMetric(
   val timer: String? = null,
   val hero: Boolean = false,
   val quiet: Boolean = false,
-  /** Value colour when it differs from the phase colour (e.g. an amber status). */
+  /** Value color when it differs from the phase color (e.g. an amber status). */
   val tone: String? = null,
 )
 

@@ -51,7 +51,7 @@ route schemas. Root [`README.md`](../README.md) covers local setup,
 | [Audit trail](./audit-trail.md) | What an audit entry stores, private-value minimization, autosave grouping (H53) |
 | [Background workers](./background-workers.md) | BullMQ queues, retries, dead letters and the sync-vs-async map |
 | [Idempotency matrix](./idempotency-matrix.md) | Retry classification of every state-changing route |
-| [Rate limiting](./rate-limiting.md) | The Valkey-backed limiter, limits per endpoint class, fail-open behaviour |
+| [Rate limiting](./rate-limiting.md) | The Valkey-backed limiter, limits per endpoint class, fail-open behavior |
 | [Realtime transport](./realtime-transport.md) | The multiplexed stream, scopes, recovery and metrics |
 | [Request admission](./request-admission.md) | P0–P3 priority lanes, reserved capacity and shedding |
 | [Route-policy ledger](./access-control-route-ledger.md) | Generated list of every route and its access policy |
@@ -63,7 +63,7 @@ route schemas. Root [`README.md`](../README.md) covers local setup,
 | [Account deletion](./account-deletion.md) | Data inventory, retention boundary and anonymization flows (H54) |
 | [Attendance certificates](./certificates.md) | Policy, variants, PDF, verification code, override and revoke |
 | [Catering and activity RSVPs](./catering-rsvp.md) | Per-activity answers, options, exclusions and headcounts |
-| [Content reports](./content-reports.md) | Reports of projects and profiles, and the organiser inbox (H18) |
+| [Content reports](./content-reports.md) | Reports of projects and profiles, and the organizer inbox (H18) |
 | [Event config & Wallet pass](./event-config-wallet.md) | The `event_config` singleton, pass rendering and the scoped-token page |
 | [Event diary](./diary.md) | Saving people and sponsor stands by scan, privacy rules, stand tags (#935) |
 | [GitHub activity](./github-activity.md) | Repo linking through the GitHub App, activity tracking, TV ranking |
@@ -80,7 +80,7 @@ route schemas. Root [`README.md`](../README.md) covers local setup,
 | [Queue groups](./queue-groups.md) | Enterprise-scoped grouping of challenges into shared judging queues (H46) |
 | [Queue operator console](./queue-operator.md) | Arrival board, team search, capability-gated actions |
 | [Schedule categories](./schedule-categories.md) | The activity-kind registry and how to add or retire a kind |
-| [Statistics dashboard](./statistics-dashboard.md) | Scopes, panel catalogue, aggregation, statistics ACLs |
+| [Statistics dashboard](./statistics-dashboard.md) | Scopes, panel catalog, aggregation, statistics ACLs |
 | [Synthetic reviewer fixtures](./reviewer-fixtures.md) | Isolated reviewer accounts for store review |
 | [TV screens](./tv-screens.md) | Modes, manual/default precedence, the combined live screen |
 

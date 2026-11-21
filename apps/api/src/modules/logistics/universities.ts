@@ -37,8 +37,8 @@ function normalizeUniversityName(name: string): string {
 async function createUniversity(actorId: number, name: string, suggested = false) {
   return withTransaction(async (client) => {
     const normalizedName = normalizeUniversityName(name);
-    // Serialise equivalent names (case/whitespace-insensitive) so concurrent
-    // self-service proposals resolve to the same catalogue row.
+    // Serialize equivalent names (case/whitespace-insensitive) so concurrent
+    // self-service proposals resolve to the same catalog row.
     await client.query(`SELECT pg_advisory_xact_lock(hashtextextended(lower($1), 0))`, [
       normalizedName,
     ]);
@@ -128,7 +128,7 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
     kind: "public",
     anonymousCategory: "public-content",
   } as const satisfies RouteAccessPolicy;
-  // Catalogues are global: their edits never touch an edition's rows.
+  // Catalogs are global: their edits never touch an edition's rows.
   const authenticated = {
     kind: "authenticated",
     edition: "global",
@@ -192,7 +192,7 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Propose a university",
         description:
-          "Authenticated self-service proposal, limited to one active suggestion per account. Equivalent concurrent proposals resolve to the same catalogue row. The proposal is attributed to the current user; anonymous clients cannot create catalogue rows. Staff can add catalogue rows through the management endpoint.",
+          "Authenticated self-service proposal, limited to one active suggestion per account. Equivalent concurrent proposals resolve to the same catalog row. The proposal is attributed to the current user; anonymous clients cannot create catalog rows. Staff can add catalog rows through the management endpoint.",
         body: createBody,
       },
     },
@@ -233,7 +233,7 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
         body: z.object({ targetId: z.number().int().positive() }),
         summary: "Consolidate duplicate universities",
         description:
-          "Staff-only consolidation of two university catalogue rows. Every affected profile and application response is reassigned to the retained university before the duplicate row is deleted.",
+          "Staff-only consolidation of two university catalog rows. Every affected profile and application response is reassigned to the retained university before the duplicate row is deleted.",
       },
     },
     async (req) => normalizeUniversity(req.userId as number, req.params.id, req.body.targetId),

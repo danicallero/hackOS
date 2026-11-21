@@ -11,7 +11,7 @@ Web: `apps/web/src/lib/nav.ts` (data) + `apps/web/src/components/layout/app-side
 `apps/mobile/app/(tabs)/_layout.tsx` (rendering).
 
 Certificate policy (#1083) is available at **Event settings → Certificates**
-(`/settings/event?tab=certificates`) to organisers with `presence:manage`.
+(`/settings/event?tab=certificates`) to organizers with `presence:manage`.
 The section owns one Save for automatic/review thresholds, presentation
 requirement and issuer name. **Attendance → Certificates**
 (`/logistics/presence?tab=certificates`, `presence:manage`) provides the review
@@ -24,7 +24,7 @@ filters. CSV exports require `logistics:stats`.
 - [Web: personal area + workspaces](#web-personal-area--workspaces)
   - [Stable personal area](#stable-personal-area-personal_nav)
   - [Work workspaces](#work-workspaces-workspaces)
-  - [Behaviour](#behaviour)
+  - [Behavior](#behavior)
 - [Mobile: custom tabs and overflow selector](#mobile-custom-tabs-and-overflow-selector-h55)
 - [Decision-only applications](#decision-only-applications)
 - [Association-aware domain pages](#association-aware-domain-pages)
@@ -119,9 +119,9 @@ workspace never over-grants access.
 | Projects | Projects, Project form | Projects: `projects:read`, `projects:edit`, or an assigned-judge/sponsor-rep association; Project form: `projects:edit` |
 | Live judging | Queue operations (tabs: All rooms overview · Judging queues · Room configuration), Judging, Reviews | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging); The Room configuration tab is `queue:admin` only — a sponsor rep routes their queues to their pooled rooms from Queue operations' Queues tab, not from room administration |
 | Logistics | Accreditation and presence, Meals and activities (tabs: Activities · Meals), Logistics stats | `accredit:scan` or `presence:scan` (Accreditation and presence — a single unified scan/people-finder/hours station), `activity:scan` (Meals and activities — one unified scan station), `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
-| Programme | Manage schedule, TV control, Announcements | `schedule:read` (view-only schedule), `schedule:manage`, `tv:control`, or `announcements:manage` |
+| Program | Manage schedule, TV control, Announcements | `schedule:read` (view-only schedule), `schedule:manage`, `tv:control`, or `announcements:manage` |
 | Sponsors | Enterprises, Challenges, Company tags (`/company-tags`), Sponsor FAQ | `sponsors:manage`, `queue:admin`, or a sponsor-rep association (Company tags: `sponsors:manage` only — reps see their company's tags on its Tags tab, #935; Sponsor FAQ: `sponsors:manage` only, plus sponsor-rep read access enforced server-side) |
-| Event setup (`Configuración` in es/gl) | Event settings, Libraries | Event settings: any of `event:manage`, `venue:manage`, `wallet:manage`, `presence:manage`, `invites:manage`, `queue:admin` (judging hours), `projects:edit` (project form) (each section within it individually gated by its own capability — H8); Libraries: `intolerances:manage` for the catalogues, `helpdesk:manage` for the Knowledge areas tab |
+| Event setup (`Configuración` in es/gl) | Event settings, Libraries | Event settings: any of `event:manage`, `venue:manage`, `wallet:manage`, `presence:manage`, `invites:manage`, `queue:admin` (judging hours), `projects:edit` (project form) (each section within it individually gated by its own capability — H8); Libraries: `intolerances:manage` for the catalogs, `helpdesk:manage` for the Knowledge areas tab |
 | Access and audit | Users, Permissions, Reports, Audit log | `users:read`, `permissions:manage`, `users:write` or `projects:edit` (Reports), `audit:read` |
 
 The web navigation uses Phosphor concept icons: `Package` for the Logistics
@@ -142,7 +142,7 @@ managers to `/users/invites` (others see Profile).
 The admin wildcard (`*`) passes every capability check and therefore sees
 every workspace and every item (`apps/web/src/lib/session.tsx`).
 
-### Behaviour
+### Behavior
 
 - The shell exposes one `main#main-content` and a first-focusable Skip to
   content link. The sidebar list is a named navigation landmark. Public landing
@@ -174,9 +174,9 @@ every workspace and every item (`apps/web/src/lib/session.tsx`).
   single-destination workspaces render nothing — the sidebar draws no group
   header for the latter either, so their label names the leaf.
 - One name per destination: `nav.ts` and the page `h1` reference the same
-  message key. `/timetable` is **Schedule** (the read-only programme every
+  message key. `/timetable` is **Schedule** (the read-only program every
   participant uses) and `/schedule` is **Manage schedule** (the editor); no
-  multi-destination workspace is labelled with one of its own items.
+  multi-destination workspace is labeled with one of its own items.
 - `/timetable` (one route for signed-in and signed-out viewers, rendered by
   `PublicScheduleView`; `/horario` redirects to it) get a client-side audience filter (H59 follow-up,
   `components/public/schedule-audience-filter.tsx`) whenever the caller's own
@@ -217,7 +217,7 @@ hidden destinations stay routable:
   [`diary.md`](./diary.md); People and Companies segments only, with no
   directory to browse, opened directly with `?view=companies`; the direct tab is
   `app/(tabs)/diary/`, its own Stack for the native header and search) and
-  **Account** are direct, with **My Projects** (tab key `queue`, labelled
+  **Account** are direct, with **My Projects** (tab key `queue`, labeled
   **Projects** in the tab bar so it fits, H19/H20) always
   added: every account in the event-access shell can open it before any queue
   entry, and the live queue status appears inside each project record, so five fit
@@ -280,7 +280,7 @@ Selection simulates tab navigation
 `resolveOperationsNavigationAction`): picking the section already on screen
 is a no-op (except Account subpages, which return to the profile), and picking another always `router.replace()`s — a tab switch,
 never a stack push — so overflow screens don't stack duplicates and back
-behaviour stays sane. Direct tabs use the headless Expo Router tab state
+behavior stays sane. Direct tabs use the headless Expo Router tab state
 (`JUMP_TO`) and emit `tabPress`, preserving each tab's stack and its
 scroll-to-top/live-activity handlers; deeper screens inside a section still
 push normally on top of it. Pathname matching normalizes Expo Router route groups first
@@ -443,7 +443,7 @@ pages keep a consistent content width. Schedule search and categorical filters s
 the standard ListToolbar/FilterMenu; long activities remain in the hourly grid,
 with category metadata and an internal daytime scroll position.
 
-The programme requests the audience-aware feed with session credentials from the
+The program requests the audience-aware feed with session credentials from the
 configured app origin; CORS reflects only trusted app origins for this endpoint.
 Anonymous public/TV consumers keep the credential-free feed. Project creation is
 the primary action of the Projects page header.
@@ -470,7 +470,7 @@ The web personal sidebar adds **Help desk** (`/help-desk`) for any of
 `HELPDESK_REQUEST`, `HELPDESK_OFFER` or `HELPDESK_COVERAGE`. Its entry shares
 one selector: My requests with request capability, Open and My assignments with
 offer capability plus server eligibility. The Support team directory remains
-one labelled sibling link with the live count of available people. Opening hours
+one labeled sibling link with the live count of available people. Opening hours
 (`/help-desk/hours`, `HELPDESK_MANAGE`), Coverage
 (`HELPDESK_COVERAGE`) and My support profile (server eligibility, including
 accepted mentors before confirmation) stay in the header menu. The latter
@@ -478,7 +478,7 @@ opens `/settings/profile?tab=public` (the help desk settings sit under the publi
 
 Published `/help-desk/requests` and `/help-desk/inbox` entries render the same
 selector. `?tab=mine|open|claims` restores selection; request-row links preserve
-the originating list URL for the labelled return action. The inbox URL defaults
+the originating list URL for the labeled return action. The inbox URL defaults
 to Open, other entries to the first authorized view. Numeric notification links
 at `/help-desk/requests/:id` remain readable under API authorization. Published
 helpers use `/help-desk/helpers/:userId`, rendering the shared public profile.
@@ -512,7 +512,7 @@ separate saves. Explicit help desk publication makes the helper and stated
 schedule browsable without creating a diary contact or changing networking
 sharing consent (H61–H63).
 
-The Logistics `/logistics/rsvps` destination is labelled **RSVP** in both the sidebar and page header (H59).
+The Logistics `/logistics/rsvps` destination is labeled **RSVP** in both the sidebar and page header (H59).
 
 At the end of Event data, Mobile Account shows RSVP only when the API offers an activity to the person’s roles. It opens personal RSVP answers at `/(tabs)/others/rsvps`, using the same push and native back navigation as notification preferences. Account remains selected, and reselecting it returns to the profile (H59, H55).
 

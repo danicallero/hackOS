@@ -73,7 +73,7 @@ function TvClock({ className }: { className?: string }) {
 
 /**
  * Standard header: who we are on the left, what this screen is plus the time
- * on the right. `eventName` replaces the product wordmark when the organiser
+ * on the right. `eventName` replaces the product wordmark when the organizer
  * has named the event — on a venue wall the hackathon's name is the useful one.
  */
 export function TvHeader({
@@ -116,7 +116,7 @@ export function TvHeader({
   );
 }
 
-/** Body wrapper for the single-purpose modes: one screenful, centred, no scroll. */
+/** Body wrapper for the single-purpose modes: one screenful, centered, no scroll. */
 export function TvBody({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden p-[2.5em]", className)}>

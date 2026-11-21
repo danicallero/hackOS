@@ -13,7 +13,7 @@ import {
 } from "../helpers.js";
 import { admitParticipant, setHackingWindow } from "../projects/fixtures.js";
 
-/** H18: attendees report user-generated content; organisers close the reports. */
+/** H18: attendees report user-generated content; organizers close the reports. */
 
 let app: App;
 let owner: number;
@@ -119,7 +119,7 @@ describe("filing a report", () => {
   });
 });
 
-describe("the organiser inbox", () => {
+describe("the organizer inbox", () => {
   it("shows each moderator only the kinds their capability covers", async () => {
     await save(reporter, owner);
     await report(reporter, { projectId, reason: "spam" });

@@ -2,15 +2,15 @@ import { useWindowDimensions } from "react-native";
 import { useBookCrease } from "@/lib/fold-region";
 import { type SideRegion, useSideRegion } from "@/lib/side-region";
 
-/** Narrowest page or window the sign-in form is centred in instead of filling (form + gutters). */
+/** Narrowest page or window the sign-in form is centered in instead of filling (form + gutters). */
 export const AUTH_CENTRED_MIN_WIDTH = 488;
 const MIN_PAGE_WIDTH = 320;
 
 /**
- * Extra padding that centres a sign-in form on a foldable. The stack already pads the system's
- * side column on its own edge, so a form centred in what is left sits off the screen's middle.
- * With room to spare the opposite edge gets the same padding (centred on the window); in a book
- * pose the form is centred on the first page instead of straddling the crease.
+ * Extra padding that centers a sign-in form on a foldable. The stack already pads the system's
+ * side column on its own edge, so a form centered in what is left sits off the screen's middle.
+ * With room to spare the opposite edge gets the same padding (centered on the window); in a book
+ * pose the form is centered on the first page instead of straddling the crease.
  */
 export function authFrameExtra(
   windowWidth: number,

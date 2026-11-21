@@ -7,7 +7,7 @@
 // timeline the public schedule uses, extended to reveal each item's
 // responsible person(s)/contact note. A sponsor rep's own /api/public/activities
 // call already returns the entire public schedule too (H59 — sponsor is
-// additive, never a narrower view of the general programme). Deliberately
+// additive, never a narrower view of the general program). Deliberately
 // not public (unlike /timetable) and not judge-visible (unlike challenges'
 // challenge-directory access) — see requireSponsorPortalAccess.
 

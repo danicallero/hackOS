@@ -536,7 +536,7 @@ export function GeneralScannerScreen() {
   );
 }
 
-/** H22–H26: labelled filter and People Finder controls stay directly reachable. */
+/** H22–H26: labeled filter and People Finder controls stay directly reachable. */
 function useScannerRoleFilterMenu({
   options,
   groups,

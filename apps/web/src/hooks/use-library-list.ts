@@ -8,7 +8,7 @@ import type { ServerStateKey } from "@/lib/server-state";
 import { useLiveQuery } from "./use-live-query";
 
 /**
- * A staff-curated catalogue (universities, degrees, food intolerances) that
+ * A staff-curated catalog (universities, degrees, food intolerances) that
  * refreshes in place when another admin edits any library. `loading` is true
  * only until the first rows paint; a failed background read keeps the rows
  * and flips `stale`, so `errorMessage` is set only when there is nothing to

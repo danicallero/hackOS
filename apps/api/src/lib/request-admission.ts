@@ -37,7 +37,7 @@ interface RequestAdmissionOptions {
   /** Bound best-effort waiters so participant storms can be shed safely. */
   maxBestEffortPending?: number;
   /**
-   * Defence in depth against leaked leases (#1367): a lease held longer than
+   * Defense in depth against leaked leases (#1367): a lease held longer than
    * this is force-released once, so a future leak path degrades capacity for
    * a bounded time instead of accumulating. Omit to disable.
    */

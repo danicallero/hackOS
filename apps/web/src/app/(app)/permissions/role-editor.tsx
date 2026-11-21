@@ -392,7 +392,7 @@ export function RoleEditor({
   // H8: per-role automatic grant/revoke rules — scoped to `role` (the rules
   // that target it), reusing GrantRulesPanel's list/create/edit/delete logic
   // in its scoped mode. The role picker in that mode is dropped entirely
-  // (you're already looking at the role), so no roles catalogue is passed
+  // (you're already looking at the role), so no roles catalog is passed
   // down here. A protected role can never be a rule's target (server-
   // enforced), so this mirrors Capabilities/Members and disables mutation
   // rather than hiding the tab.

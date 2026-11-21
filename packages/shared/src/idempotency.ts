@@ -1,6 +1,6 @@
 /**
  * Replay contract between the server's `idempotency_keys` retention and the
- * mobile offline scanner queue (#994, H54 data minimisation). A queued scan
+ * mobile offline scanner queue (#994, H54 data minimization). A queued scan
  * replays with its scan id as Idempotency-Key, so it must stop replaying
  * before the server can purge that key; otherwise an already-applied scan
  * would execute a second time.

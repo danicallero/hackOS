@@ -23,7 +23,7 @@ import { HELP_STATUS } from "./rows";
 
 type Action = "claim" | "release" | "resolve" | "cancel";
 
-/** When the request reached its current state: asked, claimed, resolved or cancelled. */
+/** When the request reached its current state: asked, claimed, resolved or canceled. */
 function statusMoment(request: HelpRequest): string {
   if (request.status === "resolved" && request.resolvedAt) return request.resolvedAt;
   if (request.status === "cancelled" && request.cancelledAt) return request.cancelledAt;

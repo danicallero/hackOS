@@ -33,7 +33,7 @@ export function registerCertificateTypeRoutes(app: FastifyInstance) {
       schema: {
         summary: "Certificate definitions and recipient roles",
         description:
-          "All configured certificate types, their trilingual text, actual recipient-role IDs, identity policy, guest/self-service options, event-end and presentation requirements and exempt roles. Includes the active role and challenge catalogues for the settings editor (#1083).",
+          "All configured certificate types, their trilingual text, actual recipient-role IDs, identity policy, guest/self-service options, event-end and presentation requirements and exempt roles. Includes the active role and challenge catalogs for the settings editor (#1083).",
       },
     },
     async () => {

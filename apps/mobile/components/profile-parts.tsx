@@ -21,7 +21,7 @@ export function QuickAction({
 }: {
   icon: SymbolViewProps["name"];
   iconTint?: SymbolViewProps["tintColor"];
-  /** Replaces the symbol, e.g. the cross-platform favourite star. */
+  /** Replaces the symbol, e.g. the cross-platform favorite star. */
   iconNode?: ReactNode;
   /** The visible caption. */
   title: string;
@@ -30,7 +30,7 @@ export function QuickAction({
   selected?: boolean;
   busy: boolean;
   onPress: () => void;
-  /** Greyed, for a tile the owner has chosen not to share (#934). */
+  /** Grayed, for a tile the owner has chosen not to share (#934). */
   dimmed?: boolean;
   /** Sits in the tile's top corner, outside the dimming (the owner's eye). */
   accessory?: ReactNode;
@@ -81,7 +81,7 @@ export function QuickAction({
 
 /**
  * The owner's eye (#934): open means scanners see the element, slashed means
- * they do not. Sits on the element it governs; the element itself is greyed
+ * they do not. Sits on the element it governs; the element itself is grayed
  * by its caller when hidden.
  */
 export function VisibilityToggle({
@@ -127,7 +127,7 @@ export function VisibilityToggle({
 /**
  * The owner's note in a profile or company sheet: one row the height of a
  * {@link DetailRow} (56pt minimum, 16pt side padding), its text vertically
- * centred, so a one-line note sits like the Links and Location rows (#935).
+ * centered, so a one-line note sits like the Links and Location rows (#935).
  */
 export function NoteRow({
   note,
@@ -185,7 +185,7 @@ export function DetailRow({
   valueNode?: ReactNode;
   /** After the value, outside the dimming (the owner's eye). */
   trailing?: ReactNode;
-  /** Greyed, for data the owner has chosen not to share. */
+  /** Grayed, for data the owner has chosen not to share. */
   dimmed?: boolean;
 }) {
   const content = (

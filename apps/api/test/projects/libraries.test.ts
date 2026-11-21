@@ -209,7 +209,7 @@ it("keeps application libraries scoped and cascades them when their form is dele
       .rowCount,
   ).toBe(0);
 });
-it("keeps synthetic catalogue values and working answers outside real curation (H16)", async () => {
+it("keeps synthetic catalog values and working answers outside real curation (H16)", async () => {
   const real = (await propose("React")).json();
   const synthetic = await createUser();
   await pool.query(`UPDATE users SET is_test_account=true WHERE id=$1`, [synthetic]);

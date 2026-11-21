@@ -459,7 +459,7 @@ roll_service() {
   fi
   if [[ -n "$old_ids" ]]; then
     echo "DRAIN: stopping the previous $service replica"
-    # docker stop honours each container's stop_grace_period.
+    # docker stop honors each container's stop_grace_period.
     # shellcheck disable=SC2086
     docker stop $old_ids >/dev/null
     # shellcheck disable=SC2086

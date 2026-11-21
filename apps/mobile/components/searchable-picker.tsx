@@ -113,7 +113,7 @@ export function CheckRow({
 }
 
 /**
- * A sheet that picks from a searchable catalogue (project challenges, help
+ * A sheet that picks from a searchable catalog (project challenges, help
  * topics): inline title, native header search on iOS, the inset field on
  * Android. Close (xmark, leading) dismisses and calls `onDiscard` so a picker
  * that edits a draft can restore it; the checkmark (trailing) confirms.

@@ -36,7 +36,7 @@ function requestDiscardConfirmation(): Promise<boolean> {
  *
  * Internal links intercepted at the document's capture phase: stopping
  * propagation there keeps the event from ever reaching the link's own click
- * handler (Next.js `Link`), so a cancelled confirm leaves navigation as a no-op.
+ * handler (Next.js `Link`), so a canceled confirm leaves navigation as a no-op.
  */
 export function useUnsavedChangesGuard(
   dirty: boolean,

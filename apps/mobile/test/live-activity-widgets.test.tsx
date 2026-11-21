@@ -453,7 +453,7 @@ function allTexts(layout: Record<string, unknown>): string[] {
   return SLOTS.flatMap((slot) => texts(layout[slot]));
 }
 
-/** Every `foregroundStyle` colour applied within a presentation. */
+/** Every `foregroundStyle` color applied within a presentation. */
 function colors(node: unknown): string[] {
   if (node === null || node === undefined || typeof node !== "object") return [];
   if (Array.isArray(node)) return node.flatMap(colors);
@@ -905,7 +905,7 @@ describe("New Live Activity kinds (#966)", () => {
     expect(texts(staff.banner)).toContain("1142");
   });
 
-  it("drops accent colours on the Always-On Lock Screen", () => {
+  it("drops accent colors on the Always-On Lock Screen", () => {
     const reduced = { colorScheme: "dark", isLuminanceReduced: true } as LiveActivityEnvironment;
     const layout = DeadlineActivityLayout(deadline({ phase: "closing" }), reduced);
     expect(colors(layout.banner).filter((color) => color.includes("dynamic"))).toEqual([]);
@@ -966,7 +966,7 @@ describe("New Live Activity kinds (#966)", () => {
       expect(texts(closing.bannerSmall)).toContain("Not submitted");
     });
 
-    it("colours every iPhone countdown with the phase hue in each state", () => {
+    it("colors every iPhone countdown with the phase hue in each state", () => {
       const expected = { open: /0A84FF/, closing: /FF453A/, submitted: /30D158/ };
       for (const [phase, hue] of Object.entries(expected)) {
         const layout = DeadlineActivityLayout(

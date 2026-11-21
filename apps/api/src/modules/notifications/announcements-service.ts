@@ -311,7 +311,7 @@ export interface AnnouncementTargetingOptions {
   roles: Array<{ id: number; name: string }>;
 }
 
-/** Role catalogue scoped to announcement managers, avoiding the broader role-management read grant. */
+/** Role catalog scoped to announcement managers, avoiding the broader role-management read grant. */
 export async function listAnnouncementTargetingOptions(
   db: Queryable,
 ): Promise<AnnouncementTargetingOptions> {

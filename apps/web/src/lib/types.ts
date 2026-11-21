@@ -125,7 +125,7 @@ export interface RoleSummary {
   eventAccess: boolean;
   /** Built-in roles (e.g. Platform administrator). Informational only — see deletedAt/name for what's actually locked. */
   isProtected: boolean;
-  /** H8: true for a role from the seeded default catalogue. Scopes trash/restore and gates reset-to-default. */
+  /** H8: true for a role from the seeded default catalog. Scopes trash/restore and gates reset-to-default. */
   isSeeded: boolean;
   /** Sparse: a capability with no explicit row is implicitly 'inherit'. */
   capabilities: { capability: string; state: PermissionState }[];
@@ -161,7 +161,7 @@ export interface RoleGrantRule {
   enterpriseName: string | null;
 }
 
-/** GET /api/role-templates item. Keys select the web i18n catalogue. */
+/** GET /api/role-templates item. Keys select the web i18n catalog. */
 export interface RoleTemplate {
   key: string;
   labelKey: MessageKey;

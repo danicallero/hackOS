@@ -33,7 +33,7 @@ export type ProfileCardData = Pick<
 /**
  * The owner's way to change the card in place (#934): the same layout the
  * scanners read, with inputs where text goes and an eye on what can be hidden.
- * Hidden data stays on screen, greyed, so the owner sees what is withheld.
+ * Hidden data stays on screen, grayed, so the owner sees what is withheld.
  */
 export interface ProfileCardEdit {
   linksEditor?: ReactNode;
@@ -88,9 +88,9 @@ export function ProfileCard({
   /** Optional feature metadata above knowledge, within the same public profile. */
   beforeKnowledge?: ReactNode;
   identityAccessory?: ReactNode;
-  /** Over an image hero the headline uses the label colour: muted grey fails contrast there. */
+  /** Over an image hero the headline uses the label color: muted gray fails contrast there. */
   onImageHero?: boolean;
-  /** Name colour over a tinted hero; defaults to the label colour. */
+  /** Name color over a tinted hero; defaults to the label color. */
   nameColor?: string;
   onNameLayout?: (event: LayoutChangeEvent) => void;
   edit?: ProfileCardEdit;

@@ -86,7 +86,7 @@ const COPY: Record<CertificateLocale, Copy> = {
   },
   en: {
     title: "CERTIFICATE OF ATTENDANCE",
-    by: (issuer, taxId) => `${issuer}${taxId ? `, NIF ${taxId},` : ""} as the organising body,`,
+    by: (issuer, taxId) => `${issuer}${taxId ? `, NIF ${taxId},` : ""} as the organizing body,`,
     certifies: "CERTIFIES:",
     document: (passport) => (passport ? "passport" : "DNI/NIE/passport"),
     person: (dni, passport) => ({
@@ -96,7 +96,7 @@ const COPY: Record<CertificateLocale, Copy> = {
     took: (event, venue, from, to) =>
       `actively took part in the event ${event}${venue ? `, held at ${venue},` : ""} from ${from} to ${to}.`,
     participation:
-      "During the event, the participant collaborated in the development of technology projects, attended specialised workshops and took part in the innovation activities proposed by the organisation, completing the event programme.",
+      "During the event, the participant collaborated in the development of technology projects, attended specialized workshops and took part in the innovation activities proposed by the organization, completing the event program.",
     hours: (hours) => `This certifies ${hours} hours of participation in the event.`,
     activities: "They attended the following activities:",
     closing: "This certificate is issued for all appropriate purposes.",
@@ -147,7 +147,7 @@ export function statesHours(
 
 /**
  * #1083: the certificate PDF. One A4 page (a second only for a long activity
- * list), issued by the organisation: no personal signature. The QR and code are
+ * list), issued by the organization: no personal signature. The QR and code are
  * stamped once when the copy is generated (`stampCopyFooter`).
  */
 export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Array> {

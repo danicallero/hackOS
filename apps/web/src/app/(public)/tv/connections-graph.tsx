@@ -39,7 +39,7 @@ export const DATA_MS = 1_000;
 /**
  * org-roam-ui look, always dark: the wall graph draws its own flat canvas whatever
  * the OS or app theme, so logos use their negative variant and nothing needs a
- * light twin. One quiet node colour, no glow, no gradient.
+ * light twin. One quiet node color, no glow, no gradient.
  */
 const PALETTE = {
   person: "#9aa8ff",
@@ -196,7 +196,7 @@ export function ConnectionsGraph({
 
   const unit = Math.max(0.5, Math.min(width, height) / 1000);
   // Rescale the settled layout to its own bounds, padded by the biggest logo, so the
-  // first frame is centred and nothing is clipped whatever shape the force pass took.
+  // first frame is centered and nothing is clipped whatever shape the force pass took.
   const world = useMemo(() => {
     // ~6% margin, never less than a logo's radius, so nothing is clipped.
     const logo = nodeRadius(0, "company", unit) * 1.1;
@@ -285,7 +285,7 @@ export function ConnectionsGraph({
     [kinds, degrees],
   );
 
-  // New nodes start (invisible, small) on their neighbours; the very first snapshot
+  // New nodes start (invisible, small) on their neighbors; the very first snapshot
   // starts in place. Only ids the scene does not know yet are touched, so this is
   // idempotent (StrictMode, re-renders).
   useMemo(() => {

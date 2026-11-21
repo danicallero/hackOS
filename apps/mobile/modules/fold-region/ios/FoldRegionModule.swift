@@ -23,7 +23,7 @@ public class FoldRegionModule: Module {
     }
 
     /// The Dynamic Island, as the occlusion reserved region (it moves to the side column on
-    /// a foldable iPhone, so a hard-coded centred frame is wrong there).
+    /// a foldable iPhone, so a hard-coded centered frame is wrong there).
     Function("getOcclusionRegion") { () -> [String: Any]? in
       return Self.region(division: false)
     }

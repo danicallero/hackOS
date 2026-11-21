@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Section } from "@/components/ui/surface";
 import { useLocale } from "@/lib/i18n";
 
-/** H18: immediate navigation feedback mirrors the final catalogue geometry. */
+/** H18: immediate navigation feedback mirrors the final catalog geometry. */
 export default function GalleryLoading() {
   const { t } = useLocale();
   return (

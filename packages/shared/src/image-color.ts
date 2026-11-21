@@ -1,10 +1,10 @@
 /**
- * Representative colour of RGBA pixels (H44, H48), shared by web and mobile so a
+ * Representative color of RGBA pixels (H44, H48), shared by web and mobile so a
  * logo gets the same hero tint on both. Transparent, near-white, near-black and
- * grey pixels are ignored, so a small vivid accent on a white or black logo is
- * the colour; the rest are bucketed and the bucket with the most (and most
+ * gray pixels are ignored, so a small vivid accent on a white or black logo is
+ * the color; the rest are bucketed and the bucket with the most (and most
  * saturated) pixels wins. `rgba` is RGBA, 4 bytes per pixel. Returns `#rrggbb`,
- * or null when there is no usable colour.
+ * or null when there is no usable color.
  */
 export function pickDominantColor(rgba: ArrayLike<number>): string | null {
   const buckets = new Map<number, { n: number; r: number; g: number; b: number; s: number }>();
@@ -47,7 +47,7 @@ export function pickDominantColor(rgba: ArrayLike<number>): string | null {
  * Whether a logo's artwork runs into its own edges (H44), from RGBA pixels of a
  * `width`×`height` copy. A border ring that is fully transparent, or a single
  * near-white or near-black matte, counts as built-in margin; anything else
- * (artwork, or a coloured box filling the image) means the logo needs the
+ * (artwork, or a colored box filling the image) means the logo needs the
  * margin added around it so it does not touch its tile.
  */
 export function logoTouchesEdge(rgba: ArrayLike<number>, width: number, height: number): boolean {
@@ -68,7 +68,7 @@ export function logoTouchesEdge(rgba: ArrayLike<number>, width: number, height: 
     const chroma =
       Math.max(rgba[i] as number, rgba[i + 1] as number, rgba[i + 2] as number) -
       Math.min(rgba[i] as number, rgba[i + 1] as number, rgba[i + 2] as number);
-    // A coloured border pixel is never a neutral matte.
+    // A colored border pixel is never a neutral matte.
     if (chroma > 24) {
       minLum = 0;
       maxLum = 255;

@@ -82,7 +82,7 @@ export function ProjectChallengesScreen() {
     () =>
       (all ?? [])
         .filter((item) => !chosen.some((c) => c.id === item.id && c.mandatory))
-        // Catalogue order, never selection order: a checkmark changes, the row stays.
+        // Catalog order, never selection order: a checkmark changes, the row stays.
         .filter((item) => matches(item.title)),
     // biome-ignore lint/correctness/useExhaustiveDependencies: matches closes over needle
     [all, chosen, matches],

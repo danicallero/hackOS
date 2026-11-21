@@ -76,7 +76,7 @@ export interface RunAccountRemovalOptions {
     scope: string;
     completionScope: string;
   };
-  /** Internal retry guard: never restart a removal that was cancelled. */
+  /** Internal retry guard: never restart a removal that was canceled. */
   retryOnlyPending?: boolean;
   /** Internal worker handoff: provider invalidation already succeeded. */
   skipWalletProviderInvalidation?: boolean;

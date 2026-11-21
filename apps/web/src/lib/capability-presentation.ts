@@ -3,7 +3,7 @@ import type { MessageKey, Translate } from "@/lib/i18n";
 import { normalizeSearchText } from "./search-text";
 
 /**
- * Capability presentation helpers (H8). The catalogue is derived entirely from
+ * Capability presentation helpers (H8). The catalog is derived entirely from
  * `ALL_CAPABILITIES` (the single source in @hackos/shared) so the UI never
  * hardcodes a capability string of its own.
  */
@@ -22,7 +22,7 @@ export function prettifyCapability(cap: string, t: Translate): string {
 }
 
 /**
- * Maps each catalogue capability to its `capabilityDescription*` message key
+ * Maps each catalog capability to its `capabilityDescription*` message key
  * (H8). Descriptions themselves are single-sourced as English prose in
  * `CAPABILITY_DESCRIPTIONS` (`@hackos/shared/capabilities`); this file has no
  * i18n machinery, so the web UI keeps its own es/gl/en translations of the
@@ -79,7 +79,7 @@ export function capabilityDescription(cap: string, t: Translate): string {
   return key ? t(key) : "";
 }
 
-/** All capabilities grouped by domain, preserving catalogue order. */
+/** All capabilities grouped by domain, preserving catalog order. */
 export function capabilitiesByDomain(): { domain: string; capabilities: string[] }[] {
   const groups: { domain: string; capabilities: string[] }[] = [];
   for (const cap of selectableCapabilities()) {
@@ -94,13 +94,13 @@ export function capabilitiesByDomain(): { domain: string; capabilities: string[]
   return groups;
 }
 
-/** All capabilities are current catalogue entries and may be assigned. */
+/** All capabilities are current catalog entries and may be assigned. */
 export function selectableCapabilities(): string[] {
   return ALL_CAPABILITIES;
 }
 
 /**
- * The capability catalogue, grouped by domain, filtered to entries whose
+ * The capability catalog, grouped by domain, filtered to entries whose
  * code or prettified label matches `query` (case- and accent-insensitive). Empty groups
  * are dropped rather than shown with zero rows.
  */

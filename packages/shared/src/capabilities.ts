@@ -1,5 +1,5 @@
 /**
- * Capability catalogue (H8): permissions are checked against these concrete
+ * Capability catalog (H8): permissions are checked against these concrete
  * capability strings, never against illustrative roles. Roles are ordered and
  * grant capabilities with an ALLOW/DENY/INHERIT tri-state per position;
  * `user_effective_capabilities` resolves the final set (see
@@ -39,7 +39,7 @@ export const CAPABILITIES = {
   INTOLERANCES_MANAGE: "intolerances:manage", // maintain the food-intolerance dictionary
   // sponsor meal plans (#933): per-person export carries dietary data, so it
   // is separate from the aggregate counts under LOGISTICS_STATS. Reserved:
-  // seeded here with the catalogue constraint (migration 0502) but no route
+  // seeded here with the catalog constraint (migration 0502) but no route
   // checks them until the #933 staff export/override routes land.
   MEAL_PLANS_EXPORT: "meal-plans:export",
   MEAL_PLANS_MANAGE: "meal-plans:manage", // edit someone else's meal plan
@@ -96,7 +96,7 @@ export const ALL_CAPABILITIES: Capability[] = Object.values(CAPABILITIES);
 
 /**
  * Short, factual, English-only description of what each capability grants
- * (H8). This is the raw catalogue — no i18n machinery lives in
+ * (H8). This is the raw catalog — no i18n machinery lives in
  * `packages/shared`, so UI surfaces that show these to a user translate them
  * via their own locale files (e.g. `apps/web/src/app/(app)/permissions/helpers.ts`
  * maps each capability to a `capabilityDescription*` message key) rather than

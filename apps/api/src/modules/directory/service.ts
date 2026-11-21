@@ -88,7 +88,7 @@ interface EntryRow {
  * Fragments over `p` (user_public_profiles) and `u` (users). The projects are
  * every active repository submission the person belongs to (#935: a person
  * can work on several); challenges are
- * the published ones any of them still takes part in (cancelled/disqualified
+ * the published ones any of them still takes part in (canceled/disqualified
  * queue entries excluded, as in projects/lifecycle.ts). Both are suppressed
  * when show_project is off.
  */
@@ -457,7 +457,7 @@ export async function getRequesterCv(userId: number): Promise<{ key: string; fil
 
 /**
  * H61, H63: a published helper's public profile exactly as people see it after
- * scanning their badge, honouring the per-field switches but independent of
+ * scanning their badge, honoring the per-field switches but independent of
  * `directory_visible` and diary saves. Creates nothing. The caller has
  * already checked the helper is listed.
  */

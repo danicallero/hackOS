@@ -364,12 +364,12 @@ The Event promotes free-software development, creativity, and innovation among s
 
 1. **Teams.** Teams may have up to four members.
 2. **Eligibility.** Participants must be of legal age or have consent from a legal guardian.
-3. **Project development.** Projects must be developed entirely during the official Event period. Participants may use libraries, frameworks, or open-source code when they comply with the applicable licences. All submissions must use a free-software licence.
+3. **Project development.** Projects must be developed entirely during the official Event period. Participants may use libraries, frameworks, or open-source code when they comply with the applicable licenses. All submissions must use a free-software license.
 4. **Submission.** Projects must be submitted through hackOS within the deadline and in accordance with the requirements specified by the Organizer. Each team is responsible for completing submission and meeting prize eligibility requirements.
 
 ### 2.3. Authorship and submitted work
 
-Each team retains the rights to its project and must respect the licences of the resources it uses. Publication under a free-software licence does not transfer ownership to GPUL. Submissions must identify contributions made during the event and third-party components used. You must not claim another person’s work as your own or misrepresent authorship or when work was developed.
+Each team retains the rights to its project and must respect the licenses of the resources it uses. Publication under a free-software license does not transfer ownership to GPUL. Submissions must identify contributions made during the event and third-party components used. You must not claim another person’s work as your own or misrepresent authorship or when work was developed.
 
 ### 2.4. Evaluation and prizes
 
@@ -387,7 +387,7 @@ The Organizer may modify or cancel the Event for justified reasons, notifying pa
 
 ### 2.7. Photographs and videos
 
-By attending the event in person, you declare that you understand and consent to the organisers, sponsor representatives, other participants and any other participating entity taking photos and videos in which you may appear and using them for promotional purposes, on social media, for commercial purposes or for any other purpose. See the [privacy policy](https://hackudc.com/en/privacy/).
+By attending the event in person, you declare that you understand and consent to the organizers, sponsor representatives, other participants and any other participating entity taking photos and videos in which you may appear and using them for promotional purposes, on social media, for commercial purposes or for any other purpose. See the [privacy policy](https://hackudc.com/en/privacy/).
 
 ## 3. hackOS: platform use
 
@@ -396,24 +396,24 @@ This section governs your account and use of the official hackOS instance operat
 ### 3.1. Registration and accounts
 
 - You must provide accurate, current and complete information.
-- You must keep your credentials secure and report any unauthorised access to your account.
+- You must keep your credentials secure and report any unauthorized access to your account.
 - You may not impersonate another person, create fraudulent accounts or transfer your account.
 - You are responsible for actions performed through your account unless they result from an incident attributable to the Operator.
 - Some features require email verification or specific permissions assigned by an administrator.
 
-The Operator may maintain reserved synthetic accounts for authorised testing and quality assurance. They are not real event registrations, may be reset or removed, and are excluded from participant statistics; authorised operational tests may still use them.
+The Operator may maintain reserved synthetic accounts for authorized testing and quality assurance. They are not real event registrations, may be reset or removed, and are excluded from participant statistics; authorized operational tests may still use them.
 
 ### 3.2. Features and permissions
 
 Available features depend on the account type and assigned permissions. hackOS may allow users to submit forms, receive communications, manage profiles, administer content or view operational information, among other actions.
 
-Administrative, review and data-access permissions are personal and may only be used for authorised tasks. They grant no rights over the information they make accessible.
+Administrative, review and data-access permissions are personal and may only be used for authorized tasks. They grant no rights over the information they make accessible.
 
 ### 3.3. Acceptable use
 
 When using hackOS, you agree not to:
 
-- Access or attempt to access accounts, data or features without authorisation.
+- Access or attempt to access accounts, data or features without authorization.
 - Introduce malware, interfere with the service, bypass security measures or carry out load or vulnerability testing without prior permission.
 - Use the platform to harass, discriminate against, threaten or harm others.
 - Publish unlawful content or content that infringes third-party rights.
@@ -422,21 +422,21 @@ When using hackOS, you agree not to:
 
 ### 3.4. Content and data you provide
 
-You retain any rights you hold in the information and files you provide. You represent that you are authorised to upload them to hackOS and that their use does not breach the law or third-party rights.
+You retain any rights you hold in the information and files you provide. You represent that you are authorized to upload them to hackOS and that their use does not breach the law or third-party rights.
 
-You grant the Operator a limited, non-exclusive authorisation, for as long as necessary, to host, reproduce and process that content solely to provide, protect and maintain this instance. The processing of personal data is described in the [privacy policy](https://hackudc.com/en/privacy/).
+You grant the Operator a limited, non-exclusive authorization, for as long as necessary, to host, reproduce and process that content solely to provide, protect and maintain this instance. The processing of personal data is described in the [privacy policy](https://hackudc.com/en/privacy/).
 
 ### 3.5. Open-source software and independent instances
 
-hackOS is an open-source software project. Its code and documentation may be used, modified and redistributed under the licence published with the source code. These terms govern the use of this instance and do not limit the rights granted by that licence.
+hackOS is an open-source software project. Its code and documentation may be used, modified and redistributed under the license published with the source code. These terms govern the use of this instance and do not limit the rights granted by that license.
 
-Any person or organisation may deploy and operate its own hackOS instance. Each instance is an independent service, and its operator is responsible for administering and maintaining it, identifying its terms of use and complying with its legal obligations. The hackOS developers do not control or accept responsibility for instances operated by third parties.
+Any person or organization may deploy and operate its own hackOS instance. Each instance is an independent service, and its operator is responsible for administering and maintaining it, identifying its terms of use and complying with its legal obligations. The hackOS developers do not control or accept responsibility for instances operated by third parties.
 
-### 3.6. Software licence and other rights
+### 3.6. Software license and other rights
 
-The hackOS code and documentation are provided under the open-source licence included in the project repository. If these terms conflict with that licence in relation to the code, the open-source licence prevails.
+The hackOS code and documentation are provided under the open-source license included in the project repository. If these terms conflict with that license in relation to the code, the open-source license prevails.
 
-Trade marks, logos, content belonging to this instance and other elements that are not part of the distributed code retain their respective ownership and terms. The hackOS licence also does not replace the licences of its dependencies.
+Trade marks, logos, content belonging to this instance and other elements that are not part of the distributed code retain their respective ownership and terms. The hackOS license also does not replace the licenses of its dependencies.
 
 ### 3.7. Third-party services
 
@@ -446,7 +446,7 @@ If you enable push notifications in the mobile application, they are delivered t
 
 ### 3.8. Service availability and changes
 
-The Operator seeks to keep this instance available and secure but does not guarantee uninterrupted or error-free service. It may perform maintenance, correct incidents, change features or remove parts of the platform for technical, legal, organisational or security reasons.
+The Operator seeks to keep this instance available and secure but does not guarantee uninterrupted or error-free service. It may perform maintenance, correct incidents, change features or remove parts of the platform for technical, legal, organizational or security reasons.
 
 Where a change materially affects ordinary use of hackOS, we will try to give reasonable notice unless an urgent situation prevents us from doing so.
 
@@ -454,7 +454,7 @@ Where a change materially affects ordinary use of hackOS, we will try to give re
 
 The Operator may restrict or suspend an account where these terms have been breached, a security risk or legal obligation exists, or use of the account harms the platform or others. Where possible, the reason and steps needed to resolve the situation will be provided.
 
-You can start account closure from "Settings → Danger zone"; the server will explain whether full deletion or irreversible anonymisation applies based on canonical event accreditation. If you are still recorded inside the venue, an accepted request completes after staff record your exit. You may also exercise your personal-data rights through the channels described in the privacy policy. Some information may be retained anonymously where needed for participation auditing.
+You can start account closure from "Settings → Danger zone"; the server will explain whether full deletion or irreversible anonymization applies based on canonical event accreditation. If you are still recorded inside the venue, an accepted request completes after staff record your exit. You may also exercise your personal-data rights through the channels described in the privacy policy. Some information may be retained anonymously where needed for participation auditing.
 
 ## 4. General provisions
 
@@ -468,7 +468,7 @@ Processing of personal data for registration, accounts, participation and event 
 
 ### 4.3. Liability
 
-To the extent permitted by law, the Operator is not liable for indirect losses, failures of user devices or connections, use contrary to these terms, or interruptions caused by third parties or circumstances beyond its reasonable control. Warranties applicable to the source code are determined by its open-source licence.
+To the extent permitted by law, the Operator is not liable for indirect losses, failures of user devices or connections, use contrary to these terms, or interruptions caused by third parties or circumstances beyond its reasonable control. Warranties applicable to the source code are determined by its open-source license.
 
 Nothing in these terms limits users' mandatory rights or any liability that cannot legally be excluded.
 

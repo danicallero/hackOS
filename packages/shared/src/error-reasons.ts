@@ -77,7 +77,7 @@ export const ERROR_REASONS = {
   HELPDESK_CLOSED: "helpdesk_closed",
   /** 409: another helper won the claim (H66). */
   HELP_REQUEST_ALREADY_CLAIMED: "help_request_already_claimed",
-  /** 409: the help request is resolved or cancelled. */
+  /** 409: the help request is resolved or canceled. */
   HELP_REQUEST_CLOSED: "help_request_closed",
   /** 409: helpers cannot claim their own or their team's request. */
   HELP_REQUEST_NOT_CLAIMABLE: "help_request_not_claimable",
@@ -87,7 +87,7 @@ export const ERROR_REASONS = {
   HELP_REQUEST_NOT_CLAIMED: "help_request_not_claimed",
   /** 409: a topic rename collides with another topic; merge instead (H61). */
   TOPIC_NAME_TAKEN: "topic_name_taken",
-  /** 400: "Other" is a request flag, not a catalogue topic (H61, H64). */
+  /** 400: "Other" is a request flag, not a catalog topic (H61, H64). */
   TOPIC_RESERVED: "topic_reserved",
   /** 400: a referenced knowledge topic does not exist. */
   TOPIC_UNKNOWN: "topic_unknown",

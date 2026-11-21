@@ -54,7 +54,7 @@ describe("isUniqueViolation", () => {
     expect(isUniqueViolation(null)).toBe(false);
   });
 
-  it("recognises a real unique violation", async () => {
+  it("recognizes a real unique violation", async () => {
     const email = `dup-${crypto.randomUUID()}@test.local`;
     await createUser({ email });
     const err = await createUser({ email }).catch((e) => e);
@@ -75,7 +75,7 @@ describe("like escaping", () => {
 });
 
 describe("request paths", () => {
-  it("strips the query string and recognises probes and prefixes", () => {
+  it("strips the query string and recognizes probes and prefixes", () => {
     expect(pathOf("/api/me?x=1")).toBe("/api/me");
     expect(pathOf("/api/me")).toBe("/api/me");
     expect(isProbePath("/healthz")).toBe(true);

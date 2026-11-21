@@ -1,6 +1,6 @@
 # Catering and activity RSVPs
 
-Per-activity RSVPs generalise the sponsor meal plans (#933): an organizer asks
+Per-activity RSVPs generalize the sponsor meal plans (#933): an organizer asks
 selected publicly visible roles to answer yes / no / not sure for an activity, and
 logistics reads truthful headcounts.
 Code: `apps/api/src/modules/rsvps/` (service, settings, summary, routes); the

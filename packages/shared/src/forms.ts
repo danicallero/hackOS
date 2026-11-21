@@ -28,7 +28,7 @@ export const MAX_IMAGES_PER_FIELD = 10;
 /**
  * Retention is an extensible field policy, not a collection of booleans.  A
  * missing value is treated as `none` by the storage boundary so legacy forms
- * remain minimised and newly-added questions are never retained by accident.
+ * remain minimized and newly-added questions are never retained by accident.
  */
 export const RETENTION_MODES = ["none", "anonymous_audit"] as const;
 export type RetentionMode = (typeof RETENTION_MODES)[number];
@@ -79,7 +79,7 @@ export const statisticsConfigSchema = z
     visualization: z.enum(STATISTICS_VISUALIZATIONS).optional(),
     aggregation: z.enum(STATISTICS_AGGREGATIONS).default("count"),
     transformation: z.enum(STATISTICS_TRANSFORMATIONS).default("none"),
-    /** Four-year programmes are the default; event authors can override this. */
+    /** Four-year programs are the default; event authors can override this. */
     program_years: z.number().int().min(1).max(12).optional(),
   })
   .strict();

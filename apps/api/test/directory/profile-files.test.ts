@@ -994,7 +994,7 @@ describe("helper profile files for help desk readers (H61, H63)", () => {
     expect((await get(`/api/users/${me}/photo`, desk)).statusCode).toBe(404);
   });
 
-  it("honours the helper's own CV switch", async () => {
+  it("honors the helper's own CV switch", async () => {
     const me = await publishedHelper(false);
     const desk = await createUserWithCapabilities([CAPABILITIES.HELPDESK_REQUEST]);
     expect((await get(`/api/directory/${me}/cv`, desk)).statusCode).toBe(404);

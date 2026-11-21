@@ -8,7 +8,7 @@ import { type HapticIntent, haptic } from "./haptics";
  *   (a light one was too faint to feel while holding the phone).
  * - `duplicate`: already registered, needs a decision — warning.
  * - `rejected`: the server refused the scan (business error) — error.
- * - `unknown`: unrecognised or revoked code — error.
+ * - `unknown`: unrecognized or revoked code — error.
  */
 export type ScanOutcome = "accepted" | "queued" | "duplicate" | "rejected" | "unknown";
 

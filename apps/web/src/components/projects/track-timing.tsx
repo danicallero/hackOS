@@ -27,7 +27,7 @@ export function TrackTiming({
 }: {
   challengeId: number;
   onSaved?: () => void;
-  /** A pencil beside the value it edits instead of a labelled button. */
+  /** A pencil beside the value it edits instead of a labeled button. */
   iconOnly?: boolean;
 }) {
   const { t } = useLocale();

@@ -380,7 +380,7 @@ export function ActivitiesScreen({
       <View style={{ flex: 1, flexDirection: "row" }}>
         <View style={{ flex: twoPane ? 0 : 1, width: twoPane ? pane.listWidth : undefined }}>
           {twoPane && !nativePane ? (
-            // The list's own top band, in the page colour: rows stop at its bottom edge, the way
+            // The list's own top band, in the page color: rows stop at its bottom edge, the way
             // they stop under the bar on a phone.
             <View
               pointerEvents="none"
@@ -519,7 +519,7 @@ export function ActivitiesScreen({
                   accessibilityRole="header"
                   maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
                   style={{
-                    // A fixed colour, not the dynamic label: iOS 26 flips a bar
+                    // A fixed color, not the dynamic label: iOS 26 flips a bar
                     // item's light/dark appearance with what scrolls behind it,
                     // which turned the title white for a moment.
                     color: colorScheme === "dark" ? "#ffffff" : "#000000",

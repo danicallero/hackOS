@@ -52,7 +52,7 @@ export interface DirectoryEntry {
     logoUrl: string | null;
     logoNegativeUrl?: string | null;
   } | null;
-  /** Representative colour of the photo, for the profile tint. */
+  /** Representative color of the photo, for the profile tint. */
   photoColor?: string | null;
 }
 

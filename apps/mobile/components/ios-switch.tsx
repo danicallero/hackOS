@@ -19,8 +19,8 @@ const INSET = 2;
 /**
  * UIKit's UISwitch drawn for Android (H55, H59): 51 x 31 capsule, white thumb
  * with a soft shadow, green track when on. Material's Switch is the leak this
- * replaces; iOS keeps the native control (`AppSwitch` in native-ui). Colours
- * are read per render so a scheme change recolours the track.
+ * replaces; iOS keeps the native control (`AppSwitch` in native-ui). Colors
+ * are read per render so a scheme change recolors the track.
  */
 export function IosSwitch({
   value = false,

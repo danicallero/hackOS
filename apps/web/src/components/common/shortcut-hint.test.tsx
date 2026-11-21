@@ -42,7 +42,7 @@ function focusTooltip(trigger: HTMLElement) {
 }
 
 describe("ShortcutTooltip (#1182)", () => {
-  it("shows the label followed by the shortcut for a labelled control", () => {
+  it("shows the label followed by the shortcut for a labeled control", () => {
     const trigger = render(
       <ShortcutTooltip shortcut="toggleSidebar" label="Toggle sidebar">
         <button type="button" aria-label="Toggle sidebar" />

@@ -2,7 +2,7 @@
  * What an SVG logo offers the hero tint (H44): the platform image decoders
  * read rasters only, so an SVG either hands over the largest raster it embeds
  * (a `data:image/...;base64` image, as design tools export), or its paint
- * colours as pixels, one per fill or stroke, for `pickDominantColor`.
+ * colors as pixels, one per fill or stroke, for `pickDominantColor`.
  */
 export type SvgTintSource =
   | { kind: "raster"; bytes: Uint8Array }

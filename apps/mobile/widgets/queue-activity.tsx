@@ -43,7 +43,7 @@ import { type LiveActivityKit, withLiveActivityKit } from "./live-activity-kit";
  * `'widget'` functions are serialized into the widget extension's own JS
  * runtime: they may only use `@expo/ui/swift-ui` components/modifiers and
  * cannot read anything declared outside the function, so every helper and
- * colour lives inside it. Colours mirror `theme/colors.ts` (systemBlue /
+ * color lives inside it. Colors mirror `theme/colors.ts` (systemBlue /
  * systemGreen light/dark); the extension cannot import the app's tokens.
  * Fields and labels added after v1 are optional: an absent one hides its
  * element, never falls back to hardcoded copy.
@@ -75,7 +75,7 @@ export const QueueActivityLayout = withLiveActivityKit(
 
     // Dynamic Island is always dark; the Lock Screen follows the system scheme,
     // which the layout's `environment.colorScheme` does not reliably report, so
-    // Lock Screen colours are dynamic (resolved by the view's own appearance;
+    // Lock Screen colors are dynamic (resolved by the view's own appearance;
     // the light green is the accessible `#248A3D`). Always-On (reduced
     // luminance) drops accent fills and lets the system dim.
     // Waiting = blue, called = green (go), in room = neutral.
@@ -171,7 +171,7 @@ export const QueueActivityLayout = withLiveActivityKit(
     // ProgressViews overlapped by 4 pt (one continuous bar, filled half by
     // half), the second one. The label row repeats the same units, so each
     // label stays under its node. Completed nodes/segments take the phase
-    // colour; the current node is larger with a halo.
+    // color; the current node is larger with a halo.
     const track = (color: string | null, withLabels: boolean) => {
       const fill = color ?? neutral;
       const gap = (side: "leading" | "trailing" | "both") =>

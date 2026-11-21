@@ -695,7 +695,7 @@ it("matches several chosen challenges against each project when the API filters 
 
 const titles = () => screen.getAllByText(/^Challenge \d\d$/).map((node) => node.props.children);
 
-it("persists a chosen challenge through the API and keeps the catalogue order (H20/H21)", async () => {
+it("persists a chosen challenge through the API and keeps the catalog order (H20/H21)", async () => {
   // A stateful server: PUT/DELETE change what the next project read returns.
   const server = new Set<number>([3]);
   mockApi.mockImplementation((path: string, init?: { method?: string }) => {
@@ -739,7 +739,7 @@ it("persists a chosen challenge through the API and keeps the catalogue order (H
   expect(titles()).toEqual(before);
 });
 
-it("reads the real catalogue contract: items with localized titles (H20)", async () => {
+it("reads the real catalog contract: items with localized titles (H20)", async () => {
   mockApi.mockImplementation((path: string) => {
     if (path === "/api/public/challenges")
       return Promise.resolve({ items: [{ id: 4, title: { en: "Space", es: "Espacio" } }] });
@@ -1002,7 +1002,7 @@ it("uploads picked photos one by one and saves them after the editor closes (H16
   expect(new Set(keys).size).toBe(2);
 });
 
-it("selects catalogue values and proposes several values as arrays (H16)", async () => {
+it("selects catalog values and proposes several values as arrays (H16)", async () => {
   const changed = jest.fn();
   mockApi.mockImplementation(async (path: string, init?: RequestInit) =>
     path.endsWith("/proposals")

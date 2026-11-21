@@ -32,15 +32,15 @@ export type LiveUpdateGlyph =
   | "badge";
 
 /**
- * Colour resolved natively for light and dark: blue, green (go), grey
- * (neutral), amber (warning), red (alert), and the lighter grey of a track's
+ * Color resolved natively for light and dark: blue, green (go), gray
+ * (neutral), amber (warning), red (alert), and the lighter gray of a track's
  * unfilled rest.
  */
 export type LiveUpdateTone = "accent" | "go" | "neutral" | "warning" | "alert" | "rest";
 
 /**
- * A track like the iOS ProgressView: each stage filled in its colour up to
- * `value`, the rest grey, gaps between stages and a round tracker at
+ * A track like the iOS ProgressView: each stage filled in its color up to
+ * `value`, the rest gray, gaps between stages and a round tracker at
  * `value`. `ProgressStyle` on the promoted path, a drawn bitmap
  * on the card. Segment lengths are relative; `value` is on their sum.
  */
@@ -61,11 +61,11 @@ export interface LiveUpdateMetric {
   caption?: string | null;
   value?: string | null;
   timer?: "countDown" | "countUp" | null;
-  /** Drawn in the phase colour; one per card. */
+  /** Drawn in the phase color; one per card. */
   hero?: boolean;
   /** A placeholder such as "Estimating…": drawn smaller than a number. */
   quiet?: boolean;
-  /** Colour of the value when it differs from the phase colour (e.g. an amber status). */
+  /** Color of the value when it differs from the phase color (e.g. an amber status). */
   tone?: LiveUpdateTone | null;
 }
 

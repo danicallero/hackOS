@@ -310,7 +310,7 @@ export async function presenceScan(
   // returns. Once a pending participant has exited, do not let that response
   // become another identity-bearing copy of the user id. The user row and raw
   // time log are removed by completePendingRemoval; the scanner only needs a
-  // successful, identity-free acknowledgement.
+  // successful, identity-free acknowledgment.
   const publicResult =
     result.pendingRemovalAction && result.kind === "out"
       ? {
@@ -407,7 +407,7 @@ export async function openSessions(opts: { actorId: number | null; at?: number }
 // ── presence estimation reads (H24) ───────────────────────────────────────
 
 /**
- * H66: a help request resolved (never cancelled) is an in-person checkpoint at
+ * H66: a help request resolved (never canceled) is an in-person checkpoint at
  * `resolved_at` for the helper who claimed it and the person who asked. It is
  * a third presence source next to door scans and activity scans (see
  * `PresenceEvent` kind `help`): it can secure a window a door entry opened but

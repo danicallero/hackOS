@@ -18,10 +18,10 @@ export const PANE_BAND_INSET = 20;
 /** Height of the queue status pill that shares the scanner band. */
 export const PANE_CONTROL_HEIGHT = 44;
 
-/** Distance from the top of the pane that centres a control of `PANE_CONTROL_HEIGHT` on the title line. */
+/** Distance from the top of the pane that centers a control of `PANE_CONTROL_HEIGHT` on the title line. */
 export const PANE_CONTROL_TOP = SCREEN_TITLE_CENTER - PANE_CONTROL_HEIGHT / 2;
 
-/** Top padding that centres a title line on `SCREEN_TITLE_CENTER`. */
+/** Top padding that centers a title line on `SCREEN_TITLE_CENTER`. */
 export const PANE_TITLE_TOP = SCREEN_TITLE_CENTER - SCREEN_TITLE.lineHeight / 2;
 
 export interface ActivityPaneLayout {

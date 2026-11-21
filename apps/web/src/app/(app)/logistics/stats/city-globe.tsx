@@ -50,7 +50,7 @@ interface GlobePalette {
   fontFamily: string;
 }
 
-/** [longitude, latitude] at the centre of the visible hemisphere. */
+/** [longitude, latitude] at the center of the visible hemisphere. */
 type Center = [number, number];
 
 const MAP_NAME = "hackos-world";
@@ -124,7 +124,7 @@ function spherePoints(count: number): Array<[number, number]> {
   });
 }
 
-/** Weighted centre of the answers and a zoom that keeps most of them in view. */
+/** Weighted center of the answers and a zoom that keeps most of them in view. */
 export function initialView(places: CityPlace[]): { center: Center; zoom: number } {
   if (places.length === 0) return { center: [0, 20], zoom: MIN_ZOOM };
   let x = 0;
@@ -141,7 +141,7 @@ export function initialView(places: CityPlace[]): { center: Center; zoom: number
     (Math.atan2(y, x) * 180) / Math.PI,
     (Math.atan2(z, Math.hypot(x, y)) * 180) / Math.PI,
   ];
-  // Frame the answers nearest the centre that add up to 90% of the people.
+  // Frame the answers nearest the center that add up to 90% of the people.
   const total = places.reduce((sum, place) => sum + place.n, 0);
   const byDistance = places
     .map((place) => ({ n: place.n, d: geoDistance([place.lon, place.lat], center) }))
@@ -398,7 +398,7 @@ function globeOption(
       min: 0,
       max: Math.sqrt(max),
       seriesIndex: 0,
-      // Fade from the first heat colour itself, not from transparent black (grey halo).
+      // Fade from the first heat color itself, not from transparent black (gray halo).
       inRange: { color: [transparent(palette.heat[0]), palette.heat[0], palette.heat[1]] },
     },
     tooltip: {

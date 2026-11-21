@@ -599,7 +599,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Download all company QR codes",
         description:
-          "A zip with one print-quality SVG per QR tag of the scannable companies, each labelled with the company name and named `<company>-<token>.svg`. Audited like the CSV export. 409 `stand_codes_empty` when no scannable company has a QR. Global sponsor administrators only (#935).",
+          "A zip with one print-quality SVG per QR tag of the scannable companies, each labeled with the company name and named `<company>-<token>.svg`. Audited like the CSV export. 409 `stand_codes_empty` when no scannable company has a QR. Global sponsor administrators only (#935).",
       },
     },
     async (req, reply) => {

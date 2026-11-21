@@ -59,7 +59,7 @@ afterEach(() => {
 });
 
 describe("LibrariesSettingsPage capability guard", () => {
-  it("keeps the catalogue managers unmounted without intolerances:manage", async () => {
+  it("keeps the catalog managers unmounted without intolerances:manage", async () => {
     await render();
 
     expect(container.querySelector("[data-testid=access-denied]")?.textContent).toBe(

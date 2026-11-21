@@ -23,7 +23,7 @@ export const MEDIUM_MAX_WIDTH = 840;
 export const TABLET_TAB_BAR_MIN_WIDTH = 700;
 
 /**
- * A tablet window with room for a labelled rail, a list and a detail (iPad landscape,
+ * A tablet window with room for a labeled rail, a list and a detail (iPad landscape,
  * 1180x820 and up). Not the expanded class (840): an iPhone Duo book (951x669) and a short
  * expanded window are expanded but keep the narrow 64pt rail.
  */
@@ -43,7 +43,7 @@ export const LIST_PANE_WIDTH = { tablet: 420, androidMedium: 340, default: 380 }
 
 /**
  * Widest a screen's content grows. Wider windows (an unfolded foldable, a
- * tablet, a floating window dragged wide) get a centred column instead of
+ * tablet, a floating window dragged wide) get a centered column instead of
  * stretched phone rows; the floating tab bar sits inside that column too.
  */
 export const MAX_CONTENT_WIDTH = 720;

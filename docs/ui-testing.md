@@ -224,7 +224,7 @@ The meal scenario performs the same badge twice and waits for the explicit
 repeat-confirmation state. The recordable-activity scenario rejects its write
 through the test proxy with a retryable 503 and verifies that the upstream has not acknowledged it. It
 restarts the process, restores forwarding, and verifies that the encrypted
-SQLite queue replays the same idempotency key with exactly one acknowledgement:
+SQLite queue replays the same idempotency key with exactly one acknowledgment:
 scanning the badge again must reach repeat confirmation. SSE connections are
 excluded only from Detox idle synchronization; the blacklist does not simulate a network outage. Scanner writes reuse the durable local scan ID
 as their idempotency key, so this covers transient failure, recovery, and the
@@ -258,8 +258,8 @@ be added without creating a second selector vocabulary.
 ## Screenshots on UI PRs
 
 **A PR that changes what a screen looks like ships screenshots in a PR
-comment.** Component tests prove behaviour, not appearance: a card can pass
-every assertion and still have an icon two points off the title's centre line.
+comment.** Component tests prove behavior, not appearance: a card can pass
+every assertion and still have an icon two points off the title's center line.
 Most reviewers are not going to spend 15 minutes compiling a dev client to see
 a spacing change, so a PR without pictures gets reviewed on the diff alone —
 which is exactly how alignment and truncation bugs survive review.

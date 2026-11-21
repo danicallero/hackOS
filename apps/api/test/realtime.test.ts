@@ -347,7 +347,7 @@ describe("multiplexed authorization and wire contract (#892)", () => {
     // Delivery is ordered on one connection: the no-op would precede this one.
     await expect.poll(signals).toBe(3);
   });
-  it("wakes help desk lists when a request is created, cancelled or claimed (H64-H66)", async () => {
+  it("wakes help desk lists when a request is created, canceled or claimed (H64-H66)", async () => {
     const requester = await createUserWithCapabilities([CAPABILITIES.HELPDESK_REQUEST]);
     const helper = await createUserWithCapabilities([CAPABILITIES.HELPDESK_OFFER]);
     const mine = await open(requester, ["domain:helpdesk", "personal"]);

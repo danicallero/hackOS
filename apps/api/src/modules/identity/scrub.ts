@@ -274,7 +274,7 @@ export async function scrubRelationships(
   await client.query(`DELETE FROM user_public_profiles WHERE user_id = $1`, [userId]);
   // H61-H66: the helper card, its knowledge and schedule, and routed-audience
   // rows go. The person's own requests lose their text and requester and
-  // are cancelled if still active; a claim held by
+  // are canceled if still active; a claim held by
   // the person returns to open so the requester can be helped by someone else.
   await client.query(`DELETE FROM help_request_recipients WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM helper_profiles WHERE user_id = $1`, [userId]);
@@ -438,7 +438,7 @@ export async function scrubRelationships(
 
   await client.query(`DELETE FROM enterprise_judges WHERE user_id = $1`, [userId]);
   // A sponsor row can be the required author anchor for a challenge. Keep
-  // that organisation-owned row, but sever the person relationship before
+  // that organization-owned row, but sever the person relationship before
   // deleting the account; deleting the row first would violate
   // challenges.author's NO ACTION FK and strand removal_pending accounts.
   await client.query(

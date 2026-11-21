@@ -98,7 +98,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
         params: repoIdParam,
         summary: "List a team's queue memberships",
         description:
-          "Every non-cancelled queue entry of the team with its waiting rank, ETA, assigned room and the rooms serving its queue. `busy_room_id`/`busy_room_name`/`busy_status` report where a team member (shared-member relation of the H30 guard, test fixtures excluded) is `called`, `in_room` or `presenting` in a separate queue entry, including in the same room; an evaluation blocks moves, any of them blocks another call (#931). Completed and disqualified rows never carry it. `eligible` is false when the project is excluded from judging (H38): it can be reordered but never called. A native projects import is excluded only by an explicit organizer override (H21).",
+          "Every non-canceled queue entry of the team with its waiting rank, ETA, assigned room and the rooms serving its queue. `busy_room_id`/`busy_room_name`/`busy_status` report where a team member (shared-member relation of the H30 guard, test fixtures excluded) is `called`, `in_room` or `presenting` in a separate queue entry, including in the same room; an evaluation blocks moves, any of them blocks another call (#931). Completed and disqualified rows never carry it. `eligible` is false when the project is excluded from judging (H38): it can be reordered but never called. A native projects import is excluded only by an explicit organizer override (H21).",
       },
     },
     async (req) => repoChallenges(req.params.repoId),
@@ -252,7 +252,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Public attendee connections graph (#934, #935)",
         description:
-          "Opt-out networking graph of the active edition: connected people and companies only, keyed-hash node ids that rotate hourly, names only for shared profiles, bounded payload with truncated flag. No notes, favourites, timestamps or user ids. Shared cache, 15 s.",
+          "Opt-out networking graph of the active edition: connected people and companies only, keyed-hash node ids that rotate hourly, names only for shared profiles, bounded payload with truncated flag. No notes, favorites, timestamps or user ids. Shared cache, 15 s.",
       },
     },
     () => sharedCache("tv", "connections", 15, tvConnections),

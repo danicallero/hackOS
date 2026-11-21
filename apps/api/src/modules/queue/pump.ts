@@ -12,7 +12,7 @@ import { callNextForRoom } from "./service.js";
 /**
  * Queue pump (plan/07 §5.1). For every non-paused room, top up `called`
  * entries up to room_queue_state.max_in_waiting_area from the shared
- * challenge queue, honouring position/priority and the H30 member-busy
+ * challenge queue, honoring position/priority and the H30 member-busy
  * guard (all inside callNextForRoom). Challenges whose sponsor opted out of
  * the live queue never block anything here because they were never `enqueue`d
  * in the first place (queue_entries only exist for challenges an admin
@@ -138,7 +138,7 @@ type PreCallClaim = {
  * H38: claim every due logical team's pre-call cycle in ONE queue group, in a
  * single lock-holding transaction (previously one transaction per team).
  *
- * The group row serialises all pump workers for a merged queue, so two
+ * The group row serializes all pump workers for a merged queue, so two
  * overlapping ticks cannot both claim: the loser waits, then finds the teams
  * already warned. Under that lock the room states and every entry are locked
  * once in id order, the fixture marker is re-verified, and the due set (rank

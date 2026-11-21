@@ -25,7 +25,7 @@ stream (#999). The API rejects mobile requests below `MOBILE_MIN_BUILD` with
 `426` and `{"error":{"code":"upgrade_required","details":{"minBuild","build"}}}`;
 the app then shows a blocking update screen that opens the store. Web and
 tooling never send the header and are unaffected. Installed builds that predate
-the header are recognised by Better Auth's `expo-origin` header and count as
+the header are recognized by Better Auth's `expo-origin` header and count as
 build 0, so any floor above 0 blocks them. `0` (default) disables the floor.
 
 To raise the floor:
@@ -35,7 +35,7 @@ To raise the floor:
 2. Check `hackos_mobile_client_requests_total{build,outcome}` on `/metrics`:
    `build="unreported"` are pre-header installs; `outcome="rejected"` shows who
    a given floor would lock out (set the floor in staging first). At most 64
-   distinct build values are labelled, the rest fall into `other`.
+   distinct build values are labeled, the rest fall into `other`.
 3. Set `MOBILE_MIN_BUILD` in the deployment environment and restart the API.
    Do it before event day and leave store-review lead time.
 4. Record the floor below. Only once it passes a build may the installed-client

@@ -33,7 +33,7 @@ export function deviceUserAgentHeaders(
 ): Record<string, string> {
   const model = headerSafe(device.modelName ?? "");
   if (!model) return {};
-  // Android reports a bare model code ("SM-G991B"); the maker makes it recognisable.
+  // Android reports a bare model code ("SM-G991B"); the maker makes it recognizable.
   const maker = headerSafe(device.manufacturer ?? "");
   const named =
     maker && maker !== "Apple" && !model.toLowerCase().startsWith(maker.toLowerCase())

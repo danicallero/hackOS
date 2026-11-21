@@ -206,7 +206,7 @@ describe("ConnectionsGraph", () => {
         await act(async () => {
           await vi.advanceTimersByTimeAsync(500);
         });
-      // Into the first section again: labelled, where the stalled tour stayed on the overview.
+      // Into the first section again: labeled, where the stalled tour stayed on the overview.
       let seen = 0;
       for (let t = 0; t < sectionMs; t += 500) {
         await act(async () => {

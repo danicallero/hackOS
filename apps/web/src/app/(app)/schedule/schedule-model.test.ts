@@ -300,7 +300,7 @@ describe("draftWindowBetween", () => {
     expect(minutesBetween(window!)).toBe(10);
   });
 
-  it("still produces a default-length row when the neighbours leave no gap", () => {
+  it("still produces a default-length row when the neighbors leave no gap", () => {
     const window = draftWindowBetween(
       iso(at("2026-08-22", 11)),
       iso(at("2026-08-22", 10)),

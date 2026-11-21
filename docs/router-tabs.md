@@ -6,7 +6,7 @@ available on every platform:
 
 - iOS 26+ uses the real `expo-glass-effect` Liquid Glass material.
 - Earlier iOS versions and Android use the same layout, hit targets, gesture
-  model, and overflow menu with an opaque, colour-scheme-aware surface.
+  model, and overflow menu with an opaque, color-scheme-aware surface.
 - Four direct tabs and a separate overflow circle are used when navigation is
   crowded. Five direct tabs fit on compact layouts when there is no overflow;
   tablet-width layouts fit six.
@@ -40,7 +40,7 @@ Story: H55.
 - [Overflow menu contract](#overflow-menu-contract)
 - [Interaction model](#interaction-model)
 - [Geometry and safe-area contract](#geometry-and-safe-area-contract)
-- [Platform behaviour](#platform-behaviour)
+- [Platform behaviour](#platform-behavior)
 - [Accessibility and screen readers](#accessibility-and-screen-readers)
 - [Testing](#testing)
 - [Publishing checklist for a future package](#publishing-checklist-for-a-future-package)
@@ -138,7 +138,7 @@ The reusable module has no default export. Its package-facing exports are:
 | `RouterTabs` | component | Renders the headless Expo Router tab shell. |
 | `isRouterTabsLiquidGlassAvailable` | function | Reports whether this runtime can render native Liquid Glass. |
 | `RouterTabItem`, `RouterTabRoute` | types | Direct-cell descriptors and the complete route registry. |
-| `RouterTabsProps`, `RouterTabsTheme` | types | Shell configuration and semantic colours. |
+| `RouterTabsProps`, `RouterTabsTheme` | types | Shell configuration and semantic colors. |
 | `RouterTabsSurfaceProps`, `RouterTabsSurfaceComponent`, `RouterTabsSurfaceMode` | types | Material injection contract for a design system or custom renderer. |
 | `MAX_DIRECT_TABS`, `MAX_TABS_WITHOUT_OVERFLOW` | constants | Default direct-cell budgets: 4 with overflow, 5 without. |
 | `ROUTER_TAB_BAR_HEIGHT` | constant | Compact surface/circle size: 64 pt. Tablet geometry is resolved by the inset helpers. |
@@ -156,7 +156,7 @@ boundary.
 | `href` | `Href` | Expo Router destination used by the direct `TabTrigger`. |
 | `name` | `string` | Stable trigger name. It must be unique within the tab registry. |
 | `label` | `string` | Visible and accessible tab label. Keep it short enough to fit one line. |
-| `icon` | `ReactNode` | Inactive icon node. The caller owns its size and colour. |
+| `icon` | `ReactNode` | Inactive icon node. The caller owns its size and color. |
 | `selectedIcon` | `ReactNode?` | Optional selected icon node. `icon` is reused when omitted. |
 | `testID` | `string?` | Optional stable test identifier for the direct button. |
 
@@ -164,7 +164,7 @@ The shell intentionally accepts `ReactNode`, rather than a symbol name or an
 icon library type. This keeps icon rendering portable and lets a consumer use
 SF Symbols on Apple platforms, Material icons on Android, or its own icon
 system. The consumer is responsible for setting the icon's inactive and
-selected colours.
+selected colors.
 
 ### `RouterTabRoute`
 
@@ -179,15 +179,15 @@ not change as capability or overflow state changes.
 | --- | --- |
 | `surface` | Opaque direct/overflow surface on non-Liquid-Glass platforms. |
 | `selectedSurface` | Opaque selection lens surface on non-Liquid-Glass platforms. |
-| `label` | Inactive label colour. |
-| `selectedLabel` | Active label colour. |
-| `transparent` | Transparent colour used by the overlay and tab hit targets. |
+| `label` | Inactive label color. |
+| `selectedLabel` | Active label color. |
+| `transparent` | Transparent color used by the overlay and tab hit targets. |
 | `shadow?` | Optional React Native `boxShadow` value applied to the bar and lens. |
 
 On iOS 26+, `surface` and `selectedSurface` are not painted as opaque fills;
 the native Liquid Glass surfaces provide the clear outer material and regular
 frosted active pill. They remain required so the same theme has a complete fallback.
-Icon colours are intentionally not in the theme: `RouterTabItem` accepts
+Icon colors are intentionally not in the theme: `RouterTabItem` accepts
 arbitrary React nodes, so the consumer can use any icon library and own its
 inactive/active rendering.
 
@@ -196,7 +196,7 @@ inactive/active rendering.
 | Prop | Required | Meaning |
 | --- | --- | --- |
 | `tabs` | yes | Direct cells to render, in visual and scrub order. |
-| `theme` | yes | Semantic colours and optional shadow for both rendering paths. |
+| `theme` | yes | Semantic colors and optional shadow for both rendering paths. |
 | `routes` | no | Complete hidden + direct route registry. Defaults to descriptors derived from `tabs`. |
 | `overflow` | no | Ready-to-render overflow control placed in its own perfect circle. |
 | `maxDirectTabs` | no | Direct-cell budget when `overflow` exists. Defaults to 4. |
@@ -233,7 +233,7 @@ and change only the visible descriptors/menu actions.
 ### Material abstraction
 
 The default `surfaceComponent` uses only `expo-glass-effect` and React Native,
-so the shell is not coupled to hackOS's `GlassView`, colour tokens, or another
+so the shell is not coupled to hackOS's `GlassView`, color tokens, or another
 application component. A consumer can replace it with a design-system
 surface, a third-party blur implementation, or a platform-specific renderer:
 
@@ -273,7 +273,7 @@ shell still owns hit testing, selection animation, and route changes.
 
 `fallbackTheme` is the other customization seam. It lets an app with an
 intentionally dark screen provide dark fallback tokens without forcing the
-library to know how that app represents colour schemes:
+library to know how that app represents color schemes:
 
 ```tsx
 <RouterTabs
@@ -322,7 +322,7 @@ screen depending on where the pathname was read.
 
 Direct cells remain real Expo Router `TabTrigger` controls. A normal tap goes
 through the router's tab event pipeline, so consumers retain native tab
-behaviour such as:
+behavior such as:
 
 - preserving each tab's stack;
 - receiving `tabPress` on the selected screen;
@@ -333,8 +333,8 @@ behaviour such as:
 The shell does not replace that press event with a delayed JS callback. In
 particular, `onTabSelect` is not called for ordinary taps; it exists for a
 scrub's single commit so a consumer can add one haptic/analytics event without
-duplicating Expo Router's `tabPress` behaviour. A consumer that needs retap
-behaviour must listen to the screen's own navigation `tabPress` event, not try
+duplicating Expo Router's `tabPress` behavior. A consumer that needs retap
+behavior must listen to the screen's own navigation `tabPress` event, not try
 to infer it from `onTabSelect`.
 
 ### Reduced motion
@@ -402,12 +402,12 @@ to remain reachable.
 
 The navigation theme canvas matches the semantic screen background, including
 native stack views beneath system side columns. The clear area behind a floating
-rail/sidebar must not expose the navigation library's default canvas colour.
+rail/sidebar must not expose the navigation library's default canvas color.
 
 On iOS landscape windows at least 600 pt tall, the app reserves a leading
 column for the vertical tab surface. In large landscape windows (at least
 1100 × 800 pt), the navigator fills the window and the rail is top-aligned below
-the title band with a 200 pt labelled sidebar; smaller foldable windows keep
+the title band with a 200 pt labeled sidebar; smaller foldable windows keep
 their bottom-aligned symbol rail.
 A system-provided side column takes
 precedence. The vertical budget follows both available height and the width
@@ -482,13 +482,13 @@ Do not add another hard-coded `paddingBottom`, safe-area spacer, or absolute
 bar height in a route that uses this component. Those duplicate clearances are
 the usual cause of lists ending too high.
 
-## Platform behaviour
+## Platform behavior
 
 | Platform | Material | Navigation/menu | Consumer responsibility |
 | --- | --- | --- | --- |
 | iOS 26+ | Native Liquid Glass: a clear outer surface plus a regular frosted interactive selection pill | Expo Router triggers + native `MenuView` overflow | Keep content edge-to-edge and use the inset hook for reachable endings. |
-| iOS <26 | Opaque colour-scheme-aware surface with matching geometry | Same | Supply `fallbackTheme` for screens with an explicit dark surface. |
-| Android | Opaque colour-scheme-aware surface with matching geometry | Same trigger contract; hackOS's `OpaqueRouterTabs` adapter renders a hand-rolled card menu here instead of `MenuView`'s Compose `DropdownMenu` fallback, to match the iOS card look (see `navigation.md`) | Ensure the app has Gesture Handler/Reanimated configured; use the inset hook for navigation-bar clearance. |
+| iOS <26 | Opaque color-scheme-aware surface with matching geometry | Same | Supply `fallbackTheme` for screens with an explicit dark surface. |
+| Android | Opaque color-scheme-aware surface with matching geometry | Same trigger contract; hackOS's `OpaqueRouterTabs` adapter renders a hand-rolled card menu here instead of `MenuView`'s Compose `DropdownMenu` fallback, to match the iOS card look (see `navigation.md`) | Ensure the app has Gesture Handler/Reanimated configured; use the inset hook for navigation-bar clearance. |
 | iPad / regular tablet width | Up to six direct cells; leading rail in landscape, thinner horizontal bar in portrait | Same | Treat window size and orientation as layout policy, preserving the selected route across rotation. |
 
 `expo-glass-effect` is the material seam. The reusable shell checks the same
@@ -509,12 +509,12 @@ an enhancement, never the only way to navigate: a screen-reader user can move
 focus to a tab and activate it with the normal accessibility action. Retapping
 the focused tab continues to go through Expo Router's `tabPress` event, so
 screen-reader activation preserves the same scroll-to-top/live-activity
-behaviour as a touch tap.
+behavior as a touch tap.
 
 The overflow button must expose its current label and selected state from the
 adapter, and its native menu actions must have visible localized labels. The
 menu itself should remain a real native menu so VoiceOver/TalkBack get their
-standard open, focus, selection, and dismiss behaviour. Icons inside a tab or
+standard open, focus, selection, and dismiss behavior. Icons inside a tab or
 overflow button are decorative because the control already has a text label;
 custom consumers should pass icon nodes with `accessible={false}`. The
 selection lens is also excluded from accessibility focus.
@@ -531,7 +531,7 @@ Recommended test layers:
 2. Navigation contract tests for route-group normalization, overflow no-op,
    replacement, and exhaustive destination descriptors.
 3. React Native Testing Library tests for labels, selected state, menu actions,
-   retap behaviour, reduced-motion selection, and the final-tab selection after
+   retap behavior, reduced-motion selection, and the final-tab selection after
    a scrub.
 4. A simulator/device pass on iOS 26+, an older iOS runtime, and Android for
    visual alignment, native menu presentation, gesture feel, VoiceOver, and
@@ -545,7 +545,7 @@ See [`ui-testing.md`](./ui-testing.md#screenshots-on-ui-prs).
 ## Publishing checklist for a future package
 
 The current source already has the package boundary. Publishing it should
-formalize these seams rather than add hackOS-specific behaviour:
+formalize these seams rather than add hackOS-specific behavior:
 
 1. Move `router-tabs.tsx` and `router-tabs-inset.ts` into a package with
    peer dependencies on `expo-router`, `expo-glass-effect`,
@@ -561,13 +561,13 @@ formalize these seams rather than add hackOS-specific behaviour:
    and design-system consumers can calculate clearance without mounting React
    Native.
 5. Document Expo SDK / React Native / Reanimated compatibility and provide a
-   small example app with one direct set, one overflow set, and both colour
+   small example app with one direct set, one overflow set, and both color
    schemes before publishing.
 
 The package should remain a tab shell rather than a complete navigation
 framework. Expo Router owns routes and stacks; the consumer owns the registry,
 overflow policy, menu actions, analytics, haptics, and domain-specific retap
-behaviour.
+behavior.
 
 ## Troubleshooting
 

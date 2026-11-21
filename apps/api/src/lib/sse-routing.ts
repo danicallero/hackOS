@@ -61,7 +61,7 @@ export function mutationDomainForPath(url: string): string | null {
     return SSE_TOPICS.SPONSORS;
   }
 
-  // These catalogues are maintained by logistics staff and consumed by the
+  // These catalogs are maintained by logistics staff and consumed by the
   // application/profile/scanner read models (H7, H12, H22-H27).
   if (
     matches("/api/universities") ||

@@ -161,7 +161,7 @@ export interface ReviewRow {
   updatedAt: string | null;
 }
 
-/** All non-cancelled challenge applications in this project's queue group. */
+/** All non-canceled challenge applications in this project's queue group. */
 function appliedChallengesSql(fixtureMarkerParam: number): string {
   return `COALESCE(
     (SELECT jsonb_agg(

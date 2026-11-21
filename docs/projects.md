@@ -31,7 +31,7 @@ is locked and revision must match before saving. A stale save receives 409 and
 never replaces a newer draft. Submission validates required fields and verifies
 that uploaded file keys belong to this project and field. Required fields are
 not enforced during autosave. A submitted project is frozen for participants
-(H20, H21): edits, invitations, challenge enrolment and the GitHub link answer
+(H20, H21): edits, invitations, challenge enrollment and the GitHub link answer
 409 `project_frozen`. Inside the submission window a member calls
 `POST /api/me/projects/:id/withdraw-submission` (`canWithdraw`), which returns the
 project to a plain draft (`submitted_at` cleared, so the deadline still binds),
@@ -62,7 +62,7 @@ so a time or consent change cannot retain a privileged cached projection.
 The web gallery refreshes its server projection on public invalidations and
 every 15 seconds for SQL-clock phase boundaries. Consent changes emit only a
 payload-free public invalidation. The configured web origin may make credentialed
-public reads for attendee-only galleries and winners; external catalogue origins
+public reads for attendee-only galleries and winners; external catalog origins
 retain anonymous wildcard CORS.
 
 ## Gallery and files
@@ -143,7 +143,7 @@ edit intended challenges; mandatory challenges are added automatically and
 cannot be withdrawn (H17). `GET /api/projects/estimates` gives staff and
 sponsors per-challenge project counts from the same stores and scope.
 Staff create/edit projects with `POST /api/repos` and `PUT /api/repos/:id/draft`
-and enrol or withdraw all projects with
+and enroll or withdraw all projects with
 `POST /api/challenges/:challengeId/repos/bulk-add|bulk-remove` (H21), audited in
 the same transaction.
 
@@ -288,7 +288,7 @@ the project name, show actual cover images and team names, and disclose the
 complete challenge list only when it exceeds the visible preview.
 
 The project record's top (`ProjectRecordHero` over `HeroBleed`, H18/H48) takes
-its colours from the cover gallery (the images of the first form field that has
+its colors from the cover gallery (the images of the first form field that has
 any). `AmbientBackdrop` (`components/common/ambient-backdrop.tsx`) draws the
 photo the carousel shows behind the header, enlarged 1.4× and blurred (72 px)
 until no shape survives, under a veil of the page background (65% light, 55%

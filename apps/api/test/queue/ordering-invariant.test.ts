@@ -144,7 +144,7 @@ describe("dense 1..N positions", () => {
     expect(await positions(challengeId)).toHaveLength(3);
   });
 
-  it("serialises concurrent moves onto one dense ordering", async () => {
+  it("serializes concurrent moves onto one dense ordering", async () => {
     const { moveToTop, skipToEnd } = await import("../../src/modules/queue/service.js");
     const { challengeIds } = await createEnterpriseChallenges(1);
     const challengeId = challengeIds[0]!;

@@ -1,6 +1,6 @@
 # Certificates and attendance awards
 
-Certificates (#1083) are issued by the organisation, not by a person. There is
+Certificates (#1083) are issued by the organization, not by a person. There is
 no handwritten or personal digital signature and no electronic seal (the
 association does not issue one). Trust comes from the issuer named on the PDF
 plus an unguessable code that a public page resolves. Anything that needs a
@@ -28,7 +28,7 @@ before merging changes, so unrelated patches preserve each other:
 | `minHours` | Secured venue hours (H24 `guaranteedPresenceMs`; open provisional time does not count) needed for automatic issue. `null` turns automatic issue off. |
 | `minReviewHours` | Lower secured-hours threshold that opens case-by-case review. `null` disables the review queue; cannot exceed `minHours` when both are set. |
 | `awardHours` | Optional hours stated on automatic certificates and university exports, also suggested in the reviewer. No preset: `null` uses confirmed attendance and leaves review awards blank. A reviewer can enter a different value per person. |
-| `issuerName` | The organisation printed on the document. |
+| `issuerName` | The organization printed on the document. |
 | `issuerTaxId` | Its NIF, printed after the name (default `G15659220`); `null` omits it. Frozen in each snapshot at issue. |
 
 A person who does not meet the policy gets nothing, with a reason
@@ -46,7 +46,7 @@ The hours policy above is shared. Each certificate type then adds its own requir
 |---|---|
 | `requiresEventEnd` | Self-service and bulk issue wait until `event_config.event_ends_at` has passed (`certificate_event_not_ended`). On by default for **Attendance**, which states the event was completed; **Attendance hours** and **Activities** are available at any time. |
 | `demoRequirement` | `none`; `any` (the team started or finished a presentation in the queue: `queue_entries.presentation_started_at` / `completed_at`, `certificate_demo_required`); `mandatory` (presented to a challenge marked mandatory); or `challenge` with `demoChallengeId` (presented to that challenge's jury). The last two answer `certificate_demo_jury_required`. A deleted challenge never matches, so the requirement fails closed. A manual award stands in for the presentation, not for the event-end wait. |
-| `exemptRoleIds` | Holders of these roles (for example organisers) skip the hours policy, the event-end wait and the presentation. An exempt person's stated hours are their award, else the policy's `awardHours`, else measured hours; **Attendance hours** with none of them answers `certificate_hours_not_met`. |
+| `exemptRoleIds` | Holders of these roles (for example organizers) skip the hours policy, the event-end wait and the presentation. An exempt person's stated hours are their award, else the policy's `awardHours`, else measured hours; **Attendance hours** with none of them answers `certificate_hours_not_met`. |
 
 Staff can skip the event-end and presentation requirements for one person by issuing from the
 dialog with an override reason (audited as usual). `availableCertificateTypes` returns each type's
@@ -113,10 +113,10 @@ and university CSV, while the general CSV still exposes the measured time.
 
 ## Predefined certificates
 
-Attendance, Hours and Accepted spot are predefined in the catalogue; the original Activities variant is also retained. Organisers can edit their wording. The participant picks a type and language; each is a separate document.
+Attendance, Hours and Accepted spot are predefined in the catalog; the original Activities variant is also retained. Organizers can edit their wording. The participant picks a type and language; each is a separate document.
 
 Accepted spot is available to **everyone with event access**, including staff, sponsors, mentors and custom event-access roles. It requires no attendance hours, project presentation or accepted application record. Its audience cannot be restricted to selected roles, turned into an attendance policy or opened to unlinked guests; enabled recipients obtain it directly from their profile. It certifies the accepted place, not attendance or hours.
-It follows event access over time too: when the person has none left (last event-access role removed, a role stops granting access or is deleted, or the account is suspended or anonymised), deferred database triggers on `user_roles`, `roles` and `users` revoke it at commit (`event_access_lost`, audited with source `system`, stored copy dropped). A role swap inside one transaction keeps it. If access returns, a new certificate can be requested; the revoked one stays revoked.
+It follows event access over time too: when the person has none left (last event-access role removed, a role stops granting access or is deleted, or the account is suspended or anonymized), deferred database triggers on `user_roles`, `roles` and `users` revoke it at commit (`event_access_lost`, audited with source `system`, stored copy dropped). A role swap inside one transaction keeps it. If access returns, a new certificate can be requested; the revoked one stays revoked.
 
 The original attendance PDF variants are:
 
@@ -135,7 +135,7 @@ public verification alike (`statesHours` in `pdf.ts`).
 Languages: es, gl and en. Requesting another language creates a separate
 certificate and verification code; same-language retries return the existing one.
 The three original types retain the default wording from `pdf.ts` until custom wording is saved. The
-GPUL logo is `apps/api/assets/certificate/logo.png` (rasterised from the
+GPUL logo is `apps/api/assets/certificate/logo.png` (rasterized from the
 organisation's `default.svg`); it is drawn top right (the Docker image already copies `assets/`). The PDF
 uses the standard Helvetica fonts, which viewers substitute rather than embed.
 The logo is a 384 px palette PNG and the footer QR a 1-bit PNG, so a stored copy is
@@ -143,7 +143,7 @@ about 15 KB (the first version was 41 KB).
 
 ## Configurable types and guest register
 
-**Event settings → Certificates** also owns the certificate catalogue and
+**Event settings → Certificates** also owns the certificate catalog and
 persistent issued-document register, all guarded by `presence:manage`.
 Create or edit a type's name, PDF title and wording in es/gl/en. Text supports
 `{recipient}`, `{event}`, `{issuer}`, `{activity}`, `{hours}`,
@@ -270,7 +270,7 @@ type settings are global to the current edition (`edition: "current"`).
 - Bulk issue reads hours, attended activities, presentations, roles and contact data for the whole
   batch in set-based queries, then issues each person in their own transaction. Each transaction
   still locks the settings, type and person and re-reads the person's award, so a concurrent review
-  or type edit is honoured (an edited type drops the preload for that person).
+  or type edit is honored (an edited type drops the preload for that person).
 - Account removal or anonymization (H54) deletes the person's certificates and manual awards of every edition; their codes and hashes then answer 404 like unknown ones (`identity/scrub.ts`).
 - Issue, revoke and settings changes are audited (H53):
   `certificate.issue`, `certificate.approve`, `certificate.revoke`, `certificate.supersede`,

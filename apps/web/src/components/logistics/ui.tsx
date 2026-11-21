@@ -10,10 +10,10 @@ export function errorMessage(err: unknown, t: Translate, fallback: string): stri
 }
 
 /**
- * Labelled form field wrapper used across the logistics stations.
+ * Labeled form field wrapper used across the logistics stations.
  *
  * The label block keeps a stable height so a field with a subtitle/hint does
- * not move its control relative to a neighbouring field (H22-H26).
+ * not move its control relative to a neighboring field (H22-H26).
  */
 export function Field({
   id,

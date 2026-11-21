@@ -11,7 +11,7 @@ import { colors, motion, type } from "@/theme";
 
 /**
  * H22-H26, H55: what an empty detail pane shows where a result will appear, in the system's
- * ContentUnavailableView style: a large symbol, a headline and one secondary line, centred,
+ * ContentUnavailableView style: a large symbol, a headline and one secondary line, centered,
  * with no card or border. It is one accessibility element and fades in (Reduce Motion: at once).
  */
 export function PanePlaceholder({

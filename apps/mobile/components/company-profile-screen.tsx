@@ -155,7 +155,7 @@ export function CompanyProfileScreen() {
   const [titleAt, setTitleAt] = useState(TITLE_AT);
   const request = useRef(0);
   // iOS keeps the native back circle; a cold deep link has nothing to pop (H59).
-  // The zoom transition's cancelled swipe-to-dismiss leaves the native back
+  // The zoom transition's canceled swipe-to-dismiss leaves the native back
   // button hidden, so these screens always draw their own glass circle.
   const floatingBack = true;
 
@@ -185,10 +185,10 @@ export function CompanyProfileScreen() {
     }
   }, [companyId]);
 
-  // The reader's own diary entry for this company (#935), when they scanned its stand: favourite,
+  // The reader's own diary entry for this company (#935), when they scanned its stand: favorite,
   // private note and removal live here now that the Contacts album opens this page.
   const [entry, setEntry] = useState<SponsorCollectionEntry | null>(null);
-  // A company in the reader's album with no scan yet: shown greyed out, with no diary controls.
+  // A company in the reader's album with no scan yet: shown grayed out, with no diary controls.
   const [uncollected, setUncollected] = useState(false);
   const [entryBusy, setEntryBusy] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
@@ -301,11 +301,11 @@ export function CompanyProfileScreen() {
     }
   }
 
-  // An uncollected company keeps the neutral grey hero instead of its logo colour.
-  // The colour is computed on the device (prefetched from the lists); until it
+  // An uncollected company keeps the neutral gray hero instead of its logo color.
+  // The color is computed on the device (prefetched from the lists); until it
   // is ready the neutral hero shows, then the tint fades in over it.
-  // H44: a collected company's logo colours the header (`ImageHero`); an uncollected one keeps
-  // the neutral grey hero.
+  // H44: a collected company's logo colors the header (`ImageHero`); an uncollected one keeps
+  // the neutral gray hero.
   const heroLogo =
     header && !uncollected
       ? dark && header.logoNegativeUrl

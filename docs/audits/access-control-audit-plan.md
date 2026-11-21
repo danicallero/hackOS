@@ -119,7 +119,7 @@ approved inverting that architecture. This is the current model:
   position reordering, and user assignment — the old capability-group CRUD
   routes (`/api/permission-groups*`) are removed, not deprecated in place.
 - Capability groups no longer exist at all, cosmetic or otherwise — the H8
-  template catalogue (`templates.ts`) is reused only as a prefill/seed
+  template catalog (`templates.ts`) is reused only as a prefill/seed
   source for creating a role, not as a separate authorization concept.
 
 ### DerivedRole retired: badge_category and getEffectiveRole (H8 full replacement)
@@ -395,7 +395,7 @@ array survives:
   feeds it a runtime array). `lib/role-filters.ts`'s
   `roleFilterOptionsFromRoster` now derives one filter row per distinct role
   name actually present on the synced roster (alphabetized), rather than a
-  separate `GET /api/roles` catalogue fetch — a catalogue would list custom
+  separate `GET /api/roles` catalog fetch — a catalog would list custom
   role names nobody on the current roster holds, producing filter rows that
   match nobody.
 - **`general-scanner-screen.tsx`** (custom panel): already a vertical
@@ -649,7 +649,7 @@ independent systems that both grant roles automatically.
 - **Seeded data, not application logic** (same migration): the ten
   Organizer-implication rules the repo owner asked for are `INSERT`ed as
   ordinary `role_grant_rules` rows (`action = 'grant'`, `enabled = true`),
-  looked up by role name against the 0805 default catalogue — fully visible
+  looked up by role name against the 0805 default catalog — fully visible
   and editable via the same Grant Rules tab as any other rule, matching this
   feature's point of being admin-configurable rather than hardcoded.
 - **Admin UI** (`grant-rules-panel.tsx`): the create/edit form gets a
@@ -693,13 +693,13 @@ creates nothing on a fresh database — see above) plus 0801's always-created
 migration mechanically ported all 20 legacy platform templates as roles
 unconditionally (a fresh install ended up with roughly 25 roles nobody
 asked for), then narrowed to a six-role planning-to-operations ladder. 0805
-now seeds the repo owner's finalized **composable catalogue**: fifteen
+now seeds the repo owner's finalized **composable catalog**: fifteen
 default roles (plus the unchanged `Sponsor` and the CLI-only
 `system:superadmin`) built so an organizer normally holds `Organizer` plus
 whichever functional team role(s) their job actually needs, rather than a
 single rung on a ladder.
 
-- **Event Director** — every catalogue capability except the admin wildcard
+- **Event Director** — every catalog capability except the admin wildcard
   (`*`) and the deprecated `sponsor:portal` no-op. The single top
   non-superadmin tier, and the default seed's sole owner of every
   decide/override/broadcast-type action (see risk tiering below).
@@ -893,7 +893,7 @@ caller of the accept endpoint are unchanged.
 ### `is_seeded`, `role_seed_defaults`, and reset-to-default (0800/0807)
 
 `roles.is_seeded` (`boolean NOT NULL DEFAULT false`, added in 0800, set
-`true` by 0801's `Sponsor` insert and every 0805 default-catalogue insert)
+`true` by 0801's `Sponsor` insert and every 0805 default-catalog insert)
 marks a role as coming from the seeded default set rather than from an admin
 using `POST /api/roles`. It's a durable column rather than a name match, so
 renaming a seeded role (e.g. "Organizer" → "Field Organizer") doesn't drop it
@@ -1098,7 +1098,7 @@ preHandlers do not repeat the recursive group query. A capability revocation
 must take effect on the first request started after its transaction commits,
 even when Valkey is unavailable.
 
-The shared catalogue in
+The shared catalog in
 [`packages/shared/src/capabilities.ts`](../../packages/shared/src/capabilities.ts)
 remains the only source for capability strings. Every direct grant, group
 mutation, nesting operation, template reset, member assignment, and invitation
@@ -1108,7 +1108,7 @@ constants rather than inline strings.
 Before adding the database constraint, a migration preflight moves unknown
 existing grants into a quarantine table, records enough provenance to audit and
 repair them, and removes them from effective authorization. A test must prove
-that the database constraint and `ALL_CAPABILITIES` contain the same catalogue.
+that the database constraint and `ALL_CAPABILITIES` contain the same catalog.
 Existing `sponsor:portal` grants are reported separately; the capability stays
 as a documented no-op during migration compatibility but is excluded from
 templates and selectable UI.
@@ -1186,7 +1186,7 @@ groups only. It cannot manufacture or transmit superadmin access.
 
 ## Resettable permission templates
 
-Templates are an application catalogue, not permanent database groups. An
+Templates are an application catalog, not permanent database groups. An
 administrator instantiates an ordinary editable group; multiple groups may
 come from the same template, and the administrator chooses a unique localized
 name and optional description.
@@ -1215,7 +1215,7 @@ Renaming or editing a description does not create drift. Template labels and
 descriptions are trilingual UI message keys (`es`, `gl`, and `en`), never
 hardcoded interface copy.
 
-### Predetermined catalogue
+### Predetermined catalog
 
 | Template | Exact capabilities |
 | --- | --- |
@@ -1232,7 +1232,7 @@ hardcoded interface copy.
 | Presence station | `presence:scan` |
 | Activity and meal station | `activity:scan` |
 | Logistics supervisor | `accredit:scan`, `presence:scan`, `activity:scan`, `logistics:stats` |
-| Programme manager | `schedule:manage` |
+| Program manager | `schedule:manage` |
 | TV operator | `tv:control` |
 | Sponsor administrator | `sponsors:manage`, `invites:manage`, `users:read` |
 | Communications manager | `announcements:manage`, `notifications:send` |
@@ -1241,7 +1241,7 @@ hardcoded interface copy.
 
 Assigned judges and sponsor representatives need no template for their
 relationship-scoped access. `sponsor:portal` is absent from both templates and
-the selectable catalogue.
+the selectable catalog.
 
 ## Test and acceptance matrix
 
@@ -1261,7 +1261,7 @@ the selectable catalogue.
 - Grants and committed revocations take effect on the next request with Valkey
   unavailable and under concurrent requests.
 - Unknown capabilities are rejected in CRUD, nesting, membership, templates,
-  and invitations; the database/shared-catalogue synchronization test passes.
+  and invitations; the database/shared-catalog synchronization test passes.
 - Existing unknown grants are quarantined and no longer effective.
 - A non-wildcard `permissions:manage` holder cannot create, reset, modify,
   include, assign, invite with, or delete through a wildcard-containing graph.
@@ -1320,7 +1320,7 @@ decision gate remains, or if Orca task/dispatch provenance cannot be verified.
 1. Inventory and report unknown capability and `sponsor:portal` assignments
    without changing ordinary custom groups or memberships.
 2. Add quarantine storage, move unknown grants transactionally, and add the
-   catalogue constraint plus synchronization test.
+   catalog constraint plus synchronization test.
 3. Introduce route metadata and enforcement with every existing route
    classified in the same deploy; do not ship a broad temporary exemption.
 4. Replace cross-request authorization caching and land graph-safety locking.

@@ -152,7 +152,7 @@ describe("PersonDetail (#934, #935)", () => {
     expect(layer?.hasAttribute("crossorigin")).toBe(false);
   });
 
-  it("keeps the single-colour wash without a photo", async () => {
+  it("keeps the single-color wash without a photo", async () => {
     await render();
     expect(container.querySelector("[data-hero-bleed]")).not.toBeNull();
     expect(container.querySelector("[data-hero-ambient]")).toBeNull();

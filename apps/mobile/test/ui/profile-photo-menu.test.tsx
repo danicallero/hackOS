@@ -102,7 +102,7 @@ describe("ProfilePhotoMenu (#934)", () => {
     expect(screen.getByLabelText("profilePhotoChange")).toBeTruthy();
   });
 
-  it("crops to a centred square, uploads a JPEG with an idempotency key and refreshes me", async () => {
+  it("crops to a centered square, uploads a JPEG with an idempotency key and refreshes me", async () => {
     await renderMobile(<ProfilePhotoMenu name="Ada Lovelace" image={null} size={96} />);
     await press("library");
 

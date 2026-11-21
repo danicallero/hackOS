@@ -105,7 +105,7 @@ export default function RootLayout() {
 
 /**
  * An auth-style screen drawn instead of the whole app: the frame and side padding the root Stack's
- * `contentStyle` gives sign-in, which `AuthScreen`'s foldable centring assumes (H4, H55).
+ * `contentStyle` gives sign-in, which `AuthScreen`'s foldable centering assumes (H4, H55).
  */
 function StacklessScreen({ children }: { children: ReactNode }) {
   const sideInsets = useSideInsets();
@@ -551,7 +551,7 @@ function RootLayoutNav({
   const { refetch } = useMeContext();
   const showRestoringSession = useDelayedVisibility(!me && loading, 500);
   const canEnterApp = canEnterMobileApp(authenticated, me?.hasEventAccess);
-  // One page colour for every screen: the navigation theme canvas is a fixed black, so a screen
+  // One page color for every screen: the navigation theme canvas is a fixed black, so a screen
   // that paints nothing itself would show it (pitch black on Mac and iPad) beside the grouped page.
   const page = { backgroundColor: colors.background };
   const sidePadding = { ...page, paddingLeft: safeInsets.left, paddingRight: safeInsets.right };
@@ -655,7 +655,7 @@ function RootLayoutNav({
             options={{
               // #935 directory profile: Android draws its own back button;
               // iOS uses the transparent native header of the other detail
-              // screens, so no band ever covers the centred avatar.
+              // screens, so no band ever covers the centered avatar.
               ...transparentDetailHeaderOptions,
               headerShown: process.env.EXPO_OS === "ios",
             }}

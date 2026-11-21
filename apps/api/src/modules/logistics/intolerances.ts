@@ -15,7 +15,7 @@ import { idParamSchema, PUBLIC_CATALOG_CACHE } from "./schemas.js";
 
 /**
  * Food-intolerance dictionary (H12/H25). Administration maintains the shared
- * catalogue that the registration and profile pickers render; every entry
+ * catalog that the registration and profile pickers render; every entry
  * carries i18n labels. There is deliberately no FK from users.food_intolerances
  * (integer[]) to this table, so removing an entry is safe — stale ids simply
  * stop resolving in the meal-planning stats.
@@ -45,7 +45,7 @@ export function registerIntoleranceRoutes(app: FastifyInstance): void {
     kind: "public",
     anonymousCategory: "public-content",
   } as const satisfies RouteAccessPolicy;
-  // The catalogue is global: edits never touch an edition's rows.
+  // The catalog is global: edits never touch an edition's rows.
   const manageAccess = {
     kind: "capability",
     capability: CAPABILITIES.INTOLERANCES_MANAGE,
@@ -60,7 +60,7 @@ export function registerIntoleranceRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List public food-intolerance options",
         description:
-          "Anonymous read-only catalogue used by application and profile pickers; staff maintain it through the protected management endpoints.",
+          "Anonymous read-only catalog used by application and profile pickers; staff maintain it through the protected management endpoints.",
       },
     },
     async (_req, reply) => {

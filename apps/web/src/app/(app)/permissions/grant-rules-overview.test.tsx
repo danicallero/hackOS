@@ -44,7 +44,7 @@ vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},
 }));
 
-// Mimics the real catalogue entry ("{roleName} is assigned") closely enough
+// Mimics the real catalog entry ("{roleName} is assigned") closely enough
 // to exercise interpolation without importing the JSON locale; every other
 // key just echoes back so assertions can match on the raw key.
 const t = (key: string, values?: Record<string, string | number>) => {

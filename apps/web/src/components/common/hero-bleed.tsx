@@ -6,7 +6,7 @@ import { type Ambient, AmbientBackdrop } from "./ambient-backdrop";
  * Tinted page top that runs edge to edge and under the top of the canvas, with
  * no card around it (H47, H48). Place it as the page's first child, outside
  * `PageLayout`; it cancels the shell's padding. The wash comes from the
- * image colour and falls back to blue, as on mobile. With `ambient` images (a
+ * image color and falls back to blue, as on mobile. With `ambient` images (a
  * project's visible photo, a person's photo, a company's logo; H18, H44, H48)
  * the backdrop is the image itself instead (`AmbientBackdrop`).
  */

@@ -107,9 +107,9 @@ export async function accreditationCountsByRole() {
 
 /**
  * H27: hourly flow of accreditations, meal servings and activity scans, so
- * organisers can see peaks (door staffing, kitchen load) while the event runs
+ * organizers can see peaks (door staffing, kitchen load) while the event runs
  * and justify the attendance curve afterwards. Buckets are UTC hour instants;
- * the client localises them. Same account filters as the totals above.
+ * the client localizes them. Same account filters as the totals above.
  */
 export async function hourlyFlow() {
   const accreditations = await pool.query<{ bucket: Date; n: number }>(

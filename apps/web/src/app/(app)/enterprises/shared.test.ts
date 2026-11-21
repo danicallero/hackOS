@@ -55,7 +55,7 @@ describe("groupEnterprises (H45)", () => {
     position: number | null = null,
   ) => ({ id, name, kind, priority, position }) as Enterprise;
 
-  it("groups by priority only and honours manual position", () => {
+  it("groups by priority only and honors manual position", () => {
     const groups = groupEnterprises([
       e(1, "Zed", "sponsor", 2),
       e(2, "Entity", "collaborator", 1),

@@ -41,7 +41,7 @@ import { type EventReminder, readEventReminder, saveEventReminder } from "./remi
  *
  * One row backs six independently-owned settings sections (identity/timing,
  * venue, wallet pass, presence policy, invited-account requirements, the
- * shirt-size catalogue) — rather than splitting into six endpoints, GET/PUT
+ * shirt-size catalog) — rather than splitting into six endpoints, GET/PUT
  * stay a single resource (matching how the merge logic below already treats
  * every field independently) and PUT enforces one capability per field
  * group at request time. See EVENT_SETTINGS_CAPABILITIES below.

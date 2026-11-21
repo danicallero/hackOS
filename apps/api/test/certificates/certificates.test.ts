@@ -17,7 +17,7 @@ import {
 } from "../helpers.js";
 import { admitParticipant, createChallenge } from "../projects/fixtures.js";
 
-/** #1083: attendance certificates issued by the organisation, verified by code. */
+/** #1083: attendance certificates issued by the organization, verified by code. */
 
 let app: App;
 let staff: number;
@@ -321,14 +321,14 @@ describe("certificate wording (#1083)", () => {
 
   it("names the issuer's NIF and the recipient once, with their document beside the name", async () => {
     const text = await render({}, "12345678Z");
-    expect(text).toContain("GPUL, NIF G15659220, as the organising body,");
+    expect(text).toContain("GPUL, NIF G15659220, as the organizing body,");
     expect(text).toContain(
       "This certifies that Ada Lovelace (DNI/NIE/passport 12345678Z) has an accepted spot",
     );
     expect(text.match(/Ada Lovelace/g)).toHaveLength(1);
     expect(await render({ documentKind: "passport" }, "P1")).toContain("(passport P1)");
     const legacy = await render({ issuerTaxId: undefined, templateBody: "Welcome." }, null);
-    expect(legacy).toContain("GPUL as the organising body,");
+    expect(legacy).toContain("GPUL as the organizing body,");
     expect(legacy).toMatch(/Ada Lovelace ?\. Welcome\./);
   });
 });

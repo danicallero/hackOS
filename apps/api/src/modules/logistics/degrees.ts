@@ -109,7 +109,7 @@ export function registerDegreeRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
   const manage = requireCapability(CAPABILITIES.INTOLERANCES_MANAGE);
   const publicAccess = routeAccess({ kind: "public", anonymousCategory: "public-content" });
-  // Catalogues are global: edits never touch an edition's rows.
+  // Catalogs are global: edits never touch an edition's rows.
   const authenticated = routeAccess({ kind: "authenticated", edition: "global" });
   const manageAccess = routeAccess({
     kind: "capability",
@@ -182,7 +182,7 @@ export function registerDegreeRoutes(app: FastifyInstance): void {
       preHandler: manage,
       schema: {
         summary: "Create a degree",
-        description: "Adds a curated degree to the application-form catalogue.",
+        description: "Adds a curated degree to the application-form catalog.",
         body,
       },
     },
@@ -200,7 +200,7 @@ export function registerDegreeRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Consolidate duplicate degrees",
         description:
-          "Staff-only consolidation of two degree catalogue rows. Every affected application response is reassigned to the retained degree before the duplicate row is deleted.",
+          "Staff-only consolidation of two degree catalog rows. Every affected application response is reassigned to the retained degree before the duplicate row is deleted.",
         params: idParamSchema,
         body: z.object({ targetId: z.number().int().positive() }),
       },

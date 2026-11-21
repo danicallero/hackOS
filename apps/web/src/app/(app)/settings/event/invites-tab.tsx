@@ -3,7 +3,7 @@
 // Invited-account requirements category (INVITES_MANAGE, H10): whether an
 // invited sponsor/staff account must supply a shirt size, and whether their
 // claim form shows dietary-restriction fields at all. Off by default — not
-// every event caters on-site sponsors/staff. The shirt-size catalogue itself
+// every event caters on-site sponsors/staff. The shirt-size catalog itself
 // lives in Settings → Libraries, next to the other shared reference lists
 // (food intolerances, universities) that feed application forms and
 // profiles — this tab only owns the two invite-claim requirement toggles.

@@ -54,7 +54,7 @@ explicit release/security approval for the reset operation.
 | `participant-explorer` | Participant | Non-destructive demo account, accredited and outside the venue. Owns six projects and walks every queue stage: *Aurora Rover* (submitted, repository, waiting in a queue shared by two challenges), *Pixel Garden* (scored), *Nimbus Notes* (called to room A), *Tidal Lab* (inside room A), *Ember Engine* (presenting in room B) and *Draft Notes* (draft). Sees two other teams' projects (*Lumen Labs*, *Orbit Kit*) in the Gallery and can report them. |
 | `staff-queue-operator` | Staff | Synthetic queue/judge operator (`queue:status`, `queue:operate`, `judge:panel`, `projects:read`, `projects:edit`) for the two synthetic rooms, their projects and challenges; it cannot reach any other queue, room, project or challenge. |
 
-The dedicated internal operator roles are excluded from the public role catalogue
+The dedicated internal operator roles are excluded from the public role catalog
 (`/api/roles`, including deleted-role listings). They remain assigned to the
 synthetic operators and continue to participate in authorization; shared real
 roles such as Participant remain visible.
@@ -87,7 +87,7 @@ corrected for features added since. Passwords, the deletion code and the
 deployment URL go in the private handoff, never in this repository.
 
 > **What is this app?** hackOS is the official mobile app for HackUDC, a public
-> student hackathon organised by GPUL in A Coruña, Spain. Anyone eligible can
+> student hackathon organized by GPUL in A Coruña, Spain. Anyone eligible can
 > apply through the public event website; accepted attendees receive mobile
 > access. No paid content, subscriptions or in-app purchases.
 >
@@ -104,14 +104,14 @@ deployment URL go in the private handoff, never in this repository.
 > `app-review-<scenario>@hackos.test` and the shared password from the private
 > handoff. Accounts: `participant-explorer` (walks the app: six projects, every queue stage, the
 > gallery and reporting), `participant-anonymize-outside`
-> (anonymisation outside the venue), `participant-delete` (full deletion),
-> `participant-anonymize-inside` (anonymisation with a pending exit),
+> (anonymization outside the venue), `participant-delete` (full deletion),
+> `participant-anonymize-inside` (anonymization with a pending exit),
 > `staff-exit-operator` and `staff-queue-operator` (runs the two synthetic
 > rooms and judges their projects). All are synthetic, hold an event ticket and
 > see only fixture data.
 >
-> **Account deletion and anonymisation.** Account → Delete account, confirmation
-> code in the handoff. Full deletion: `participant-delete`. Anonymisation
+> **Account deletion and anonymization.** Account → Delete account, confirmation
+> code in the handoff. Full deletion: `participant-delete`. Anonymization
 > outside the venue: the primary participant. Checked-in attendees may keep
 > anonymous audit data for public-funding audits; an attendee inside the venue
 > is retained until an exit operator records their departure or 12 hours pass,
@@ -131,8 +131,8 @@ deployment URL go in the private handoff, never in this repository.
 > scanned that person. There is no direct messaging, chat or comment feature between
 > users; team invitations carry no free text. Any attendee can report a project (Gallery →
 > project → Report) or a saved person's profile (Report on their card) with a
-> reason; reports go to a moderation inbox that organisers review, and
-> organisers can edit a project or hide a profile or its photo. Other concerns
+> reason; reports go to a moderation inbox that organizers review, and
+> organizers can edit a project or hide a profile or its photo. Other concerns
 > can be sent to hackudc@gpul.org, the address in the Privacy Policy.
 
 Statements from the earlier notes that were removed because they stopped being
@@ -184,7 +184,7 @@ Registry: `review_fixture_queues` holds one pointer row per slot (`fixture_key`,
 and room; an account's slots share one enterprise and sponsor and are purged
 together after every pointer is checked.
 
-Still not covered: a scoped organiser and a sponsor representative, and
+Still not covered: a scoped organizer and a sponsor representative, and
 anything that needs a real GitHub App installation.
 
 ## Checking whether credentials were used
@@ -231,7 +231,7 @@ controlled by the deployment.
 
 These are implementation assumptions, not legal conclusions:
 
-- GPUL is the responsible organisation/data controller for the GPUL-operated
+- GPUL is the responsible organization/data controller for the GPUL-operated
   hackOS instance; “HackUDC” names the event, not the operator.
 - Synthetic accounts, marked projects/challenges and their queues are isolated
   test fixtures within the same deployment/database. They must not affect
