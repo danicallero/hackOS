@@ -27,7 +27,16 @@ describe("statistics layout", () => {
         "shirt-sizes": { width: 1, height: 1 },
       },
       tones: {},
-      overviewOrder: ["submitted", "confirmed", "rejected", "rate", "expired", "available", "time"],
+      overviewOrder: [
+        "submitted",
+        "confirmed",
+        "rejected",
+        "rate",
+        "declined",
+        "expired",
+        "available",
+        "time",
+      ],
     });
   });
 
@@ -35,7 +44,16 @@ describe("statistics layout", () => {
     expect(
       sanitizeStatsLayout({ overviewOrder: ["time", "confirmed", "missing", "time"] }, ["overview"])
         .overviewOrder,
-    ).toEqual(["time", "confirmed", "submitted", "rejected", "rate", "expired", "available"]);
+    ).toEqual([
+      "time",
+      "confirmed",
+      "submitted",
+      "rejected",
+      "rate",
+      "declined",
+      "expired",
+      "available",
+    ]);
   });
 
   it("keeps valid panel and KPI tones while dropping obsolete color preferences", () => {

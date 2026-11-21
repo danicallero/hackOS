@@ -128,8 +128,9 @@ canvas renderer, with Natural Earth 110m countries from `world-atlas`, a
 heat-map layer (square-root weighted so small towns stay visible beside the
 largest one) and a dot per city whose tooltip gives the exact count. Dragging
 rotates the globe; zoom buttons scale it; the first view centres on the
-people-weighted mean and frames 90% of them. Only the visible hemisphere is
-drawn. A hidden, evenly spaced point set over the whole sphere keeps the geo
+people-weighted mean and frames 90% of them (the whole globe when they are
+spread over most of a hemisphere). The heat kernel spans a fixed arc of the
+sphere, so it grows with the zoom. Only the visible hemisphere is drawn. A hidden, evenly spaced point set over the whole sphere keeps the geo
 bounding box (and so the globe's size) constant while it turns.
 
 Answers carry no coordinates, so `lib/city-geocode.ts` places them offline

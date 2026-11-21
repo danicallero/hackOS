@@ -240,6 +240,7 @@ export async function applicationStats(
       sent: Number(funnel.rows[0]?.sent ?? 0),
       confirmed: Number(funnel.rows[0]?.confirmed ?? 0),
       rejected: Number(funnel.rows[0]?.rejected ?? byStatus.rejected ?? 0),
+      declined: Number(funnel.rows[0]?.declined ?? 0),
       expired_confirmations: Number(funnel.rows[0]?.expired ?? 0),
       still_able_to_confirm: Number(funnel.rows[0]?.still_in_window ?? 0),
       confirmation_rate:

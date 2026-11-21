@@ -62,6 +62,10 @@ const MIN_ZOOM = 1;
 const MAX_ZOOM = 16;
 const ZOOM_STEP = 1.6;
 const DEGREES_PER_PIXEL = 0.35;
+const WHOLE_GLOBE_BELOW = 1.5;
+// Heat kernel spans about this arc of the sphere, so it follows the zoom
+// instead of covering a whole country when the globe is small.
+const HEAT_ARC = Math.sin((1.2 * Math.PI) / 180);
 
 echarts.use([
   CanvasRenderer,
@@ -150,7 +154,9 @@ export function initialView(places: CityPlace[]): { center: Center; zoom: number
     if (covered >= total * 0.9) break;
   }
   const visible = Math.min(Math.PI / 2, Math.max((8 * Math.PI) / 180, radius * 1.4));
-  return { center, zoom: clampZoom(1 / Math.sin(visible)) };
+  const zoom = 1 / Math.sin(visible);
+  // Just above 1 the disk would only overflow the panel without showing more.
+  return { center, zoom: zoom < WHOLE_GLOBE_BELOW ? MIN_ZOOM : clampZoom(zoom) };
 }
 
 const clampZoom = (zoom: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
@@ -385,7 +391,6 @@ function globeOption(
           itemStyle: { opacity: 0, borderWidth: 0 },
         },
       ],
-      tooltip: { show: false },
     },
     visualMap: {
       show: false,
@@ -415,8 +420,8 @@ function globeOption(
       {
         type: "heatmap",
         coordinateSystem: "geo",
-        pointSize: Math.max(8, Math.min(28, radius / 14)),
-        blurSize: Math.max(12, Math.min(40, radius / 9)),
+        pointSize: Math.max(4, Math.min(48, radius * HEAT_ARC)),
+        blurSize: Math.max(6, Math.min(64, radius * HEAT_ARC * 1.4)),
         silent: true,
         // Square root keeps a few people visible beside the largest city.
         data: visible.map((place) => [place.lon, place.lat, Math.sqrt(place.n)]),
@@ -425,6 +430,8 @@ function globeOption(
         type: "scatter",
         coordinateSystem: "geo",
         z: 5,
+        // ECharts cascades the geo component's tooltip into its series; keep it on here.
+        tooltip: { show: true },
         data: visible.map((place) => ({
           name: place.label,
           value: [place.lon, place.lat, place.n],
