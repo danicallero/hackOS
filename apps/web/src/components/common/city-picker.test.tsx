@@ -22,15 +22,14 @@ vi.mock("@/lib/i18n", () => ({
 }));
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
-const madrid = { city: "Madrid", province: "Community of Madrid", country: "Spain" };
+// Photon answers in the requested language; the picker offers the canonical spelling.
 const response = {
   ok: true,
   json: async () => ({
-    features: [
-      { properties: { name: madrid.city, state: madrid.province, country: madrid.country } },
-    ],
+    features: [{ properties: { name: "Madrid", state: "Community of Madrid", country: "Spain" } }],
   }),
 };
+const madrid = { city: "Madrid", province: "Comunidad de Madrid", country: "España" };
 
 describe("CityPicker (H12)", () => {
   let root: Root;
@@ -94,18 +93,18 @@ describe("CityPicker (H12)", () => {
     language = locale;
     const user = await search();
     expect(fetchMock.mock.calls[0][0]).toContain(`lang=${locale === "en" ? "en" : "default"}`);
-    expect(container.textContent).toContain("Madrid, Community of Madrid, Spain");
+    expect(container.textContent).toContain("Madrid, Comunidad de Madrid, España");
     await user.keyboard("{ArrowDown}{Enter}");
     expect(onChange).toHaveBeenLastCalledWith(madrid);
     expect((container.querySelector("input") as HTMLInputElement).value).toBe(
-      "Madrid, Community of Madrid, Spain",
+      "Madrid, Comunidad de Madrid, España",
     );
   });
 
   it("finds A Coruña from an unaccented local query", async () => {
     await search("coruna");
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("A Coruña, Galicia, Spain");
+    expect(container.textContent).toContain("A Coruña, Galicia, España");
   });
 
   it("sends normalized text to the remote geocoder", async () => {
@@ -121,7 +120,7 @@ describe("CityPicker (H12)", () => {
     });
     await search("SÃO PAULO");
     expect(fetchMock.mock.calls[0][0]).toContain("q=sao%20paulo");
-    expect(container.textContent).toContain("São Paulo, São Paulo, Brazil");
+    expect(container.textContent).toContain("São Paulo, São Paulo, Brasil");
   });
 
   it("shows a pending search and permits complete manual entry without waiting", async () => {
@@ -208,12 +207,12 @@ describe("CityPicker (H12)", () => {
   it("answers from the bundled index without calling any service", async () => {
     const user = await search("Vig");
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("Vigo, Galicia, Spain");
+    expect(container.textContent).toContain("Vigo, Galicia, España");
     await user.keyboard("{ArrowDown}{Enter}");
     expect(onChange).toHaveBeenLastCalledWith({
       city: "Vigo",
       province: "Galicia",
-      country: "Spain",
+      country: "España",
     });
   });
 
@@ -266,7 +265,7 @@ describe("CityPicker (H12)", () => {
     expect(onChange).toHaveBeenLastCalledWith({
       city: "Vigo",
       province: "Galicia",
-      country: "Spain",
+      country: "España",
     });
   });
 });

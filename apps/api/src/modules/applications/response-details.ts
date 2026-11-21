@@ -4,7 +4,7 @@ import { audit } from "../../lib/audit.js";
 
 import { NotFoundError } from "../../lib/errors.js";
 
-import { validateResponses } from "../../lib/form-validation.js";
+import { canonicalCityAnswers, validateResponses } from "../../lib/form-validation.js";
 import { previousRejectionsSql } from "./application-reads.js";
 import { stripDietaryResponses } from "./forms.js";
 import { grantedRoleNameSql } from "./granted-role.js";
@@ -208,7 +208,7 @@ export async function editResponse(
 
     const updated = await client.query(
       `UPDATE application_responses SET responses = $2::jsonb WHERE id = $1 RETURNING *`,
-      [responseId, JSON.stringify(storedResponses)],
+      [responseId, JSON.stringify(canonicalCityAnswers(storedResponses))],
     );
 
     await audit(client, {

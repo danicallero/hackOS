@@ -6,7 +6,7 @@ import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
-import { validateResponses } from "../../lib/form-validation.js";
+import { canonicalCityAnswers, validateResponses } from "../../lib/form-validation.js";
 import { visibleWinnerRows } from "../challenges/winner-publication.js";
 import { syncFieldLibraries, validateLibraryAnswers } from "../form-libraries/service.js";
 import { hasEventAccess } from "../identity/role.js";
@@ -125,7 +125,11 @@ export async function saveNativeDraft(
     const description = descriptionField ? responses[descriptionField.key] : undefined;
     const { rows } = await db.query(
       `UPDATE repos SET responses=$2,draft_revision=draft_revision+1,description=COALESCE($3,description) WHERE id=$1 RETURNING responses,draft_revision AS revision`,
-      [id, JSON.stringify(responses), typeof description === "string" ? description.trim() : null],
+      [
+        id,
+        JSON.stringify(canonicalCityAnswers(responses)),
+        typeof description === "string" ? description.trim() : null,
+      ],
     );
     if (staff && before.submission_status === "submitted")
       await snapshotProjectSubmission(db, userId, id, form?.version ?? null, "admin");

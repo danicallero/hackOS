@@ -70,12 +70,12 @@ test("can select a city and complete the location while Photon is unavailable", 
   const city = page.getByRole("combobox", { name: "City of origin" });
   await city.fill("Madird");
   await expect(
-    page.getByRole("option", { name: "Madrid, Community of Madrid, Spain" }),
+    page.getByRole("option", { name: "Madrid, Comunidad de Madrid, España" }),
   ).toBeVisible();
   await page.screenshot({ path: "artifacts/city-suggestions.png" });
   await city.press("ArrowDown");
   await city.press("Enter");
-  await expect(city).toHaveValue("Madrid, Community of Madrid, Spain");
+  await expect(city).toHaveValue("Madrid, Comunidad de Madrid, España");
 
   await page.unroute("https://photon.komoot.io/**");
   await page.route("https://photon.komoot.io/**", (route) =>

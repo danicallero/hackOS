@@ -77,11 +77,14 @@ export function StatsChart({
   type,
   title,
   height,
+  note,
 }: {
   data: StatsChartDatum[];
   type: PlotChartType;
   title: string;
   height?: number | string;
+  /** A line between the chart and its data, e.g. what the chart leaves out. */
+  note?: React.ReactNode;
 }) {
   const { t } = useLocale();
   const [selected, setSelected] = useState<Record<string, boolean>>({});
@@ -189,6 +192,7 @@ export function StatsChart({
           style={{ height: chartHeight }}
         />
       </div>
+      {note}
       <details className="mt-2 text-sm">
         <summary className="button-interaction cursor-pointer rounded px-1 py-1">
           {t("statsChartData")}
