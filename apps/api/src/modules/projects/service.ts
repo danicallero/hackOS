@@ -5,7 +5,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit, auditMany } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { assertFixtureSubjectScope, isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
-import { validateResponses } from "../../lib/form-validation.js";
+import { canonicalCityAnswers, validateResponses } from "../../lib/form-validation.js";
 import { likeContains } from "../../lib/like.js";
 import { sharedCache } from "../../lib/shared-cache.js";
 import { broadcast } from "../../lib/sse.js";
@@ -1068,7 +1068,7 @@ export async function createRepoNative(
         input.demoUrl,
         actorId,
         marker,
-        JSON.stringify(responses),
+        JSON.stringify(canonicalCityAnswers(responses)),
       ],
     );
     const id = rows[0].id;

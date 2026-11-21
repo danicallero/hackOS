@@ -1,3 +1,4 @@
+import { canonicalCityAnswer } from "@hackos/shared/places";
 import { normalizeSearchText } from "@/lib/search-text";
 
 // City suggestions for CityPicker, fastest source first:
@@ -5,8 +6,9 @@ import { normalizeSearchText } from "@/lib/search-text";
 //      scripts/build-city-data.mjs) that answers instantly and offline;
 //   2. Photon (OpenStreetMap) when the index has no match;
 //   3. Open-Meteo geocoding when Photon fails or has nothing.
-// Only complete city/province/country records are suggested, and no
-// third-party identifier is ever persisted.
+// Only complete city/province/country records are suggested, in the canonical
+// spelling the API stores (@hackos/shared/places: "España", "Cataluña"), and
+// no third-party identifier is ever persisted.
 
 export interface CityValue {
   city: string;
@@ -172,14 +174,16 @@ async function searchOpenMeteo(query: string, language: string, signal: AbortSig
 
 const dedupe = (cities: CityValue[]) => {
   const seen = new Set<string>();
-  return cities.filter((c) => {
-    const key = normalizeSearchText(formatCityValue(c))
-      .replace(/[^\p{L}\p{N}]+/gu, " ")
-      .trim();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return cities
+    .map((city) => canonicalCityAnswer(city))
+    .filter((c) => {
+      const key = normalizeSearchText(formatCityValue(c))
+        .replace(/[^\p{L}\p{N}]+/gu, " ")
+        .trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 };
 
 /**

@@ -6,7 +6,7 @@ import { audit } from "../../lib/audit.js";
 
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 
-import { validateResponses } from "../../lib/form-validation.js";
+import { canonicalCityAnswers, validateResponses } from "../../lib/form-validation.js";
 
 import { activeLibraryFields, validateLibraryAnswers } from "../form-libraries/service.js";
 
@@ -70,7 +70,7 @@ export async function saveDraft(
         `INSERT INTO application_responses
            (user_id, application_id, application_form_version_id, responses, status)
          VALUES ($1, $2, $3, $4::jsonb, 'draft') RETURNING *`,
-        [userId, applicationId, currentForm.id, JSON.stringify(responses)],
+        [userId, applicationId, currentForm.id, JSON.stringify(canonicalCityAnswers(responses))],
       );
       return { ...inserted.rows[0], can_delete_draft: true };
     }
@@ -93,7 +93,7 @@ export async function saveDraft(
       `UPDATE application_responses
           SET responses = $3::jsonb
         WHERE id = $1 AND user_id = $2 RETURNING *`,
-      [existing.id, userId, JSON.stringify(responses)],
+      [existing.id, userId, JSON.stringify(canonicalCityAnswers(responses))],
     );
     return { ...updated.rows[0], can_delete_draft: await canDeleteDraft(client, updated.rows[0]) };
   });
@@ -306,7 +306,7 @@ export async function submitResponse(
            allow_resubmit_after_close = false,
            auto_accept_on_resubmit = false
        WHERE id = $1 AND user_id = $2 RETURNING *`,
-      [existing.id, userId, JSON.stringify(storedResponses), nextStatus],
+      [existing.id, userId, JSON.stringify(canonicalCityAnswers(storedResponses)), nextStatus],
     );
 
     if (autoAccept) {

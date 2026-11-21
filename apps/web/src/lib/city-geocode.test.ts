@@ -57,4 +57,46 @@ describe("city geocoding for the statistics globe (H27)", () => {
     ]);
     expect(places.map((place) => Math.round(place.lat))).toEqual([41, 41, 40]);
   });
+
+  it("ignores a leading article the index spells differently", async () => {
+    const index = await loadCityIndex();
+    const { places } = placeCities(index, [
+      { label: "O Porriño, Galicia, España", n: 2 },
+      { label: "La Coruña, Galicia, España", n: 1 },
+    ]);
+    expect(places).toEqual([
+      expect.objectContaining({ approximate: false }),
+      expect.objectContaining({ approximate: false }),
+    ]);
+    expect(places[0]?.lat).toBeCloseTo(42.16, 1);
+    expect(places[0]?.lon).toBeCloseTo(-8.62, 1);
+    expect(places[1]?.lat).toBeCloseTo(43.37, 1);
+  });
+
+  it("places municipalities whose seat GeoNames lists without population", async () => {
+    const index = await loadCityIndex();
+    const { places } = placeCities(index, [{ label: "Xove, Galicia, España", n: 1 }]);
+    expect(places[0]).toMatchObject({ approximate: false });
+    expect(places[0]?.lat).toBeCloseTo(43.69, 1);
+    expect(places[0]?.lon).toBeCloseTo(-7.51, 1);
+  });
+
+  it("falls back to the answer's region before the country's capital", async () => {
+    const index = await loadCityIndex();
+    const { places } = placeCities(index, [{ label: "Aldea Perdida, Galicia, España", n: 1 }]);
+    expect(places[0]).toMatchObject({ approximate: true });
+    // Galicia's largest indexed place (Vigo), not Madrid.
+    expect(places[0]?.lon).toBeLessThan(-7);
+  });
+
+  it("groups answers by canonical region whatever language they were written in", async () => {
+    const index = await loadCityIndex();
+    const { places } = placeCities(index, [
+      { label: "Girona, Catalonia, Spain", n: 1 },
+      { label: "Barcelona, Cataluña, España", n: 1 },
+      { label: "Zaragoza, Aragon, España", n: 1 },
+    ]);
+    expect(places[0]?.region).toBe(places[1]?.region);
+    expect(places[2]?.region).not.toBe(places[0]?.region);
+  });
 });
