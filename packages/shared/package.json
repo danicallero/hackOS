@@ -39,6 +39,7 @@
     "./event-time-store": "./src/event-time-store.ts",
     "./forms": "./src/forms.ts",
     "./help-desk": "./src/help-desk.ts",
+    "./places": "./src/places.ts",
     "./phone": "./src/phone.ts",
     "./idempotency": "./src/idempotency.ts",
     "./projects": "./src/projects.ts",

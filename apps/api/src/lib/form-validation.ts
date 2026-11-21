@@ -7,6 +7,7 @@ import {
   type TemplateField,
 } from "@hackos/shared/forms";
 import { normalizePhone } from "@hackos/shared/phone";
+import { canonicalCityAnswer } from "@hackos/shared/places";
 import { BadRequestError } from "./errors.js";
 
 /**
@@ -223,4 +224,36 @@ export function validateResponses(
       ),
     });
   }
+}
+
+/**
+ * H11/H27: city answers are stored in one canonical spelling ("España", not
+ * "Spain"; "Cataluña", not "Catalonia"), whatever language the picker or its
+ * geocoder answered in, so review, exports and statistics group them together.
+ * Any {city, province, country} answer is a city answer; nothing else changes.
+ */
+export function canonicalCityAnswers(responses: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(responses).map(([key, value]) => {
+      const answer = value as Record<string, unknown> | null;
+      return typeof answer === "object" &&
+        answer !== null &&
+        !Array.isArray(answer) &&
+        typeof answer.city === "string" &&
+        typeof answer.province === "string" &&
+        typeof answer.country === "string"
+        ? [
+            key,
+            {
+              ...answer,
+              ...canonicalCityAnswer({
+                city: answer.city,
+                province: answer.province,
+                country: answer.country,
+              }),
+            },
+          ]
+        : [key, value];
+    }),
+  );
 }

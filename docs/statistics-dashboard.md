@@ -125,12 +125,14 @@ City questions add a fourth view, `globe` (their default; the shared
 `STATISTICS_VISUALIZATIONS` schema rejects it on any other kind). `city-globe.tsx`
 draws an ECharts `geo` component through a d3 orthographic projection on the
 canvas renderer, with Natural Earth 110m countries from `world-atlas`, a
-heat-map layer (square-root weighted so small towns stay visible beside the
-largest one) and a dot per city whose tooltip gives the exact count. Dragging
+heat-map layer and a dot per city whose tooltip gives the exact count. Dragging
 rotates the globe; zoom buttons scale it; the first view centers on the
 people-weighted mean and frames 90% of them (the whole globe when they are
 spread over most of a hemisphere). The heat kernel spans a fixed arc of the
-sphere, so it grows with the zoom; it is translucent and the country borders
+sphere, so it grows with the zoom. Heat measures regions, not single
+answers: each city carries its region's total on a log scale, so neighbors
+with one person each glow together while a lone answer in an otherwise empty
+region stays faint. It is translucent and the country borders
 are drawn again above it, so a dense cluster never hides the land. Only the visible hemisphere is drawn. A hidden, evenly spaced point set over the whole sphere keeps the geo
 bounding box (and so the globe's size) constant while it turns.
 
@@ -140,8 +142,8 @@ stores each row's coordinates, a district flag and every country's capital;
 rebuild with `apps/web/scripts/build-city-data.mjs`; in Galicia, Catalonia and
 the Basque Country it also includes every municipality of 1k+ at its seat,
 since GeoNames lists many seats such as Xove without population). A city matches by name
-within its country, preferring the answer's region by shared words (so
-"Castilla y León" finds "Castille and León") and then a town over a district.
+within its country, preferring the answer's region (compared in the canonical
+spelling of `@hackos/shared/places`, then by shared words) and then a town over a district.
 A leading article is ignored when the exact name misses ("O Porriño" finds
 GeoNames' "Porriño"). A city outside the index is shown at the largest indexed
 place of its region, else at its country's capital; an unrecognizable

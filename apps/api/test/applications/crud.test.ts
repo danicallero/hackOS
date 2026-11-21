@@ -247,6 +247,44 @@ describe("applications CRUD (H11)", () => {
     expect(rows[0]?.version).toBe(2);
   });
 
+  it("stores city answers in one canonical spelling (H11, H27)", async () => {
+    const a = await getApp();
+    const applicant = await createUser();
+    const id = await createApplication({
+      template: [
+        ...sampleTemplate(),
+        {
+          key: "origin",
+          label: { es: "Ciudad", gl: "Cidade", en: "City" },
+          kind: "city",
+          required: false,
+        },
+      ],
+    });
+
+    const draft = await a.inject({
+      method: "PUT",
+      url: `/api/applications/${id}/response`,
+      headers: asUser(applicant),
+      payload: {
+        responses: {
+          motivation: "Spain",
+          origin: { city: " Girona ", province: "Catalonia", country: "Spain" },
+        },
+      },
+    });
+    expect(draft.statusCode).toBe(200);
+
+    const { rows } = await pool.query<{ responses: Record<string, unknown> }>(
+      `SELECT responses FROM application_responses WHERE id = $1`,
+      [draft.json().id],
+    );
+    expect(rows[0]?.responses).toEqual({
+      motivation: "Spain",
+      origin: { city: "Girona", province: "Cataluña", country: "España" },
+    });
+  });
+
   it("stores explicit anonymous retention in immutable form versions and protects it by capability", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);

@@ -88,4 +88,15 @@ describe("city geocoding for the statistics globe (H27)", () => {
     // Galicia's largest indexed place (Vigo), not Madrid.
     expect(places[0]?.lon).toBeLessThan(-7);
   });
+
+  it("groups answers by canonical region whatever language they were written in", async () => {
+    const index = await loadCityIndex();
+    const { places } = placeCities(index, [
+      { label: "Girona, Catalonia, Spain", n: 1 },
+      { label: "Barcelona, Cataluña, España", n: 1 },
+      { label: "Zaragoza, Aragon, España", n: 1 },
+    ]);
+    expect(places[0]?.region).toBe(places[1]?.region);
+    expect(places[2]?.region).not.toBe(places[0]?.region);
+  });
 });

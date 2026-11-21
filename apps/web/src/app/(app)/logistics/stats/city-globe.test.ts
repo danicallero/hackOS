@@ -7,6 +7,7 @@ const place = (lat: number, lon: number, n = 1) => ({
   lat,
   lon,
   approximate: false,
+  region: `${lat},${lon}`,
 });
 
 describe("initialView (H27)", () => {

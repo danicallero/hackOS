@@ -269,7 +269,7 @@ field definitions. No database migration is needed for this layout metadata.
 
 The form catalog also supports curated university-degree IDs and city
 suggestions. The city picker (`apps/web/src/lib/city-search.ts`) answers from a
-bundled offline index of Spanish cities first (~1,200, GeoNames, CC BY 4.0; rebuild with
+bundled offline index of Spanish places first (~1,600, GeoNames, CC BY 4.0; rebuild with
 `apps/web/scripts/build-city-data.mjs`), and only when that has no match asks
 Photon/OpenStreetMap (`en` for English, `default` for Spanish/Galician, since
 the public server rejects `es`/`gl`), then Open-Meteo geocoding if Photon fails
@@ -277,7 +277,12 @@ or is empty. Each live service gets five seconds; stale requests are canceled.
 It exposes loading, empty and failure states and supports keyboard selection.
 Leaving the field never discards the text: a pending search is awaited, an
 exact city match is selected, and otherwise the text is kept in the manual
-city/province/country fields (H12). City labels are stored as text while degree
+city/province/country fields (H12). City labels are stored as text in one
+canonical spelling: `@hackos/shared/places` names a country in Spanish whatever
+language it arrived in ("Spain" → "España") and each Spanish autonomous
+community once ("Catalonia"/"Catalunya" → "Cataluña"). The picker suggests that
+form, the API applies `canonicalCityAnswers` to every stored application and
+project answer, and migration `0209` backfilled earlier answers. Degree
 answers retain the catalog ID. The degree catalog follows the university
 catalogue's authenticated-proposal and staff-curation boundary.
 Universities and degrees referenced by application answers cannot be deleted,

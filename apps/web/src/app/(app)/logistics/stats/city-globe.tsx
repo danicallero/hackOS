@@ -69,6 +69,8 @@ const HEAT_ARC = Math.sin((0.8 * Math.PI) / 180);
 // The heat stays translucent and the borders are drawn over it, so the land
 // underneath a dense cluster (all of Galicia) still reads as a map.
 const HEAT_MAX_OPACITY = 0.7;
+const HEAT_LONE = 0.08;
+const HEAT_FLOOR = 0.55;
 
 echarts.use([
   CanvasRenderer,
@@ -357,6 +359,20 @@ function globeOption(
     (place) => geoDistance([place.lon, place.lat], center) < Math.PI / 2,
   );
   const max = Math.max(1, ...places.map((place) => place.n));
+  // Heat is "how many people come from this region": every city carries its
+  // region's total, so two neighbors with one person each light up together
+  // while a lone answer stays faint. From two people up, the log scale starts
+  // at a clearly visible floor so a small region still reads next to the
+  // largest one.
+  const regionTotals = new Map<string, number>();
+  for (const place of places) {
+    regionTotals.set(place.region, (regionTotals.get(place.region) ?? 0) + place.n);
+  }
+  const hottest = Math.log2(Math.max(2, ...regionTotals.values()));
+  const heat = (place: CityPlace) => {
+    const total = regionTotals.get(place.region) ?? place.n;
+    return total < 2 ? HEAT_LONE : HEAT_FLOOR + (1 - HEAT_FLOOR) * (Math.log2(total) / hottest);
+  };
   const dotSize = (n: number) => 3 + 7 * Math.sqrt(n / max);
   const geo = {
     map: MAP_NAME,
@@ -410,7 +426,7 @@ function globeOption(
       show: false,
       type: "continuous",
       min: 0,
-      max: Math.sqrt(max),
+      max: 1,
       seriesIndex: 0,
       // Fade from the first heat color itself, not from transparent black (gray halo).
       inRange: { color: [transparent(palette.heat[0]), palette.heat[0], palette.heat[1]] },
@@ -439,8 +455,7 @@ function globeOption(
         pointSize: Math.max(4, Math.min(32, radius * HEAT_ARC)),
         blurSize: Math.max(6, Math.min(44, radius * HEAT_ARC * 1.4)),
         silent: true,
-        // Square root keeps a few people visible beside the largest city.
-        data: visible.map((place) => [place.lon, place.lat, Math.sqrt(place.n)]),
+        data: visible.map((place) => [place.lon, place.lat, heat(place)]),
       },
       {
         type: "scatter",
