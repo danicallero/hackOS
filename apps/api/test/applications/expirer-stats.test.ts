@@ -146,6 +146,7 @@ describe("pre-event stats (H27)", () => {
       submitted: 4,
       confirmed: 2,
       rejected: 0,
+      declined: 1,
       expired_confirmations: 0,
       still_able_to_confirm: 0,
     });

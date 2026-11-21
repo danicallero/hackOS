@@ -2724,6 +2724,7 @@
   "submittedApplications": "Submitted applications",
   "rejected": "Rejected",
   "expiredConfirmations": "Expired confirmations",
+  "declinedPlaces": "Declined places",
   "stillAbleToConfirm": "Still able to confirm",
   "pendingConfirmation": "Pending confirmation",
   "confirmationRate": "Confirmation rate",

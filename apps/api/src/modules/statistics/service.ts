@@ -257,6 +257,7 @@ export function mergeApplicationSnapshots(
       "sent",
       "confirmed",
       "rejected",
+      "declined",
       "expired_confirmations",
       "still_able_to_confirm",
     ]) {
@@ -353,6 +354,7 @@ export function mergeApplicationSnapshots(
     submitted,
     confirmed,
     rejected: Number(overviewMetrics.rejected ?? counts.rejected ?? 0),
+    declined: Number(overviewMetrics.declined ?? counts.declined ?? 0),
     expired_confirmations: Number(overviewMetrics.expired_confirmations ?? 0),
     still_able_to_confirm: Number(overviewMetrics.still_able_to_confirm ?? 0),
     confirmation_rate: sent > 0 ? confirmed / sent : null,

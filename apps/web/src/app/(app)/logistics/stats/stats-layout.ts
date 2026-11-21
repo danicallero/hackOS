@@ -8,6 +8,7 @@ const OVERVIEW_KPI_KEYS = [
   "confirmed",
   "rejected",
   "rate",
+  "declined",
   "expired",
   "available",
   "time",
