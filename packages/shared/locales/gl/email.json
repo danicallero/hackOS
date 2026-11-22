@@ -128,11 +128,11 @@
       },
       "duplicate_removal": {
         "subject": "Tes dúas solicitudes de {{applicationName}}",
-        "body": "Ola {{name}}:\n\nAtopamos dúas solicitudes de {{applicationName}} para {{eventName}} que parecen da mesma persoa: unha desde {{email}} e outra desde {{otherEmail}}. A de {{keptEmail}} xa está aceptada.\n\nSe nolo permites, eliminaremos a conta {{removedEmail}} e a súa solicitude. Se son de persoas distintas, indícao na ligazón e manteremos ambas.\n\n[Responder]({{mergeUrl}})\n\nA ligazón caduca en 14 días.\n\nO equipo de {{eventName}}"
+        "body": "Ola {{name}}:\n\nAtopamos dúas solicitudes de {{applicationName}} para {{eventName}} que parecen da mesma persoa: unha desde {{email}} e outra desde {{otherEmail}}. Manteremos a de {{keptEmail}}.\n\nSe nolo permites, eliminaremos a conta {{removedEmail}} e a súa solicitude. Se son de persoas distintas, indícao na ligazón e manteremos ambas.\n\n[Responder]({{mergeUrl}})\n\nA ligazón caduca en 14 días.\n\nO equipo de {{eventName}}"
       },
       "duplicate_choice": {
         "subject": "Tes dúas solicitudes de {{applicationName}}",
-        "body": "Ola {{name}}:\n\nAtopamos dúas solicitudes aceptadas de {{applicationName}} para {{eventName}} co mesmo DNI: unha desde {{email}} e outra desde {{otherEmail}}. Cada persoa só pode participar unha vez.\n\nNa ligazón, escolle que conta queres conservar. A outra eliminarase xunto coa súa solicitude. Se son de persoas distintas, indícao alí e manteremos ambas.\n\n[Escoller a conta]({{mergeUrl}})\n\nA ligazón caduca en 14 días.\n\nO equipo de {{eventName}}"
+        "body": "Ola {{name}}:\n\nAtopamos dúas solicitudes de {{applicationName}} para {{eventName}} co mesmo DNI: unha desde {{email}} e outra desde {{otherEmail}}. Cada persoa só pode participar unha vez.\n\nNa ligazón, escolle que conta queres conservar. A outra eliminarase xunto coa súa solicitude. Se son de persoas distintas, indícao alí e manteremos ambas.\n\n[Escoller a conta]({{mergeUrl}})\n\nA ligazón caduca en 14 días.\n\nO equipo de {{eventName}}"
       }
     },
     "schedule": {

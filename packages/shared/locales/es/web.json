@@ -4447,7 +4447,7 @@
   "duplicateRemovalConfirmDesc": "Las dos direcciones reciben un correo. Si la persona acepta, se elimina la cuenta cuya solicitud no está aceptada.",
   "duplicateStatusRemoved": "Otra cuenta eliminada",
   "duplicateRemovalTitle": "Elimina tu otra cuenta",
-  "duplicateRemovalKept": "Solicitud aceptada, se mantiene",
+  "duplicateRemovalKept": "Se mantiene",
   "duplicateRemovalDeleted": "Se eliminará con su solicitud",
   "duplicateRemovalAction": "Eliminar la otra cuenta",
   "duplicateRemovedTitle": "Cuenta eliminada",
