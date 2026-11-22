@@ -128,11 +128,11 @@
       },
       "duplicate_removal": {
         "subject": "Tienes dos solicitudes de {{applicationName}}",
-        "body": "Hola {{name}}:\n\nHemos encontrado dos solicitudes de {{applicationName}} para {{eventName}} que parecen de la misma persona: una desde {{email}} y otra desde {{otherEmail}}. La de {{keptEmail}} ya está aceptada.\n\nSi nos lo permites, eliminaremos la cuenta {{removedEmail}} y su solicitud. Si son de personas distintas, indícalo en el enlace y mantendremos ambas.\n\n[Responder]({{mergeUrl}})\n\nEl enlace caduca en 14 días.\n\nEl equipo de {{eventName}}"
+        "body": "Hola {{name}}:\n\nHemos encontrado dos solicitudes de {{applicationName}} para {{eventName}} que parecen de la misma persona: una desde {{email}} y otra desde {{otherEmail}}. Mantendremos la de {{keptEmail}}.\n\nSi nos lo permites, eliminaremos la cuenta {{removedEmail}} y su solicitud. Si son de personas distintas, indícalo en el enlace y mantendremos ambas.\n\n[Responder]({{mergeUrl}})\n\nEl enlace caduca en 14 días.\n\nEl equipo de {{eventName}}"
       },
       "duplicate_choice": {
         "subject": "Tienes dos solicitudes de {{applicationName}}",
-        "body": "Hola {{name}}:\n\nHemos encontrado dos solicitudes aceptadas de {{applicationName}} para {{eventName}} con el mismo DNI: una desde {{email}} y otra desde {{otherEmail}}. Cada persona solo puede participar una vez.\n\nEn el enlace, elige qué cuenta quieres conservar. La otra se eliminará junto con su solicitud. Si son de personas distintas, indícalo ahí y mantendremos ambas.\n\n[Elegir la cuenta]({{mergeUrl}})\n\nEl enlace caduca en 14 días.\n\nEl equipo de {{eventName}}"
+        "body": "Hola {{name}}:\n\nHemos encontrado dos solicitudes de {{applicationName}} para {{eventName}} con el mismo DNI: una desde {{email}} y otra desde {{otherEmail}}. Cada persona solo puede participar una vez.\n\nEn el enlace, elige qué cuenta quieres conservar. La otra se eliminará junto con su solicitud. Si son de personas distintas, indícalo ahí y mantendremos ambas.\n\n[Elegir la cuenta]({{mergeUrl}})\n\nEl enlace caduca en 14 días.\n\nEl equipo de {{eventName}}"
       }
     },
     "schedule": {
