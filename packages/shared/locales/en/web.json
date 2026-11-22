@@ -4447,7 +4447,7 @@
   "duplicateRemovalConfirmDesc": "Both addresses get an email. If the person agrees, the account whose application was not accepted is deleted.",
   "duplicateStatusRemoved": "Other account deleted",
   "duplicateRemovalTitle": "Delete your other account",
-  "duplicateRemovalKept": "Accepted application, stays",
+  "duplicateRemovalKept": "Stays",
   "duplicateRemovalDeleted": "Will be deleted with its application",
   "duplicateRemovalAction": "Delete the other account",
   "duplicateRemovedTitle": "Account deleted",

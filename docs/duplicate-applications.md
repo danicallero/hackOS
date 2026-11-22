@@ -71,6 +71,9 @@ A case's `kind` is `merge` or `remove`.
   masked too for a personal one (`m•••@fir•••.com`), since
   `me@firstlast.com` identifies its owner. The H15 confirmation page uses the
   same `maskEmail`.
+- Applicant-facing copy (emails and the link page) never says an
+  application is accepted: `accepted_internal` counts as accepted here, and
+  its decision may not have been sent yet.
 - A proposal stores an md5 fingerprint of both responses (answers, status,
   submission date). For a removal, the kept response only has to stay
   accepted (confirming attendance meanwhile is fine), and both when the
