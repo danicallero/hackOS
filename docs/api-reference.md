@@ -241,6 +241,10 @@ its transition implementation lives in `applications/expirations.ts`, not a
 request path. The public `applications/service.ts` entry point re-exports the
 split form, submission, review, decision, confirmation, response-read and
 expirer services; shared transition locks live in `applications/internal.ts`.
+Reviewers can find one person's two applications (same DNI, similar names or
+emails), dismiss the pair or propose a merge the applicant answers from an
+emailed link, keeping one account and deleting the other; see
+[`duplicate-applications.md`](./duplicate-applications.md).
 
 Acceptance email links carry their bearer token in a URL fragment so the web
 server, referrer and request logs do not receive it. Landing pages do not act on
@@ -279,11 +283,13 @@ Leaving the field never discards the text: a pending search is awaited, an
 exact city match is selected, and otherwise the text is kept in the manual
 city/province/country fields (H12). City labels are stored as text in one
 canonical spelling: `@hackos/shared/places` names a country in Spanish whatever
-language it arrived in ("Spain" → "España") and each Spanish autonomous
+language it arrived in, including the country's own ("Spain" → "España",
+"Polska" → "Polonia"), and each Spanish autonomous
 community and province once ("Catalonia"/"Catalunya" → "Cataluña", "La Coruña"
 → "A Coruña"). The picker suggests that form, the API applies
 `canonicalCityAnswers` to every stored application and project answer, and
-migrations `0209` (countries, communities) and `0210` (provinces) backfilled
+migrations `0209` (countries, communities), `0210` (provinces) and `0211`
+(countries in their own language) backfilled
 earlier answers. Degree
 answers retain the catalog ID. The degree catalog follows the university
 catalogue's authenticated-proposal and staff-curation boundary.

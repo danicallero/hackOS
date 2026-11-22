@@ -61,14 +61,48 @@ interface EmailConfirmResult extends ConfirmResult {
   maskedEmail: string;
 }
 
+/** Shared mail providers: their domain says nothing about who holds the address. */
+const PUBLIC_MAIL_DOMAINS = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "hotmail.com",
+  "hotmail.es",
+  "outlook.com",
+  "outlook.es",
+  "live.com",
+  "msn.com",
+  "yahoo.com",
+  "yahoo.es",
+  "icloud.com",
+  "me.com",
+  "mac.com",
+  "proton.me",
+  "protonmail.com",
+  "pm.me",
+  "gmx.com",
+  "gmx.es",
+  "aol.com",
+  "zoho.com",
+  "tutanota.com",
+  "yandex.com",
+  "mail.com",
+]);
+
 /**
- * m•••@example.com — enough for the holder of the link to recognize their own
- * account without printing a full address to whoever the mail was forwarded to.
+ * m•••@gmail.com — enough for the holder of the link to recognize their own
+ * account without printing a full address to whoever the mail was forwarded
+ * to. A personal domain (me@firstlast.com) identifies its owner, so outside
+ * the shared providers the domain is masked too, keeping only its first
+ * letter and top-level suffix: m•••@f•••.com.
  */
-function maskEmail(email: string): string {
+export function maskEmail(email: string): string {
   const at = email.lastIndexOf("@");
   if (at <= 0) return "•••";
-  return `${email[0]}•••${email.slice(at)}`;
+  const domain = email.slice(at + 1).toLowerCase();
+  if (PUBLIC_MAIL_DOMAINS.has(domain)) return `${email[0]}•••@${domain}`;
+  const dot = domain.lastIndexOf(".");
+  const suffix = dot > 0 ? domain.slice(dot) : "";
+  return `${email[0]}•••@${domain[0] ?? ""}•••${suffix}`;
 }
 
 async function doConfirm(

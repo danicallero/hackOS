@@ -71,6 +71,8 @@ describe("final route-policy ledger", () => {
       "GET /api/wallet/scoped/google/:purpose",
       "POST /api/applications/confirm",
       "POST /api/applications/decline",
+      "POST /api/applications/duplicate-merges/decide",
+      "POST /api/applications/duplicate-merges/lookup",
       "POST /api/auth/resend-verification",
       "POST /api/github/webhook",
       "POST /api/invites/accept",

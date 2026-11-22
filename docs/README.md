@@ -64,6 +64,7 @@ route schemas. Root [`README.md`](../README.md) covers local setup,
 | [Attendance certificates](./certificates.md) | Policy, variants, PDF, verification code, override and revoke |
 | [Catering and activity RSVPs](./catering-rsvp.md) | Per-activity answers, options, exclusions and headcounts |
 | [Content reports](./content-reports.md) | Reports of projects and profiles, and the organizer inbox (H18) |
+| [Duplicate applications](./duplicate-applications.md) | Finding one person's two applications, merge proposals and the applicant's choice (H13, H54) |
 | [Event config & Wallet pass](./event-config-wallet.md) | The `event_config` singleton, pass rendering and the scoped-token page |
 | [Event diary](./diary.md) | Saving people and sponsor stands by scan, privacy rules, stand tags (#935) |
 | [GitHub activity](./github-activity.md) | Repo linking through the GitHub App, activity tracking, TV ranking |

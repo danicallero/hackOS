@@ -121,6 +121,10 @@
       "confirmationLastChance": {
         "subject": "Spot confirmation at {{eventName}}: less than 24 hours remaining",
         "body": "Hi {{name}},\n\nThere are less than 24 hours left to confirm your spot at {{eventName}}. This is the final reminder.{{confirmationDetails}}\n\nThe {{eventName}} team"
+      },
+      "duplicate": {
+        "subject": "You have two {{applicationName}} applications",
+        "body": "Hi {{name}},\n\nWe found two {{applicationName}} applications for {{eventName}} that look like they come from the same person: one from {{email}} and one from {{otherEmail}}. With your permission, we'll merge them into one.\n\nThe link shows what the merged application will look like and lets you choose which account to keep. The other account will be deleted. If they belong to different people, say so there and we'll keep them separate.\n\n[Review the merge]({{mergeUrl}})\n\nThe link expires in 14 days.\n\nThe {{eventName}} team"
       }
     },
     "schedule": {

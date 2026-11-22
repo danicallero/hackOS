@@ -48,6 +48,16 @@ describe("city geocoding for the statistics globe (H27)", () => {
     expect(unplaced).toBe(4);
   });
 
+  it("recognizes a country written in its own language", async () => {
+    const index = await loadCityIndex();
+    const { places, unplaced } = placeCities(index, [
+      { label: "Kraków, Małopolskie, Polska", n: 2 },
+    ]);
+    expect(unplaced).toBe(0);
+    expect(places[0]).toMatchObject({ n: 2, approximate: true });
+    expect(places[0]?.lat).toBeCloseTo(52.23, 1);
+  });
+
   it("prefers the answer's region, across languages, then a town over a district", async () => {
     const index = await loadCityIndex();
     const { places } = placeCities(index, [

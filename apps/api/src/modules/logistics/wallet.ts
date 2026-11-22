@@ -695,12 +695,18 @@ export async function appleChangedSerials(input: {
   return { lastUpdated, serialNumbers };
 }
 
+const APPLE_LOG_MAX_LINES = 50;
+const APPLE_LOG_MAX_LINE_LENGTH = 1000;
+
 export async function appleLog(logs: string[], authorization?: string) {
   // Wallet reports its client-side errors here (bad webServiceURL, auth
   // failures, refused updates...) — printing them is the only visibility we
   // get into why a device isn't updating.
-  for (const line of logs) console.warn("wallet: device log:", line);
-  if (!authorization) return {};
+  // The route is unauthenticated (PassKit sends no credential), so bound what
+  // a caller can print and quote each line so it cannot forge log entries.
+  for (const line of logs.slice(0, APPLE_LOG_MAX_LINES))
+    console.warn("wallet: device log:", JSON.stringify(line.slice(0, APPLE_LOG_MAX_LINE_LENGTH)));
+  if (!authorization?.startsWith("ApplePass ")) return {};
   const token = appleAuthToken(authorization);
   const { rows } = await pool.query<{ is_test_account: boolean }>(
     `SELECT u.is_test_account
@@ -711,8 +717,7 @@ export async function appleLog(logs: string[], authorization?: string) {
       LIMIT 1`,
     [token],
   );
-  // The pre-handler normally guarantees a matching pass. If the account was
-  // finalized between the pre-handler and this handler, do not fall back to a
+  // An unknown or finalized pass gets no broadcast: never fall back to a
   // global topic that could expose a synthetic batch to real operators.
   if (!rows[0]) return {};
   await broadcast(
