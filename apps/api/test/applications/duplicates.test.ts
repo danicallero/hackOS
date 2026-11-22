@@ -109,10 +109,11 @@ async function propose(
 }
 
 /** The raw token of each emailed link, keyed by recipient user id. */
-async function mergeTokens(): Promise<Map<number, string>> {
+async function mergeTokens(template = "application.duplicate"): Promise<Map<number, string>> {
   const { rows } = await pool.query(
     `SELECT user_id, payload FROM notification_outbox
-      WHERE payload->>'template' = 'application.duplicate' ORDER BY id`,
+      WHERE payload->>'template' = $1 ORDER BY id`,
+    [template],
   );
   return new Map(
     rows.map((row) => [
@@ -136,8 +137,9 @@ describe("masked addresses (H13, H15)", () => {
   it("masks a personal domain but keeps a shared provider recognizable", async () => {
     const { maskEmail } = await import("../../src/modules/applications/confirmations.js");
     expect(maskEmail("ana@gmail.com")).toBe("a•••@gmail.com");
-    expect(maskEmail("me@firstlastname.com")).toBe("m•••@f•••.com");
-    expect(maskEmail("ana@cs.example.co")).toBe("a•••@c•••.co");
+    expect(maskEmail("anagarcia22@gmail.com")).toBe("anag•••2@gmail.com");
+    expect(maskEmail("me@firstlastname.com")).toBe("m•••@fir•••.com");
+    expect(maskEmail("ana@cs.example.co")).toBe("a•••@cs.•••.co");
   });
 });
 
@@ -276,7 +278,7 @@ describe("duplicate applications (H13, H54)", () => {
     expect(view.you).toBe("first");
     expect(view.accounts).toEqual([
       { side: "first", email: "lucia.fernandez@example.test" },
-      { side: "second", email: "l•••@e•••.org" },
+      { side: "second", email: "luci•••9@exa•••.org" },
     ]);
     expect(view.answers).toMatchObject({ motivation: "second", credits: "yes", dni: "12345678-Z" });
 
@@ -439,5 +441,153 @@ describe("duplicate applications (H13, H54)", () => {
       [appId],
     );
     expect(["merged", "kept_separate"]).toContain(rows[0].status);
+  });
+
+  it("asks to delete the account whose application was not accepted (H13, H54)", async () => {
+    const a = await getApp();
+    const appId = await createApplication({ template: templateWithDni() });
+    const { first, second } = await duplicatePair(appId);
+    await pool.query(`UPDATE application_responses SET status = 'accepted' WHERE id = $1`, [
+      first.responseId,
+    ]);
+    const pair = [first.responseId, second.responseId] as [number, number];
+    const merge = await propose(appId, pair, first.responseId);
+    expect(merge.json().error.details.code).toBe("duplicate_merge_decided");
+
+    const removal = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/duplicates/removals`,
+      headers: { ...asUser(editor), "Idempotency-Key": crypto.randomUUID() },
+      payload: { response_ids: pair },
+    });
+    expect(removal.statusCode).toBe(200);
+    const { rows: mails } = await pool.query(
+      `SELECT user_id, payload->'vars' AS vars FROM notification_outbox
+        WHERE payload->>'template' = 'application.duplicate_removal' ORDER BY user_id`,
+    );
+    const toSecond = mails.find((row) => row.user_id === second.userId);
+    expect(toSecond.vars).toMatchObject({
+      keptEmail: "luci•••z@exa•••.test",
+      removedEmail: "luciafernandez99@example.org",
+    });
+    const { cases } = await overview(appId);
+    expect(cases[0]).toMatchObject({ kind: "remove", status: "pending", outdated: false });
+
+    // The accepted applicant confirming attendance does not outdate the proposal.
+    await pool.query(`UPDATE application_responses SET status = 'confirmed' WHERE id = $1`, [
+      first.responseId,
+    ]);
+    const token = (await mergeTokens("application.duplicate_removal")).get(second.userId) as string;
+    const lookup = await a.inject({
+      method: "POST",
+      url: "/api/applications/duplicate-merges/lookup",
+      payload: { token },
+    });
+    expect(lookup.statusCode).toBe(200);
+    expect(lookup.json()).toMatchObject({
+      kind: "remove",
+      you: "second",
+      kept: "first",
+      answers: {},
+    });
+
+    const wrong = await decide(token, { decision: "merge", keep: "second" });
+    expect(wrong.statusCode).toBe(400);
+    const res = await decide(token, { decision: "remove" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ status: "removed" });
+
+    const { rows } = await pool.query(
+      `SELECT (SELECT status FROM application_responses WHERE id = $1) AS kept,
+              (SELECT count(*) FROM application_responses WHERE id = $2)::int AS responses,
+              (SELECT count(*) FROM users WHERE id = $3)::int AS users`,
+      [first.responseId, second.responseId, second.userId],
+    );
+    expect(rows[0]).toEqual({ kept: "confirmed", responses: 0, users: 0 });
+    expect((await overview(appId)).cases[0]).toMatchObject({
+      status: "removed",
+      kept_response_id: first.responseId,
+    });
+  });
+
+  it("only proposes a removal with exactly one accepted application, and outdates it", async () => {
+    const a = await getApp();
+    const appId = await createApplication({ template: templateWithDni() });
+    const { first, second } = await duplicatePair(appId);
+    const pair = [first.responseId, second.responseId] as [number, number];
+    const proposeRemoval = () =>
+      a.inject({
+        method: "POST",
+        url: `/api/applications/${appId}/duplicates/removals`,
+        headers: { ...asUser(editor), "Idempotency-Key": crypto.randomUUID() },
+        payload: { response_ids: pair },
+      });
+    const none = await proposeRemoval();
+    expect(none.statusCode).toBe(409);
+    expect(none.json().error.details.code).toBe("duplicate_removal_not_applicable");
+
+    await pool.query(`UPDATE application_responses SET status = 'confirmed' WHERE id = $1`, [
+      second.responseId,
+    ]);
+    expect((await proposeRemoval()).statusCode).toBe(200);
+    // The kept application stops being accepted: the answer is refused.
+    await pool.query(`UPDATE application_responses SET status = 'declined' WHERE id = $1`, [
+      second.responseId,
+    ]);
+    expect((await overview(appId)).cases[0].outdated).toBe(true);
+    const token = (await mergeTokens("application.duplicate_removal")).get(first.userId) as string;
+    const res = await decide(token, { decision: "remove" });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.details.code).toBe("duplicate_merge_outdated");
+  });
+
+  it("lets the applicant choose the account when both are accepted with the same DNI", async () => {
+    const a = await getApp();
+    const appId = await createApplication({ template: templateWithDni() });
+    const { first, second } = await duplicatePair(appId);
+    await pool.query(`UPDATE application_responses SET status = 'confirmed' WHERE id = ANY($1)`, [
+      [first.responseId, second.responseId],
+    ]);
+    const proposeRemoval = () =>
+      a.inject({
+        method: "POST",
+        url: `/api/applications/${appId}/duplicates/removals`,
+        headers: { ...asUser(editor), "Idempotency-Key": crypto.randomUUID() },
+        payload: { response_ids: [first.responseId, second.responseId] },
+      });
+
+    // Without a shared DNI two accepted applications are left alone.
+    await pool.query(
+      `UPDATE application_responses SET responses = responses || '{"dni":"99999999R"}' WHERE id = $1`,
+      [second.responseId],
+    );
+    await pool.query(`UPDATE users SET dni = '99999999R' WHERE id = $1`, [second.userId]);
+    const different = await proposeRemoval();
+    expect(different.statusCode).toBe(409);
+    expect(different.json().error.details.code).toBe("duplicate_removal_not_applicable");
+    await pool.query(
+      `UPDATE application_responses SET responses = responses || '{"dni":"12345678z"}' WHERE id = $1`,
+      [second.responseId],
+    );
+
+    expect((await proposeRemoval()).statusCode).toBe(200);
+    const token = (await mergeTokens("application.duplicate_choice")).get(first.userId) as string;
+    const lookup = await a.inject({
+      method: "POST",
+      url: "/api/applications/duplicate-merges/lookup",
+      payload: { token },
+    });
+    expect(lookup.json()).toMatchObject({ kind: "remove", you: "first", kept: null });
+
+    expect((await decide(token, { decision: "remove" })).statusCode).toBe(400);
+    const res = await decide(token, { decision: "remove", keep: "second" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ status: "removed" });
+    const { rows } = await pool.query(
+      `SELECT (SELECT status FROM application_responses WHERE id = $1) AS kept,
+              (SELECT count(*) FROM users WHERE id = $2)::int AS users`,
+      [second.responseId, first.userId],
+    );
+    expect(rows[0]).toEqual({ kept: "confirmed", users: 0 });
   });
 });

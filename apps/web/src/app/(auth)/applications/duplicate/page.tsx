@@ -3,8 +3,10 @@
 // Answer to a duplicate-application merge (H13, H54). The proposal email links
 // here with #token=… (kept out of URLs and referrers). The page shows the
 // merged application and both accounts; the visitor keeps one account (the
-// other is deleted) or says the two applications are not theirs. Reading the
-// proposal never changes anything; only the buttons POST a decision.
+// other is deleted) or says the two applications are not theirs. A removal
+// proposal (one application already accepted) only asks whether to delete the
+// other account; with both accepted it asks which account to keep. Reading the proposal never changes anything; only the
+// buttons POST a decision.
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -26,8 +28,10 @@ type Side = "first" | "second";
 
 interface MergeView {
   status: string;
+  kind: "merge" | "remove";
   application_name: string;
   you: Side;
+  kept: Side | null;
   accounts: Array<{ side: Side; email: string }>;
   template: TemplateField[];
   sections: FormSection[];
@@ -36,7 +40,11 @@ interface MergeView {
   expires_at: string | null;
 }
 
-type Outcome = { status: "merged"; email: string } | { status: "kept_separate" };
+type Decision = "merge" | "remove" | "keep_separate";
+
+type Outcome =
+  | { status: "merged" | "removed"; email: string; yours: boolean }
+  | { status: "kept_separate" };
 
 function DuplicateInner() {
   const token = useEmailLinkToken(useSearchParams().get("token"));
@@ -44,7 +52,7 @@ function DuplicateInner() {
   const [view, setView] = useState<MergeView | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [keep, setKeep] = useState<Side | null>(null);
-  const [pending, setPending] = useState<"merge" | "keep_separate" | null>(null);
+  const [pending, setPending] = useState<Decision | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const idempotencyKey = useRef<string | null>(null);
@@ -60,7 +68,7 @@ function DuplicateInner() {
       .then((result) => {
         if (!active) return;
         setView(result);
-        setKeep(result.you);
+        setKeep(result.kept ?? result.you);
       })
       .catch((err) => {
         if (active) setLoadError(apiErrorText(err, t, t("duplicateLoadFailed")));
@@ -70,7 +78,7 @@ function DuplicateInner() {
     };
   }, [token, t]);
 
-  async function answer(decision: "merge" | "keep_separate") {
+  async function answer(decision: Decision) {
     if (!token || !view) return;
     setPending(decision);
     setActionError(null);
@@ -78,16 +86,17 @@ function DuplicateInner() {
     try {
       await api.post(
         "/api/applications/duplicate-merges/decide",
-        { token, decision, ...(decision === "merge" ? { keep } : {}) },
+        { token, decision, ...(decision === "keep_separate" ? {} : { keep }) },
         { headers: { "Idempotency-Key": idempotencyKey.current } },
       );
       setOutcome(
-        decision === "merge"
-          ? {
-              status: "merged",
+        decision === "keep_separate"
+          ? { status: "kept_separate" }
+          : {
+              status: decision === "merge" ? "merged" : "removed",
               email: view.accounts.find((account) => account.side === keep)?.email ?? "",
-            }
-          : { status: "kept_separate" },
+              yours: keep === view.you,
+            },
       );
     } catch (err) {
       // A different answer is a different request: never replay this key for it.
@@ -105,17 +114,26 @@ function DuplicateInner() {
           <CardTitle>
             {outcome.status === "merged"
               ? t("duplicateMergedTitle")
-              : t("duplicateKeptSeparateTitle")}
+              : outcome.status === "removed"
+                ? t("duplicateRemovedTitle")
+                : t("duplicateKeptSeparateTitle")}
           </CardTitle>
-          {outcome.status === "merged" && (
-            <CardDescription>{t("duplicateMergedDesc", { email: outcome.email })}</CardDescription>
+          {outcome.status !== "kept_separate" && (
+            <CardDescription>
+              {t(outcome.status === "merged" ? "duplicateMergedDesc" : "duplicateRemovedDesc", {
+                email: outcome.email,
+              })}
+            </CardDescription>
           )}
         </CardHeader>
-        <CardContent className="flex flex-col gap-2 text-center">
-          <Button asChild variant="outline" className="w-full sm:w-auto">
-            <Link href="/my-applications">{t("viewApplications")}</Link>
-          </Button>
-        </CardContent>
+        {/* The link holder's own account may be the one just deleted. */}
+        {(outcome.status === "kept_separate" || outcome.yours) && (
+          <CardContent className="flex flex-col gap-2 text-center">
+            <Button asChild variant="outline" className="w-full sm:w-auto">
+              <Link href="/my-applications">{t("viewApplications")}</Link>
+            </Button>
+          </CardContent>
+        )}
       </Card>
     );
   }
@@ -133,6 +151,66 @@ function DuplicateInner() {
   }
 
   if (!view) return <LoadingCard />;
+
+  if (view.kind === "remove" && view.kept === null) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("duplicateChoiceTitle")}</CardTitle>
+          <CardDescription>{view.application_name}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <AccountChoice accounts={view.accounts} keep={keep} onKeep={setKeep} />
+          <Answer
+            error={actionError}
+            pending={pending}
+            confirm="remove"
+            confirmLabel={t("duplicateChoiceAction")}
+            disabled={!keep}
+            onAnswer={(decision) => void answer(decision)}
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (view.kind === "remove") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("duplicateRemovalTitle")}</CardTitle>
+          <CardDescription>{view.application_name}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <ul className="grid gap-2">
+            {view.accounts.map((account) => (
+              <li
+                key={account.side}
+                className={cn(
+                  "space-y-0.5 rounded-md border p-3 text-sm",
+                  account.side === view.kept ? "border-primary bg-primary/5" : "border-border",
+                )}
+              >
+                <p className="break-all font-medium">{account.email}</p>
+                <p className="text-muted-foreground">
+                  {account.side === view.kept
+                    ? t("duplicateRemovalKept")
+                    : t("duplicateRemovalDeleted")}
+                </p>
+              </li>
+            ))}
+          </ul>
+          <Answer
+            error={actionError}
+            pending={pending}
+            confirm="remove"
+            confirmLabel={t("duplicateRemovalAction")}
+            onAnswer={(decision) => void answer(decision)}
+          />
+        </CardContent>
+      </Card>
+    );
+  }
 
   const fields = view.template.filter((field) => view.answers[field.key] !== undefined);
   return (
@@ -185,58 +263,111 @@ function DuplicateInner() {
             ))}
         </div>
 
-        <fieldset className="border-border space-y-2 border-t pt-5">
-          <legend className="float-left mb-2 w-full text-sm font-medium">
-            {t("duplicateKeepAccountLabel")}
-          </legend>
-          <div className="clear-both grid gap-2">
-            {view.accounts.map((account) => (
-              <label
-                key={account.side}
-                className={cn(
-                  "flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm",
-                  keep === account.side ? "border-primary bg-primary/5" : "border-border",
-                )}
-              >
-                <input
-                  type="radio"
-                  name="keep"
-                  className="accent-primary shrink-0"
-                  checked={keep === account.side}
-                  onChange={() => setKeep(account.side)}
-                />
-                <span className="min-w-0 break-all">{account.email}</span>
-              </label>
-            ))}
-          </div>
-          <p className="text-muted-foreground text-sm">{t("duplicateOtherDeleted")}</p>
-        </fieldset>
+        <AccountChoice
+          accounts={view.accounts}
+          keep={keep}
+          onKeep={setKeep}
+          className="border-border border-t pt-5"
+        />
 
-        {actionError && (
-          <p role="alert" className="text-destructive text-sm">
-            {actionError}
-          </p>
-        )}
-
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-          <Button
-            variant="outline"
-            disabled={pending !== null}
-            loading={pending === "keep_separate"}
-            onClick={() => void answer("keep_separate")}
-          >
-            {t("duplicateKeepSeparateAction")}
-          </Button>
-          <Button
-            disabled={pending !== null || !keep}
-            loading={pending === "merge"}
-            onClick={() => void answer("merge")}
-          >
-            {t("duplicateMergeAction")}
-          </Button>
-        </div>
+        <Answer
+          error={actionError}
+          pending={pending}
+          confirm="merge"
+          confirmLabel={t("duplicateMergeAction")}
+          disabled={!keep}
+          onAnswer={(decision) => void answer(decision)}
+        />
       </CardContent>
     </Card>
+  );
+}
+
+/** The account to keep; the other one is deleted. */
+function AccountChoice({
+  accounts,
+  keep,
+  onKeep,
+  className,
+}: {
+  accounts: MergeView["accounts"];
+  keep: Side | null;
+  onKeep: (side: Side) => void;
+  className?: string;
+}) {
+  const { t } = useLocale();
+  return (
+    <fieldset className={cn("space-y-2", className)}>
+      <legend className="float-left mb-2 w-full text-sm font-medium">
+        {t("duplicateKeepAccountLabel")}
+      </legend>
+      <div className="clear-both grid gap-2">
+        {accounts.map((account) => (
+          <label
+            key={account.side}
+            className={cn(
+              "flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm",
+              keep === account.side ? "border-primary bg-primary/5" : "border-border",
+            )}
+          >
+            <input
+              type="radio"
+              name="keep"
+              className="accent-primary shrink-0"
+              checked={keep === account.side}
+              onChange={() => onKeep(account.side)}
+            />
+            <span className="min-w-0 break-all">{account.email}</span>
+          </label>
+        ))}
+      </div>
+      <p className="text-muted-foreground text-sm">{t("duplicateOtherDeleted")}</p>
+    </fieldset>
+  );
+}
+
+/** The two answers: keep both separate, or go ahead with the proposal. */
+function Answer({
+  error,
+  pending,
+  confirm,
+  confirmLabel,
+  disabled = false,
+  onAnswer,
+}: {
+  error: string | null;
+  pending: Decision | null;
+  confirm: "merge" | "remove";
+  confirmLabel: string;
+  disabled?: boolean;
+  onAnswer: (decision: Decision) => void;
+}) {
+  const { t } = useLocale();
+  return (
+    <>
+      {error && (
+        <p role="alert" className="text-destructive text-sm">
+          {error}
+        </p>
+      )}
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+        <Button
+          variant="outline"
+          disabled={pending !== null}
+          loading={pending === "keep_separate"}
+          onClick={() => onAnswer("keep_separate")}
+        >
+          {t("duplicateKeepSeparateAction")}
+        </Button>
+        <Button
+          disabled={pending !== null || disabled}
+          loading={pending === confirm}
+          onClick={() => onAnswer(confirm)}
+        >
+          {confirmLabel}
+        </Button>
+      </div>
+    </>
   );
 }
 

@@ -3,8 +3,11 @@
 // Duplicate applications (H13, H54). Pairs of responses that look like one
 // person applying from two accounts — same DNI, or very similar names or
 // email local parts. A reviewer compares a pair and either dismisses it or
-// proposes a merge choosing each answer and the submission date to keep; the
-// applicant then answers from an emailed link (see /applications/duplicate).
+// proposes a merge choosing each answer and the submission date to keep. When
+// one of the two is already accepted there is nothing to merge: the reviewer
+// asks instead whether to delete the other account, or, when both are
+// accepted with the same DNI, which account to keep. The applicant answers
+// from an emailed link (see /applications/duplicate).
 
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
@@ -53,7 +56,7 @@ interface Candidate {
 
 interface DuplicateCase {
   id: number;
-  status: "dismissed" | "pending" | "merged" | "kept_separate" | "cancelled";
+  status: "dismissed" | "pending" | "merged" | "removed" | "kept_separate" | "cancelled";
   first_response_id: number | null;
   second_response_id: number | null;
   kept_response_id: number | null;
@@ -71,6 +74,8 @@ interface Overview {
 /** Answer keys that live on the user row or travel with another answer. */
 const HIDDEN_KEYS = new Set(["food_intolerances", "food_intolerance_notes"]);
 const SHARE_SUFFIX = sponsorShareKey("");
+/** A pair with one of these (or two, same DNI) is resolved by deleting an account. */
+const ACCEPTED_STATUSES = new Set(["accepted", "confirmed", "accepted_internal"]);
 
 function caseStatus(row: DuplicateCase, t: Translate): { label: string; tone: Tone } {
   if (row.status === "pending") {
@@ -81,6 +86,7 @@ function caseStatus(row: DuplicateCase, t: Translate): { label: string; tone: To
   const map: Record<Exclude<DuplicateCase["status"], "pending">, { label: string; tone: Tone }> = {
     dismissed: { label: t("duplicateStatusDismissed"), tone: "neutral" },
     merged: { label: t("duplicateStatusMerged"), tone: "success" },
+    removed: { label: t("duplicateStatusRemoved"), tone: "success" },
     kept_separate: { label: t("duplicateStatusKeptSeparate"), tone: "neutral" },
     cancelled: { label: t("duplicateStatusCancelled"), tone: "neutral" },
   };
@@ -290,6 +296,7 @@ export function DuplicatesTab({
           template={template ?? []}
           sections={sections}
           canEdit={canEdit}
+          sameDni={comparing.reasons.includes("dni")}
           onClose={() => setComparing(null)}
           onDone={async () => {
             setComparing(null);
@@ -322,6 +329,7 @@ function CompareModal({
   template,
   sections,
   canEdit,
+  sameDni,
   onClose,
   onDone,
 }: {
@@ -331,6 +339,7 @@ function CompareModal({
   template: TemplateField[];
   sections: FormSection[];
   canEdit: boolean;
+  sameDni: boolean;
   onClose: () => void;
   onDone: () => Promise<void>;
 }) {
@@ -381,6 +390,18 @@ function CompareModal({
   const [submittedFrom, setSubmittedFrom] = useState(() => defaultSubmission(first, second));
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, setPending] = useState<"dismiss" | "propose" | null>(null);
+  // One accepted application cannot be merged into: ask to delete the other account.
+  const accepted = [first, second].filter((response) => ACCEPTED_STATUSES.has(response.status));
+  // Both accepted: the applicant chooses the account, only for the same DNI.
+  const choice = accepted.length === 2 && sameDni;
+  const removal = accepted.length === 1 || choice;
+  const canPropose = canEdit && (accepted.length < 2 || choice);
+  // A removal leaves the kept application as it is: highlight its answers
+  // (none when the applicant chooses).
+  const keptId = accepted.length === 1 ? accepted[0]?.id : removal ? -1 : undefined;
+  const proposeLabel = t(
+    choice ? "duplicateProposeChoice" : removal ? "duplicateProposeRemoval" : "duplicatePropose",
+  );
 
   const text = (field: TemplateField, value: unknown) => {
     if (!hasValue(value)) return "—";
@@ -412,20 +433,22 @@ function CompareModal({
     setPending("propose");
     try {
       await api.post(
-        `/api/applications/${applicationId}/duplicates/merges`,
-        {
-          response_ids: [first.id, second.id],
-          field_sources: sources,
-          submitted_from_response_id: submittedFrom,
-        },
+        `/api/applications/${applicationId}/duplicates/${removal ? "removals" : "merges"}`,
+        removal
+          ? { response_ids: [first.id, second.id] }
+          : {
+              response_ids: [first.id, second.id],
+              field_sources: sources,
+              submitted_from_response_id: submittedFrom,
+            },
         { headers: { "Idempotency-Key": crypto.randomUUID() } },
       );
       setConfirmOpen(false);
-      toast.success(t("duplicateProposeSent"), { compactTitle: t("duplicatePropose") });
+      toast.success(t("duplicateProposeSent"), { compactTitle: proposeLabel });
       await onDone();
     } catch (err) {
       setConfirmOpen(false);
-      showErrorToast(err, t("duplicatePropose"));
+      showErrorToast(err, proposeLabel);
     } finally {
       setPending(null);
     }
@@ -450,9 +473,9 @@ function CompareModal({
           >
             {t("duplicateDismiss")}
           </Button>
-          {canEdit && (
+          {canPropose && (
             <Button disabled={pending !== null} onClick={() => setConfirmOpen(true)}>
-              {t("duplicatePropose")}
+              {proposeLabel}
             </Button>
           )}
         </div>
@@ -480,9 +503,9 @@ function CompareModal({
               : t("duplicateNotSubmitted"),
             disabled: anySubmitted && !response.submitted_at,
           }))}
-          selected={submittedFrom}
+          selected={keptId ?? submittedFrom}
           onSelect={setSubmittedFrom}
-          readOnly={!canEdit}
+          readOnly={!canEdit || removal}
         />
 
         {fields.map((field) => (
@@ -495,11 +518,11 @@ function CompareModal({
               text: text(field, response.responses[field.key]),
               disabled: !hasValue(response.responses[field.key]),
             }))}
-            selected={sources[field.key] ?? first.id}
+            selected={keptId ?? sources[field.key] ?? first.id}
             onSelect={(responseId) =>
               setSources((current) => ({ ...current, [field.key]: responseId }))
             }
-            readOnly={!canEdit}
+            readOnly={!canEdit || removal}
           />
         ))}
       </div>
@@ -507,8 +530,20 @@ function CompareModal({
       <AlertModal
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
-        title={t("duplicateProposeConfirmTitle")}
-        description={t("duplicateProposeConfirmDesc")}
+        title={t(
+          choice
+            ? "duplicateChoiceConfirmTitle"
+            : removal
+              ? "duplicateRemovalConfirmTitle"
+              : "duplicateProposeConfirmTitle",
+        )}
+        description={t(
+          choice
+            ? "duplicateChoiceConfirmDesc"
+            : removal
+              ? "duplicateRemovalConfirmDesc"
+              : "duplicateProposeConfirmDesc",
+        )}
         cancelLabel={t("cancel")}
         confirmLabel={t("duplicateProposeSend")}
         pending={pending === "propose"}

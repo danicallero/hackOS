@@ -18,6 +18,7 @@ import {
   getDuplicateOverview,
   lookupDuplicateMerge,
   proposeDuplicateMerge,
+  proposeDuplicateRemoval,
 } from "./duplicates.js";
 import { idParamSchema } from "./schemas.js";
 
@@ -88,14 +89,31 @@ export function registerDuplicateRoutes(app: FastifyInstance): void {
   );
 
   r.post(
+    "/api/applications/:id/duplicates/removals",
+    {
+      preHandler: [requireCapability(edit), idempotencyGuard],
+      config: routeAccess({ kind: "capability", capability: edit }),
+      schema: {
+        summary: "Ask an accepted applicant to delete their duplicate account",
+        description:
+          "For a pair with an accepted application (accepted, confirmed or accepted internally), which cannot be merged (H13). With one accepted, emails both owners a link valid for 14 days asking whether to delete the account of the other application; with both accepted and the same DNI, the link asks which account to keep. Nothing changes until an owner answers: confirming deletes the other response and its account (H54) and leaves the kept one untouched; they can also keep both. 409 duplicate_removal_not_applicable when neither is accepted, or both are without a shared DNI. Audited.",
+        params: idParamSchema,
+        body: z.object({ response_ids: responsePairSchema }),
+      },
+    },
+    async (req) =>
+      proposeDuplicateRemoval(req.userId as number, req.params.id, req.body.response_ids),
+  );
+
+  r.post(
     "/api/applications/:id/duplicates/:caseId/cancel",
     {
       preHandler: [requireCapability(review), idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: review }),
       schema: {
-        summary: "Withdraw a merge proposal or undo a dismissal",
+        summary: "Withdraw a proposal or undo a dismissal",
         description:
-          "A dismissed pair becomes a suggestion again; a pending merge proposal is withdrawn and its links stop working, which also needs APPLICATIONS_EDIT_RESPONSE (H13). 409 duplicate_case_closed for an answered case. Audited.",
+          "A dismissed pair becomes a suggestion again; a pending merge or removal proposal is withdrawn and its links stop working, which also needs APPLICATIONS_EDIT_RESPONSE (H13). 409 duplicate_case_closed for an answered case. Audited.",
         params: idParamSchema.extend({ caseId: z.coerce.number().int().positive() }),
       },
     },
@@ -112,9 +130,9 @@ export function registerDuplicateRoutes(app: FastifyInstance): void {
       preHandler: rateLimitGuard("duplicate-merge-link", { windowSeconds: 60, max: 30 }, keyByIp),
       config: routeAccess({ kind: "token", policy: "application-duplicate-merge" }),
       schema: {
-        summary: "Show a proposed merge from its email link",
+        summary: "Show a proposed merge or removal from its email link",
         description:
-          "Public, read-only view for the link emailed with a merge proposal (H13): the merged answers (file answers by file name), the kept submission date and both accounts — the link holder's own address in full, the other one masked. 404 duplicate_merge_invalid for an unknown link; 409 duplicate_merge_closed (with the final status), duplicate_merge_expired or duplicate_merge_outdated when it can no longer be answered. Rate limited to 30/min per IP. POST so the token never appears in a URL.",
+          "Public, read-only view for the link emailed with a proposal (H13): its kind, both accounts and, for a merge, the merged answers (file answers by file name) and the kept submission date; for a removal, which side's accepted application stays (no answers). The link holder's own address is shown in full, the other one masked. 404 duplicate_merge_invalid for an unknown link; 409 duplicate_merge_closed (with the final status), duplicate_merge_expired or duplicate_merge_outdated when it can no longer be answered. Rate limited to 30/min per IP. POST so the token never appears in a URL.",
         body: tokenSchema,
       },
     },
@@ -130,11 +148,11 @@ export function registerDuplicateRoutes(app: FastifyInstance): void {
       ],
       config: routeAccess({ kind: "token", policy: "application-duplicate-merge" }),
       schema: {
-        summary: "Answer a proposed merge",
+        summary: "Answer a proposed merge or removal",
         description:
-          "The link holder merges the two applications into the account they keep, or keeps both separate (H13). Exactly one answer wins. A merge copies any file chosen from the other account, writes the merged answers, submission date and status to the kept response, deletes the other response and then deletes the other account through the H54 removal flow; it is refused with 409 duplicate_merge_needs_staff when that account has event history and 409 duplicate_merge_outdated when either response changed after the proposal. Same-key retries replay the first result. Audited.",
+          "The link holder merges the two applications into the account they keep (merge proposal), confirms deleting the other account (removal proposal; `keep` is required when both are accepted and the holder chooses; the kept response is left as it is), or keeps both separate (H13). 400 when the answer does not match the proposal's kind. Exactly one answer wins. A merge copies any file chosen from the other account, writes the merged answers, submission date and status to the kept response, deletes the other response and then deletes the other account through the H54 removal flow; it is refused with 409 duplicate_merge_needs_staff when that account has event history and 409 duplicate_merge_outdated when either response changed after the proposal. Same-key retries replay the first result. Audited.",
         body: tokenSchema.extend({
-          decision: z.enum(["merge", "keep_separate"]),
+          decision: z.enum(["merge", "remove", "keep_separate"]),
           keep: z.enum(["first", "second"]).optional(),
         }),
       },
@@ -145,6 +163,7 @@ export function registerDuplicateRoutes(app: FastifyInstance): void {
         if (!keep) throw new BadRequestError("Choose the account to keep");
         return decideDuplicateMerge(token, { decision, keep });
       }
+      if (decision === "remove") return decideDuplicateMerge(token, { decision, keep });
       return decideDuplicateMerge(token, { decision });
     },
   );

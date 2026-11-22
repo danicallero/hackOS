@@ -88,21 +88,30 @@ const PUBLIC_MAIL_DOMAINS = new Set([
   "mail.com",
 ]);
 
+/** The start (about a third, 1-4 characters) and, for longer values, the last character. */
+function maskPart(value: string, maxStart: number, keepLast: boolean): string {
+  const start = Math.max(1, Math.min(maxStart, Math.ceil(value.length / 3)));
+  const last = keepLast && value.length >= 6 ? value.slice(-1) : "";
+  return `${value.slice(0, start)}•••${last}`;
+}
+
 /**
- * m•••@gmail.com — enough for the holder of the link to recognize their own
- * account without printing a full address to whoever the mail was forwarded
- * to. A personal domain (me@firstlast.com) identifies its owner, so outside
- * the shared providers the domain is masked too, keeping only its first
- * letter and top-level suffix: m•••@f•••.com.
+ * anag•••2@gmail.com — enough for the holder of the link to recognize their
+ * own account without printing a full address to whoever the mail was
+ * forwarded to. A personal domain (me@firstlast.com) identifies its owner, so
+ * outside the shared providers the domain is masked too, keeping its first
+ * letters and top-level suffix: m•••@fir•••.com.
  */
 export function maskEmail(email: string): string {
   const at = email.lastIndexOf("@");
   if (at <= 0) return "•••";
+  const local = maskPart(email.slice(0, at), 4, true);
   const domain = email.slice(at + 1).toLowerCase();
-  if (PUBLIC_MAIL_DOMAINS.has(domain)) return `${email[0]}•••@${domain}`;
+  if (PUBLIC_MAIL_DOMAINS.has(domain)) return `${local}@${domain}`;
   const dot = domain.lastIndexOf(".");
+  const name = dot > 0 ? domain.slice(0, dot) : domain;
   const suffix = dot > 0 ? domain.slice(dot) : "";
-  return `${email[0]}•••@${domain[0] ?? ""}•••${suffix}`;
+  return `${local}@${maskPart(name, 3, false)}${suffix}`;
 }
 
 async function doConfirm(

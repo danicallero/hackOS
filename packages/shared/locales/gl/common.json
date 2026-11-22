@@ -139,5 +139,6 @@
   "apiError_duplicate_merge_closed": "Esta fusión xa se respondeu ou se retirou.",
   "apiError_duplicate_merge_expired": "Esta ligazón caducou. Escríbenos se aínda queres fusionar as túas solicitudes.",
   "apiError_duplicate_merge_outdated": "Unha das solicitudes cambiou despois de propoñer a fusión. Escríbenos para revisala de novo.",
-  "apiError_duplicate_merge_needs_staff": "A outra conta xa ten actividade no evento. Escríbenos e resolvémolo."
+  "apiError_duplicate_merge_needs_staff": "A outra conta xa ten actividade no evento. Escríbenos e resolvémolo.",
+  "apiError_duplicate_removal_not_applicable": "Só cando unha solicitude está aceptada, ou ambas o están e comparten o mesmo DNI."
 }

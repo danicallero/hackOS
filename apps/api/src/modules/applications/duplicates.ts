@@ -9,7 +9,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 
 import { audit } from "../../lib/audit.js";
 
-import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 
 import { getObject, putObject } from "../../lib/storage.js";
 
@@ -28,6 +28,7 @@ import { loadUserComms } from "./decision-delivery.js";
 import {
   type DuplicateCandidate,
   findDuplicateCandidates,
+  normalizeDni,
   pairKey,
 } from "./duplicate-detection.js";
 
@@ -40,7 +41,9 @@ import type { FormSection, TemplateField } from "./schemas.js";
  * pairs of responses that look like one person applying from two accounts,
  * dismiss the pair or propose a merge with answers chosen field by field. The
  * proposal is emailed to both addresses; the applicant keeps one account
- * (the other is deleted) or says they are different people.
+ * (the other is deleted) or says they are different people. When one of the
+ * two is already accepted, the reviewer instead asks whether to delete the
+ * account of the other one (a removal proposal, answered the same way).
  */
 
 /** How long the emailed merge link stays valid. */
@@ -48,6 +51,9 @@ const PROPOSAL_DAYS = 14;
 
 /** Only undecided responses can be merged: a decision belongs to one account. */
 const MERGEABLE_STATUSES = new Set(["draft", "review"]);
+
+/** A removal proposal keeps an accepted response and deletes the other account. */
+const ACCEPTED_STATUSES = new Set(["accepted", "confirmed", "accepted_internal"]);
 
 /** Open cases hide their pair from the candidate list. */
 const OPEN_STATUSES = ["dismissed", "pending", "kept_separate"];
@@ -58,6 +64,8 @@ const fingerprintSql = (alias: string) =>
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
 type Side = "first" | "second";
+
+type CaseKind = "merge" | "remove";
 
 interface DuplicateResponse {
   id: number;
@@ -77,6 +85,7 @@ interface CaseRow {
   first_response_id: number | null;
   second_response_id: number | null;
   status: string;
+  kind: CaseKind;
   merged_responses: Record<string, unknown> | null;
   submitted_from_response_id: number | null;
   source_fingerprints: Record<string, string> | null;
@@ -86,6 +95,28 @@ interface CaseRow {
   kept_response_id: number | null;
   created_at: Date;
   resolved_at: Date | null;
+}
+
+/**
+ * A proposal no longer matches the responses it was made from. A merge needs
+ * both unchanged; a removal needs the deleted side unchanged and the kept one
+ * still accepted. When the applicant chooses, both only have to stay accepted.
+ */
+function isOutdated(
+  row: Pick<CaseRow, "kind" | "kept_response_id" | "source_fingerprints">,
+  responses: Array<{ id: number | null; status: string | null; fingerprint: string | null }>,
+): boolean {
+  return responses.some((response) => {
+    if (response.id == null) return true;
+    // A side that may be kept only has to stay accepted (confirming is fine).
+    if (
+      row.kind === "remove" &&
+      (row.kept_response_id == null || response.id === row.kept_response_id)
+    ) {
+      return !ACCEPTED_STATUSES.has(response.status ?? "");
+    }
+    return response.fingerprint !== row.source_fingerprints?.[String(response.id)];
+  });
 }
 
 // ── detection read ────────────────────────────────────────────────────────────
@@ -104,6 +135,7 @@ export interface DuplicateOverview {
   cases: Array<{
     id: number;
     status: string;
+    kind: CaseKind;
     first_response_id: number | null;
     second_response_id: number | null;
     kept_response_id: number | null;
@@ -127,9 +159,16 @@ export async function getDuplicateOverview(applicationId: number): Promise<Dupli
     [applicationId],
   );
   const { rows: cases } = await pool.query<
-    CaseRow & { first_fp: string | null; second_fp: string | null; pair_key: string }
+    CaseRow & {
+      first_fp: string | null;
+      second_fp: string | null;
+      first_status: string | null;
+      second_status: string | null;
+      pair_key: string;
+    }
   >(
-    `SELECT c.*, ${fingerprintSql("r1")} AS first_fp, ${fingerprintSql("r2")} AS second_fp
+    `SELECT c.*, ${fingerprintSql("r1")} AS first_fp, ${fingerprintSql("r2")} AS second_fp,
+            r1.status AS first_status, r2.status AS second_status
        FROM application_duplicate_cases c
        LEFT JOIN application_responses r1 ON r1.id = c.first_response_id
        LEFT JOIN application_responses r2 ON r2.id = c.second_response_id
@@ -179,14 +218,17 @@ export async function getDuplicateOverview(applicationId: number): Promise<Dupli
     cases: cases.map((row) => ({
       id: row.id,
       status: row.status,
+      kind: row.kind,
       first_response_id: row.first_response_id,
       second_response_id: row.second_response_id,
       kept_response_id: row.kept_response_id,
       submitted_from_response_id: row.submitted_from_response_id,
       outdated:
         row.status === "pending" &&
-        (row.first_fp !== row.source_fingerprints?.[String(row.first_response_id)] ||
-          row.second_fp !== row.source_fingerprints?.[String(row.second_response_id)]),
+        isOutdated(row, [
+          { id: row.first_response_id, status: row.first_status, fingerprint: row.first_fp },
+          { id: row.second_response_id, status: row.second_status, fingerprint: row.second_fp },
+        ]),
       expires_at: row.expires_at,
       created_at: row.created_at,
       resolved_at: row.resolved_at,
@@ -316,6 +358,107 @@ export function mergeAnswers(
   return merged;
 }
 
+type Proposal =
+  | { kind: "merge"; merged: Record<string, unknown>; submittedFromId: number }
+  /** keptId null: both are accepted with the same DNI, the applicant chooses. */
+  | { kind: "remove"; keptId: number | null };
+
+/**
+ * Inserts a pending case and emails each owner their own link. The removal
+ * email names which address stays; any address but the recipient's is masked.
+ */
+async function insertProposal(
+  client: pg.PoolClient,
+  actorId: number,
+  app: { id: number; name: string },
+  [first, second]: [LockedResponse, LockedResponse],
+  proposal: Proposal,
+): Promise<{ id: number; expires_at: Date }> {
+  const tokens = {
+    first: randomBytes(32).toString("base64url"),
+    second: randomBytes(32).toString("base64url"),
+  };
+  const { rows } = await client.query<{ id: number; expires_at: Date }>(
+    `INSERT INTO application_duplicate_cases
+       (application_id, first_response_id, second_response_id, pair_key, status, kind,
+        merged_responses, submitted_from_response_id, kept_response_id, source_fingerprints,
+        first_token_hash, second_token_hash, expires_at, created_by)
+     VALUES ($1, $2, $3, $4, 'pending', $5, $6::jsonb, $7, $8, $9::jsonb, $10, $11,
+             now() + make_interval(days => $12), $13)
+     ON CONFLICT (application_id, pair_key)
+       WHERE status IN ('dismissed', 'pending', 'kept_separate')
+       DO NOTHING
+     RETURNING id, expires_at`,
+    [
+      app.id,
+      first.id,
+      second.id,
+      pairKey(first.id, second.id),
+      proposal.kind,
+      proposal.kind === "merge" ? JSON.stringify(proposal.merged) : null,
+      proposal.kind === "merge" ? proposal.submittedFromId : null,
+      proposal.kind === "remove" ? proposal.keptId : null,
+      JSON.stringify({ [first.id]: first.fingerprint, [second.id]: second.fingerprint }),
+      hashToken(tokens.first),
+      hashToken(tokens.second),
+      PROPOSAL_DAYS,
+      actorId,
+    ],
+  );
+  const created = rows[0];
+  if (!created) {
+    throw new ConflictError("This pair already has an open decision", {
+      code: ERROR_REASONS.DUPLICATE_CASE_EXISTS,
+    });
+  }
+
+  const eventName = await getEventName(client);
+  const comms = new Map<number, Awaited<ReturnType<typeof loadUserComms>>>();
+  for (const response of [first, second]) {
+    comms.set(response.user_id, await loadUserComms(client, response.user_id));
+  }
+  const owners = [
+    { response: first, token: tokens.first, other: second },
+    { response: second, token: tokens.second, other: first },
+  ];
+  for (const { response, token, other } of owners) {
+    const user = comms.get(response.user_id);
+    const otherUser = comms.get(other.user_id);
+    if (!user || !otherUser) throw new NotFoundError("User not found");
+    const shown = (owner: LockedResponse) =>
+      owner === response ? user.email : maskEmail(otherUser.email);
+    const kept = proposal.kind === "remove" && proposal.keptId === other.id ? other : response;
+    const template =
+      proposal.kind === "merge"
+        ? "application.duplicate"
+        : proposal.keptId === null
+          ? "application.duplicate_choice"
+          : "application.duplicate_removal";
+    const payload: EmailPayload = {
+      template,
+      recipient: user.email,
+      language: user.language,
+      vars: {
+        name: user.name ?? "",
+        applicationName: app.name,
+        eventName,
+        email: user.email,
+        otherEmail: maskEmail(otherUser.email),
+        ...(proposal.kind === "remove" && proposal.keptId !== null
+          ? { keptEmail: shown(kept), removedEmail: shown(kept === response ? other : response) }
+          : {}),
+        mergeUrl: webUrl(`/applications/duplicate#token=${token}`),
+      },
+    };
+    await client.query(
+      `INSERT INTO notification_outbox (user_id, category, channel, payload)
+       VALUES ($1, 'application', 'email', $2::jsonb)`,
+      [response.user_id, JSON.stringify(payload)],
+    );
+  }
+  return created;
+}
+
 export interface ProposeMergeInput {
   response_ids: [number, number];
   field_sources: Record<string, number>;
@@ -357,75 +500,11 @@ export async function proposeDuplicateMerge(
       }
     }
     const merged = mergeAnswers(first, second, input.field_sources);
-
-    const tokens = {
-      first: randomBytes(32).toString("base64url"),
-      second: randomBytes(32).toString("base64url"),
-    };
-    const { rows } = await client.query<{ id: number; expires_at: Date }>(
-      `INSERT INTO application_duplicate_cases
-         (application_id, first_response_id, second_response_id, pair_key, status,
-          merged_responses, submitted_from_response_id, source_fingerprints,
-          first_token_hash, second_token_hash, expires_at, created_by)
-       VALUES ($1, $2, $3, $4, 'pending', $5::jsonb, $6, $7::jsonb, $8, $9,
-               now() + make_interval(days => $10), $11)
-       ON CONFLICT (application_id, pair_key)
-         WHERE status IN ('dismissed', 'pending', 'kept_separate')
-         DO NOTHING
-       RETURNING id, expires_at`,
-      [
-        applicationId,
-        first.id,
-        second.id,
-        pairKey(first.id, second.id),
-        JSON.stringify(merged),
-        submittedFrom.id,
-        JSON.stringify({ [first.id]: first.fingerprint, [second.id]: second.fingerprint }),
-        hashToken(tokens.first),
-        hashToken(tokens.second),
-        PROPOSAL_DAYS,
-        actorId,
-      ],
-    );
-    const created = rows[0];
-    if (!created) {
-      throw new ConflictError("This pair already has an open decision", {
-        code: ERROR_REASONS.DUPLICATE_CASE_EXISTS,
-      });
-    }
-
-    const eventName = await getEventName(client);
-    const owners = [
-      { response: first, token: tokens.first, other: second },
-      { response: second, token: tokens.second, other: first },
-    ];
-    const comms = new Map<number, Awaited<ReturnType<typeof loadUserComms>>>();
-    for (const { response } of owners) {
-      comms.set(response.user_id, await loadUserComms(client, response.user_id));
-    }
-    for (const { response, token, other } of owners) {
-      const user = comms.get(response.user_id);
-      const otherUser = comms.get(other.user_id);
-      if (!user || !otherUser) throw new NotFoundError("User not found");
-      const payload: EmailPayload = {
-        template: "application.duplicate",
-        recipient: user.email,
-        language: user.language,
-        vars: {
-          name: user.name ?? "",
-          applicationName: app.name,
-          eventName,
-          email: user.email,
-          otherEmail: maskEmail(otherUser.email),
-          mergeUrl: webUrl(`/applications/duplicate#token=${token}`),
-        },
-      };
-      await client.query(
-        `INSERT INTO notification_outbox (user_id, category, channel, payload)
-         VALUES ($1, 'application', 'email', $2::jsonb)`,
-        [response.user_id, JSON.stringify(payload)],
-      );
-    }
+    const created = await insertProposal(client, actorId, app, [first, second], {
+      kind: "merge",
+      merged,
+      submittedFromId: submittedFrom.id,
+    });
 
     // Field names only: the answers themselves stay out of the audit log.
     await audit(client, {
@@ -446,6 +525,59 @@ export async function proposeDuplicateMerge(
     });
     return created;
   });
+}
+
+/**
+ * An accepted response cannot be merged into. With one accepted response the
+ * reviewer asks whether to delete the account of the other one; with both
+ * accepted (only for the same DNI, the strongest signal) the applicant
+ * chooses which account to keep. The kept response is left unchanged.
+ */
+export async function proposeDuplicateRemoval(
+  actorId: number,
+  applicationId: number,
+  responseIds: [number, number],
+): Promise<{ id: number; expires_at: Date }> {
+  return withTransaction(async (client) => {
+    const app = await requireApplication(client, applicationId);
+    const pair = await lockPair(client, applicationId, responseIds);
+    const accepted = pair.filter((response) => ACCEPTED_STATUSES.has(response.status));
+    const notApplicable = () =>
+      new ConflictError("One application must be accepted, or both with the same DNI", {
+        code: ERROR_REASONS.DUPLICATE_REMOVAL_NOT_APPLICABLE,
+      });
+    if (accepted.length === 0) throw notApplicable();
+    if (accepted.length === 2 && !(await shareDni(client, pair))) throw notApplicable();
+    const keptId = accepted.length === 1 ? (accepted[0] as LockedResponse).id : null;
+    const created = await insertProposal(client, actorId, app, pair, { kind: "remove", keptId });
+    await audit(client, {
+      actorId,
+      entityType: "application_duplicate_case",
+      entityId: created.id,
+      action: "removal_proposed",
+      after: { response_ids: pair.map((response) => response.id), kept_response_id: keptId },
+    });
+    return created;
+  });
+}
+
+/** Both responses carry the same DNI, from the answer or the account. */
+async function shareDni(
+  client: pg.PoolClient,
+  [first, second]: [LockedResponse, LockedResponse],
+): Promise<boolean> {
+  const { rows } = await client.query<{ id: number; dni: string | null }>(
+    `SELECT id, dni FROM users WHERE id = ANY($1::int[])`,
+    [[first.user_id, second.user_id]],
+  );
+  const dnis = (response: LockedResponse) =>
+    new Set(
+      [extractDni(response.responses), rows.find((row) => row.id === response.user_id)?.dni]
+        .map(normalizeDni)
+        .filter((dni): dni is string => dni !== null),
+    );
+  const theirs = dnis(second);
+  return [...dnis(first)].some((dni) => theirs.has(dni));
 }
 
 /**
@@ -566,8 +698,11 @@ function assertOpen(row: TokenCase): void {
 
 export interface DuplicateMergeView {
   status: string;
+  kind: CaseKind;
   application_name: string;
   you: Side;
+  /** A removal keeps this side's account; null lets the holder choose. */
+  kept: Side | null;
   accounts: Array<{ side: Side; email: string }>;
   template: TemplateField[];
   sections: FormSection[];
@@ -576,13 +711,26 @@ export interface DuplicateMergeView {
   expires_at: Date | null;
 }
 
-/** What the emailed link shows: the merged application and both accounts. */
+/** The side a removal keeps; null when the applicant chooses (merge, or both accepted). */
+const keptSide = (row: CaseRow): Side | null =>
+  row.kind !== "remove" || row.kept_response_id == null
+    ? null
+    : row.kept_response_id === row.first_response_id
+      ? "first"
+      : "second";
+
+/**
+ * What the emailed link shows: both accounts and, for a merge, the merged
+ * application. A removal shows no answers: the accepted application stays as
+ * it is and its owner already sees it in their account.
+ */
 export async function lookupDuplicateMerge(token: string): Promise<DuplicateMergeView> {
   const { row, side } = await findCaseByToken(pool, token);
   assertOpen(row);
+  const merge = row.kind === "merge";
   const { rows: source } = await pool.query<{ submitted_at: Date | null }>(
     `SELECT submitted_at FROM application_responses WHERE id = $1`,
-    [row.submitted_from_response_id],
+    [merge ? row.submitted_from_response_id : row.kept_response_id],
   );
   const email = (which: Side) => {
     const value = (which === "first" ? row.first_email : row.second_email) ?? "";
@@ -591,15 +739,17 @@ export async function lookupDuplicateMerge(token: string): Promise<DuplicateMerg
   };
   return {
     status: row.status,
+    kind: row.kind,
     application_name: row.application_name,
     you: side,
+    kept: keptSide(row),
     accounts: [
       { side: "first", email: email("first") },
       { side: "second", email: email("second") },
     ],
-    template: row.template,
-    sections: row.sections,
-    answers: displayAnswers(row.template, row.merged_responses ?? {}),
+    template: merge ? row.template : [],
+    sections: merge ? row.sections : [],
+    answers: merge ? displayAnswers(row.template, row.merged_responses ?? {}) : {},
     submitted_at: source[0]?.submitted_at ?? null,
     expires_at: row.expires_at,
   };
@@ -633,26 +783,43 @@ async function copyDiscardedFiles(
   return merged;
 }
 
-export type DuplicateDecision = { decision: "keep_separate" } | { decision: "merge"; keep: Side };
+export type DuplicateDecision =
+  | { decision: "keep_separate" }
+  | { decision: "merge"; keep: Side }
+  | { decision: "remove"; keep?: Side };
 
 /**
- * The applicant's answer. Exactly one answer wins (the case row is locked);
- * a merge rewrites the kept response, deletes the other one and then removes
- * the other account through the H54 removal flow.
+ * The applicant's answer. Exactly one answer wins (the case row is locked).
+ * A merge rewrites the kept response; a removal leaves the accepted one as
+ * it is. Both delete the other response and then remove the other account
+ * through the H54 removal flow.
  */
 export async function decideDuplicateMerge(
   token: string,
   input: DuplicateDecision,
-): Promise<{ status: "merged" | "kept_separate" }> {
+): Promise<{ status: "merged" | "removed" | "kept_separate" }> {
   const { row: preview } = await findCaseByToken(pool, token);
   assertOpen(preview);
+  if (input.decision !== "keep_separate" && input.decision !== preview.kind) {
+    throw new BadRequestError("This answer does not match the proposal");
+  }
   const firstUser = preview.first_user_id as number;
   const secondUser = preview.second_user_id as number;
-  const keep = input.decision === "merge" ? input.keep : null;
+  const keep =
+    input.decision === "merge"
+      ? input.keep
+      : input.decision === "remove"
+        ? (keptSide(preview) ?? input.keep ?? null)
+        : null;
+  if (input.decision === "remove" && keep === null) {
+    throw new BadRequestError("Choose the account to keep");
+  }
   const keptUserId = keep === "second" ? secondUser : firstUser;
   const discardedUserId = keep === "second" ? firstUser : secondUser;
   const merged =
-    keep === null ? null : await copyDiscardedFiles(preview, keptUserId, discardedUserId);
+    input.decision === "merge"
+      ? await copyDiscardedFiles(preview, keptUserId, discardedUserId)
+      : null;
 
   const outcome = await withTransaction(async (client) => {
     // Owners first (the removal lock order), then the case: a concurrent
@@ -669,16 +836,13 @@ export async function decideDuplicateMerge(
     ]);
     // The link's owner answered; the audit row names that account (H53).
     const actorId = side === "first" ? first.user_id : second.user_id;
-    if (
-      first.fingerprint !== row.source_fingerprints?.[String(first.id)] ||
-      second.fingerprint !== row.source_fingerprints?.[String(second.id)]
-    ) {
+    if (isOutdated(row, [first, second])) {
       throw new ConflictError("One of the applications changed after this was proposed", {
         code: ERROR_REASONS.DUPLICATE_MERGE_OUTDATED,
       });
     }
 
-    if (keep === null || merged === null) {
+    if (keep === null) {
       await client.query(
         `UPDATE application_duplicate_cases
             SET status = 'kept_separate', merged_responses = NULL, resolved_at = now()
@@ -704,15 +868,27 @@ export async function decideDuplicateMerge(
         code: ERROR_REASONS.DUPLICATE_MERGE_NEEDS_STAFF,
       });
     }
-    const source = row.submitted_from_response_id === first.id ? first : second;
-    await client.query(
-      `UPDATE application_responses
-          SET responses = $2::jsonb, status = $3::app_response_status, submitted_at = $4
-        WHERE id = $1`,
-      [kept.id, JSON.stringify(merged), source.status, source.submitted_at],
-    );
-    const dni = extractDni(merged);
-    if (dni) await client.query(`UPDATE users SET dni = $2 WHERE id = $1`, [kept.user_id, dni]);
+    if (merged) {
+      const source = row.submitted_from_response_id === first.id ? first : second;
+      await client.query(
+        `UPDATE application_responses
+            SET responses = $2::jsonb, status = $3::app_response_status, submitted_at = $4
+          WHERE id = $1`,
+        [kept.id, JSON.stringify(merged), source.status, source.submitted_at],
+      );
+      const dni = extractDni(merged);
+      if (dni) await client.query(`UPDATE users SET dni = $2 WHERE id = $1`, [kept.user_id, dni]);
+      await audit(client, {
+        actorId,
+        entityType: "application_response",
+        entityId: kept.id,
+        action: "duplicate_merged",
+        source: "email",
+        before: { status: kept.status },
+        after: { status: source.status, case_id: row.id, merged_response_id: discarded.id },
+      });
+    }
+    const status = merged ? ("merged" as const) : ("removed" as const);
     await client.query(
       `UPDATE application_responses SET referrer_application_id = NULL
         WHERE referrer_application_id = $1`,
@@ -722,32 +898,23 @@ export async function decideDuplicateMerge(
     await client.query(`DELETE FROM application_responses WHERE id = $1`, [discarded.id]);
     await client.query(
       `UPDATE application_duplicate_cases
-          SET status = 'merged', merged_responses = NULL, kept_response_id = $2,
+          SET status = $3, merged_responses = NULL, kept_response_id = $2,
               resolved_at = now()
         WHERE id = $1`,
-      [row.id, kept.id],
+      [row.id, kept.id, status],
     );
-    await audit(client, {
-      actorId,
-      entityType: "application_response",
-      entityId: kept.id,
-      action: "duplicate_merged",
-      source: "email",
-      before: { status: kept.status },
-      after: { status: source.status, case_id: row.id, merged_response_id: discarded.id },
-    });
     await audit(client, {
       actorId,
       entityType: "application_duplicate_case",
       entityId: row.id,
-      action: "merged",
+      action: status,
       source: "email",
-      after: { kept_response_id: kept.id },
+      after: { kept_response_id: kept.id, deleted_response_id: discarded.id },
     });
-    return { status: "merged" as const };
+    return { status };
   });
 
-  if (outcome.status === "merged") {
+  if (outcome.status !== "kept_separate") {
     // The merged response is committed; the other account goes through the
     // normal removal, which retries its own external cleanup on failure.
     try {
@@ -758,7 +925,7 @@ export async function decideDuplicateMerge(
         requestedAction: "delete",
       });
     } catch (error) {
-      console.error(`[duplicates] removal of merged account ${discardedUserId} failed`, error);
+      console.error(`[duplicates] removal of duplicate account ${discardedUserId} failed`, error);
     }
   }
   return outcome;

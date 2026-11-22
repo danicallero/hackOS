@@ -4441,5 +4441,20 @@
   "duplicateLinkProblemTitle": "No se puede usar este enlace",
   "duplicateLoadFailed": "No se pudo cargar la propuesta.",
   "duplicateMergeFailed": "No se pudo guardar tu respuesta.",
-  "duplicateSubmittedOn": "Presentada el {date}"
+  "duplicateSubmittedOn": "Presentada el {date}",
+  "duplicateProposeRemoval": "Pedir eliminar la otra cuenta",
+  "duplicateRemovalConfirmTitle": "¿Pedir que se elimine la otra cuenta?",
+  "duplicateRemovalConfirmDesc": "Las dos direcciones reciben un correo. Si la persona acepta, se elimina la cuenta cuya solicitud no está aceptada.",
+  "duplicateStatusRemoved": "Otra cuenta eliminada",
+  "duplicateRemovalTitle": "Elimina tu otra cuenta",
+  "duplicateRemovalKept": "Solicitud aceptada, se mantiene",
+  "duplicateRemovalDeleted": "Se eliminará con su solicitud",
+  "duplicateRemovalAction": "Eliminar la otra cuenta",
+  "duplicateRemovedTitle": "Cuenta eliminada",
+  "duplicateRemovedDesc": "Tu solicitud sigue en {email}.",
+  "duplicateProposeChoice": "Preguntar qué cuenta conservar",
+  "duplicateChoiceConfirmTitle": "¿Preguntar qué cuenta conservar?",
+  "duplicateChoiceConfirmDesc": "Las dos solicitudes están aceptadas. Las dos direcciones reciben un correo; la persona conserva una cuenta y la otra se elimina con su solicitud.",
+  "duplicateChoiceTitle": "Elige la cuenta que conservas",
+  "duplicateChoiceAction": "Conservar esta cuenta"
 }
