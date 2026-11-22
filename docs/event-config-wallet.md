@@ -238,7 +238,9 @@ own pass. The `/api/wallet/apple/v1/*` device protocol deliberately does not
 use browser sessions; registration, unregistration, and pass downloads require
 `Authorization: ApplePass <authenticationToken>`. Changed-pass polling authenticates
 with the registered device library identifier, as required by PassKit, and
-returns only that device’s registered Apple serials.
+returns only that device’s registered Apple serials. Device logs (`POST /v1/log`)
+need no credential either, since PassKit sends none: the API prints at most 50
+quoted lines of 1000 characters per report and changes nothing else.
 
 ## 3. The settings page (apps/web/src/app/(app)/settings/event/page.tsx)
 
