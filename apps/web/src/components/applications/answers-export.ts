@@ -7,7 +7,7 @@ import { exportCsv } from "@/lib/csv";
 import { pickText, type Translate } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
 
-interface LibraryNames {
+export interface LibraryNames {
   universities: Map<number, string>;
   degrees: Map<number, string>;
   intolerances: Map<number, string>;
@@ -15,7 +15,7 @@ interface LibraryNames {
 
 /** Renders one field's value as plain text for the answers export — mirrors
  *  TemplateFieldControl's read-only display for kinds with an option lookup. */
-function fieldValueText(
+export function fieldValueText(
   field: TemplateField,
   value: unknown,
   lang: Language,
@@ -94,6 +94,31 @@ async function loadIntoleranceNames(lang: Language): Promise<Map<number, string>
   }
 }
 
+/** Display names for the university, degree and intolerance ids in these answers. */
+export async function loadLibraryNames(
+  fields: TemplateField[],
+  answers: Record<string, unknown>[],
+  lang: Language,
+): Promise<LibraryNames> {
+  const idsFor = (kind: "university" | "degree") => [
+    ...new Set(
+      fields.flatMap((field) => {
+        if (field.kind !== kind) return [];
+        return answers.flatMap((values) => {
+          const id = Number(values[field.key]);
+          return Number.isInteger(id) && id > 0 ? [id] : [];
+        });
+      }),
+    ),
+  ];
+  const [universities, degrees, intolerances] = await Promise.all([
+    loadNames("/api/public/universities", "universities", idsFor("university")),
+    loadNames("/api/public/degrees", "degrees", idsFor("degree")),
+    loadIntoleranceNames(lang),
+  ]);
+  return { universities, degrees, intolerances };
+}
+
 /** Downloads one response as a single wide CSV row, matching the application
  * export and user-roster convention: fields are columns and people are rows. */
 export async function exportAnswers(
@@ -103,21 +128,7 @@ export async function exportAnswers(
   lang: Language,
   t: Translate,
 ): Promise<void> {
-  const idsFor = (kind: "university" | "degree") => [
-    ...new Set(
-      answerFields.flatMap((field) => {
-        if (field.kind !== kind) return [];
-        const id = Number(answerValues[field.key]);
-        return Number.isInteger(id) && id > 0 ? [id] : [];
-      }),
-    ),
-  ];
-  const [universities, degrees, intolerances] = await Promise.all([
-    loadNames("/api/public/universities", "universities", idsFor("university")),
-    loadNames("/api/public/degrees", "degrees", idsFor("degree")),
-    loadIntoleranceNames(lang),
-  ]);
-  const libraryValues = { universities, degrees, intolerances };
+  const libraryValues = await loadLibraryNames(answerFields, [answerValues], lang);
   exportCsv(`${(response.name ?? response.email).replace(/[^a-z0-9]+/gi, "-")}-answers.csv`, [
     ["Name", "Last name", "Email", ...answerFields.map((field) => pickText(field.label, lang))],
     [

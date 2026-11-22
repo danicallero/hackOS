@@ -13,6 +13,8 @@
 //     send/resend/re-accept/revoke/confirm-override action strictly on
 //     applications:decide, so widening tab *visibility* to reviewers doesn't
 //     widen what they can do (H57). Optional stats strip needs logistics:stats.
+//   • Duplicates (applications:review) — pairs that look like one person
+//     applying twice; proposing a merge needs applications:edit-response.
 //
 // NOTE: the applications template uses templateFieldSchema (FIELD_KINDS), not
 // the judging questionSchema. i18n labels carry {en,es,gl} (plan/07 §2).
@@ -53,6 +55,7 @@ import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { useUrlTab } from "@/lib/url-tab";
+import { DuplicatesTab } from "./duplicates-tab";
 import { ApplicationDangerZone, MetadataCard } from "./metadata-card";
 import { ResponsesTab } from "./responses-tab";
 
@@ -74,7 +77,10 @@ export default function ApplicationDetailPage() {
     canReview ? "review" : null,
     canSeeDecisions ? "outbox" : null,
     canSeeDecisions ? "sent" : null,
-  ].filter((value): value is "builder" | "review" | "outbox" | "sent" => value !== null);
+    canReview ? "duplicates" : null,
+  ].filter(
+    (value): value is "builder" | "review" | "outbox" | "sent" | "duplicates" => value !== null,
+  );
   // Access to this page already requires one of manage/review/decide (nav.ts),
   // so applicationTabs is never empty — the first gated tab is a safe default.
   const responseRequested = useSearchParams().has("response");
@@ -262,6 +268,7 @@ export default function ApplicationDetailPage() {
             {canSeeDecisions && (
               <TabsTrigger value="sent">{t("workspaceSentDecisions")}</TabsTrigger>
             )}
+            {canReview && <TabsTrigger value="duplicates">{t("duplicatesTab")}</TabsTrigger>}
           </TabBar>
 
           {canManage && (
@@ -320,6 +327,15 @@ export default function ApplicationDetailPage() {
                 reviewHiddenFields={form?.review_hidden_fields ?? []}
                 onStandardViewSaved={loadForm}
                 workspace="sent"
+              />
+            </TabsContent>
+          )}
+          {canReview && (
+            <TabsContent value="duplicates" className="pt-2">
+              <DuplicatesTab
+                id={id}
+                template={form?.template ?? null}
+                sections={form?.sections ?? []}
               />
             </TabsContent>
           )}

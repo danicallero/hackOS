@@ -130,5 +130,14 @@
   "apiError_already_sent": "The decision was already sent.",
   "apiError_response_status_changed": "Its status no longer allows this action.",
   "apiError_response_not_found": "The application or its account no longer exists.",
-  "apiError_edition_closed": "This edition is closed and read only."
+  "apiError_edition_closed": "This edition is closed and read only.",
+  "apiError_duplicate_case_exists": "This pair already has an open decision.",
+  "apiError_duplicate_case_closed": "This case is already closed.",
+  "apiError_duplicate_merge_decided": "Only draft or in-review applications can be merged.",
+  "apiError_duplicate_merge_submission_required": "Keep the submission date of a submitted application.",
+  "apiError_duplicate_merge_invalid": "This link isn't valid.",
+  "apiError_duplicate_merge_closed": "This merge was already answered or withdrawn.",
+  "apiError_duplicate_merge_expired": "This link has expired. Write to us if you still want to merge your applications.",
+  "apiError_duplicate_merge_outdated": "One of the applications changed after the merge was proposed. Write to us so we can review it again.",
+  "apiError_duplicate_merge_needs_staff": "The other account already has event activity. Write to us and we'll sort it out."
 }
