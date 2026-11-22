@@ -488,6 +488,38 @@ describe("H28 Apple Wallet PassKit", () => {
     expect(changed.json().serialNumbers).toContain(serial);
   });
 
+  it("accepts PassKit device logs, which Wallet sends without credentials (H28)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      for (const authorization of [undefined, "ApplePass unknown-token", "Bearer nope"]) {
+        const res = await app.inject({
+          method: "POST",
+          url: "/api/wallet/apple/v1/log",
+          headers: authorization ? { authorization } : {},
+          payload: { logs: ["Web service error: forged\nwallet: device log: fake"] },
+        });
+        expect(res.statusCode).toBe(200);
+      }
+      // Each line is printed quoted, so an embedded newline cannot forge an entry.
+      expect(warn).toHaveBeenCalledWith(
+        "wallet: device log:",
+        JSON.stringify("Web service error: forged\nwallet: device log: fake"),
+      );
+
+      warn.mockClear();
+      await app.inject({
+        method: "POST",
+        url: "/api/wallet/apple/v1/log",
+        payload: { logs: Array.from({ length: 80 }, () => "x".repeat(5000)) },
+      });
+      const printed = warn.mock.calls.filter(([prefix]) => prefix === "wallet: device log:");
+      expect(printed).toHaveLength(50);
+      expect(printed.every(([, line]) => (line as string).length <= 1002)).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("accepts tokenless polling only for registered device identifiers (H28)", async () => {
     const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet-passes.js");
     const { pool } = await import("../../src/db/pool.js");

@@ -1252,12 +1252,13 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/wallet/apple/v1/log",
     {
+      // H28: Wallet sends its diagnostics without an Authorization header, so a
+      // token check here rejected every report and hid the device errors.
       ...routeAccess(access.applePasskit),
-      preHandler: requireAppleWebServiceToken,
       schema: {
         summary: "PassKit device diagnostics",
         description:
-          "Apple Wallet device diagnostics authenticated with an ApplePass web-service token. The API records only the device-supplied diagnostic lines.",
+          "Apple Wallet device diagnostics. PassKit sends them without credentials, so no token is required; the API only prints the bounded diagnostic lines. A valid `ApplePass` token, when present, also refreshes the logistics wallet view.",
         body: appleLogBody,
       },
     },
