@@ -238,6 +238,7 @@ Table application_duplicate_cases {
   first_token_hash text [unique]
   id integer [pk, increment, not null]
   kept_response_id integer
+  kind text [not null, default: `'merge'::text`, note: 'merge: combine both answers into the kept account. remove: keep the accepted application and delete the other account.']
   merged_responses jsonb
   pair_key text [not null]
   resolved_at "timestamp with time zone"

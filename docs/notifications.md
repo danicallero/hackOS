@@ -454,7 +454,11 @@ it leaves from the transactional sender ([email-ses](email-ses.md)).
 
 A duplicate-application merge proposal (H13) emails each owner
 `application.duplicate`: the recipient's address, the other one masked, and a
-`mergeUrl` to review the merged application. Also transactional
+`mergeUrl` to review the merged application. When one application is already
+accepted, `application.duplicate_removal` asks instead whether to delete the
+other account (`keptEmail`, `removedEmail`, masked unless the recipient's own,
+and the same `mergeUrl`); with both accepted and the same DNI,
+`application.duplicate_choice` asks which account to keep. Also transactional
 ([duplicate-applications](duplicate-applications.md)).
 
 `application.decision` stays the outbox template name; the renderer selects

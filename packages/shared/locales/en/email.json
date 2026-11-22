@@ -125,6 +125,14 @@
       "duplicate": {
         "subject": "You have two {{applicationName}} applications",
         "body": "Hi {{name}},\n\nWe found two {{applicationName}} applications for {{eventName}} that look like they come from the same person: one from {{email}} and one from {{otherEmail}}. With your permission, we'll merge them into one.\n\nThe link shows what the merged application will look like and lets you choose which account to keep. The other account will be deleted. If they belong to different people, say so there and we'll keep them separate.\n\n[Review the merge]({{mergeUrl}})\n\nThe link expires in 14 days.\n\nThe {{eventName}} team"
+      },
+      "duplicate_removal": {
+        "subject": "You have two {{applicationName}} applications",
+        "body": "Hi {{name}},\n\nWe found two {{applicationName}} applications for {{eventName}} that look like they come from the same person: one from {{email}} and one from {{otherEmail}}. The one from {{keptEmail}} has already been accepted.\n\nWith your permission, we'll delete the account {{removedEmail}} and its application. If they belong to different people, say so at the link and we'll keep both.\n\n[Answer]({{mergeUrl}})\n\nThe link expires in 14 days.\n\nThe {{eventName}} team"
+      },
+      "duplicate_choice": {
+        "subject": "You have two {{applicationName}} applications",
+        "body": "Hi {{name}},\n\nWe found two accepted {{applicationName}} applications for {{eventName}} with the same ID number: one from {{email}} and one from {{otherEmail}}. Each person can only take part once.\n\nAt the link, choose which account to keep. The other one will be deleted with its application. If they belong to different people, say so there and we'll keep both.\n\n[Choose the account]({{mergeUrl}})\n\nThe link expires in 14 days.\n\nThe {{eventName}} team"
       }
     },
     "schedule": {

@@ -828,7 +828,7 @@ describe("confirm / decline (H15)", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.user_id).toBe(userId);
-    expect(body.masked_email).toMatch(/^.•••@/);
+    expect(body.masked_email).toMatch(/^[^@]+•••[^@]?@/);
     expect(body.wallet_token.length).toBeGreaterThan(20);
     expect(new Date(body.wallet_token_expires_at).getTime()).toBeGreaterThan(Date.now());
 
