@@ -94,7 +94,7 @@ function prepare(subject: DuplicateSubject): Prepared {
     .split(" ")
     .filter(Boolean);
   // Word order does not matter ("Pérez García, Ana" vs "Ana Pérez García").
-  const nameGrams = bigrams([...nameTokens].sort().join(" "));
+  const nameGrams = bigrams([...nameTokens].sort((a, b) => a.localeCompare(b)).join(" "));
   const stem = emailStem(subject.email);
   const emailGrams = stem.length >= 4 ? bigrams(stem) : new Map();
   return {
