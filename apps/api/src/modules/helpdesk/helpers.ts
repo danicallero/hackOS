@@ -14,6 +14,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { getRequestAuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { likeTokens, matchesAllTokens } from "../../lib/like.js";
 import { photoUrl } from "../../lib/profile-files.js";
 import { type DirectoryEntry, helperProfileEntry, OWN_CV_PATH } from "../directory/service.js";
 import { getEventTimezone } from "../event/service.js";
@@ -581,8 +582,10 @@ export async function listHelpers(filter: HelperFilter): Promise<HelperCard[]> {
   if (filter.q) {
     params.push(`%${filter.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
     const p = `$${params.length}`;
+    params.push(likeTokens(filter.q));
+    const tokens = `$${params.length}`;
     where.push(`(
-      unaccent(u.name || ' ' || COALESCE(u.surname, '')) ILIKE unaccent(${p})
+      ${matchesAllTokens("concat_ws(' ', u.name, u.surname)", tokens)}
       OR EXISTS (SELECT 1 FROM helper_topics qt JOIN help_topics t ON t.id = qt.topic_id
                   WHERE qt.user_id = u.id AND qt.event_key = current_edition()
                     AND unaccent(t.name) ILIKE unaccent(${p})))`);

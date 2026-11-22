@@ -1,6 +1,6 @@
 import { pool } from "../../db/pool.js";
 import { fixtureReadFilter } from "../../lib/fixture-subject-scope.js";
-import { likeContains } from "../../lib/like.js";
+import { likeContains, likeTokens, matchesAllTokens } from "../../lib/like.js";
 
 // ── H22/H23: unified person lookup ─────────────────────────────────────────
 
@@ -101,19 +101,17 @@ export async function searchPeople(
   // `unaccent` makes the comparison accent-insensitive while
   // the stored names keep their accents: "ana per" finds "Ana Pérez".
   const like = likeContains(needle);
+  const tokens = likeTokens(needle);
   const fuzzy = await pool.query(
     `SELECT u.id FROM users u
       WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
         ${fixtureFilter}
-        AND (unaccent(u.name) ILIKE unaccent($1)
-         OR unaccent(u.surname) ILIKE unaccent($1)
-         OR unaccent(u.email) ILIKE unaccent($1)
-         OR u.dni ILIKE $1
-         OR unaccent(u.name || ' ' || u.surname) ILIKE unaccent($1)
-         OR unaccent(u.surname || ' ' || u.name) ILIKE unaccent($1))
+        AND (${matchesAllTokens("concat_ws(' ', u.name, u.surname, u.email)", "$2")}
+         OR ${matchesAllTokens("concat_ws(' ', u.surname, u.name)", "$2")}
+         OR u.dni ILIKE $1)
       ORDER BY u.surname NULLS LAST, u.name NULLS LAST, u.id
       LIMIT 10`,
-    [like],
+    [like, tokens],
   );
   return loadResults(
     fuzzy.rows.map((r: { id: number }) => r.id),

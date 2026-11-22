@@ -10,7 +10,7 @@ import {
   userHasCapability,
 } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
-import { likeContains } from "../../lib/like.js";
+import { likeTokens, matchesAllTokens } from "../../lib/like.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { previousRejectionsSql } from "./application-reads.js";
 import { requireApplication } from "./forms.js";
@@ -107,9 +107,9 @@ export function registerReviewRoutes(app: FastifyInstance): void {
         filters.push(`r.status = $${params.length}`);
       }
       if (req.query.search) {
-        params.push(likeContains(req.query.search));
+        params.push(likeTokens(req.query.search));
         filters.push(
-          `(unaccent(u.name) ILIKE unaccent($${params.length}) OR unaccent(u.email) ILIKE unaccent($${params.length}))`,
+          matchesAllTokens("concat_ws(' ', u.name, u.surname, u.email)", `$${params.length}`),
         );
       }
       const { rows } = await pool.query(

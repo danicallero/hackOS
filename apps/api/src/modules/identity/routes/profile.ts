@@ -18,7 +18,7 @@ import { readScopedEdition } from "../../../lib/edition.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
 import { assertFixtureSubjectScope } from "../../../lib/fixture-subject-scope.js";
 import { idempotencyGuard, replayCompletedIdempotency } from "../../../lib/idempotency.js";
-import { likeContains } from "../../../lib/like.js";
+import { likeTokens, matchesAllTokens } from "../../../lib/like.js";
 import { photoUrl } from "../../../lib/profile-files.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { getEventTimezone } from "../../event/service.js";
@@ -931,18 +931,13 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       const { q, limit, offset } = req.query;
       const needle = q?.trim().replace(/\s+/g, " ") || null;
-      const filter = needle ? likeContains(needle) : null;
+      const filter = needle ? likeTokens(needle) : null;
       // `unaccent` makes name/surname matching accent-insensitive.
       const where = filter
         ? `WHERE account_state = 'active' AND anonymized_at IS NULL
              AND is_test_account = false
-             AND (unaccent(name) ILIKE unaccent($1)
-              OR unaccent(surname) ILIKE unaccent($1)
-              OR unaccent(email) ILIKE unaccent($1)
-              OR unaccent(badge_id) ILIKE unaccent($1)
-              OR unaccent(dni) ILIKE unaccent($1)
-              OR unaccent(name || ' ' || surname) ILIKE unaccent($1)
-              OR unaccent(surname || ' ' || name) ILIKE unaccent($1))`
+             AND (${matchesAllTokens("concat_ws(' ', name, surname, email, badge_id, dni)", "$1")}
+              OR ${matchesAllTokens("concat_ws(' ', surname, name)", "$1")})`
         : `WHERE account_state = 'active' AND anonymized_at IS NULL
              AND is_test_account = false`;
       const args = filter ? [filter, limit, offset] : [limit, offset];
