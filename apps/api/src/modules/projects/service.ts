@@ -6,7 +6,7 @@ import { audit, auditMany } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { assertFixtureSubjectScope, isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
 import { canonicalCityAnswers, validateResponses } from "../../lib/form-validation.js";
-import { likeContains } from "../../lib/like.js";
+import { likeTokens, matchesAllTokens } from "../../lib/like.js";
 import { sharedCache } from "../../lib/shared-cache.js";
 import { broadcast } from "../../lib/sse.js";
 import { deletePrefix } from "../../lib/storage.js";
@@ -497,8 +497,8 @@ export async function listProjectMemberCandidates(q: string, limit: number, acto
   const marker = await isSyntheticOperator(pool, actorId);
   return (
     await pool.query(
-      `SELECT id,email,name,surname FROM users WHERE is_test_account=$3 AND account_state='active' AND anonymized_at IS NULL AND (unaccent(email) ILIKE unaccent($1) OR unaccent(name) ILIKE unaccent($1)) ORDER BY id LIMIT $2`,
-      [likeContains(q), limit, marker],
+      `SELECT id,email,name,surname FROM users WHERE is_test_account=$3 AND account_state='active' AND anonymized_at IS NULL AND ${matchesAllTokens("concat_ws(' ', email, name, surname)", "$1")} ORDER BY id LIMIT $2`,
+      [likeTokens(q), limit, marker],
     )
   ).rows;
 }
