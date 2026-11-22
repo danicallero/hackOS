@@ -3,6 +3,7 @@ import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import type { Column } from "@/components/common/data-table";
 import { StatusBadge } from "@/components/common/status-badge";
 import {
+  APPLICATION_STATUS_ORDER,
   type ApplicationWorkspace,
   applicationStatusLabel,
   applicationStatusTone,
@@ -58,7 +59,7 @@ export function buildResponseColumns({
       id: "status",
       width: "w-48",
       header: t("statusColumn"),
-      sortValue: (r) => r.status,
+      sortValue: (r) => APPLICATION_STATUS_ORDER.indexOf(r.status),
       cell: (r) => <ResponseStatus response={r} t={t} />,
     },
     {

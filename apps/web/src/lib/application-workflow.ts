@@ -54,6 +54,19 @@ export function statusesForWorkspace(workspace: ApplicationWorkspace): string[] 
   return [...WORKSPACE_STATUSES[workspace]];
 }
 
+/** Response statuses in workflow order (H12-H15): sort lists by this, not by key. */
+export const APPLICATION_STATUS_ORDER: readonly string[] = [
+  "draft",
+  "review",
+  "accepted_internal",
+  "accepted",
+  "confirmed",
+  "rejected_internal",
+  "rejected",
+  "declined",
+  "expired",
+];
+
 const STATUS_TONE: Record<string, Tone> = {
   draft: "neutral",
   review: "warning",
