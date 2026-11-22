@@ -28,7 +28,7 @@ with an open case (dismissed, pending, kept separate) are not suggested again.
 
 ## Cases
 
-`application_duplicate_cases` (migration `0211`) holds every decision about a
+`application_duplicate_cases` (migration `0212`) holds every decision about a
 pair, keyed by `pair_key` (`"<low id>:<high id>"`); a partial unique index
 allows one open case per pair.
 
