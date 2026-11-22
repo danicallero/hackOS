@@ -121,6 +121,10 @@
       "confirmationLastChance": {
         "subject": "Confirmación de praza en {{eventName}}: quedan menos de 24 horas",
         "body": "Ola {{name}},\n\nQuedan menos de 24 horas para confirmar a túa praza en {{eventName}}. Este é o último recordatorio.{{confirmationDetails}}\n\nO equipo de {{eventName}}"
+      },
+      "duplicate": {
+        "subject": "Tes dúas solicitudes de {{applicationName}}",
+        "body": "Ola {{name}}:\n\nDetectamos dúas solicitudes de {{applicationName}} para {{eventName}} que parecen da mesma persoa: unha desde {{email}} e outra desde {{otherEmail}}. Co teu permiso, fusionarémolas nunha soa.\n\nNa ligazón verás como quedará a solicitude fusionada e escollerás que conta conservar. A outra conta eliminarase. Se non son da mesma persoa, indícao alí e manterémolas separadas.\n\n[Revisar a fusión]({{mergeUrl}})\n\nA ligazón caduca en 14 días.\n\nO equipo de {{eventName}}"
       }
     },
     "schedule": {

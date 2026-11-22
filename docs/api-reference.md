@@ -241,6 +241,10 @@ its transition implementation lives in `applications/expirations.ts`, not a
 request path. The public `applications/service.ts` entry point re-exports the
 split form, submission, review, decision, confirmation, response-read and
 expirer services; shared transition locks live in `applications/internal.ts`.
+Reviewers can find one person's two applications (same DNI, similar names or
+emails), dismiss the pair or propose a merge the applicant answers from an
+emailed link, keeping one account and deleting the other; see
+[`duplicate-applications.md`](./duplicate-applications.md).
 
 Acceptance email links carry their bearer token in a URL fragment so the web
 server, referrer and request logs do not receive it. Landing pages do not act on

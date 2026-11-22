@@ -452,6 +452,11 @@ same optional `rejectionDetails` reason line, that the draft can be resubmitted
 even after the deadline, and an `applicationUrl` link to it. Like the decision,
 it leaves from the transactional sender ([email-ses](email-ses.md)).
 
+A duplicate-application merge proposal (H13) emails each owner
+`application.duplicate`: the recipient's address, the other one masked, and a
+`mergeUrl` to review the merged application. Also transactional
+([duplicate-applications](duplicate-applications.md)).
+
 `application.decision` stays the outbox template name; the renderer selects
 complete `accepted`/`rejected` subject/body variants in es/gl/en from the internal
 decision variable, so raw status keys never appear in participant messages.

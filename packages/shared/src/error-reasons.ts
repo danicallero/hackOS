@@ -103,6 +103,24 @@ export const ERROR_REASONS = {
   RESPONSE_STATUS_CHANGED: "response_status_changed",
   /** 404: the response, or its applicant's account, no longer exists (H14). */
   RESPONSE_NOT_FOUND: "response_not_found",
+  /** 409: the pair of applications already has an open duplicate decision (H13). */
+  DUPLICATE_CASE_EXISTS: "duplicate_case_exists",
+  /** 409: the duplicate case was already answered or withdrawn (H13). */
+  DUPLICATE_CASE_CLOSED: "duplicate_case_closed",
+  /** 409: only draft or in-review applications can be merged (H13). */
+  DUPLICATE_MERGE_DECIDED: "duplicate_merge_decided",
+  /** 409: a merge must keep the submission date of a submitted application (H13). */
+  DUPLICATE_MERGE_SUBMISSION_REQUIRED: "duplicate_merge_submission_required",
+  /** 404: the merge link is not valid (H13). */
+  DUPLICATE_MERGE_INVALID: "duplicate_merge_invalid",
+  /** 409: the merge was already answered or withdrawn (H13). */
+  DUPLICATE_MERGE_CLOSED: "duplicate_merge_closed",
+  /** 409: the merge link expired (H13). */
+  DUPLICATE_MERGE_EXPIRED: "duplicate_merge_expired",
+  /** 409: an application changed after the merge was proposed (H13). */
+  DUPLICATE_MERGE_OUTDATED: "duplicate_merge_outdated",
+  /** 409: the account to delete has event history; staff must handle it (H13, H54). */
+  DUPLICATE_MERGE_NEEDS_STAFF: "duplicate_merge_needs_staff",
 } as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[keyof typeof ERROR_REASONS];

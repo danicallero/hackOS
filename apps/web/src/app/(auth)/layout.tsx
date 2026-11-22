@@ -13,6 +13,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const pathname = usePathname();
   const confirmation = pathname === "/applications/confirm";
   const claim = pathname === "/claim-account";
+  const duplicate = pathname === "/applications/duplicate";
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden">
       <PublicTopBar access={false} />
@@ -21,7 +22,12 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         tabIndex={-1}
         className="outline-none flex flex-1 items-center justify-center px-4 py-10"
       >
-        <div className={cn("w-full", confirmation ? "max-w-3xl" : claim ? "max-w-xl" : "max-w-md")}>
+        <div
+          className={cn(
+            "w-full",
+            confirmation ? "max-w-3xl" : duplicate ? "max-w-2xl" : claim ? "max-w-xl" : "max-w-md",
+          )}
+        >
           {children}
         </div>
       </main>

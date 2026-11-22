@@ -4,6 +4,7 @@ import type { FastifyInstance } from "fastify";
 import "./expirer.js";
 import { registerAdminRoutes } from "./admin.routes.js";
 import { registerConfirmRoutes } from "./confirm.routes.js";
+import { registerDuplicateRoutes } from "./duplicates.routes.js";
 import { scheduleExpirer } from "./expirer.js";
 import { registerFilesExportRoutes } from "./files-export.routes.js";
 import { registerMeRoutes } from "./me.routes.js";
@@ -21,6 +22,7 @@ export async function registerApplicationsModule(app: FastifyInstance): Promise<
   registerMeRoutes(app);
   registerReviewRoutes(app);
   registerConfirmRoutes(app);
+  registerDuplicateRoutes(app);
   registerUploadRoutes(app);
   registerFilesExportRoutes(app);
 
