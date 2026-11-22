@@ -121,6 +121,8 @@ export const ERROR_REASONS = {
   DUPLICATE_MERGE_OUTDATED: "duplicate_merge_outdated",
   /** 409: the account to delete has event history; staff must handle it (H13, H54). */
   DUPLICATE_MERGE_NEEDS_STAFF: "duplicate_merge_needs_staff",
+  /** 409: a removal needs one accepted application, or both with the same DNI (H13). */
+  DUPLICATE_REMOVAL_NOT_APPLICABLE: "duplicate_removal_not_applicable",
 } as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[keyof typeof ERROR_REASONS];

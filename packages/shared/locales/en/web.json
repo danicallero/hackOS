@@ -4441,5 +4441,20 @@
   "duplicateLinkProblemTitle": "This link can't be used",
   "duplicateLoadFailed": "Couldn't load the proposal.",
   "duplicateMergeFailed": "Couldn't save your answer.",
-  "duplicateSubmittedOn": "Submitted on {date}"
+  "duplicateSubmittedOn": "Submitted on {date}",
+  "duplicateProposeRemoval": "Ask to delete the other account",
+  "duplicateRemovalConfirmTitle": "Ask to delete the other account?",
+  "duplicateRemovalConfirmDesc": "Both addresses get an email. If the person agrees, the account whose application was not accepted is deleted.",
+  "duplicateStatusRemoved": "Other account deleted",
+  "duplicateRemovalTitle": "Delete your other account",
+  "duplicateRemovalKept": "Accepted application, stays",
+  "duplicateRemovalDeleted": "Will be deleted with its application",
+  "duplicateRemovalAction": "Delete the other account",
+  "duplicateRemovedTitle": "Account deleted",
+  "duplicateRemovedDesc": "Your application stays under {email}.",
+  "duplicateProposeChoice": "Ask which account to keep",
+  "duplicateChoiceConfirmTitle": "Ask which account to keep?",
+  "duplicateChoiceConfirmDesc": "Both applications are accepted. Both addresses get an email; the person keeps one account and the other is deleted with its application.",
+  "duplicateChoiceTitle": "Choose the account to keep",
+  "duplicateChoiceAction": "Keep this account"
 }

@@ -139,5 +139,6 @@
   "apiError_duplicate_merge_closed": "This merge was already answered or withdrawn.",
   "apiError_duplicate_merge_expired": "This link has expired. Write to us if you still want to merge your applications.",
   "apiError_duplicate_merge_outdated": "One of the applications changed after the merge was proposed. Write to us so we can review it again.",
-  "apiError_duplicate_merge_needs_staff": "The other account already has event activity. Write to us and we'll sort it out."
+  "apiError_duplicate_merge_needs_staff": "The other account already has event activity. Write to us and we'll sort it out.",
+  "apiError_duplicate_removal_not_applicable": "Only possible when one application is accepted, or both are and share the same ID number."
 }
