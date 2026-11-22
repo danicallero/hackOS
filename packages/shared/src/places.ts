@@ -27,6 +27,18 @@ export function placeKey(text: string): string {
     .trim();
 }
 
+/** A country's name in its own main language, from CLDR likely subtags. */
+function endonym(code: string): string | null {
+  try {
+    const { language } = new Intl.Locale(`und-${code}`).maximize();
+    if (!language || language === "und") return null;
+    const label = new Intl.DisplayNames([language], { type: "region" }).of(code);
+    return label && label !== code ? label : null;
+  } catch {
+    return null;
+  }
+}
+
 let countryCodes: Map<string, string> | null = null;
 /** ISO 3166-1 alpha-2 code of a country name in any supported language. */
 export function countryCode(name: string): string | null {
@@ -53,6 +65,15 @@ export function countryCode(name: string): string | null {
             countryCodes.set(placeKey(label), code);
           }
         }
+      }
+    }
+    // Each country's own name too ("Polska", "Deutschland", "Sverige"):
+    // answers typed by hand or geocoded in the local language use it.
+    for (const first of letters) {
+      for (const second of letters) {
+        const code = `${first}${second}`;
+        const label = endonym(code);
+        if (label && !countryCodes.has(placeKey(label))) countryCodes.set(placeKey(label), code);
       }
     }
   }

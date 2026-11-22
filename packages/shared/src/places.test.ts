@@ -14,6 +14,10 @@ describe("canonical city answers (H11, H27)", () => {
     }
     expect(canonicalCountry("Brazil")).toBe("Brasil");
     expect(canonicalCountry(" Atlantis ")).toBe("Atlantis");
+    // Each country in its own language, whatever the browser spoke.
+    expect(canonicalCountry("Polska")).toBe("Polonia");
+    expect(canonicalCountry("Sverige")).toBe("Suecia");
+    expect(canonicalCountry("Česko")).toBe("Chequia");
   });
 
   it("names Spanish communities once and leaves other provinces alone", () => {
