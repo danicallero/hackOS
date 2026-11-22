@@ -2,7 +2,7 @@ import type { Queryable } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { assertFixtureSubjectScope, isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
-import { likeContains } from "../../lib/like.js";
+import { likeTokens, matchesAllTokens } from "../../lib/like.js";
 import { type NotificationChannel, notifyMany } from "./service.js";
 import type { Language } from "./translate/index.js";
 
@@ -350,14 +350,14 @@ export async function listAnnouncementRecipientCandidates(
   limit: number,
   actorId?: number,
 ): Promise<AnnouncementRecipient[]> {
-  const filter = likeContains(query.trim());
+  const filter = likeTokens(query);
   const fixtureMarker = actorId == null ? false : await isSyntheticOperator(db, actorId);
   const { rows } = await db.query(
     `SELECT id, email, name, surname
        FROM users
       WHERE account_state = 'active' AND anonymized_at IS NULL
         AND is_test_account = $3
-        AND (unaccent(email) ILIKE unaccent($1) OR unaccent(name) ILIKE unaccent($1) OR unaccent(surname) ILIKE unaccent($1))
+        AND ${matchesAllTokens("concat_ws(' ', email, name, surname)", "$1")}
       ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
       LIMIT $2`,
     [filter, limit, fixtureMarker],

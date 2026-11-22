@@ -2097,6 +2097,12 @@ describe("staff user routes (H7)", () => {
     expect(await search("BADGE-GRACE")).toContain("grace@example.test");
     expect(await search("Grace   Hopper")).toContain("grace@example.test");
     expect(await search("Hopper ")).toContain("grace@example.test");
+    // Words may match non-adjacent parts: second surname, accents, any order.
+    const nicolasId = await createUser({ name: "Nicolás", email: "nicolas@example.test" });
+    await pool.query("UPDATE users SET surname = $2 WHERE id = $1", [nicolasId, "Fernández Losa"]);
+    expect(await search("nicolas losa")).toContain("nicolas@example.test");
+    expect(await search("losa NICOLAS")).toContain("nicolas@example.test");
+    expect(await search("nicolas hopper")).not.toContain("nicolas@example.test");
   });
 
   it("GET /api/users resolves each row's visibleRoleName via the bulk view, not just capability holders (H8 regression: the web /users page previously read a stale `role` field name and always showed everyone as unassigned)", async () => {

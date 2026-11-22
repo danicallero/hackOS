@@ -8,7 +8,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { type AuthorizationContext, userHasAnyCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
-import { likeContains } from "../../lib/like.js";
+import { likeTokens, matchesAllTokens } from "../../lib/like.js";
 import { photoUrl } from "../../lib/profile-files.js";
 import { broadcast } from "../../lib/sse.js";
 import { currentEventKey } from "../event/context.js";
@@ -1026,12 +1026,12 @@ export async function listScheduleOwnerCandidates(
   query: string,
   limit: number,
 ): Promise<OwnerCandidate[]> {
-  const filter = likeContains(query.trim());
+  const filter = likeTokens(query);
   const { rows } = await pool.query(
     `SELECT id, email, name, surname
        FROM users
       WHERE account_state = 'active' AND anonymized_at IS NULL
-        AND (unaccent(email) ILIKE unaccent($1) OR unaccent(name) ILIKE unaccent($1) OR unaccent(surname) ILIKE unaccent($1))
+        AND ${matchesAllTokens("concat_ws(' ', email, name, surname)", "$1")}
       ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
       LIMIT $2`,
     [filter, limit],
