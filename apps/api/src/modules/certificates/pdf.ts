@@ -2,9 +2,11 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PDFDocument, type PDFFont, rgb, StandardFonts } from "pdf-lib";
 import { COPY_FOOTER_RESERVE, printable, wrap } from "../../lib/pdf-copy-footer.js";
+import { ADMISSION_LETTER } from "./admission-letter.js";
 
 /** #1083: what a certificate says, frozen when it was issued. */
 export interface CertificateSnapshot {
+  admissionLetter?: "hackudc-2027";
   name: string;
   surname: string | null;
   eventName: string;
@@ -154,7 +156,8 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
   const { snapshot, variant, locale, issuedAt, dni } = input;
   const copy = COPY[locale];
   const pdf = await PDFDocument.create();
-  pdf.setTitle(snapshot.templateTitle ?? copy.title);
+  const admission = snapshot.admissionLetter === "hackudc-2027" ? ADMISSION_LETTER[locale] : null;
+  pdf.setTitle(admission?.title ?? snapshot.templateTitle ?? copy.title);
   pdf.setProducer("hackOS");
   pdf.setCreationDate(issuedAt);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
@@ -178,7 +181,12 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
   };
 
   /** A paragraph whose pieces may be bold, wrapped as one flow. */
-  const rich = (parts: { text: string; bold?: boolean }[], size: number, gap: number) => {
+  const rich = (
+    parts: { text: string; bold?: boolean }[],
+    size: number,
+    gap: number,
+    indent = 0,
+  ) => {
     const words = parts.flatMap((part) => {
       const font = part.bold ? bold : regular;
       return printable(font, part.text)
@@ -187,10 +195,10 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
         .map((word) => ({ word, font }));
     });
     let line: typeof words = [];
-    let lineWidth = 0;
+    let lineWidth = indent;
     const flush = () => {
       ensure(size * 1.5);
-      let x = MARGIN;
+      let x = MARGIN + indent;
       for (const { word, font } of line) {
         page.drawText(word, { x, y: y - size, size, font, color: BLACK });
         x += font.widthOfTextAtSize(word, size);
@@ -198,6 +206,7 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
       y -= size * 1.5;
       line = [];
       lineWidth = 0;
+      indent = 0;
     };
     for (const item of words) {
       const w = item.font.widthOfTextAtSize(item.word.trimEnd(), size);
@@ -227,6 +236,42 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
       height: scaled.height,
     });
     y -= scaled.height + 24;
+  }
+
+  if (admission) {
+    const date = new Intl.DateTimeFormat(locale === "en" ? "en-GB" : locale, {
+      dateStyle: "long",
+      timeZone: snapshot.timezone,
+    }).format(issuedAt);
+    paragraph(admission.title, bold, 14, 14);
+    paragraph(`${admission.date}: ${date}`, regular, 11, 14);
+    paragraph(admission.greeting, regular, 11.5, 12);
+    const emphasis = (text: string) =>
+      text.split("**").map((part, index) => ({ text: part, bold: index % 2 === 1 }));
+    const [before, after] = admission
+      .invitation(snapshot.issuerName, snapshot.issuerTaxId ?? "", "{recipient}")
+      .split("{recipient}");
+    rich(
+      [
+        { text: before ?? "" },
+        { text: fullName, bold: true },
+        { text: dni != null ? ` (${admission.identification}: ${dni})` : "" },
+        ...emphasis(after ?? ""),
+      ],
+      11.5,
+      12,
+      12,
+    );
+    for (const body of [
+      admission.venue,
+      admission.event,
+      admission.provisions,
+      admission.contact,
+    ]) {
+      rich(emphasis(body), 11.5, 12, 12);
+    }
+    paragraph(admission.issued(snapshot.issuerName), regular, 11, 0);
+    return pdf.save();
   }
 
   const passport = snapshot.documentKind === "passport";

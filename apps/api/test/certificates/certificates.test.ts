@@ -1467,6 +1467,48 @@ describe("configured types and the durable guest register", () => {
     expect(rows[0].snapshot).toMatchObject({ hours: 27.5, manuallyCertified: true });
   });
 
+  it("issues a separate HackUDC 2027 admission letter with verification in each language", async () => {
+    await pool.query(
+      `UPDATE event_config SET name = 'HackUDC 2027',
+         event_starts_at = '2027-02-26T09:00:00Z', event_ends_at = '2027-02-28T18:00:00Z'`,
+    );
+    await pool.query("UPDATE users SET dni = 'AB-123 45' WHERE id = $1", [person]);
+    const { rows } = await pool.query(
+      "SELECT id FROM certificate_types WHERE legacy_variant = 'accepted_spot'",
+    );
+    const codes = new Set<string>();
+    for (const [locale, greeting, label, site] of [
+      ["gl", "A quen corresponda:", "número de identificación", "https://hackudc.com/gl/"],
+      ["es", "A quien corresponda:", "número de identificación", "https://hackudc.com/"],
+      ["en", "To Whom It May Concern:", "identification number", "https://hackudc.com/en/"],
+    ]) {
+      const cert = await app.inject({
+        method: "POST",
+        url: "/api/me/certificates/issue",
+        headers: asUser(person),
+        payload: { typeId: rows[0].id, locale },
+      });
+      expect(cert.statusCode, cert.body).toBe(200);
+      const { code } = cert.json();
+      codes.add(code);
+      const pdf = await app.inject({
+        method: "GET",
+        url: `/api/public/certificates/${code}/pdf`,
+      });
+      expect(pdf.statusCode).toBe(200);
+      expect((await PDFDocument.load(pdf.rawPayload)).getPageCount()).toBe(1);
+      const text = (await pdfText(pdf.rawPayload)).replace(/\s+/g, " ");
+      expect(text).toContain(greeting);
+      expect(text).toContain(`${label}: AB-123 45`);
+      expect(text).toContain(site);
+      const verificationLabel = locale === "en" ? "Verification code" : "Código de verificación";
+      expect(text).toContain(`${verificationLabel} (CSV): ${code}`);
+      expect(text).toContain(`/verify/${code}`);
+      expect(text).not.toMatch(/Schengen|DNI|NIE|passport|pasaporte/i);
+    }
+    expect(codes.size).toBe(3);
+  });
+
   it("predefines accepted spot for all event-access roles without attendance, demo or accepted application", async () => {
     await app.inject({
       method: "PUT",
