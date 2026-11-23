@@ -13,14 +13,12 @@ const env = vi.hoisted(() => ({
   error: null as unknown,
   path: "/help-desk",
   search: "",
-  replace: vi.fn(),
   reload: vi.fn(),
   reads: [] as string[],
 }));
 vi.mock("next/navigation", () => ({
   usePathname: () => env.path,
   useSearchParams: () => new URLSearchParams(env.search),
-  useRouter: () => ({ replace: env.replace }),
 }));
 vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t: (key: string) => key }) }));
 vi.mock("@/lib/session", () => ({
@@ -84,6 +82,7 @@ beforeEach(() => {
     reads: [],
   });
   vi.clearAllMocks();
+  window.history.replaceState(null, "", "/help-desk");
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -99,12 +98,12 @@ describe("unified Help desk (H64-H66)", () => {
     await render();
     expect(env.reads.at(-1)).toBe("/api/helpdesk/requests/mine");
     expect(container.querySelectorAll("[role=tab]")).toHaveLength(3);
-    expect(env.replace).not.toHaveBeenCalled();
+    expect(window.location.search).toBe("");
     await act(async () =>
       userEvent.click(getByRole(container, "tab", { name: "helpDeskOpenRequests" })),
     );
     expect(env.reads.at(-1)).toBe("/api/helpdesk/inbox?scope=open");
-    expect(env.replace).toHaveBeenLastCalledWith("/help-desk?tab=open", { scroll: false });
+    expect(window.location.search).toBe("?tab=open");
     const tab = getByRole(container, "tab", { name: "helpDeskOpenRequests" });
     expect(document.getElementById(tab.getAttribute("aria-controls")!)?.getAttribute("role")).toBe(
       "tabpanel",
@@ -126,7 +125,7 @@ describe("unified Help desk (H64-H66)", () => {
       getByRole(container, "tab", { name: "helpDeskAssigned" }).getAttribute("aria-selected"),
     ).toBe("true");
     expect(env.reads.at(-1)).toBe("/api/helpdesk/inbox?scope=mine");
-    expect(env.replace).not.toHaveBeenCalled();
+    expect(window.location.search).toBe("");
   });
   it("keeps the legacy inbox entry on open and follows external URL changes", async () => {
     env.caps = [CAPABILITIES.HELPDESK_REQUEST, CAPABILITIES.HELPDESK_OFFER];

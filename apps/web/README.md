@@ -453,6 +453,10 @@ uses the same segmented style everywhere: `width="full"` stretches it and
 workspace and
 role tree/editor layout.
 
+Tabs that select client-rendered panels on the same route use `useUrlTab`.
+It updates `?tab=` through the browser History API, which Next synchronizes
+with `useSearchParams` without fetching a new server component payload.
+
 Long page forms use `SectionCard stickyFooter` and `FormActions`, with one
 submit owner and `SaveStatus` for the actual request/dirty state. Panel footers
 are fixed outside their scroll body; short forms remain in normal flow.
