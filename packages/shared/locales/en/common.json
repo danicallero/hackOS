@@ -105,6 +105,7 @@
   "apiError_session_not_fresh": "Your session is too old for this. Sign in again.",
   "apiError_session_expired": "Your session has expired. Sign in again.",
   "apiErrorNetwork": "Could not reach the server. Check your connection.",
+  "apiError_client_read_timeout": "The request timed out. Try again.",
   "apiErrorServer": "Something went wrong on our side. Try again, or contact staff if it persists.",
   "apiError_review_field_lease_required": "Your editing lease has expired or belongs to another judge.",
   "apiError_certificate_review_required": "Awaiting attendance review",

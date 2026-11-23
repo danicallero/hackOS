@@ -370,7 +370,7 @@ clear.
 Status: active
 Scope: repository
 Source: user-correction
-Date: 2026-11-18
+Date: 2026-11-23
 
 ### Trigger
 A visual element disappears, flickers or stalls during interaction, especially
@@ -391,7 +391,9 @@ proposed cause against runtime evidence before changing code.
 Distinguish geometric clipping from a transition freezing halfway. Correlate
 late feedback (such as a haptic) with its actual callback before attributing
 recovery to that feedback. A reference library's different rendering hierarchy
-is not evidence that hierarchy caused the reported timing failure.
+is not evidence that hierarchy caused the reported timing failure. When the
+whole window stops accepting clicks, check a persistent shell control and
+inspect the hit target separately from any pending panel request.
 
 ### Validation
 Repeat the same pointer interaction after the change, including related entry

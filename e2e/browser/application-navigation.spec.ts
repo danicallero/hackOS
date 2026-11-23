@@ -168,3 +168,71 @@ for (const isSponsorRep of [false, true]) {
     }
   });
 }
+
+// H8, #935: a slow profile read must not hold up switching between staff tabs.
+test("staff tabs stay responsive when the public profile stalls", async ({ page }, info) => {
+  await page.clock.install();
+  let releaseProfile = () => {};
+  const pendingProfile = new Promise<void>((resolve) => {
+    releaseProfile = resolve;
+  });
+  const tabRouteRequests: string[] = [];
+  await page.route("**/users/20?*", (route) => {
+    if (route.request().headers().rsc === "1") {
+      tabRouteRequests.push(route.request().url());
+      return route.abort();
+    }
+    return route.continue();
+  });
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/me/public-profile") return route.fallback();
+    if (path === "/api/me")
+      return route.fulfill({ json: { ...shellUser, capabilities: [CAPABILITIES.USERS_READ] } });
+    if (path === "/api/users/20")
+      return route.fulfill({
+        json: {
+          ...shellUser,
+          id: 20,
+          name: "Ada",
+          surname: "Applicant",
+          foodIntolerances: [],
+          createdAt: "2026-11-01T12:00:00Z",
+        },
+      });
+    if (path === "/api/public/food-intolerances")
+      return route.fulfill({ json: { intolerances: [] } });
+    if (path === "/api/realtime/stream") {
+      await pendingProfile;
+      return route.abort();
+    }
+    if (path === "/api/users/20/public-profile") {
+      await pendingProfile;
+      return route.fulfill({ status: 503, json: {} });
+    }
+    return route.fulfill({ json: {} });
+  });
+  try {
+    await page.goto("/users/20?tab=overview#profile");
+    const profileRequest = page.waitForRequest("**/api/users/20/public-profile");
+    const profile = page.getByRole("tab", { name: "Public profile" });
+    await profile.click();
+    await profileRequest;
+    await expect(profile).toHaveAttribute("aria-selected", "true");
+    await expect(page).toHaveURL(/tab=public-profile#profile$/);
+    await page.clock.runFor(12_100);
+    await expect(page.getByText("The request timed out. Try again.")).toBeVisible();
+
+    await page.screenshot({ path: info.outputPath("public-profile-timeout.png") });
+
+    const retry = page.waitForRequest("**/api/users/20/public-profile");
+    await page.getByRole("button", { name: "Retry", exact: true }).click();
+    await retry;
+    await page.getByRole("tab", { name: "Overview" }).click();
+    await expect(page.getByRole("heading", { name: "Profile details", exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/tab=overview#profile$/);
+    expect(tabRouteRequests).toEqual([]);
+  } finally {
+    releaseProfile();
+  }
+});

@@ -137,7 +137,8 @@ Motion, contrast and transparency follow the system preferences, in
   `default="none"` so dialogs, filters and in-page Suspense do not trigger the
   boundary, and keep durations 120-200 ms. Under `prefers-reduced-motion` every
   view-transition animation is off and the swap is instant. The transition
-  snapshot paints above overlays, so close dialogs before navigating. Public
+  snapshot paints above overlays, so close dialogs before navigating. The
+  transition overlay lets pointer events reach the live sidebar. Public
   surfaces under `(public)` and `(auth)` have no template and no transition.
 - **No flash between pages.** A list the user has already seen paints at once
   and revalidates in the background (stale-while-revalidate, see

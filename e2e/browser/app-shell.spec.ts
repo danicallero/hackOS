@@ -31,3 +31,30 @@ test("keeps mobile shell notifications and page heading visible together", async
     (box?.y ?? 0) + (box?.height ?? 0) / 2;
   expect(Math.abs(centre(headingBox) - centre(triggerBox))).toBeLessThanOrEqual(2);
 });
+
+// H55: a route snapshot may still be animating when the next sidebar click arrives.
+test("keeps the sidebar clickable during a native view transition", async ({ page }) => {
+  test.skip(
+    !["chromium", "webkit"].includes(test.info().project.name),
+    "Requires native view-transition support",
+  );
+  await page.route("**/api/me", (route) => route.fulfill({ json: shellUser }));
+  await page.route("**/api/me/notifications**", (route) =>
+    route.fulfill({ json: { items: [], total: 0 } }),
+  );
+  await page.goto("/inbox");
+  const search = page.getByRole("button", { name: "Quick search" });
+  await expect(search).toBeVisible();
+  await page.addStyleTag({
+    content: `
+      :root { view-transition-name: none; }
+      main { view-transition-name: test-content; }
+      ::view-transition-group(test-content),
+      ::view-transition-old(test-content),
+      ::view-transition-new(test-content) { animation-duration: 20s; }
+    `,
+  });
+  await page.evaluate(() => document.startViewTransition(() => {}).ready);
+  await search.click({ timeout: 3000 });
+  await expect(page.getByRole("dialog")).toBeVisible();
+});

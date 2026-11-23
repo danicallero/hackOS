@@ -88,7 +88,7 @@ function coalescedGet<T>(path: string, options: RequestOptions): Promise<T> {
       controller,
       subscribers: 0,
       shared: false,
-      promise: performFetch<T>(path, { ...rest, signal: controller.signal }).finally(() => {
+      promise: performRead<T>(path, { ...rest, signal: controller.signal }).finally(() => {
         if (inflightGets.get(key) === created) inflightGets.delete(key);
       }),
     };
@@ -222,12 +222,43 @@ async function performFetch<T>(path: string, options: RequestOptions): Promise<T
   return payload as T;
 }
 
+// End a stalled browser read before the live query's 15-second fallback poll (H55).
+const READ_TIMEOUT_MS = 12_000;
+
+async function performRead<T>(path: string, options: RequestOptions): Promise<T> {
+  if (typeof window === "undefined") return performFetch<T>(path, options);
+  const { signal } = options;
+  if (signal?.aborted) throw abortError(signal);
+  const controller = new AbortController();
+  const forwardAbort = () => controller.abort(signal?.reason);
+  signal?.addEventListener("abort", forwardAbort, { once: true });
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  // Settle the UI even if a stalled browser transport delays acknowledging abort.
+  const interruption = new Promise<never>((_, reject) => {
+    controller.signal.addEventListener("abort", () => reject(abortError(controller.signal)), {
+      once: true,
+    });
+    deadline = setTimeout(() => {
+      controller.abort(new ApiError(0, "client_read_timeout", "The request timed out."));
+    }, READ_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([
+      performFetch<T>(path, { ...options, signal: controller.signal }),
+      interruption,
+    ]);
+  } finally {
+    clearTimeout(deadline);
+    signal?.removeEventListener("abort", forwardAbort);
+  }
+}
+
 export function apiFetch<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
   const isGet = (options.method?.toUpperCase() ?? "GET") === "GET";
   if (isGet && options.body === undefined && !options.headers) {
     return coalescedGet<T>(path, options);
   }
-  return performFetch<T>(path, options);
+  return isGet ? performRead<T>(path, options) : performFetch<T>(path, options);
 }
 
 /**

@@ -1,7 +1,7 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useState } from "react";
 
 interface UrlTabOptions<T extends string> {
   values: readonly T[];
@@ -26,23 +26,11 @@ export function resolveUrlTab<T extends string>(
  * canonical value (UX-03, H8/H55).
  */
 export function useUrlTab<T extends string>({ values, defaultValue, aliases }: UrlTabOptions<T>) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const requested = searchParams.get("tab");
+  const requested = useSearchParams().get("tab");
   const valuesKey = values.join("\u0000");
   const resolved = resolveUrlTab(requested, { values, defaultValue, aliases });
-  const navigation = useRef({ pathname, requested, router, search: searchParams.toString() });
-  navigation.current = { pathname, requested, router, search: searchParams.toString() };
 
-  // The rendered tab is local state, not `resolved` directly: on a page
-  // whose child re-renders constantly (e.g. a live-updating SSE query),
-  // those re-renders can preempt the `router.replace` transition below
-  // before it commits, so the URL-derived value never visibly changes even
-  // though the click fired — the switch just silently loses the race over
-  // and over. Local state updates synchronously and can't be starved that
-  // way; the URL stays in sync underneath it as a best-effort side channel,
-  // and still drives `tab` for back/forward navigation and deep links.
+  // Commit the selection immediately while Next synchronizes useSearchParams.
   const [tab, setTabState] = useState<T>(resolved);
   // Adjust state during render (React's documented alternative to an effect
   // for "reset state when a prop changes"): catches external URL changes —
@@ -58,14 +46,12 @@ export function useUrlTab<T extends string>({ values, defaultValue, aliases }: U
     (next: string) => {
       if (!valuesKey.split("\u0000").includes(next)) return;
       setTabState(next as T);
-      const current = navigation.current;
-      if (current.requested === next) return;
-      const params = new URLSearchParams(current.search);
-      params.set("tab", next);
-      const query = params.toString();
-      current.router.replace(query ? `${current.pathname}?${query}` : current.pathname, {
-        scroll: false,
-      });
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("tab") === next) return;
+      url.searchParams.set("tab", next);
+      // Peer panels already live on this route (H55). A router navigation would
+      // request a new server payload just to synchronize the query string.
+      window.history.replaceState(null, "", url);
     },
     [valuesKey],
   );
