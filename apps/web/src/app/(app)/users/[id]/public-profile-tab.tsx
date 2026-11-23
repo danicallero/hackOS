@@ -46,9 +46,9 @@ export function PublicProfileTab({
     error: loadError,
     refetch,
   } = useLiveQuery<{ generation: number; profile: PublicProfile }>(
-    async () => {
+    async (signal) => {
       const startedAt = generation.current;
-      return { generation: startedAt, profile: await api.get<PublicProfile>(path) };
+      return { generation: startedAt, profile: await api.get<PublicProfile>(path, { signal }) };
     },
     domainScope(SSE_TOPICS.IDENTITY),
     [EVENTS.DOMAIN_CHANGED],
