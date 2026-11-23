@@ -19,6 +19,7 @@ import { stampCopyFooter } from "../../lib/pdf-copy-footer.js";
 import { userUniversityIdSql } from "../../lib/user-university.js";
 import { hasEventAccess } from "../identity/role.js";
 import { allHours, userHours } from "../logistics/presence.js";
+import { ADMISSION_LETTER } from "./admission-letter.js";
 import {
   type CertificateLocale,
   type CertificateSnapshot,
@@ -687,7 +688,18 @@ async function insertCertificate(
         : definition.identityPolicy;
     snapshot.documentKind = opts.documentKind ?? "dni_nie";
     const activityName = opts.activityName?.trim() ?? "";
-    if (definition.body) {
+    if (
+      definition.legacyVariant === "accepted_spot" &&
+      /^hackudc(?:\s+2027)?$/i.test(snapshot.eventName.trim()) &&
+      new Intl.DateTimeFormat("sv-SE", {
+        year: "numeric",
+        timeZone: snapshot.timezone,
+      }).format(new Date(snapshot.eventStartsAt)) === "2027"
+    ) {
+      snapshot.admissionLetter = "hackudc-2027";
+      snapshot.templateTitle = ADMISSION_LETTER[opts.locale].title;
+      delete snapshot.documentKind;
+    } else if (definition.body) {
       const date = new Intl.DateTimeFormat(opts.locale, {
         dateStyle: "long",
         timeZone: snapshot.timezone,
@@ -1127,6 +1139,9 @@ export async function renderCertificate(
       {
         issuer: snapshot.issuerName,
         code: row.code,
+        ...(snapshot.admissionLetter === "hackudc-2027" && {
+          codeLabel: ADMISSION_LETTER[row.locale as CertificateLocale].verificationCode,
+        }),
         verifyUrl: `${config.WEB_URL.replace(/\/$/, "")}/verify/${row.code}`,
         locale: row.locale,
         printedAt: generatedAt,

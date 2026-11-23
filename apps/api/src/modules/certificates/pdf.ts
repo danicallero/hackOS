@@ -2,9 +2,11 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PDFDocument, type PDFFont, rgb, StandardFonts } from "pdf-lib";
 import { COPY_FOOTER_RESERVE, printable, wrap } from "../../lib/pdf-copy-footer.js";
+import { ADMISSION_LETTER } from "./admission-letter.js";
 
 /** #1083: what a certificate says, frozen when it was issued. */
 export interface CertificateSnapshot {
+  admissionLetter?: "hackudc-2027";
   name: string;
   surname: string | null;
   eventName: string;
@@ -154,7 +156,8 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
   const { snapshot, variant, locale, issuedAt, dni } = input;
   const copy = COPY[locale];
   const pdf = await PDFDocument.create();
-  pdf.setTitle(snapshot.templateTitle ?? copy.title);
+  const admission = snapshot.admissionLetter === "hackudc-2027" ? ADMISSION_LETTER[locale] : null;
+  pdf.setTitle(admission?.title ?? snapshot.templateTitle ?? copy.title);
   pdf.setProducer("hackOS");
   pdf.setCreationDate(issuedAt);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
@@ -227,6 +230,39 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
       height: scaled.height,
     });
     y -= scaled.height + 24;
+  }
+
+  if (admission) {
+    const date = new Intl.DateTimeFormat(locale === "en" ? "en-GB" : locale, {
+      dateStyle: "long",
+      timeZone: snapshot.timezone,
+    }).format(issuedAt);
+    paragraph(admission.title, bold, 14, 14);
+    paragraph(`${admission.date}: ${date}`, regular, 11, 14);
+    paragraph(admission.greeting, regular, 11, 8);
+    const [before, after] = admission
+      .invitation(snapshot.issuerName, snapshot.issuerTaxId ?? "", "{recipient}")
+      .split("{recipient}");
+    rich(
+      [
+        { text: before ?? "" },
+        { text: fullName, bold: true },
+        { text: `${dni != null ? ` (${admission.identification}: ${dni})` : ""}${after ?? ""}` },
+      ],
+      11,
+      8,
+    );
+    for (const body of [
+      admission.venue,
+      admission.event,
+      admission.provisions,
+      admission.confirmation,
+      admission.contact,
+      admission.issued(snapshot.issuerName),
+    ]) {
+      paragraph(body, regular, 11, 8);
+    }
+    return pdf.save();
   }
 
   const passport = snapshot.documentKind === "passport";
