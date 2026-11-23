@@ -125,6 +125,7 @@ interface CopyFooterInput {
   issuer: string;
   /** The verification code printed as CSV and resolved by `verifyUrl`. */
   code: string;
+  codeLabel?: string;
   verifyUrl: string;
   locale: CopyLocale;
   printedAt: Date;
@@ -209,7 +210,13 @@ export async function stampCopyFooter(
     text(copy.copyOf(input.issuer), tableX + 5, top, 8, printedSplit - tableX - 10);
     text(copy.printed(printed), printedSplit + 5, top, 8, printedW - 10);
     text(copy.page(index + 1, pages.length), headSplit + 5, top, 8, pageW - 10);
-    text(`CSV: ${input.code}`, printedSplit + 5, csvTop, 8, tableW - (printedSplit - tableX) - 10);
+    text(
+      `${input.codeLabel ?? "CSV"}: ${input.code}`,
+      printedSplit + 5,
+      csvTop,
+      8,
+      tableW - (printedSplit - tableX) - 10,
+    );
     text(copy.note(input.verifyUrl), tableX + 5, noteTop, 7.5, tableW - 10);
   });
   return pdf.save();

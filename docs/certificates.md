@@ -118,6 +118,12 @@ Attendance, Hours and Accepted spot are predefined in the catalog; the original 
 Accepted spot is available to **everyone with event access**, including staff, sponsors, mentors and custom event-access roles. It requires no attendance hours, project presentation or accepted application record. Its audience cannot be restricted to selected roles, turned into an attendance policy or opened to unlinked guests; enabled recipients obtain it directly from their profile. It certifies the accepted place, not attendance or hours.
 It follows event access over time too: when the person has none left (last event-access role removed, a role stops granting access or is deleted, or the account is suspended or anonymized), deferred database triggers on `user_roles`, `roles` and `users` revoke it at commit (`event_access_lost`, audited with source `system`, stored copy dropped). A role swap inside one transaction keeps it. If access returns, a new certificate can be requested; the revoked one stays revoked.
 
+For HackUDC 2027, the Accepted spot type issues the trilingual invitation and
+admission letter. New letters use the edition-specific wording in
+`admission-letter.ts`, the same GPUL logo and verification footer, and a localized
+issue date. The identification value, when included, is printed under the generic
+identification-number label. Previously issued documents retain their original wording.
+
 The original attendance PDF variants are:
 
 - `participation` (Attendance): took part and completed the program from the event start to
