@@ -528,6 +528,11 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
  * so the shell and sidebar stay still. Only opacity/transform animate. Under
  * reduced motion the swap is instant (the browser default).
  */
+/* The transition overlay spans the viewport, including the live sidebar (H55). */
+::view-transition {
+  pointer-events: none;
+}
+
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;

@@ -2,13 +2,8 @@ import { act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const navigation = vi.hoisted(() => ({ pathname: "/demo", query: "" }));
-const routerReplace = vi.hoisted(() => vi.fn());
-
 vi.mock("next/navigation", () => ({
-  usePathname: () => navigation.pathname,
-  useRouter: () => ({ replace: routerReplace }),
-  useSearchParams: () => new URLSearchParams(navigation.query),
+  useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 
 import { resolveUrlTab, useUrlTab } from "./url-tab";
@@ -49,9 +44,7 @@ describe("useUrlTab URL behavior (UX-03)", () => {
   }
 
   beforeEach(() => {
-    navigation.pathname = "/demo";
-    navigation.query = "";
-    routerReplace.mockClear();
+    window.history.replaceState(null, "", "/demo");
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -64,29 +57,32 @@ describe("useUrlTab URL behavior (UX-03)", () => {
   });
 
   it("reads a direct link and falls back for an invalid URL value", () => {
-    navigation.query = "tab=activity";
+    window.history.replaceState(null, "", "/demo?tab=activity");
     act(() => root.render(createElement(Harness)));
     expect(container.querySelector("output")?.dataset.tab).toBe("activity");
 
-    navigation.query = "tab=unknown";
+    window.history.replaceState(null, "", "/demo?tab=unknown");
     act(() => root.render(createElement(Harness)));
     expect(container.querySelector("output")?.dataset.tab).toBe("overview");
   });
 
   it("writes the selected tab without dropping other query parameters", () => {
-    navigation.query = "filter=open&tab=overview";
+    window.history.replaceState(null, "", "/demo?filter=open&tab=overview#panel");
     act(() => root.render(createElement(Harness)));
     act(() => latest?.setTab("activity"));
-    expect(routerReplace).toHaveBeenCalledWith("/demo?filter=open&tab=activity", {
-      scroll: false,
-    });
+    expect(window.location.href).toContain("/demo?filter=open&tab=activity#panel");
   });
 
   it("does not replace history when the canonical tab is already selected", () => {
-    navigation.query = "filter=open&tab=overview";
+    window.history.replaceState(null, "", "/demo?filter=open&tab=overview");
     act(() => root.render(createElement(Harness)));
-    act(() => latest?.setTab("overview"));
-    expect(routerReplace).not.toHaveBeenCalled();
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    try {
+      act(() => latest?.setTab("overview"));
+      expect(replaceState).not.toHaveBeenCalled();
+    } finally {
+      replaceState.mockRestore();
+    }
   });
 
   it("keeps the setter stable across parent rerenders", () => {
@@ -97,11 +93,11 @@ describe("useUrlTab URL behavior (UX-03)", () => {
   });
 
   it("tracks a back/forward-style URL change on rerender", () => {
-    navigation.query = "tab=overview";
+    window.history.replaceState(null, "", "/demo?tab=overview");
     act(() => root.render(createElement(Harness)));
     expect(container.querySelector("output")?.dataset.tab).toBe("overview");
 
-    navigation.query = "tab=activity";
+    window.history.replaceState(null, "", "/demo?tab=activity");
     act(() => root.render(createElement(Harness)));
     expect(container.querySelector("output")?.dataset.tab).toBe("activity");
   });

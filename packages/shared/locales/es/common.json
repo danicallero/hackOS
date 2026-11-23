@@ -105,6 +105,7 @@
   "apiError_session_not_fresh": "Tu sesión es demasiado antigua para esto. Vuelve a iniciar sesión.",
   "apiError_session_expired": "Tu sesión ha caducado. Vuelve a iniciar sesión.",
   "apiErrorNetwork": "No se pudo contactar con el servidor. Comprueba tu conexión.",
+  "apiError_client_read_timeout": "La solicitud tardó demasiado. Vuelve a intentarlo.",
   "apiErrorServer": "Algo ha fallado por nuestra parte. Inténtalo de nuevo o avisa al staff si persiste.",
   "apiError_review_field_lease_required": "Tu bloqueo de edición ha caducado o pertenece a otro jurado.",
   "apiError_certificate_review_required": "Pendiente de revisión de asistencia",

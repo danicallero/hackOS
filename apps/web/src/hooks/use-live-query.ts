@@ -187,10 +187,6 @@ export function useLiveQuery<T>(
             refetchRef.current(request.queuedTrigger);
           }
         });
-
-      return () => {
-        request.cancelled = true;
-      };
     },
     [telemetryScope, resourceKey],
   );
@@ -221,8 +217,13 @@ export function useLiveQuery<T>(
       // Reset loading before the cold read.
       setLoading(true);
     }
-    const cancel = refetch();
-    return cancel;
+    refetch();
+    return () => {
+      // A remounted effect can observe the same shared read immediately.
+      // Leaving a cancelled request here queues a second read and hides the first failure.
+      if (requestRef.current) requestRef.current.cancelled = true;
+      requestRef.current = null;
+    };
   }, [enabled, refetch, queryKeyValue, resourceKey]);
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
