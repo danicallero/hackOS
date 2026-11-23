@@ -181,7 +181,12 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
   };
 
   /** A paragraph whose pieces may be bold, wrapped as one flow. */
-  const rich = (parts: { text: string; bold?: boolean }[], size: number, gap: number) => {
+  const rich = (
+    parts: { text: string; bold?: boolean }[],
+    size: number,
+    gap: number,
+    indent = 0,
+  ) => {
     const words = parts.flatMap((part) => {
       const font = part.bold ? bold : regular;
       return printable(font, part.text)
@@ -190,10 +195,10 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
         .map((word) => ({ word, font }));
     });
     let line: typeof words = [];
-    let lineWidth = 0;
+    let lineWidth = indent;
     const flush = () => {
       ensure(size * 1.5);
-      let x = MARGIN;
+      let x = MARGIN + indent;
       for (const { word, font } of line) {
         page.drawText(word, { x, y: y - size, size, font, color: BLACK });
         x += font.widthOfTextAtSize(word, size);
@@ -201,6 +206,7 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
       y -= size * 1.5;
       line = [];
       lineWidth = 0;
+      indent = 0;
     };
     for (const item of words) {
       const w = item.font.widthOfTextAtSize(item.word.trimEnd(), size);
@@ -239,7 +245,9 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
     }).format(issuedAt);
     paragraph(admission.title, bold, 14, 14);
     paragraph(`${admission.date}: ${date}`, regular, 11, 14);
-    paragraph(admission.greeting, regular, 11, 8);
+    paragraph(admission.greeting, regular, 11.5, 12);
+    const emphasis = (text: string) =>
+      text.split("**").map((part, index) => ({ text: part, bold: index % 2 === 1 }));
     const [before, after] = admission
       .invitation(snapshot.issuerName, snapshot.issuerTaxId ?? "", "{recipient}")
       .split("{recipient}");
@@ -247,21 +255,22 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
       [
         { text: before ?? "" },
         { text: fullName, bold: true },
-        { text: `${dni != null ? ` (${admission.identification}: ${dni})` : ""}${after ?? ""}` },
+        { text: dni != null ? ` (${admission.identification}: ${dni})` : "" },
+        ...emphasis(after ?? ""),
       ],
-      11,
-      8,
+      11.5,
+      12,
+      12,
     );
     for (const body of [
       admission.venue,
       admission.event,
       admission.provisions,
-      admission.confirmation,
       admission.contact,
-      admission.issued(snapshot.issuerName),
     ]) {
-      paragraph(body, regular, 11, 8);
+      rich(emphasis(body), 11.5, 12, 12);
     }
+    paragraph(admission.issued(snapshot.issuerName), regular, 11, 0);
     return pdf.save();
   }
 
