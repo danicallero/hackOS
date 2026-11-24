@@ -54,7 +54,7 @@ function IosCameraModal({ visible, onClose, children }: Props) {
       }
     } else if (presented) {
       // H22–H26: keep the camera and its black backing together until the
-      // card is invisible. The transparent native host can then dismiss
+      // card has shrunk away. The transparent native host can then dismiss
       // without exposing its default background during CameraView teardown.
       zoom.value = withTiming(0, { duration: reducedMotion ? 0 : 190 }, (finished) => {
         if (finished) runOnJS(setPresented)(false);
@@ -89,12 +89,11 @@ function IosCameraModal({ visible, onClose, children }: Props) {
   const card = useAnimatedStyle(() => {
     const drag = Math.min(1, Math.max(x.value / width, y.value / height));
     return {
-      opacity: zoom.value,
-      borderRadius: (1 - zoom.value + drag) * 32,
+      // H22–H26: UIKit needs full ancestor opacity for the glass controls.
       transform: [
         { translateX: x.value },
         { translateY: y.value },
-        { scale: reducedMotion ? 1 : (0.78 + zoom.value * 0.22) * (1 - drag * 0.35) },
+        { scale: reducedMotion ? 1 : (0.02 + zoom.value * 0.98) * (1 - drag * 0.35) },
       ],
     };
   });
@@ -120,5 +119,5 @@ function IosCameraModal({ visible, onClose, children }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  card: { flex: 1, backgroundColor: "black", overflow: "hidden" },
+  card: { flex: 1, backgroundColor: "black" },
 });

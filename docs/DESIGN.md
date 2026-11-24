@@ -1492,9 +1492,9 @@ architecture: [`mobile.md`](./mobile.md).**
   placeholders, disabled content and non-text decoration. Semantic label tokens
   adapt to Increase Contrast, and readable text on tinted surfaces uses that
   surface's matching `on…Surface` foreground token.
-- **Edition titles.** The root layout loads the bundled Arvo Regular TTF for
-  auth headings and the shared `SCREEN_TITLE` style. Body text, controls and
-  tab labels use platform typography.
+- **Mobile typography.** Auth headings and the shared `SCREEN_TITLE` style
+  use the platform typeface and the mobile `type.*` tokens, like body text,
+  controls and tab labels.
 - **One pressed vocabulary.** `PressableFeedback` (`feedback`: `row` highlight for
   list cells, `opacity` for text/icon buttons, `scale` for filled buttons and
   cards, `none` when the control draws its own) replaces ad-hoc

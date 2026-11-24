@@ -383,7 +383,7 @@ over as they are touched, guarded by `pnpm check:mobile-tokens` (H55, H59).
 All screen text sizes now use `type.*` tokens, including conditional sizes;
 bold text stops at 700 (#1165). The token guard has a zero font-size budget
 and rejects 800/900 weights. Proportional avatar initials remain geometry-derived.
-Auth headings and the shared `SCREEN_TITLE` style use bundled Arvo Regular.
+Auth headings and the shared `SCREEN_TITLE` style use the platform typeface.
 Primary row labels, names, and choices release their single-line limit at
 accessibility text sizes (#1166); secondary metadata may stay truncated.
 Readable supporting text uses `colors.secondaryLabel`; `colors.tertiaryLabel`
@@ -859,8 +859,7 @@ they are not device screenshots or proof of native toolbar behavior.
   `components/licenses-screen.tsx`): every npm package in the shipped
   JavaScript bundle with its notice truncated to four lines and a link to its
   source repository (from the manifest's `repository`, else `homepage`), under
-  a compact transparent header. Each entry opens its full notice, including the
-  bundled Arvo font's SIL Open Font License. Package notices are in
+  a compact transparent header. Each package opens its full notice. Package notices are in
   `assets/licenses.json`, generated from the iOS and Android export source maps
   by `pnpm --filter @hackos/mobile generate:licenses`
   (`scripts/generate-licenses.mjs`); rerun it and commit the result whenever a
@@ -2052,12 +2051,14 @@ a temporal stability test (`lib/qr-scan-stability.ts`).
   than 25% (`MAX_AREA_CHANGE_RATIO`) between detections — this rejects a
   still-focusing or still-moving frame. The gap accommodates Expo Camera's
   500ms throttle for identical barcode payloads.
+- While waiting for a QR, the frame gently expands and returns to its base size.
 - On confirmation the frame contracts around the detected code with a brief
   pulse and haptic feedback. The scan handler runs immediately.
 - The iOS QR viewer zooms in and can be dismissed with Back or by swiping
   down or right. Its preview stays mounted over a black backing until the
-  zoom-out finishes. With Reduce Motion, the viewer opens and closes
-  immediately and skips the capture animation.
+  zoom-out finishes. Its controls use native Liquid Glass where available.
+  With Reduce Motion, the viewer opens and closes immediately and skips
+  the waiting pulse and capture animation.
 - A confirmed scan locks the camera for 1200ms and resets the candidate on
   blur, viewport resize, or `scanningEnabled` toggling off.
 - *Android quirks.* `expo-camera` does not guarantee the same `cornerPoints`

@@ -4,9 +4,12 @@ import { useIsFocused } from "expo-router";
 import { type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
+  cancelAnimation,
+  Easing,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
+  withRepeat,
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -176,6 +179,7 @@ function CameraPreview({
   const locked = useRef(false);
   const unlockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reducedMotion = useReducedMotion();
+  const idleScale = useSharedValue(1);
   const capture = useSharedValue(0);
   const target = useSharedValue({ x: 0, y: 0, scale: 1 });
   const captureFrame = useAnimatedStyle(() => {
@@ -187,7 +191,7 @@ function CameraPreview({
         : [
             { translateX: x * progress },
             { translateY: y * progress },
-            { scale: 1 + (scale - 1) * progress },
+            { scale: idleScale.value + (scale - idleScale.value) * progress },
           ],
     };
   });
@@ -213,6 +217,20 @@ function CameraPreview({
   });
   const [manualEntryVisible, setManualEntryVisible] = useState(false);
   const [permissionError, setPermissionError] = useState<Error | null>(null);
+  const pulseWhileScanning =
+    isFocused && scanningEnabled && !closing && !manualEntryVisible && permission?.granted;
+  useEffect(() => {
+    if (!pulseWhileScanning || reducedMotion) {
+      idleScale.value = 1;
+      return;
+    }
+    idleScale.value = withRepeat(
+      withTiming(1.035, { duration: 950, easing: Easing.inOut(Easing.sin) }),
+      -1,
+      true,
+    );
+    return () => cancelAnimation(idleScale);
+  }, [idleScale, pulseWhileScanning, reducedMotion]);
   const requestCamera = useCallback(() => {
     permissionRequestStarted.current = true;
     setPermissionError(null);
