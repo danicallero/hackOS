@@ -181,8 +181,6 @@ function CameraPreview({
   const unlockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reducedMotion = useReducedMotion();
   const idleScale = useSharedValue(1);
-  const capture = useSharedValue(0);
-  const target = useSharedValue({ x: 0, y: 0, scale: 1 });
   useEffect(
     () => () => {
       if (unlockTimer.current) clearTimeout(unlockTimer.current);
@@ -225,15 +223,12 @@ function CameraPreview({
     });
   }, [requestPermission]);
   const frameSize = scanFrameSize(width, height);
-  // Use the same edge for the cutout and the corner strokes throughout the pulse and capture.
+  // Use the same edge for the cutout and the corner strokes throughout the pulse.
   const frame = useDerivedValue(() => {
-    const progress = reducedMotion ? 0 : capture.value;
-    const { x, y, scale } = target.value;
-    const restingScale = reducedMotion ? 1 : idleScale.value;
-    const frameScale = restingScale + (scale - restingScale) * progress;
+    const frameScale = idleScale.value;
     const size = frameSize * frameScale;
-    const left = (width - size) / 2 + x * progress;
-    const top = (height - size) / 2 + y * progress;
+    const left = (width - size) / 2;
+    const top = (height - size) / 2;
     const right = left + size;
     const bottom = top + size;
     const radius = FRAME_RADIUS * frameScale;
@@ -258,10 +253,6 @@ function CameraPreview({
     d: `M0 0 H${width} V${height} H0 Z ${frame.value.outline}`,
   }));
   const corners = useAnimatedProps(() => ({ d: frame.value.corners }));
-  const capturePulse = useAnimatedProps(() => ({
-    d: frame.value.outline,
-    opacity: 0.48 * Math.sin(Math.PI * capture.value),
-  }));
 
   useEffect(() => {
     if (
@@ -289,12 +280,11 @@ function CameraPreview({
     if (!isFocused && !closing) {
       locked.current = false;
       if (unlockTimer.current) clearTimeout(unlockTimer.current);
-      capture.value = 0;
       scanCandidate.current = null;
       setTorchEnabled(false);
       setManualEntryVisible(false);
     }
-  }, [capture, closing, isFocused]);
+  }, [closing, isFocused]);
 
   useEffect(() => {
     scanCandidate.current = null;
@@ -318,22 +308,14 @@ function CameraPreview({
       scanCandidate.current = confirmation.candidate;
       if (!confirmation.accepted) return;
       locked.current = true;
-      target.value = {
-        x: observation.centerX * frameSize,
-        y: observation.centerY * frameSize,
-        scale: Math.min(1, Math.sqrt(observation.areaRatio) + 0.12),
-      };
-      capture.value = 0;
-      capture.value = withTiming(1, { duration: 145 });
       void haptic("light");
       if (unlockTimer.current) clearTimeout(unlockTimer.current);
       unlockTimer.current = setTimeout(() => {
         locked.current = false;
-        capture.value = withTiming(0, { duration: 125 });
       }, 1200);
       onValue(result.data);
     },
-    [capture, frameSize, height, onValue, target, width],
+    [frameSize, height, onValue, width],
   );
 
   function nfcPermissionButton() {
@@ -462,9 +444,6 @@ function CameraPreview({
       ) : null}
       <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
         <AnimatedPath animatedProps={shade} fill="rgba(0,0,0,0.54)" fillRule="evenodd" />
-        {!reducedMotion ? (
-          <AnimatedPath animatedProps={capturePulse} fill="none" stroke="white" strokeWidth={6} />
-        ) : null}
         <AnimatedPath
           animatedProps={corners}
           fill="none"

@@ -2053,13 +2053,12 @@ a temporal stability test (`lib/qr-scan-stability.ts`).
   500ms throttle for identical barcode payloads.
 - While waiting for a QR, the rounded frame and the opening in the shade expand
   together by 1.2% and return to their base size.
-- On confirmation the frame contracts around the detected code with a brief
-  pulse and haptic feedback. The scan handler runs immediately.
+- A confirmed read gives haptic feedback and immediately calls the scan handler.
 - The iOS QR viewer zooms in and can be dismissed with Back or by swiping
   down or right. Its preview stays mounted over a black backing until the
   zoom-out finishes. Its controls use native Liquid Glass where available.
   With Reduce Motion, the viewer opens and closes immediately and skips
-  the waiting pulse and capture animation.
+  the waiting pulse.
 - A confirmed scan locks the camera for 1200ms and resets the candidate on
   blur, viewport resize, or `scanningEnabled` toggling off.
 - *Android quirks.* `expo-camera` does not guarantee the same `cornerPoints`
