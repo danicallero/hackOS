@@ -2051,7 +2051,8 @@ a temporal stability test (`lib/qr-scan-stability.ts`).
   than 25% (`MAX_AREA_CHANGE_RATIO`) between detections — this rejects a
   still-focusing or still-moving frame. The gap accommodates Expo Camera's
   500ms throttle for identical barcode payloads.
-- While waiting for a QR, the frame gently expands and returns to its base size.
+- While waiting for a QR, the rounded frame and the opening in the shade expand
+  together by 1.2% and return to their base size.
 - On confirmation the frame contracts around the detected code with a brief
   pulse and haptic feedback. The scan handler runs immediately.
 - The iOS QR viewer zooms in and can be dismissed with Back or by swiping

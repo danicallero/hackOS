@@ -6,7 +6,8 @@ import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-nati
 import Animated, {
   cancelAnimation,
   Easing,
-  useAnimatedStyle,
+  useAnimatedProps,
+  useDerivedValue,
   useReducedMotion,
   useSharedValue,
   withRepeat,
@@ -182,22 +183,6 @@ function CameraPreview({
   const idleScale = useSharedValue(1);
   const capture = useSharedValue(0);
   const target = useSharedValue({ x: 0, y: 0, scale: 1 });
-  const captureFrame = useAnimatedStyle(() => {
-    const progress = capture.value;
-    const { x, y, scale } = target.value;
-    return {
-      transform: reducedMotion
-        ? []
-        : [
-            { translateX: x * progress },
-            { translateY: y * progress },
-            { scale: idleScale.value + (scale - idleScale.value) * progress },
-          ],
-    };
-  });
-  const capturePulse = useAnimatedStyle(() => ({
-    opacity: 0.48 * Math.sin(Math.PI * capture.value),
-  }));
   useEffect(
     () => () => {
       if (unlockTimer.current) clearTimeout(unlockTimer.current);
@@ -225,7 +210,7 @@ function CameraPreview({
       return;
     }
     idleScale.value = withRepeat(
-      withTiming(1.035, { duration: 950, easing: Easing.inOut(Easing.sin) }),
+      withTiming(1.012, { duration: 1100, easing: Easing.inOut(Easing.sin) }),
       -1,
       true,
     );
@@ -240,23 +225,43 @@ function CameraPreview({
     });
   }, [requestPermission]);
   const frameSize = scanFrameSize(width, height);
-  const frameLeft = (width - frameSize) / 2;
-  const frameTop = (height - frameSize) / 2;
-  const frameRight = frameLeft + frameSize;
-  const frameBottom = frameTop + frameSize;
-  const shadePath = [
-    `M0 0 H${width} V${height} H0 Z`,
-    `M${frameLeft + FRAME_RADIUS} ${frameTop}`,
-    `H${frameRight - FRAME_RADIUS}`,
-    `A${FRAME_RADIUS} ${FRAME_RADIUS} 0 0 1 ${frameRight} ${frameTop + FRAME_RADIUS}`,
-    `V${frameBottom - FRAME_RADIUS}`,
-    `A${FRAME_RADIUS} ${FRAME_RADIUS} 0 0 1 ${frameRight - FRAME_RADIUS} ${frameBottom}`,
-    `H${frameLeft + FRAME_RADIUS}`,
-    `A${FRAME_RADIUS} ${FRAME_RADIUS} 0 0 1 ${frameLeft} ${frameBottom - FRAME_RADIUS}`,
-    `V${frameTop + FRAME_RADIUS}`,
-    `A${FRAME_RADIUS} ${FRAME_RADIUS} 0 0 1 ${frameLeft + FRAME_RADIUS} ${frameTop}`,
-    "Z",
-  ].join(" ");
+  // Use the same edge for the cutout and the corner strokes throughout the pulse and capture.
+  const frame = useDerivedValue(() => {
+    const progress = reducedMotion ? 0 : capture.value;
+    const { x, y, scale } = target.value;
+    const restingScale = reducedMotion ? 1 : idleScale.value;
+    const frameScale = restingScale + (scale - restingScale) * progress;
+    const size = frameSize * frameScale;
+    const left = (width - size) / 2 + x * progress;
+    const top = (height - size) / 2 + y * progress;
+    const right = left + size;
+    const bottom = top + size;
+    const radius = FRAME_RADIUS * frameScale;
+    const leg = 52 * frameScale;
+    const arc = `A${radius} ${radius} 0 0 1`;
+    const topLeft = `${arc} ${left + radius} ${top}`;
+    const topRight = `${arc} ${right} ${top + radius}`;
+    const bottomRight = `${arc} ${right - radius} ${bottom}`;
+    const bottomLeft = `${arc} ${left} ${bottom - radius}`;
+
+    return {
+      outline: `M${left + radius} ${top} H${right - radius} ${topRight} V${bottom - radius} ${bottomRight} H${left + radius} ${bottomLeft} V${top + radius} ${topLeft} Z`,
+      corners: [
+        `M${left} ${top + leg} V${top + radius} ${topLeft} H${left + leg}`,
+        `M${right - leg} ${top} H${right - radius} ${topRight} V${top + leg}`,
+        `M${right} ${bottom - leg} V${bottom - radius} ${bottomRight} H${right - leg}`,
+        `M${left + leg} ${bottom} H${left + radius} ${bottomLeft} V${bottom - leg}`,
+      ].join(" "),
+    };
+  });
+  const shade = useAnimatedProps(() => ({
+    d: `M0 0 H${width} V${height} H0 Z ${frame.value.outline}`,
+  }));
+  const corners = useAnimatedProps(() => ({ d: frame.value.corners }));
+  const capturePulse = useAnimatedProps(() => ({
+    d: frame.value.outline,
+    opacity: 0.48 * Math.sin(Math.PI * capture.value),
+  }));
 
   useEffect(() => {
     if (
@@ -456,19 +461,18 @@ function CameraPreview({
         />
       ) : null}
       <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <Path d={shadePath} fill="rgba(0,0,0,0.54)" fillRule="evenodd" />
+        <AnimatedPath animatedProps={shade} fill="rgba(0,0,0,0.54)" fillRule="evenodd" />
+        {!reducedMotion ? (
+          <AnimatedPath animatedProps={capturePulse} fill="none" stroke="white" strokeWidth={6} />
+        ) : null}
+        <AnimatedPath
+          animatedProps={corners}
+          fill="none"
+          stroke="white"
+          strokeWidth={6}
+          strokeLinecap="round"
+        />
       </Svg>
-      <View pointerEvents="none" style={styles.frameOverlay}>
-        <Animated.View
-          style={[styles.frame, { height: frameSize, width: frameSize }, captureFrame]}
-        >
-          {!reducedMotion ? <Animated.View style={[styles.pulse, capturePulse]} /> : null}
-          <View style={[styles.corner, styles.topLeft]} />
-          <View style={[styles.corner, styles.topRight]} />
-          <View style={[styles.corner, styles.bottomLeft]} />
-          <View style={[styles.corner, styles.bottomRight]} />
-        </Animated.View>
-      </View>
       {hint === null ? null : (
         <Text
           maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
@@ -583,54 +587,10 @@ function CameraPreview({
   );
 }
 
+const AnimatedPath = Animated.createAnimatedComponent(Path);
 const FRAME_RADIUS = 28;
 const styles = StyleSheet.create({
   black: { backgroundColor: "#000", flex: 1 },
-  frameOverlay: {
-    alignItems: "center",
-    bottom: 0,
-    justifyContent: "center",
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: 0,
-  },
-  frame: { borderRadius: FRAME_RADIUS, overflow: "hidden" },
-  pulse: {
-    ...StyleSheet.absoluteFill,
-    borderColor: "white",
-    borderRadius: FRAME_RADIUS,
-    borderWidth: 5,
-  },
-  corner: { borderColor: "white", height: 52, position: "absolute", width: 52 },
-  topLeft: {
-    borderLeftWidth: 4,
-    borderTopLeftRadius: FRAME_RADIUS,
-    borderTopWidth: 4,
-    left: 0,
-    top: 0,
-  },
-  topRight: {
-    borderRightWidth: 4,
-    borderTopRightRadius: FRAME_RADIUS,
-    borderTopWidth: 4,
-    right: 0,
-    top: 0,
-  },
-  bottomLeft: {
-    borderBottomWidth: 4,
-    borderLeftWidth: 4,
-    bottom: 0,
-    left: 0,
-    borderBottomLeftRadius: FRAME_RADIUS,
-  },
-  bottomRight: {
-    borderBottomWidth: 4,
-    borderRightWidth: 4,
-    bottom: 0,
-    right: 0,
-    borderBottomRightRadius: FRAME_RADIUS,
-  },
   hint: {
     color: "white",
     fontSize: type.callout.fontSize,
