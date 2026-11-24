@@ -130,7 +130,10 @@ export function RequestTable({
   onClaimed,
   audience,
   returnHref,
+  scope,
 }: {
+  /** The list's scope tabs, placed in the toolbar beside search and filters. */
+  scope?: React.ReactNode;
   requests: HelpRequest[];
   returnHref?: string;
   reload: () => void;
@@ -273,6 +276,8 @@ export function RequestTable({
           placeholder: t("helpDeskSearchRequests"),
         }}
         filters={filters}
+        actions={scope}
+        searchOwnRowWhenNarrow
       />
       <DataTable
         data={rows}

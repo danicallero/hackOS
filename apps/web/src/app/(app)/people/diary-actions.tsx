@@ -89,7 +89,7 @@ function StarButton({
       <StarIcon
         aria-hidden="true"
         weight={mark.starred ? "fill" : "regular"}
-        className={cn("size-4", mark.starred ? "text-warning" : "text-muted-foreground")}
+        className={cn("size-5", mark.starred ? "text-warning" : "text-foreground/60")}
       />
     </IconButton>
   );
@@ -116,7 +116,7 @@ function DiaryMenu({
           label={`${t("openMenuAria")}: ${name}`}
           disabled={handlers.busyId === mark.id}
         >
-          <DotsThreeIcon aria-hidden="true" />
+          <DotsThreeIcon aria-hidden="true" weight="bold" className="size-5 text-foreground/60" />
         </IconButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

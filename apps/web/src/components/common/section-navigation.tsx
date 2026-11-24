@@ -34,6 +34,7 @@ import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
 import { useUnreadCount } from "@/hooks/use-unread-count";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
+import { cn } from "@/lib/utils";
 
 function ProjectsNavigation() {
   const { t } = useLocale();
@@ -218,6 +219,7 @@ function HelpDeskNavigation() {
     "/api/helpdesk/helpers",
     allowed,
   );
+  const available = directory.data?.helpers.filter((helper) => helper.availableNow).length ?? 0;
   const items = [
     {
       href: "/help-desk",
@@ -247,11 +249,23 @@ function HelpDeskNavigation() {
               <Icon aria-hidden="true" />
               {label}
               {href === "/help-desk/helpers" && directory.data ? (
-                <span className="text-muted-foreground tabular-nums">
-                  {t("helpDeskAvailableCount", {
-                    count: directory.data.helpers.filter((helper) => helper.availableNow).length,
-                  })}
-                </span>
+                <Badge
+                  variant="secondary"
+                  className="gap-1 tabular-nums"
+                  title={t("helpDeskAvailableCount", { count: available })}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "size-1.5 rounded-full",
+                      available > 0 ? "bg-success" : "bg-muted-foreground/50",
+                    )}
+                  />
+                  <span aria-hidden="true">{available}</span>
+                  <span className="sr-only">
+                    {t("helpDeskAvailableCount", { count: available })}
+                  </span>
+                </Badge>
               ) : null}
             </Link>
           </Button>
