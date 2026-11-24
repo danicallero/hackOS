@@ -86,8 +86,8 @@ Each row: value → intent → boundary.
 | Accent | one interactive accent | CTAs and active states only. Never decorative, never a background wash. One per view. |
 | Error recovery | Brand blue, ink and red | The branded full-page error illustration uses the active edition palette. Do not reuse it for regular warnings or inline errors. |
 | Status colors | via `tones.ts` | Reserved for actual state (queue, decision, sync). Never used to make neutral UI "more colorful". |
-| Page title | 24/32 Rockwell regular (`type-page-title`) | One per page, in `PageHeader`. Every `<h1>` uses it, including auth, public and system pages (maintenance, pending removal, legal, company tag). Never inside cards. |
-| Section title | 18/24 Rockwell regular (`type-section-title`) | Titles a `Section`/`SectionCard`. Not a substitute for the page title. |
+| Page title | 24/32 Arvo regular (`type-page-title`) | One per page, in `PageHeader`. Every `<h1>` uses it, including auth, public and system pages (maintenance, pending removal, legal, company tag). Never inside cards. |
+| Section title | 18/24 Arvo regular (`type-section-title`) | Titles a `Section`/`SectionCard`. Not a substitute for the page title. |
 | Body | 14/20 regular | Default text. |
 | Subheading | 14/20 semibold sans (`type-subheading`) | The h2-h4 inside a card, panel or dialog that groups related fields or rows under a Section title. Not for page or section titles, and not on landing headings. |
 | Label | 13/18 medium (`type-label`) | Form labels and control captions. |
@@ -165,7 +165,8 @@ color; reserve uppercase for real codes (badge IDs, room codes).
 The web UI follows the [HackUDC 2027 landing](https://github.com/gpul-org/hackudc-2027).
 Its [brand guidelines](https://github.com/gpul-org/hackudc-2027/blob/9d51fe26600238fceeebab43e1ca6f902e181bce/BRAND_GUIDELINES.md)
 and [CSS palette](https://github.com/gpul-org/hackudc-2027/blob/9d51fe26600238fceeebab43e1ca6f902e181bce/src/styles/global.css)
-at commit `9d51fe26600238fceeebab43e1ca6f902e181bce` define this edition.
+at commit `9d51fe26600238fceeebab43e1ca6f902e181bce` define the edition palette and geometry.
+The current edition's display face is [Arvo from Google Fonts](https://fonts.google.com/specimen/Arvo).
 The landing is an independent Astro application: this repo implements its
 identity through the existing shadcn contract, rather than copying its layout.
 Changes here do not automatically update that repository or the native app.
@@ -192,7 +193,7 @@ When adding/updating a primitive, preserve this token-backed visual contract.
 | Red `#bf2100` | `--brand-red` | Errors and destructive actions; lighter derived destructive color on ink |
 | Yellow `#f5dc8f` | `--brand-yellow` | Warning marker/wash, paired with normal foreground text |
 | Inter | `--brand-sans` | Body, labels, navigation and dense data; loaded by `next/font` in the root layout |
-| Rockwell | `--brand-display` | Page/section/dialog titles and public headlines; supplied regular/bold WOFF2 files in `public/fonts/hackudc-2027/` |
+| Arvo | `--brand-display` | Page/section/dialog titles and public headlines. Self-hosted regular and bold WOFF2 files in `public/fonts/hackudc-2027/`. |
 
 Focus uses `--ring`: ink in light mode, pale blue in dark mode. Never use red
 for ordinary field hover or focus; reserve it for invalid and destructive states.
@@ -228,7 +229,7 @@ Header and content share the theme's card surface without a decorative top rule.
 The email header uses the centered horizontal HackUDC 2027 marketing wordmark
 in red for light mail and cream for supported dark-mode clients, using PNG
 exports of the supplied edition SVGs (`public/email/hackudc-2027{,-dark}.*`);
-the app keeps its hackOS product wordmark. Rockwell headings, sans body
+the app keeps its hackOS product wordmark. Arvo headings, sans body
 text, pill actions and 8px surfaces retain the edition geometry. The acceptance
 heading names confirmation, the primary button confirms, and declining is a
 secondary outlined button. Copy leads with the outcome, shows the exact localized
@@ -1491,6 +1492,9 @@ architecture: [`mobile.md`](./mobile.md).**
   placeholders, disabled content and non-text decoration. Semantic label tokens
   adapt to Increase Contrast, and readable text on tinted surfaces uses that
   surface's matching `on…Surface` foreground token.
+- **Edition titles.** The root layout loads the bundled Arvo Regular TTF for
+  auth headings and the shared `SCREEN_TITLE` style. Body text, controls and
+  tab labels use platform typography.
 - **One pressed vocabulary.** `PressableFeedback` (`feedback`: `row` highlight for
   list cells, `opacity` for text/icon buttons, `scale` for filled buttons and
   cards, `none` when the control draws its own) replaces ad-hoc

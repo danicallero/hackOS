@@ -6,7 +6,12 @@
  */
 import { type } from "./tokens";
 
-export const SCREEN_TITLE = type.title;
+export const DISPLAY_FONT_FAMILY = "Arvo-Regular";
+export const SCREEN_TITLE = {
+  ...type.title,
+  fontFamily: DISPLAY_FONT_FAMILY,
+  fontWeight: "400",
+} as const;
 /** Invisible native navigation title measurement; never use for visible text. */
 export const NATIVE_HEADER_MEASUREMENT_FONT_SIZE = 1;
 export const SCREEN_TITLE_CENTER = 47.5;
