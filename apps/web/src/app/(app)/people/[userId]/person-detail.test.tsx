@@ -9,7 +9,7 @@ import { resetServerStateForTests } from "@/lib/server-state";
 const env = vi.hoisted(() => ({ eventSource: vi.fn() }));
 
 vi.mock("@/lib/api", () => ({
-  api: { get: vi.fn() },
+  api: { get: vi.fn(), patch: vi.fn(), delete: vi.fn() },
   ApiError: class ApiError extends Error {
     constructor(
       public status: number,
@@ -55,6 +55,7 @@ function entry(overrides: Partial<DirectoryEntry> = {}): DirectoryEntry {
 
 const get = vi.mocked(api.get);
 let person: DirectoryEntry | Error;
+let diaryItems: unknown[];
 let container: HTMLDivElement;
 let root: Root;
 
@@ -69,11 +70,13 @@ beforeEach(() => {
   env.eventSource.mockReset();
   resetServerStateForTests();
   person = entry();
+  diaryItems = [];
   get.mockReset();
   get.mockImplementation(((path: string) => {
     if (path === "/api/public/challenges") {
       return Promise.resolve({ items: [{ id: 7, title: { en: "Best hack", es: "Mejor hack" } }] });
     }
+    if (path === "/api/me/diary") return Promise.resolve({ items: diaryItems });
     return person instanceof Error ? Promise.reject(person) : Promise.resolve(person);
   }) as typeof api.get);
   container = document.createElement("div");
@@ -130,6 +133,30 @@ describe("PersonDetail (#934, #935)", () => {
     expect(env.eventSource).toHaveBeenCalledWith(
       "domain:directory",
       expect.objectContaining({ events: ["domain.changed"] }),
+    );
+  });
+
+  it("offers the diary favorite for a saved person and toggles it", async () => {
+    diaryItems = [
+      {
+        id: 9,
+        kind: "person",
+        starred: false,
+        note: null,
+        createdAt: "2026-11-01T00:00:00Z",
+        updatedAt: "2026-11-01T00:00:00Z",
+        person: person as DirectoryEntry,
+        sponsor: null,
+      },
+    ];
+    vi.mocked(api.patch).mockResolvedValue({ ...(diaryItems[0] as object), starred: true });
+    await render();
+    const star = container.querySelector<HTMLButtonElement>("button[aria-pressed]");
+    expect(star?.getAttribute("aria-pressed")).toBe("false");
+    await act(async () => star?.click());
+    expect(api.patch).toHaveBeenCalledWith("/api/me/diary/9", { starred: true });
+    expect(container.querySelector("button[aria-pressed]")?.getAttribute("aria-pressed")).toBe(
+      "true",
     );
   });
 

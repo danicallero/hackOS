@@ -147,10 +147,15 @@ function categoryLabel(
   return category;
 }
 
-export function MessagesTab() {
+export function MessagesTab({ unreadOnly }: { unreadOnly: boolean }) {
   const { t, language } = useLocale();
-  const [unreadOnly, setUnreadOnly] = useState(false);
   const [offset, setOffset] = useState(0);
+  // A new filter starts from the first page.
+  const [seenFilter, setSeenFilter] = useState(unreadOnly);
+  if (seenFilter !== unreadOnly) {
+    setSeenFilter(unreadOnly);
+    setOffset(0);
+  }
   // Which items are expanded to show the full body + every other payload field.
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [deleting, setDeleting] = useState<InboxItem | null>(null);
@@ -214,20 +219,6 @@ export function MessagesTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Switch
-          id="unread-only"
-          checked={unreadOnly}
-          onCheckedChange={(checked) => {
-            setUnreadOnly(checked);
-            setOffset(0);
-          }}
-        />
-        <Label htmlFor="unread-only" className="font-normal">
-          {t("unreadOnly")}
-        </Label>
-      </div>
-
       {loading && !data ? (
         <div className="flex justify-center py-12">
           <Spinner className="size-5" />
@@ -235,7 +226,7 @@ export function MessagesTab() {
       ) : error ? (
         <EmptyState title={t("couldNotLoadInboxTitle")} description={t("couldNotLoadInboxDesc")} />
       ) : items.length === 0 ? (
-        <EmptyState title={unreadOnly ? t("noUnreadMessages") : t("noMessagesYet")} />
+        <EmptyState framed title={unreadOnly ? t("noUnreadMessages") : t("noMessagesYet")} />
       ) : (
         <ul className="space-y-3">
           {items.map((item) => {

@@ -17,6 +17,7 @@ export function PageHeader({
   primaryAction,
   secondaryActions,
   actions,
+  nav,
   className,
   headingLevel = 1,
   reserveNavigation = true,
@@ -41,6 +42,11 @@ export function PageHeader({
   description?: string;
   primaryAction?: React.ReactNode;
   secondaryActions?: React.ReactNode;
+  /**
+   * Sibling-route navigation of the section. Sits on the title's row from md up
+   * (and below it on narrow screens) so it does not cost a row of its own.
+   */
+  nav?: React.ReactNode;
   /** @deprecated Prefer primaryAction and secondaryActions to make priority explicit. */
   actions?: React.ReactNode;
   className?: string;
@@ -59,7 +65,8 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        "flex min-h-(--control-height-default) flex-col gap-(--space-within-section) md:flex-row md:items-start md:justify-between",
+        "flex min-h-(--control-height-default) flex-col gap-(--space-within-section) md:flex-row md:justify-between",
+        nav ? "md:items-center" : "md:items-start",
         className,
       )}
     >
@@ -88,6 +95,7 @@ export function PageHeader({
           )}
         </div>
       </div>
+      {nav && <div className="min-w-0 md:mr-auto md:ml-4">{nav}</div>}
       {actionContent && (
         <ActionGroup className="md:shrink-0 md:justify-end">{actionContent}</ActionGroup>
       )}

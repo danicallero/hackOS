@@ -11,6 +11,8 @@ export function EmptyState({
   description,
   action,
   className,
+  inline,
+  framed,
 }: {
   title: string;
   /** Secondary line under the title, e.g. why the state is empty. */
@@ -18,11 +20,23 @@ export function EmptyState({
   /** The one thing to do next, e.g. a "Create" button. */
   action?: React.ReactNode;
   className?: string;
+  /** Empty section under a heading: left-aligned quiet text, no vertical padding. */
+  inline?: boolean;
+  /** A collection with no rows: the same bordered surface its table or grid would occupy. */
+  framed?: boolean;
 }) {
+  if (inline)
+    return (
+      <div className={cn("min-w-0 space-y-2", className)}>
+        <p className="text-muted-foreground text-sm text-pretty">{description ?? title}</p>
+        {action}
+      </div>
+    );
   return (
     <div
       className={cn(
         "flex min-w-0 flex-col items-center justify-center gap-3 px-6 py-10 text-center",
+        framed && "rounded-surface border bg-card",
         className,
       )}
     >
