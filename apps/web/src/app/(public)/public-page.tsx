@@ -230,6 +230,34 @@ function PublicPageContent({
         )}
       </section>
 
+      <nav aria-label={t("onThisPage")} className="flex flex-wrap gap-2 focus-within:pb-6">
+        {[
+          ...(openApplications.length
+            ? [{ id: "applications-title", label: t("openApplications") }]
+            : []),
+          ...(screenAnnouncements.length
+            ? [{ id: "announcements-title", label: t("publicAnnouncements") }]
+            : []),
+          { id: "schedule-title", label: t("publicSchedule") },
+          { id: "challenges-title", label: t("challengesAndPrizes") },
+          { id: "gallery-title", label: t("projectGallery") },
+          { id: "sponsors-title", label: t("sponsors") },
+          ...(collaborators.length
+            ? [{ id: "collaborators-title", label: t("collaborators") }]
+            : []),
+        ].map(({ id, label }) => (
+          <Button
+            key={id}
+            variant="ghost"
+            size="sm"
+            className="sr-only h-auto min-h-[var(--control-height-compact)] max-w-full whitespace-normal text-left focus-visible:not-sr-only"
+            asChild
+          >
+            <a href={`#${id}`}>{label}</a>
+          </Button>
+        ))}
+      </nav>
+
       {openApplications.length > 0 && (
         <section aria-labelledby="applications-title" className="py-12">
           <SectionHeading id="applications-title">{t("openApplications")}</SectionHeading>

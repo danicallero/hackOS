@@ -19,7 +19,11 @@ export default function InboxPage() {
   return (
     <Tabs value={tab} onValueChange={setTab}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <TabBar width="content" aria-label={t("inbox")}>
+        <TabBar
+          width="content"
+          aria-label={t("inbox")}
+          className="h-auto flex-wrap [&_[data-slot=tabs-trigger]]:whitespace-normal"
+        >
           <TabsTrigger value="messages">{t("messages")}</TabsTrigger>
           <TabsTrigger value="preferences">{t("preferences")}</TabsTrigger>
         </TabBar>

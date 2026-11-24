@@ -66,7 +66,7 @@ function PersonReader({ userId, companyId }: { userId: number; companyId?: numbe
   );
   const [override, setOverride] = useState<DiaryEntry | null>(null);
   const [removedId, setRemovedId] = useState<number | null>(null);
-  const saved = diary?.items.find((item) => item.person?.userId === userId);
+  const saved = diary?.items?.find((item) => item.person?.userId === userId);
   const mark =
     saved && saved.id !== removedId ? (override?.id === saved.id ? override : saved) : null;
   const { handlers, dialogs } = useDiaryMutations({
