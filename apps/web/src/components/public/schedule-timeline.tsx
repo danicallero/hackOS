@@ -3,12 +3,9 @@
 import { activityKindLabelKey, toActivityKind } from "@hackos/shared/activity-kinds";
 import { instantToWallClock, wallClockToInstant } from "@hackos/shared/event-time";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
-import { CaretLeftIcon } from "@phosphor-icons/react/dist/csr/CaretLeft";
-import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
-import { IconButton } from "@/components/common/icon-button";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { TabBar } from "@/components/common/tab-bar";
 import {
@@ -259,35 +256,12 @@ export function ScheduleTimeline({
         <EmptyState title={emptyTitle ?? t("schedulePending")} />
       </div>
     );
+  // The day chips above already switch day; the header only names it.
   const dayHeader = (
-    <div className="flex h-11 items-center justify-between gap-2 px-1">
-      <IconButton
-        label={t("previous")}
-        variant="ghost"
-        size="icon-sm"
-        disabled={days.findIndex(([key]) => key === activeDay[0]) === 0}
-        onClick={() => {
-          const index = days.findIndex(([key]) => key === activeDay[0]);
-          setSelectedDay(days[index - 1][0]);
-        }}
-      >
-        <CaretLeftIcon aria-hidden="true" />
-      </IconButton>
+    <div className="flex h-11 items-center justify-center px-1">
       <span className="min-w-0 text-center text-sm font-medium">
         {dateFormatter.format(new Date(activeDay[1][0].startsAt))}
       </span>
-      <IconButton
-        label={t("next")}
-        variant="ghost"
-        size="icon-sm"
-        disabled={days.findIndex(([key]) => key === activeDay[0]) === days.length - 1}
-        onClick={() => {
-          const index = days.findIndex(([key]) => key === activeDay[0]);
-          setSelectedDay(days[index + 1][0]);
-        }}
-      >
-        <CaretRightIcon aria-hidden="true" />
-      </IconButton>
     </div>
   );
   const controls = (

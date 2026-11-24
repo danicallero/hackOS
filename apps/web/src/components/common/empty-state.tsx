@@ -12,6 +12,7 @@ export function EmptyState({
   action,
   className,
   inline,
+  framed,
 }: {
   title: string;
   /** Secondary line under the title, e.g. why the state is empty. */
@@ -21,6 +22,8 @@ export function EmptyState({
   className?: string;
   /** Empty section under a heading: left-aligned quiet text, no vertical padding. */
   inline?: boolean;
+  /** A collection with no rows: the same bordered surface its table or grid would occupy. */
+  framed?: boolean;
 }) {
   if (inline)
     return (
@@ -33,6 +36,7 @@ export function EmptyState({
     <div
       className={cn(
         "flex min-w-0 flex-col items-center justify-center gap-3 px-6 py-10 text-center",
+        framed && "rounded-surface border bg-card",
         className,
       )}
     >
