@@ -58,6 +58,16 @@ export default function HelpdeskPage() {
     allowed && !!view,
   );
   if (!allowed) return <AccessDenied ask={t("noAccessTitle")} />;
+  const scopeTabs =
+    views.length > 1 ? (
+      <TabBar width="content" aria-label={t("helpDeskAllRequests")}>
+        {views.map((value) => (
+          <TabsTrigger key={value} value={value}>
+            {t(VIEW_LABEL[value])}
+          </TabsTrigger>
+        ))}
+      </TabBar>
+    ) : null;
   const content = (
     <div className="space-y-4">
       {resource.stale ? <StaleDataNotice onRetry={resource.refetch} /> : null}
@@ -69,6 +79,7 @@ export default function HelpdeskPage() {
           key={view}
           returnHref={`${pathname}?tab=${view}`}
           audience={view === "mine" ? "requester" : "helper"}
+          scope={scopeTabs}
           requests={resource.data.requests}
           reload={resource.refetch}
           onClaimed={() => setTab("claims")}
@@ -84,15 +95,6 @@ export default function HelpdeskPage() {
         content
       ) : view ? (
         <Tabs value={view} onValueChange={setTab}>
-          {views.length > 1 ? (
-            <TabBar width="content" aria-label={t("helpDeskAllRequests")}>
-              {views.map((value) => (
-                <TabsTrigger key={value} value={value}>
-                  {t(VIEW_LABEL[value])}
-                </TabsTrigger>
-              ))}
-            </TabBar>
-          ) : null}
           <TabsContent value={view}>{content}</TabsContent>
         </Tabs>
       ) : profile.loading ? (

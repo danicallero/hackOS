@@ -85,7 +85,7 @@ export function MyProjectsView() {
     }
   }
   return (
-    <PageLayout width="reading">
+    <PageLayout>
       <ProjectsSectionHeader
         primaryAction={
           canCreate ? (
@@ -124,7 +124,7 @@ export function MyProjectsView() {
           </ul>
         </SectionCard>
       )}
-      {projects?.length === 0 && <EmptyState title={t("myProjectsEmptyTitle")} />}
+      {projects?.length === 0 && <EmptyState framed title={t("myProjectsEmptyTitle")} />}
       {projects && projects.length > 0 && (
         <div className="space-y-2">
           {projects.map((project) => (

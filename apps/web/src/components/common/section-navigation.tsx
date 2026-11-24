@@ -34,6 +34,13 @@ import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
 import { useUnreadCount } from "@/hooks/use-unread-count";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
+import { cn } from "@/lib/utils";
+
+/**
+ * Sibling routes of one workspace share this view-transition name, so the
+ * title and tabs stay put while only the content below crossfades.
+ */
+const SECTION_HEADER_TRANSITION = { viewTransitionName: "section-header" } as const;
 
 function ProjectsNavigation() {
   const { t } = useLocale();
@@ -132,7 +139,7 @@ export function HomeSectionHeader() {
   const { t } = useLocale();
   const pathname = usePathname();
   return (
-    <div className="space-y-(--page-section-gap)">
+    <div className="space-y-(--page-section-gap)" style={SECTION_HEADER_TRANSITION}>
       <PageHeader
         title={t("home")}
         tabTitle={t(
@@ -142,8 +149,8 @@ export function HomeSectionHeader() {
               ? "inbox"
               : "eventInformation",
         )}
+        nav={<HomeNavigation />}
       />
-      <HomeNavigation />
     </div>
   );
 }
@@ -173,7 +180,7 @@ export function ProjectsSectionHeader({
     management ? "manageProjects" : galleryRecord ? "projectGallery" : "myProjects",
   );
   return (
-    <div className="space-y-(--page-section-gap)">
+    <div className="space-y-(--page-section-gap)" style={SECTION_HEADER_TRANSITION}>
       <PageHeader
         title={
           recordName ??
@@ -183,8 +190,9 @@ export function ProjectsSectionHeader({
         state={recordState}
         primaryAction={recordAction ?? primaryAction}
         secondaryActions={secondaryActions}
+        nav={recordName ? undefined : <ProjectsNavigation />}
       />
-      <ProjectsNavigation />
+      {recordName ? <ProjectsNavigation /> : null}
     </div>
   );
 }
@@ -218,6 +226,7 @@ function HelpDeskNavigation() {
     "/api/helpdesk/helpers",
     allowed,
   );
+  const available = directory.data?.helpers.filter((helper) => helper.availableNow).length ?? 0;
   const items = [
     {
       href: "/help-desk",
@@ -247,11 +256,23 @@ function HelpDeskNavigation() {
               <Icon aria-hidden="true" />
               {label}
               {href === "/help-desk/helpers" && directory.data ? (
-                <span className="text-muted-foreground tabular-nums">
-                  {t("helpDeskAvailableCount", {
-                    count: directory.data.helpers.filter((helper) => helper.availableNow).length,
-                  })}
-                </span>
+                <Badge
+                  variant="secondary"
+                  className="gap-1 tabular-nums"
+                  title={t("helpDeskAvailableCount", { count: available })}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "size-1.5 rounded-full",
+                      available > 0 ? "bg-success" : "bg-muted-foreground/50",
+                    )}
+                  />
+                  <span aria-hidden="true">{available}</span>
+                  <span className="sr-only">
+                    {t("helpDeskAvailableCount", { count: available })}
+                  </span>
+                </Badge>
               ) : null}
             </Link>
           </Button>
@@ -312,14 +333,14 @@ function HelpDeskOptions() {
 export function HelpDeskSectionHeader({ meta }: { meta?: React.ReactNode }) {
   const { t } = useLocale();
   return (
-    <div className="space-y-(--page-section-gap)">
+    <div className="space-y-(--page-section-gap)" style={SECTION_HEADER_TRANSITION}>
       <PageHeader
         title={t("helpDeskTitle")}
         meta={meta}
         secondaryActions={<HelpDeskOptions />}
         primaryAction={<RequestHelpAction />}
+        nav={<HelpDeskNavigation />}
       />
-      <HelpDeskNavigation />
       <HelpDeskClosed />
     </div>
   );

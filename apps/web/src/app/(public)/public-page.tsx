@@ -213,9 +213,12 @@ function PublicPageContent({
               </Link>
             </Button>
           )}
-          <Button size="lg" variant="outline" asChild>
-            <Link href={appHref}>{appLabel}</Link>
-          </Button>
+          {/* The header already carries this link; the hero repeats it only as its sole action. */}
+          {openApplications.length === 0 && (
+            <Button size="lg" asChild>
+              <Link href={appHref}>{appLabel}</Link>
+            </Button>
+          )}
         </div>
         {eventPhase.kind !== "none" && (
           <div className="border-border bg-card mt-10 inline-flex max-w-full flex-col rounded-surface border p-4 sm:p-5">
@@ -227,7 +230,7 @@ function PublicPageContent({
         )}
       </section>
 
-      <nav aria-label={t("onThisPage")} className="flex flex-wrap gap-2 pb-6">
+      <nav aria-label={t("onThisPage")} className="flex flex-wrap gap-2 focus-within:pb-6">
         {[
           ...(openApplications.length
             ? [{ id: "applications-title", label: t("openApplications") }]
@@ -247,7 +250,7 @@ function PublicPageContent({
             key={id}
             variant="ghost"
             size="sm"
-            className="h-auto min-h-[var(--control-height-compact)] max-w-full whitespace-normal text-left"
+            className="sr-only h-auto min-h-[var(--control-height-compact)] max-w-full whitespace-normal text-left focus-visible:not-sr-only"
             asChild
           >
             <a href={`#${id}`}>{label}</a>
@@ -267,10 +270,14 @@ function PublicPageContent({
                 <div className="min-w-0">
                   <h3 className="type-subheading">{form.name}</h3>
                   <p className="text-muted-foreground mt-1 text-sm">
-                    <span>{grantedRoleNameLabel(form.granted_role_name, t)}</span>
-                    {form.close_at
-                      ? ` · ${t("closes")} ${dateTime(form.close_at, event.timezone, language)}`
-                      : ""}
+                    {[
+                      grantedRoleNameLabel(form.granted_role_name, t),
+                      form.close_at
+                        ? `${t("closes")} ${dateTime(form.close_at, event.timezone, language)}`
+                        : null,
+                    ]
+                      .filter((part) => part && part.toLowerCase() !== form.name.toLowerCase())
+                      .join(" · ")}
                   </p>
                 </div>
                 <Button asChild size="sm">
@@ -352,22 +359,21 @@ function PublicPageContent({
             ))}
           </div>
         ) : (
-          <EmptyState className="mt-6" title={t("challengesPending")} />
+          <EmptyState inline className="mt-6" title={t("challengesPending")} />
         )}
       </section>
 
       <section aria-labelledby="gallery-title" className="py-12">
-        <SectionHeading id="gallery-title">{t("projectGallery")}</SectionHeading>
-        <Button
-          asChild
-          variant="outline"
-          className="mt-6 h-auto min-h-[var(--control-height-default)] max-w-full whitespace-normal"
+        <Link
+          href="/gallery"
+          className="group inline-flex items-center gap-2 rounded-sm focus-visible:outline-2"
         >
-          <Link href="/gallery">
-            {t("projectGallery")}
-            <ArrowRightIcon aria-hidden="true" className="size-4" />
-          </Link>
-        </Button>
+          <SectionHeading id="gallery-title">{t("projectGallery")}</SectionHeading>
+          <ArrowRightIcon
+            aria-hidden="true"
+            className="size-5 transition-transform group-hover:translate-x-1 motion-reduce:transition-none"
+          />
+        </Link>
       </section>
 
       <section aria-labelledby="sponsors-title" className="py-12">
@@ -384,7 +390,7 @@ function PublicPageContent({
             className="mt-6 h-auto min-h-[var(--control-height-default)] max-w-full whitespace-normal"
           />
         ) : (
-          <EmptyState className="mt-6" title={t("sponsorsPending")} />
+          <EmptyState inline className="mt-6" title={t("sponsorsPending")} />
         )}
       </section>
 

@@ -3,12 +3,9 @@
 import { activityKindLabelKey, toActivityKind } from "@hackos/shared/activity-kinds";
 import { instantToWallClock, wallClockToInstant } from "@hackos/shared/event-time";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
-import { CaretLeftIcon } from "@phosphor-icons/react/dist/csr/CaretLeft";
-import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
-import { IconButton } from "@/components/common/icon-button";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { TabBar } from "@/components/common/tab-bar";
 import {
@@ -259,42 +256,36 @@ export function ScheduleTimeline({
         <EmptyState title={emptyTitle ?? t("schedulePending")} />
       </div>
     );
+  // In day view the grid's own header switches day: one control instead of a row of chips above it.
   const dayHeader = (
-    <div className="flex h-11 items-center justify-between gap-2 px-1">
-      <IconButton
-        label={t("previous")}
-        variant="ghost"
-        size="icon-sm"
-        disabled={days.findIndex(([key]) => key === activeDay[0]) === 0}
-        onClick={() => {
-          const index = days.findIndex(([key]) => key === activeDay[0]);
-          setSelectedDay(days[index - 1][0]);
-        }}
-      >
-        <CaretLeftIcon aria-hidden="true" />
-      </IconButton>
-      <span className="min-w-0 text-center text-sm font-medium">
-        {dateFormatter.format(new Date(activeDay[1][0].startsAt))}
-      </span>
-      <IconButton
-        label={t("next")}
-        variant="ghost"
-        size="icon-sm"
-        disabled={days.findIndex(([key]) => key === activeDay[0]) === days.length - 1}
-        onClick={() => {
-          const index = days.findIndex(([key]) => key === activeDay[0]);
-          setSelectedDay(days[index + 1][0]);
-        }}
-      >
-        <CaretRightIcon aria-hidden="true" />
-      </IconButton>
+    <div className="flex h-11 items-center px-2">
+      {days.length > 1 ? (
+        <Tabs value={activeDay[0]} onValueChange={setSelectedDay} className="min-w-0">
+          <TabBar width="content" aria-label={t("calendarDay")}>
+            {days.map(([key, entries]) => (
+              <TabsTrigger key={key} value={key} className="capitalize">
+                {shortDate.format(new Date(entries[0].startsAt))}
+                {key === today && (
+                  <span aria-hidden="true" className="size-1.5 rounded-full bg-destructive" />
+                )}
+              </TabsTrigger>
+            ))}
+          </TabBar>
+        </Tabs>
+      ) : (
+        <span className="min-w-0 flex-1 text-center text-sm font-medium">
+          {dateFormatter.format(new Date(activeDay[1][0].startsAt))}
+        </span>
+      )}
     </div>
   );
   const controls = (
     <div className="flex flex-wrap items-center gap-2">
-      <Button variant="outline" size="sm" onClick={goToNow}>
-        {t("today")}
-      </Button>
+      {(view === "week" || activeDay[0] !== today) && (
+        <Button variant="outline" size="sm" onClick={goToNow}>
+          {t("today")}
+        </Button>
+      )}
       <TabBar width="content" aria-label={t("schedule")}>
         <TabsTrigger value="day">{t("calendarDay")}</TabsTrigger>
         <TabsTrigger value="week">{t("calendarWeek")}</TabsTrigger>
@@ -308,26 +299,6 @@ export function ScheduleTimeline({
       className={cn("gap-0 space-y-3", className)}
     >
       {renderToolbar ? renderToolbar(controls) : controls}
-      {view === "day" && days.length > 1 && (
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
-          {days.map(([key, entries]) => (
-            <Button
-              key={key}
-              type="button"
-              size="sm"
-              variant={key === activeDay[0] ? "default" : "outline"}
-              aria-pressed={key === activeDay[0]}
-              className="shrink-0 capitalize"
-              onClick={() => setSelectedDay(key)}
-            >
-              {shortDate.format(new Date(entries[0].startsAt))}
-              {key === today && (
-                <span aria-hidden="true" className="size-1.5 rounded-full bg-destructive" />
-              )}
-            </Button>
-          ))}
-        </div>
-      )}
       <TabsContent value={view}>
         <div
           ref={scroller}
@@ -462,7 +433,7 @@ export function ScheduleTimeline({
                         type="button"
                         onClick={() => openItem(item)}
                         className={cn(
-                          "button-interaction absolute z-20 flex flex-col items-start justify-start overflow-hidden rounded-sm border border-l-[3px] px-2 text-left",
+                          "button-interaction absolute z-[5] flex flex-col items-start justify-start overflow-hidden rounded-sm border border-l-[3px] px-2 text-left",
                           itemHeight < 42 ? "py-0.5" : itemHeight < 60 ? "py-1" : "py-2",
                           SCHEDULE_CATEGORY_STYLES[toActivityKind(item.type) ?? "activity"],
                           liveIds.has(item.id) && "ring-2 ring-destructive/70",
@@ -490,12 +461,21 @@ export function ScheduleTimeline({
                         </span>
                         {itemHeight >= 42 && (
                           <span className="block max-w-full shrink-0 truncate text-xs opacity-80">
-                            {t(activityKindLabelKey(toActivityKind(item.type) ?? "activity"))}
-                            {` · ${timeFormatter.format(new Date(item.startsAt))}–${timeFormatter.format(new Date(item.endsAt))}`}
+                            {/* Side-by-side items are narrow: the time is the useful part. */}
+                            {laneCount === 1 &&
+                              `${t(activityKindLabelKey(toActivityKind(item.type) ?? "activity"))} · `}
+                            {`${timeFormatter.format(new Date(item.startsAt))}–${timeFormatter.format(new Date(item.endsAt))}`}
                           </span>
                         )}
                         {itemHeight >= 88 && item.location && (
-                          <span className="mt-1 flex max-w-[calc(100%-6.5rem)] shrink-0 items-center gap-1 text-xs opacity-80">
+                          <span
+                            className={cn(
+                              "mt-1 flex min-w-0 max-w-full shrink-0 items-center gap-1 text-xs opacity-80",
+                              (item.speakers?.length ?? 0) > 0 &&
+                                laneCount === 1 &&
+                                "max-w-[calc(100%-6.5rem)]",
+                            )}
+                          >
                             <MapPinIcon aria-hidden="true" className="size-3 shrink-0" />
                             <span className="truncate">{item.location}</span>
                           </span>
@@ -515,7 +495,7 @@ export function ScheduleTimeline({
                     <div
                       aria-hidden="true"
                       className={cn(
-                        "pointer-events-none absolute inset-x-0 z-10 border-t",
+                        "pointer-events-none absolute inset-x-0 z-[6] border-t",
                         key === today ? "border-t-2 border-destructive" : "border-destructive/20",
                       )}
                       style={{ top: nowHour * HOUR_HEIGHT }}

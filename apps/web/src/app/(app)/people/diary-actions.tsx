@@ -2,7 +2,8 @@
 
 import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { StarIcon } from "@phosphor-icons/react/dist/csr/Star";
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { AlertModal } from "@/components/common/alert-modal";
 import { IconButton } from "@/components/common/icon-button";
 import { Modal } from "@/components/common/modal";
 import { Button } from "@/components/ui/button";
@@ -13,8 +14,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type Translate, useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import type { DirectoryEntry } from "./person-row";
 
 /** Public sponsor card (`SponsorCard`, #935). */
 export interface SponsorCard {
@@ -37,6 +42,18 @@ export interface DiaryMark {
   id: number;
   starred: boolean;
   note: string | null;
+}
+
+/** `DiaryEntry` from `GET /api/me/diary` (#935). */
+export interface DiaryEntry {
+  id: number;
+  kind: "person" | "sponsor";
+  starred: boolean;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+  person: DirectoryEntry | null;
+  sponsor: SponsorCard | null;
 }
 
 export interface DiaryHandlers {
@@ -72,7 +89,7 @@ function StarButton({
       <StarIcon
         aria-hidden="true"
         weight={mark.starred ? "fill" : "regular"}
-        className={cn("size-4", mark.starred ? "text-warning" : "text-muted-foreground")}
+        className={cn("size-5", mark.starred ? "text-warning" : "text-foreground/60")}
       />
     </IconButton>
   );
@@ -99,7 +116,7 @@ function DiaryMenu({
           label={`${t("openMenuAria")}: ${name}`}
           disabled={handlers.busyId === mark.id}
         >
-          <DotsThreeIcon aria-hidden="true" />
+          <DotsThreeIcon aria-hidden="true" weight="bold" className="size-5 text-foreground/60" />
         </IconButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -227,4 +244,101 @@ export function NoteDialog({
       />
     </Modal>
   );
+}
+
+/**
+ * Favorite, note and removal of a saved entry (#935), shared by the diary list
+ * and a saved person's page. The caller owns the entry list: `onReplace`
+ * receives the server's updated entry and `onRemoved` the deleted id.
+ */
+export function useDiaryMutations({
+  onReplace,
+  onRemoved,
+}: {
+  onReplace: (entry: DiaryEntry) => void;
+  onRemoved: (id: number) => void;
+}) {
+  const { t } = useLocale();
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [noteTarget, setNoteTarget] = useState<(DiaryMark & { title: string }) | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<(DiaryMark & { title: string }) | null>(null);
+
+  const patch = useCallback(
+    async (id: number, body: { starred?: boolean; note?: string }, title: string) => {
+      setBusyId(id);
+      try {
+        onReplace(await api.patch<DiaryEntry>(`/api/me/diary/${id}`, body));
+        return true;
+      } catch (err) {
+        toast.error(apiErrorText(err, t, t("diaryCouldNotSave")), title);
+        return false;
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [onReplace, t],
+  );
+
+  // Favouriting only marks a saved entry: it never adds or removes one (#935).
+  const handlers = useMemo<DiaryHandlers>(
+    () => ({
+      busyId,
+      onToggleStar: (mark) => void patch(mark.id, { starred: !mark.starred }, t("diaryFavourite")),
+      onEditNote: (mark, title) => setNoteTarget({ ...mark, title }),
+      onRemove: (mark, title) => setRemoveTarget({ ...mark, title }),
+    }),
+    [busyId, patch, t],
+  );
+
+  async function saveNote(note: string) {
+    if (!noteTarget) return;
+    if (await patch(noteTarget.id, { note }, t("diaryNote"))) {
+      setNoteTarget(null);
+      toast.success(t("diaryNoteSaved"), { compactTitle: t("diaryNote") });
+    }
+  }
+
+  async function confirmRemove() {
+    if (!removeTarget) return;
+    const target = removeTarget;
+    setBusyId(target.id);
+    try {
+      await api.delete(`/api/me/diary/${target.id}`);
+      onRemoved(target.id);
+      setRemoveTarget(null);
+      toast.success(t("diaryRemoved"), { compactTitle: t("diaryRemoveTitle") });
+    } catch (err) {
+      toast.error(apiErrorText(err, t, t("diaryCouldNotSave")), t("diaryRemoveTitle"));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const dialogs = (
+    <>
+      <NoteDialog
+        target={noteTarget}
+        pending={noteTarget !== null && busyId === noteTarget.id}
+        onClose={() => setNoteTarget(null)}
+        onSave={(note) => void saveNote(note)}
+      />
+      <AlertModal
+        open={removeTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRemoveTarget(null);
+        }}
+        title={t("diaryRemoveTitle")}
+        description={removeTarget?.title ?? ""}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("remove")}
+        destructive
+        pending={removeTarget !== null && busyId === removeTarget.id}
+        onConfirm={() => void confirmRemove()}
+      >
+        <p className="text-muted-foreground text-pretty text-sm">{t("diaryRemoveBody")}</p>
+      </AlertModal>
+    </>
+  );
+
+  return { handlers, dialogs };
 }

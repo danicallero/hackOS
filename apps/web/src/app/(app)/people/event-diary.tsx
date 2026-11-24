@@ -3,7 +3,6 @@
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
-import { AlertModal } from "@/components/common/alert-modal";
 import { DataTable } from "@/components/common/data-table";
 import { ListToolbar } from "@/components/common/list-toolbar";
 import { PageHeader } from "@/components/common/page-header";
@@ -21,12 +20,11 @@ import { toast } from "@/lib/toast";
 import { useUrlTab } from "@/lib/url-tab";
 import { CompanyCollection } from "./company-collection";
 import {
-  type DiaryHandlers,
-  type DiaryMark,
+  type DiaryEntry,
   FavouritesToggle,
-  NoteDialog,
   PersonActions,
   type SponsorCard,
+  useDiaryMutations,
 } from "./diary-actions";
 import {
   type DirectoryEntry,
@@ -37,19 +35,7 @@ import {
   useChallengeNames,
 } from "./person-row";
 
-export type { SponsorCard } from "./diary-actions";
-
-/** `DiaryEntry` from `GET /api/me/diary` (#935). */
-export interface DiaryEntry {
-  id: number;
-  kind: "person" | "sponsor";
-  starred: boolean;
-  note: string | null;
-  createdAt: string;
-  updatedAt: string;
-  person: DirectoryEntry | null;
-  sponsor: SponsorCard | null;
-}
+export type { DiaryEntry, SponsorCard } from "./diary-actions";
 
 /** Refetch on focus only when the list is older than this. */
 const FOCUS_REFRESH_MS = 30_000;
@@ -147,9 +133,6 @@ function DiaryPage() {
     return () => window.removeEventListener("focus", onFocus);
   }, [load]);
 
-  const [busyId, setBusyId] = useState<number | null>(null);
-  const [noteTarget, setNoteTarget] = useState<(DiaryMark & { title: string }) | null>(null);
-  const [removeTarget, setRemoveTarget] = useState<(DiaryMark & { title: string }) | null>(null);
   const [search, setSearch] = useState("");
   const [favouritesOnly, setFavouritesOnly] = useState(false);
 
@@ -158,58 +141,13 @@ function DiaryPage() {
       sortEntries([...(current ?? []).filter((entry) => entry.id !== next.id), next]),
     );
   }, []);
-
-  // Favouriting only marks a saved entry: it never adds or removes one (#935).
-  const handlers = useMemo<DiaryHandlers>(
-    () => ({
-      busyId,
-      onToggleStar: async (mark) => {
-        setBusyId(mark.id);
-        try {
-          replaceEntry(
-            await api.patch<DiaryEntry>(`/api/me/diary/${mark.id}`, { starred: !mark.starred }),
-          );
-        } catch (err) {
-          toast.error(apiErrorText(err, t, t("diaryCouldNotSave")), t("diaryFavourite"));
-        } finally {
-          setBusyId(null);
-        }
-      },
-      onEditNote: (mark, title) => setNoteTarget({ ...mark, title }),
-      onRemove: (mark, title) => setRemoveTarget({ ...mark, title }),
-    }),
-    [busyId, replaceEntry, t],
-  );
-
-  async function saveNote(note: string) {
-    if (!noteTarget) return;
-    setBusyId(noteTarget.id);
-    try {
-      replaceEntry(await api.patch<DiaryEntry>(`/api/me/diary/${noteTarget.id}`, { note }));
-      setNoteTarget(null);
-      toast.success(t("diaryNoteSaved"), { compactTitle: t("diaryNote") });
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("diaryCouldNotSave")), t("diaryNote"));
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function confirmRemove() {
-    if (!removeTarget) return;
-    const target = removeTarget;
-    setBusyId(target.id);
-    try {
-      await api.delete(`/api/me/diary/${target.id}`);
-      setEntries((current) => (current ?? []).filter((item) => item.id !== target.id));
-      setRemoveTarget(null);
-      toast.success(t("diaryRemoved"), { compactTitle: t("diaryRemoveTitle") });
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("diaryCouldNotSave")), t("diaryRemoveTitle"));
-    } finally {
-      setBusyId(null);
-    }
-  }
+  const removeEntry = useCallback((id: number) => {
+    setEntries((current) => (current ?? []).filter((item) => item.id !== id));
+  }, []);
+  const { handlers, dialogs } = useDiaryMutations({
+    onReplace: replaceEntry,
+    onRemoved: removeEntry,
+  });
 
   const people = useMemo(
     () => (entries ?? []).filter((entry) => entry.kind === "person"),
@@ -278,41 +216,23 @@ function DiaryPage() {
   );
 
   return (
-    <PageLayout>
-      <PageHeader title={t("diary")} />
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabBar width="content" aria-label={t("diary")}>
-          <TabsTrigger value="people">{t("diaryPeopleTab")}</TabsTrigger>
-          <TabsTrigger value="companies">{t("diaryCompaniesTab")}</TabsTrigger>
-        </TabBar>
-        <TabsContent value="people" className="pt-2">
-          {peopleView}
-        </TabsContent>
-        <TabsContent value="companies" className="pt-4">
+    <Tabs value={tab} onValueChange={setTab}>
+      <PageLayout>
+        <PageHeader
+          title={t("diary")}
+          nav={
+            <TabBar width="content" aria-label={t("diary")}>
+              <TabsTrigger value="people">{t("diaryPeopleTab")}</TabsTrigger>
+              <TabsTrigger value="companies">{t("diaryCompaniesTab")}</TabsTrigger>
+            </TabBar>
+          }
+        />
+        <TabsContent value="people">{peopleView}</TabsContent>
+        <TabsContent value="companies">
           <CompanyCollection nameOf={nameOf} />
         </TabsContent>
-      </Tabs>
-      <NoteDialog
-        target={noteTarget}
-        pending={noteTarget !== null && busyId === noteTarget.id}
-        onClose={() => setNoteTarget(null)}
-        onSave={(note) => void saveNote(note)}
-      />
-      <AlertModal
-        open={removeTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setRemoveTarget(null);
-        }}
-        title={t("diaryRemoveTitle")}
-        description={removeTarget?.title ?? ""}
-        cancelLabel={t("cancel")}
-        confirmLabel={t("remove")}
-        destructive
-        pending={removeTarget !== null && busyId === removeTarget.id}
-        onConfirm={() => void confirmRemove()}
-      >
-        <p className="text-muted-foreground text-pretty text-sm">{t("diaryRemoveBody")}</p>
-      </AlertModal>
-    </PageLayout>
+        {dialogs}
+      </PageLayout>
+    </Tabs>
   );
 }

@@ -20,11 +20,13 @@ export function HomeOverview({
   screenAnnouncements,
   challenges,
   sponsors,
+  collaborators = [],
 }: {
   event: PublicEvent;
   screenAnnouncements: PublicAnnouncement[];
   challenges: PublicChallenge[];
   sponsors: PublicSponsor[];
+  collaborators?: PublicSponsor[];
 }) {
   const { t, language } = useLocale();
   const phase = useEventPhase(event);
@@ -70,16 +72,21 @@ export function HomeOverview({
             ))}
           </div>
         ) : (
-          <EmptyState title={t("challengesPending")} />
+          <EmptyState inline title={t("challengesPending")} />
         )}
       </SectionCard>
       <SectionCard variant="plain" title={t("sponsors")}>
         {sponsors.length ? (
           <SponsorGrid sponsors={sponsors} />
         ) : (
-          <p className="text-sm text-muted-foreground">{t("sponsorsPending")}</p>
+          <EmptyState inline title={t("sponsorsPending")} />
         )}
       </SectionCard>
+      {collaborators.length > 0 && (
+        <SectionCard variant="plain" title={t("collaborators")}>
+          <SponsorGrid sponsors={collaborators} />
+        </SectionCard>
+      )}
     </div>
   );
 }

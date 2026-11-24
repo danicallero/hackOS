@@ -744,6 +744,24 @@ record. Keep bulk selection separate from the button that opens the record.
 Group related exports under one labeled menu; two identical download icons
 without context are not an adequate mobile adaptation.
 
+### Chrome budget: two rows above content
+
+A list page spends at most two rows on controls before its content:
+
+1. **Header row**: title, then the section's sibling-route navigation inline
+   (`PageHeader` `nav` slot; Home, Help desk, Projects, Contacts), then the
+   page actions at the trailing edge. On narrow screens the navigation wraps
+   under the title.
+2. **Toolbar row** (`ListToolbar`): `[scope] [search] [filters] [view/action]`.
+   What the list shows (My requests / Open, days of the schedule) is the `scope`
+   slot, a segmented `TabBar`, not a row of its own. A second level of tabs
+   outside the toolbar is not allowed. The schedule's day selector is the
+   calendar's sticky header.
+
+Controls with the same function share one style: segmented for "what am I
+looking at", outline button for "refine" (Filters), and no button that merely
+repeats the active state (Today appears only when it moves you somewhere).
+
 ### Headers, controls and tabs
 
 - A destination has one `PageHeader` and one `h1`. Title and data start at the
@@ -1154,7 +1172,10 @@ Loading / empty / error:
   spacing carry the hierarchy. Say what is actually the case ("No applicant has
   completed the form."), not that something "will appear here". A bordered
   drop destination in a builder is a target, not an empty state, and keeps its
-  dashed outline.
+  dashed outline. A section that is empty under its own heading (landing and
+  Home: challenges, sponsors) uses `<EmptyState inline>`: left-aligned quiet
+  text with no vertical padding, so sibling sections never mix centered blocks
+  with plain paragraphs.
 - Confirmation and error pages (sign-up, verify email, link expired, account
   deleted) lead with their heading; they do not stack an icon in a tinted circle
   above it. Circles are for avatars, initials, presence dots and timeline markers.

@@ -55,12 +55,15 @@ vi.mock("./request-list", () => ({
     audience,
     onClaimed,
     returnHref,
+    scope,
   }: {
     audience: string;
     onClaimed: () => void;
     returnHref: string;
+    scope?: React.ReactNode;
   }) => (
     <div>
+      {scope}
       <span>{audience}</span>
       <a href={returnHref}>Return context</a>
       <button type="button" onClick={onClaimed}>
