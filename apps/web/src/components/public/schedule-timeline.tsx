@@ -266,9 +266,11 @@ export function ScheduleTimeline({
   );
   const controls = (
     <div className="flex flex-wrap items-center gap-2">
-      <Button variant="outline" size="sm" onClick={goToNow}>
-        {t("today")}
-      </Button>
+      {(view === "week" || activeDay[0] !== today) && (
+        <Button variant="outline" size="sm" onClick={goToNow}>
+          {t("today")}
+        </Button>
+      )}
       <TabBar width="content" aria-label={t("schedule")}>
         <TabsTrigger value="day">{t("calendarDay")}</TabsTrigger>
         <TabsTrigger value="week">{t("calendarWeek")}</TabsTrigger>
@@ -283,24 +285,18 @@ export function ScheduleTimeline({
     >
       {renderToolbar ? renderToolbar(controls) : controls}
       {view === "day" && days.length > 1 && (
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
-          {days.map(([key, entries]) => (
-            <Button
-              key={key}
-              type="button"
-              size="sm"
-              variant={key === activeDay[0] ? "default" : "outline"}
-              aria-pressed={key === activeDay[0]}
-              className="shrink-0 capitalize"
-              onClick={() => setSelectedDay(key)}
-            >
-              {shortDate.format(new Date(entries[0].startsAt))}
-              {key === today && (
-                <span aria-hidden="true" className="size-1.5 rounded-full bg-destructive" />
-              )}
-            </Button>
-          ))}
-        </div>
+        <Tabs value={activeDay[0]} onValueChange={setSelectedDay}>
+          <TabBar width="content" aria-label={t("calendarDay")}>
+            {days.map(([key, entries]) => (
+              <TabsTrigger key={key} value={key} className="capitalize">
+                {shortDate.format(new Date(entries[0].startsAt))}
+                {key === today && (
+                  <span aria-hidden="true" className="size-1.5 rounded-full bg-destructive" />
+                )}
+              </TabsTrigger>
+            ))}
+          </TabBar>
+        </Tabs>
       )}
       <TabsContent value={view}>
         <div
