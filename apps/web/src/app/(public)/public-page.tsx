@@ -213,9 +213,12 @@ function PublicPageContent({
               </Link>
             </Button>
           )}
-          <Button size="lg" variant="outline" asChild>
-            <Link href={appHref}>{appLabel}</Link>
-          </Button>
+          {/* The header already carries this link; the hero repeats it only as its sole action. */}
+          {openApplications.length === 0 && (
+            <Button size="lg" asChild>
+              <Link href={appHref}>{appLabel}</Link>
+            </Button>
+          )}
         </div>
         {eventPhase.kind !== "none" && (
           <div className="border-border bg-card mt-10 inline-flex max-w-full flex-col rounded-surface border p-4 sm:p-5">
@@ -227,7 +230,7 @@ function PublicPageContent({
         )}
       </section>
 
-      <nav aria-label={t("onThisPage")} className="flex flex-wrap gap-2 pb-6">
+      <nav aria-label={t("onThisPage")} className="-ml-4 flex flex-wrap gap-2 pb-6">
         {[
           ...(openApplications.length
             ? [{ id: "applications-title", label: t("openApplications") }]
