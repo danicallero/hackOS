@@ -149,8 +149,8 @@ export function HomeSectionHeader() {
               ? "inbox"
               : "eventInformation",
         )}
+        nav={<HomeNavigation />}
       />
-      <HomeNavigation />
     </div>
   );
 }
@@ -190,8 +190,9 @@ export function ProjectsSectionHeader({
         state={recordState}
         primaryAction={recordAction ?? primaryAction}
         secondaryActions={secondaryActions}
+        nav={recordName ? undefined : <ProjectsNavigation />}
       />
-      <ProjectsNavigation />
+      {recordName ? <ProjectsNavigation /> : null}
     </div>
   );
 }
@@ -338,8 +339,8 @@ export function HelpDeskSectionHeader({ meta }: { meta?: React.ReactNode }) {
         meta={meta}
         secondaryActions={<HelpDeskOptions />}
         primaryAction={<RequestHelpAction />}
+        nav={<HelpDeskNavigation />}
       />
-      <HelpDeskNavigation />
       <HelpDeskClosed />
     </div>
   );

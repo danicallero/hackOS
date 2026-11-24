@@ -744,6 +744,24 @@ record. Keep bulk selection separate from the button that opens the record.
 Group related exports under one labeled menu; two identical download icons
 without context are not an adequate mobile adaptation.
 
+### Chrome budget: two rows above content
+
+A list page spends at most two rows on controls before its content:
+
+1. **Header row**: title, then the section's sibling-route navigation inline
+   (`PageHeader` `nav` slot; Home, Help desk, Projects, Contacts), then the
+   page actions at the trailing edge. On narrow screens the navigation wraps
+   under the title.
+2. **Toolbar row** (`ListToolbar`): `[scope] [search] [filters] [view/action]`.
+   What the list shows (My requests / Open, days of the schedule) is the `scope`
+   slot, a segmented `TabBar`, not a row of its own. A second level of tabs
+   outside the toolbar is not allowed. The schedule's day selector is the
+   calendar's sticky header.
+
+Controls with the same function share one style: segmented for "what am I
+looking at", outline button for "refine" (Filters), and no button that merely
+repeats the active state (Today appears only when it moves you somewhere).
+
 ### Headers, controls and tabs
 
 - A destination has one `PageHeader` and one `h1`. Title and data start at the

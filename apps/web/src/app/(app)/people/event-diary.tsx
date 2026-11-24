@@ -216,21 +216,23 @@ function DiaryPage() {
   );
 
   return (
-    <PageLayout>
-      <PageHeader title={t("diary")} />
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabBar width="content" aria-label={t("diary")}>
-          <TabsTrigger value="people">{t("diaryPeopleTab")}</TabsTrigger>
-          <TabsTrigger value="companies">{t("diaryCompaniesTab")}</TabsTrigger>
-        </TabBar>
-        <TabsContent value="people" className="pt-2">
-          {peopleView}
-        </TabsContent>
-        <TabsContent value="companies" className="pt-4">
+    <Tabs value={tab} onValueChange={setTab}>
+      <PageLayout>
+        <PageHeader
+          title={t("diary")}
+          nav={
+            <TabBar width="content" aria-label={t("diary")}>
+              <TabsTrigger value="people">{t("diaryPeopleTab")}</TabsTrigger>
+              <TabsTrigger value="companies">{t("diaryCompaniesTab")}</TabsTrigger>
+            </TabBar>
+          }
+        />
+        <TabsContent value="people">{peopleView}</TabsContent>
+        <TabsContent value="companies">
           <CompanyCollection nameOf={nameOf} />
         </TabsContent>
-      </Tabs>
-      {dialogs}
-    </PageLayout>
+        {dialogs}
+      </PageLayout>
+    </Tabs>
   );
 }

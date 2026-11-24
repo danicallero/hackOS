@@ -256,12 +256,27 @@ export function ScheduleTimeline({
         <EmptyState title={emptyTitle ?? t("schedulePending")} />
       </div>
     );
-  // The day chips above already switch day; the header only names it.
+  // In day view the grid's own header switches day: one control instead of a row of chips above it.
   const dayHeader = (
-    <div className="flex h-11 items-center justify-center px-1">
-      <span className="min-w-0 text-center text-sm font-medium">
-        {dateFormatter.format(new Date(activeDay[1][0].startsAt))}
-      </span>
+    <div className="flex h-11 items-center px-2">
+      {days.length > 1 ? (
+        <Tabs value={activeDay[0]} onValueChange={setSelectedDay} className="min-w-0">
+          <TabBar width="content" aria-label={t("calendarDay")}>
+            {days.map(([key, entries]) => (
+              <TabsTrigger key={key} value={key} className="capitalize">
+                {shortDate.format(new Date(entries[0].startsAt))}
+                {key === today && (
+                  <span aria-hidden="true" className="size-1.5 rounded-full bg-destructive" />
+                )}
+              </TabsTrigger>
+            ))}
+          </TabBar>
+        </Tabs>
+      ) : (
+        <span className="min-w-0 flex-1 text-center text-sm font-medium">
+          {dateFormatter.format(new Date(activeDay[1][0].startsAt))}
+        </span>
+      )}
     </div>
   );
   const controls = (
@@ -284,20 +299,6 @@ export function ScheduleTimeline({
       className={cn("gap-0 space-y-3", className)}
     >
       {renderToolbar ? renderToolbar(controls) : controls}
-      {view === "day" && days.length > 1 && (
-        <Tabs value={activeDay[0]} onValueChange={setSelectedDay}>
-          <TabBar width="content" aria-label={t("calendarDay")}>
-            {days.map(([key, entries]) => (
-              <TabsTrigger key={key} value={key} className="capitalize">
-                {shortDate.format(new Date(entries[0].startsAt))}
-                {key === today && (
-                  <span aria-hidden="true" className="size-1.5 rounded-full bg-destructive" />
-                )}
-              </TabsTrigger>
-            ))}
-          </TabBar>
-        </Tabs>
-      )}
       <TabsContent value={view}>
         <div
           ref={scroller}

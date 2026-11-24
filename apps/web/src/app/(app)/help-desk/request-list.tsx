@@ -276,7 +276,7 @@ export function RequestTable({
           placeholder: t("helpDeskSearchRequests"),
         }}
         filters={filters}
-        actions={scope}
+        scope={scope}
         searchOwnRowWhenNarrow
       />
       <DataTable
