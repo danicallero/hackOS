@@ -1,12 +1,19 @@
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { type BarcodeScanningResult, CameraView, useCameraPermissions } from "expo-camera";
 import { useIsFocused } from "expo-router";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Linking, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { GlassView } from "@/components/glass-view";
 import { NfcReader } from "@/components/nfc-reader";
+import { QrCameraClosing, QrCameraModal } from "@/components/qr-camera-modal";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { NfcScannerSurface } from "@/components/scanner-nfc-surface";
@@ -108,34 +115,28 @@ export function QrCamera({
       ) : (
         <CameraPreview
           onValue={onValue}
-          onClose={nfcFirst ? () => setCameraVisible(false) : onClose}
+          onClose={onClose}
           hint={hint}
           scanningEnabled={scanningEnabled && !nfcVisible}
           nfcSessionPending={nfcSessionPending}
-          requestCameraOnFocus={nfcFirst || requestCameraOnFocus}
+          requestCameraOnFocus={requestCameraOnFocus}
           onNfc={openNfc}
         />
       )}
       {nfcFirst ? (
-        <Modal
-          visible={cameraVisible}
-          animationType="slide"
-          onRequestClose={() => setCameraVisible(false)}
-        >
-          {cameraVisible ? (
-            <CameraPreview
-              onValue={(value) => {
-                setCameraVisible(false);
-                onValue(value);
-              }}
-              onClose={() => setCameraVisible(false)}
-              hint={hint}
-              scanningEnabled={scanningEnabled}
-              nfcSessionPending={false}
-              requestCameraOnFocus
-            />
-          ) : null}
-        </Modal>
+        <QrCameraModal visible={cameraVisible} onClose={() => setCameraVisible(false)}>
+          <CameraPreview
+            onValue={(value) => {
+              setCameraVisible(false);
+              onValue(value);
+            }}
+            onClose={() => setCameraVisible(false)}
+            hint={hint}
+            scanningEnabled={scanningEnabled}
+            nfcSessionPending={false}
+            requestCameraOnFocus
+          />
+        </QrCameraModal>
       ) : null}
       <NfcReader
         visible={nfcSupported && nfcVisible && scanningEnabled}
@@ -165,6 +166,7 @@ function CameraPreview({
   nfcSessionPending: boolean;
   requestCameraOnFocus: boolean;
 }) {
+  const closing = useContext(QrCameraClosing);
   const [permission, requestPermission] = useCameraPermissions();
   const { t } = useLocale();
   const isFocused = useIsFocused();
@@ -172,6 +174,32 @@ function CameraPreview({
   const sideRegion = useSideRegion();
   const tabBarBottomInset = useRouterTabBarBottomInset();
   const locked = useRef(false);
+  const unlockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reducedMotion = useReducedMotion();
+  const capture = useSharedValue(0);
+  const target = useSharedValue({ x: 0, y: 0, scale: 1 });
+  const captureFrame = useAnimatedStyle(() => {
+    const progress = capture.value;
+    const { x, y, scale } = target.value;
+    return {
+      transform: reducedMotion
+        ? []
+        : [
+            { translateX: x * progress },
+            { translateY: y * progress },
+            { scale: 1 + (scale - 1) * progress },
+          ],
+    };
+  });
+  const capturePulse = useAnimatedStyle(() => ({
+    opacity: 0.48 * Math.sin(Math.PI * capture.value),
+  }));
+  useEffect(
+    () => () => {
+      if (unlockTimer.current) clearTimeout(unlockTimer.current);
+    },
+    [],
+  );
   const permissionRequestStarted = useRef(false);
   const scanCandidate = useRef<QrScanCandidate | null>(null);
   const [{ height, width }, setViewport] = useState({ height: 0, width: 0 });
@@ -214,6 +242,7 @@ function CameraPreview({
 
   useEffect(() => {
     if (
+      closing ||
       permission?.status !== "undetermined" ||
       !isFocused ||
       !scanningEnabled ||
@@ -224,6 +253,7 @@ function CameraPreview({
       return;
     requestCamera();
   }, [
+    closing,
     isFocused,
     nfcSessionPending,
     permission?.status,
@@ -233,13 +263,15 @@ function CameraPreview({
   ]);
 
   useEffect(() => {
-    if (!isFocused) {
+    if (!isFocused && !closing) {
       locked.current = false;
+      if (unlockTimer.current) clearTimeout(unlockTimer.current);
+      capture.value = 0;
       scanCandidate.current = null;
       setTorchEnabled(false);
       setManualEntryVisible(false);
     }
-  }, [isFocused]);
+  }, [capture, closing, isFocused]);
 
   useEffect(() => {
     scanCandidate.current = null;
@@ -263,12 +295,22 @@ function CameraPreview({
       scanCandidate.current = confirmation.candidate;
       if (!confirmation.accepted) return;
       locked.current = true;
-      onValue(result.data);
-      setTimeout(() => {
+      target.value = {
+        x: observation.centerX * frameSize,
+        y: observation.centerY * frameSize,
+        scale: Math.min(1, Math.sqrt(observation.areaRatio) + 0.12),
+      };
+      capture.value = 0;
+      capture.value = withTiming(1, { duration: 145 });
+      void haptic("light");
+      if (unlockTimer.current) clearTimeout(unlockTimer.current);
+      unlockTimer.current = setTimeout(() => {
         locked.current = false;
+        capture.value = withTiming(0, { duration: 125 });
       }, 1200);
+      onValue(result.data);
     },
-    [frameSize, height, width, onValue],
+    [capture, frameSize, height, onValue, target, width],
   );
 
   function nfcPermissionButton() {
@@ -379,9 +421,9 @@ function CameraPreview({
       }}
       style={styles.black}
     >
-      {isFocused ? (
+      {isFocused || closing ? (
         <CameraView
-          active={isFocused}
+          active={isFocused || closing}
           // The preview only scans barcodes; it must never win hit-testing
           // over the controls rendered above it (toolbar, queue, flashlight,
           // and manual-entry buttons) on iOS 18's native camera surface.
@@ -391,7 +433,7 @@ function CameraPreview({
           enableTorch={cameraControls.showTorch && torchEnabled}
           barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
           onBarcodeScanned={
-            scanningEnabled && !manualEntryVisible ? handleBarcodeScanned : undefined
+            scanningEnabled && !closing && !manualEntryVisible ? handleBarcodeScanned : undefined
           }
         />
       ) : null}
@@ -399,12 +441,15 @@ function CameraPreview({
         <Path d={shadePath} fill="rgba(0,0,0,0.54)" fillRule="evenodd" />
       </Svg>
       <View pointerEvents="none" style={styles.frameOverlay}>
-        <View style={[styles.frame, { height: frameSize, width: frameSize }]}>
+        <Animated.View
+          style={[styles.frame, { height: frameSize, width: frameSize }, captureFrame]}
+        >
+          {!reducedMotion ? <Animated.View style={[styles.pulse, capturePulse]} /> : null}
           <View style={[styles.corner, styles.topLeft]} />
           <View style={[styles.corner, styles.topRight]} />
           <View style={[styles.corner, styles.bottomLeft]} />
           <View style={[styles.corner, styles.bottomRight]} />
-        </View>
+        </Animated.View>
       </View>
       {hint === null ? null : (
         <Text
@@ -533,6 +578,12 @@ const styles = StyleSheet.create({
     top: 0,
   },
   frame: { borderRadius: FRAME_RADIUS, overflow: "hidden" },
+  pulse: {
+    ...StyleSheet.absoluteFill,
+    borderColor: "white",
+    borderRadius: FRAME_RADIUS,
+    borderWidth: 5,
+  },
   corner: { borderColor: "white", height: 52, position: "absolute", width: 52 },
   topLeft: {
     borderLeftWidth: 4,

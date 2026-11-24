@@ -9,7 +9,6 @@ import {
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   InteractionManager,
-  Modal,
   Platform,
   ScrollView,
   Text,
@@ -27,6 +26,7 @@ import { PersonAvatar } from "@/components/person-avatar";
 import { formatMinutes, PresenceManagement } from "@/components/presence-management";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { QrCamera } from "@/components/QrCamera";
+import { QrCameraModal } from "@/components/qr-camera-modal";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { SymbolView } from "@/components/symbol";
@@ -932,18 +932,12 @@ export function PersonOperationsScreen({
         onValue={(code) => void saveBadge(code, attendeeRole ?? undefined)}
         onClose={() => setBadgeCodeMethod(null)}
       />
-      <Modal
-        visible={badgeCodeMethod === "qr"}
-        animationType="slide"
-        onRequestClose={() => setBadgeCodeMethod(null)}
-      >
-        {badgeCodeMethod === "qr" ? (
-          <QrCamera
-            onClose={() => setBadgeCodeMethod(null)}
-            onValue={(code) => void saveBadge(code.trim(), attendeeRole ?? undefined)}
-          />
-        ) : null}
-      </Modal>
+      <QrCameraModal visible={badgeCodeMethod === "qr"} onClose={() => setBadgeCodeMethod(null)}>
+        <QrCamera
+          onClose={() => setBadgeCodeMethod(null)}
+          onValue={(code) => void saveBadge(code.trim(), attendeeRole ?? undefined)}
+        />
+      </QrCameraModal>
       <NfcReader
         claimBadge
         visible={badgeReaderVisible}

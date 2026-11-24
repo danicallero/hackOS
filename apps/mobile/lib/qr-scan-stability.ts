@@ -1,8 +1,9 @@
 import type { QrFrameObservation } from "./qr-frame";
 
-const REQUIRED_DETECTIONS = 3;
-const MIN_STABLE_DURATION_MS = 100;
-const MAX_DETECTION_GAP_MS = 400;
+const REQUIRED_DETECTIONS = 2;
+const MIN_STABLE_DURATION_MS = 65;
+// H22–H26: expo-camera throttles identical callback payloads for 500ms.
+const MAX_DETECTION_GAP_MS = 750;
 const MAX_CENTER_SHIFT = 0.08;
 const MAX_AREA_CHANGE_RATIO = 0.25;
 

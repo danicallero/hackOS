@@ -2044,13 +2044,20 @@ a temporal stability test (`lib/qr-scan-stability.ts`).
   (`MIN_BARCODE_TO_FRAME_AREA_RATIO`) — this forces the operator to bring one
   QR deliberately into the foreground instead of auto-firing on whatever
   passes through the background.
-- *Stability test.* `advanceQrScanCandidate` then requires 3 consecutive
+- *Stability test.* `advanceQrScanCandidate` then requires 2 consecutive
   detections of the same data (`REQUIRED_DETECTIONS`), spanning at least
-  100ms (`MIN_STABLE_DURATION_MS`) with no gap over 400ms
+  65ms (`MIN_STABLE_DURATION_MS`) with no gap over 750ms
   (`MAX_DETECTION_GAP_MS`), while the code's center drifts by no more than
   0.08 frame-widths (`MAX_CENTER_SHIFT`) and its area changes by no more
   than 25% (`MAX_AREA_CHANGE_RATIO`) between detections — this rejects a
-  still-focusing or still-moving frame.
+  still-focusing or still-moving frame. The gap accommodates Expo Camera's
+  500ms throttle for identical barcode payloads.
+- On confirmation the frame contracts around the detected code with a brief
+  pulse and haptic feedback. The scan handler runs immediately.
+- The iOS QR viewer zooms in and can be dismissed with Back or by swiping
+  down or right. Its preview stays mounted over a black backing until the
+  zoom-out finishes. With Reduce Motion, the viewer opens and closes
+  immediately and skips the capture animation.
 - A confirmed scan locks the camera for 1200ms and resets the candidate on
   blur, viewport resize, or `scanningEnabled` toggling off.
 - *Android quirks.* `expo-camera` does not guarantee the same `cornerPoints`

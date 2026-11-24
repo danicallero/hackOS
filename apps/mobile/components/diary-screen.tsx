@@ -1,7 +1,7 @@
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AppState, Modal, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
+import { AppState, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AccountWalletOverlay, useAccountWallet, WalletModal } from "@/components/account-wallet";
 import { AppRefreshControl } from "@/components/app-refresh-control";
@@ -23,6 +23,7 @@ import { EmptyState, LegacyScreenHeader, Section, Separator } from "@/components
 import { NfcReader } from "@/components/nfc-reader";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { QrCamera } from "@/components/QrCamera";
+import { QrCameraModal } from "@/components/qr-camera-modal";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { SegmentedControl } from "@/components/segmented-control";
@@ -681,13 +682,8 @@ export function DiaryScreen() {
         onValue={(code) => void submitScan(code)}
         onClose={() => setInput(null)}
       />
-      <Modal visible={input === "qr"} animationType="slide" onRequestClose={() => setInput(null)}>
-        {input === "qr" ? (
-          <QrCamera
-            onClose={() => setInput(null)}
-            onValue={(code) => void submitScan(code, true)}
-          />
-        ) : null}
+      <QrCameraModal visible={input === "qr"} onClose={() => setInput(null)}>
+        <QrCamera onClose={() => setInput(null)} onValue={(code) => void submitScan(code, true)} />
         <CompanyCelebration
           inline
           target={input === "qr" ? companyCelebration : null}
@@ -701,7 +697,7 @@ export function DiaryScreen() {
           onCovered={revealMet}
           onDone={finishCelebration}
         />
-      </Modal>
+      </QrCameraModal>
       {noteEditor}
     </>
   );
