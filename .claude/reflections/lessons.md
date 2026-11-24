@@ -938,7 +938,7 @@ Inventory what the repo already ships (`apps/web/public`, `apps/api/assets`,
 UI components) and render it before consulting outside references. New
 surfaces take their proportions, fields, labels, palette and typefaces from the
 closest existing artifact; outside art is an accent, not the base. Titles use
-the edition's actual title weights (Rockwell regular), values use Inter; flat
+the edition's regular display face, values use Inter; flat
 color, no decorative gradients.
 
 ### Action
