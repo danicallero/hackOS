@@ -20,11 +20,13 @@ export function HomeOverview({
   screenAnnouncements,
   challenges,
   sponsors,
+  collaborators = [],
 }: {
   event: PublicEvent;
   screenAnnouncements: PublicAnnouncement[];
   challenges: PublicChallenge[];
   sponsors: PublicSponsor[];
+  collaborators?: PublicSponsor[];
 }) {
   const { t, language } = useLocale();
   const phase = useEventPhase(event);
@@ -80,6 +82,11 @@ export function HomeOverview({
           <EmptyState inline title={t("sponsorsPending")} />
         )}
       </SectionCard>
+      {collaborators.length > 0 && (
+        <SectionCard variant="plain" title={t("collaborators")}>
+          <SponsorGrid sponsors={collaborators} />
+        </SectionCard>
+      )}
     </div>
   );
 }
