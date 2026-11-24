@@ -5,6 +5,7 @@ import { parse } from "csv-parse/sync";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import yauzl from "yauzl";
 import type { App } from "../../src/app.js";
+import { pool } from "../../src/db/pool.js";
 import { createApplication, createResponse } from "../applications/fixtures.js";
 import {
   asUser,
@@ -50,7 +51,6 @@ afterAll(async () => {
   await app?.close();
   const { stopQueues } = await import("../../src/lib/queues.js");
   const { closeValkey } = await import("../../src/lib/valkey.js");
-  const { pool } = await import("../../src/db/pool.js");
   await stopQueues();
   await closeValkey();
   await pool.end();
@@ -155,6 +155,40 @@ describe("batch application export (H56)", () => {
     expect(Object.keys(entries)).toEqual(["applications.csv"]);
   });
 
+  it("exports the average review grade, blank when unreviewed (H56)", async () => {
+    const staff = await createUserWithCapabilities([CAPABILITIES.EXPORTS_RUN]);
+    const applicationId = await createApplication({ name: "Main form" });
+    const graded = await createUser({ email: "graded@test.local" });
+    const ungraded = await createUser({ email: "ungraded@test.local" });
+    const reviewerA = await createUser();
+    const reviewerB = await createUser();
+    const gradedId = await createResponse(graded, applicationId, { status: "accepted" });
+    await createResponse(ungraded, applicationId, { status: "accepted" });
+    await pool.query(
+      `INSERT INTO applicant_reviews (response_id, author_id, score) VALUES ($1, $2, 4), ($1, $3, 5)`,
+      [gradedId, reviewerA, reviewerB],
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/exports/applications.zip",
+      headers: { ...asUser(staff), "content-type": "application/json" },
+      payload: {
+        statuses: ["accepted"],
+        fields: [
+          { source: "profile", key: "email" },
+          { source: "metadata", key: "review_avg_score" },
+        ],
+        documents: "none",
+        language: "es",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const csv = (await readZipEntries(response.rawPayload))["applications.csv"]?.toString();
+    expect(csv).toContain("graded@test.local,4.5");
+    expect(csv).toMatch(/ungraded@test.local,(\r?\n|$)/);
+  });
+
   it("uses escaped field keys regardless of labels or language and disambiguates repeated keys", async () => {
     const staff = await createUserWithCapabilities([CAPABILITIES.EXPORTS_RUN]);
     const key = 'consent,"mlh"';
@@ -228,7 +262,6 @@ describe("batch application export (H56)", () => {
 
   it("exports names rather than IDs for university and degree library answers", async () => {
     const staff = await createUserWithCapabilities([CAPABILITIES.EXPORTS_RUN]);
-    const { pool } = await import("../../src/db/pool.js");
     const { rows: universities } = await pool.query<{ id: number }>(
       `INSERT INTO universities (name, proposed_by) VALUES ('Universidade de Exportación', $1)
        RETURNING id`,
