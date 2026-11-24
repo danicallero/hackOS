@@ -82,6 +82,7 @@ interface ApplicationExportRow {
   decision_sent_at: Date | null;
   confirmed_at: Date | null;
   declined_at: Date | null;
+  review_avg_score: number | null;
 }
 
 interface DocumentCandidate {
@@ -170,6 +171,10 @@ const METADATA_FIELDS: StaticFieldDefinition[] = [
   {
     key: "staff_notes",
     label: { en: "Staff notes", es: "Notas del equipo", gl: "Notas do equipo" },
+  },
+  {
+    key: "review_avg_score",
+    label: { en: "Grade", es: "Nota", gl: "Nota" },
   },
 ];
 
@@ -268,6 +273,8 @@ function fieldValueForMetadata(row: ApplicationExportRow, key: string): unknown 
       return row.declined_at;
     case "staff_notes":
       return row.staff_notes;
+    case "review_avg_score":
+      return row.review_avg_score === null ? "" : Math.round(row.review_avg_score * 100) / 100;
     default:
       return "";
   }
@@ -531,7 +538,10 @@ async function loadApplicationRows(
             r.submitted_at,
             r.decision_sent_at,
             r.confirmed_at,
-            r.declined_at
+            r.declined_at,
+            (SELECT avg(ar.score)::float
+               FROM applicant_reviews ar
+              WHERE ar.response_id = r.id AND ar.score IS NOT NULL) AS review_avg_score
        FROM application_responses r
        JOIN applications app ON app.id = r.application_id
        JOIN application_form_versions fv ON fv.id = r.application_form_version_id
