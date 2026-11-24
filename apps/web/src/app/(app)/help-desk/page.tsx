@@ -88,7 +88,7 @@ export default function HelpdeskPage() {
     </div>
   );
   return (
-    <PageLayout>
+    <PageLayout stickyChrome>
       <HelpDeskSectionHeader />
       {profile.error ? <HelpdeskError error={profile.error} retry={profile.reload} /> : null}
       {view && views.length === 1 ? (

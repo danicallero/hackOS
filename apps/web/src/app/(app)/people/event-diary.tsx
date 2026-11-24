@@ -182,6 +182,7 @@ function DiaryPage() {
           search={{
             id: "diary-search",
             label: t("searchPeople"),
+            collapsible: true,
             value: search,
             onValueChange: setSearch,
           }}
@@ -217,8 +218,9 @@ function DiaryPage() {
 
   return (
     <Tabs value={tab} onValueChange={setTab}>
-      <PageLayout>
+      <PageLayout stickyChrome>
         <PageHeader
+          sticky
           title={t("diary")}
           nav={
             <TabBar width="content" aria-label={t("diary")}>

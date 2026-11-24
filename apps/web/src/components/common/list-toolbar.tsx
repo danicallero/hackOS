@@ -67,7 +67,7 @@ export function ListToolbar({
     </PageToolbar>
   );
   return (
-    <div className="@container space-y-3">
+    <div data-sticky-toolbar className="@container space-y-3">
       {scope ? (
         <div className="flex flex-wrap items-center gap-2">
           <div className="max-w-full shrink-0">{scope}</div>

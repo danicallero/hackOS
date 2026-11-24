@@ -539,8 +539,9 @@ export default function UsersPage() {
   ];
 
   return (
-    <PageLayout>
+    <PageLayout stickyChrome>
       <PageHeader
+        sticky
         className="flex-row items-center justify-between gap-2 md:items-center"
         title={t("users")}
         state={

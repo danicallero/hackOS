@@ -758,6 +758,20 @@ A list page spends at most two rows on controls before its content:
    outside the toolbar is not allowed. The schedule's day selector is the
    calendar's sticky header.
 
+**Search on short lists** collapses to an icon button (`SearchField
+collapsible`; Contacts People) that expands in place on click or `/`, and folds
+back on Escape or blur while empty; a field holding a query never folds. Long
+lists (schedule, Users, Applications, Help desk requests) keep the field open.
+
+**Sticky chrome.** List pages opt in with `PageHeader sticky` plus
+`PageLayout stickyChrome`: the header pins at the viewport top and the toolbar
+pins directly beneath it (`--sticky-header-h` is published by the header). The
+title condenses with `transform: scale(.8)` and a hairline appears; nothing
+changes height, so content never shifts and the state cannot oscillate around
+its threshold. It is driven by an IntersectionObserver on a sentinel, not a
+scroll handler, and the 150 ms transition is off under reduced motion. Record
+pages with a hero do not use it.
+
 Controls with the same function share one style: segmented for "what am I
 looking at", outline button for "refine" (Filters), and no button that merely
 repeats the active state (Today appears only when it moves you somewhere).

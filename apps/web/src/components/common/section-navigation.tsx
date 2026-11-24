@@ -36,12 +36,6 @@ import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
-/**
- * Sibling routes of one workspace share this view-transition name, so the
- * title and tabs stay put while only the content below crossfades.
- */
-const SECTION_HEADER_TRANSITION = { viewTransitionName: "section-header" } as const;
-
 function ProjectsNavigation() {
   const { t } = useLocale();
   const { status, isPureApplicant, canAny, me } = useSessionContext();
@@ -139,7 +133,7 @@ export function HomeSectionHeader() {
   const { t } = useLocale();
   const pathname = usePathname();
   return (
-    <div className="space-y-(--page-section-gap)" style={SECTION_HEADER_TRANSITION}>
+    <>
       <PageHeader
         title={t("home")}
         tabTitle={t(
@@ -150,8 +144,9 @@ export function HomeSectionHeader() {
               : "eventInformation",
         )}
         nav={<HomeNavigation />}
+        sticky
       />
-    </div>
+    </>
   );
 }
 
@@ -180,7 +175,7 @@ export function ProjectsSectionHeader({
     management ? "manageProjects" : galleryRecord ? "projectGallery" : "myProjects",
   );
   return (
-    <div className="space-y-(--page-section-gap)" style={SECTION_HEADER_TRANSITION}>
+    <>
       <PageHeader
         title={
           recordName ??
@@ -191,9 +186,10 @@ export function ProjectsSectionHeader({
         primaryAction={recordAction ?? primaryAction}
         secondaryActions={secondaryActions}
         nav={recordName ? undefined : <ProjectsNavigation />}
+        sticky={!recordName}
       />
       {recordName ? <ProjectsNavigation /> : null}
-    </div>
+    </>
   );
 }
 
@@ -333,15 +329,16 @@ function HelpDeskOptions() {
 export function HelpDeskSectionHeader({ meta }: { meta?: React.ReactNode }) {
   const { t } = useLocale();
   return (
-    <div className="space-y-(--page-section-gap)" style={SECTION_HEADER_TRANSITION}>
+    <>
       <PageHeader
         title={t("helpDeskTitle")}
         meta={meta}
         secondaryActions={<HelpDeskOptions />}
         primaryAction={<RequestHelpAction />}
         nav={<HelpDeskNavigation />}
+        sticky
       />
       <HelpDeskClosed />
-    </div>
+    </>
   );
 }

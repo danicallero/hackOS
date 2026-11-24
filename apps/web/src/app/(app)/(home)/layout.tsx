@@ -19,7 +19,7 @@ export default function HomeLayout({ children }: { children: React.ReactNode }) 
   // A challenge is a record page: its hero runs full-bleed, so no Home tabs or width wrapper.
   if (pathname.startsWith("/challenge/")) return <>{children}</>;
   return (
-    <PageLayout>
+    <PageLayout stickyChrome>
       {status === "authenticated" ? (
         <HomeSectionHeader />
       ) : pathname === "/timetable" ? (

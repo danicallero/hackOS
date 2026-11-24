@@ -259,6 +259,10 @@ describe("EventDiary (#935)", () => {
     ];
     await render();
     const user = userEvent.setup();
+    // People's search is short-list collapsible: it opens from its icon button.
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>("button[data-shortcut-search]")?.click(),
+    );
     const field = container.querySelector<HTMLInputElement>("#diary-search")!;
     await act(async () => user.type(field, "CAFE"));
     expect(table().textContent).toContain("Ana P.");

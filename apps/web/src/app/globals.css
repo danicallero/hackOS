@@ -561,6 +561,50 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 }
 
 /*
+ * Sticky list chrome (PageHeader `sticky`, PageLayout `stickyChrome`): the header
+ * pins at the viewport top, the toolbar right under it. Condensing changes only
+ * transform and a hairline, never height, so content below never shifts.
+ */
+[data-sticky-header] {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--hackos-shell, var(--background));
+  box-shadow: 0 1px 0 transparent;
+}
+
+[data-sticky-header] .heading-row {
+  transform-origin: left center;
+}
+
+[data-sticky-header][data-condensed] {
+  box-shadow: 0 1px 0 var(--border);
+}
+
+[data-sticky-header][data-condensed] .heading-row {
+  transform: scale(0.8);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-sticky-header],
+  [data-sticky-header] .heading-row {
+    transition:
+      transform 150ms cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 150ms ease-out;
+  }
+}
+
+[data-sticky-chrome] [data-sticky-toolbar] {
+  position: sticky;
+  top: var(--sticky-header-h, 0px);
+  z-index: 15;
+  background: var(--hackos-shell, var(--background));
+  /* Cover rows scrolling under the pinned bar without moving anything in flow. */
+  padding-bottom: 0.5rem;
+  margin-bottom: -0.5rem;
+}
+
+/*
  * Route skeletons stay invisible for the first 400 ms: a fast navigation lands
  * its content before anything flashes; only a slow one shows the placeholder.
  */

@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
 import { ActionGroup } from "@/components/common/action-group";
 import { PageTitle } from "@/components/common/page-title";
 import { cn } from "@/lib/utils";
@@ -18,6 +21,7 @@ export function PageHeader({
   secondaryActions,
   actions,
   nav,
+  sticky = false,
   className,
   headingLevel = 1,
   reserveNavigation = true,
@@ -47,6 +51,12 @@ export function PageHeader({
    * (and below it on narrow screens) so it does not cost a row of its own.
    */
   nav?: React.ReactNode;
+  /**
+   * List pages: the header stays pinned while the content scrolls and its title
+   * condenses (transform only, so nothing below moves). Toolbars inside a
+   * `[data-sticky-chrome]` canvas pin right beneath it.
+   */
+  sticky?: boolean;
   /** @deprecated Prefer primaryAction and secondaryActions to make priority explicit. */
   actions?: React.ReactNode;
   className?: string;
@@ -62,7 +72,7 @@ export function PageHeader({
       actions
     );
 
-  return (
+  const header = (
     <header
       className={cn(
         "flex min-h-(--control-height-default) flex-col gap-(--space-within-section) md:flex-row md:justify-between",
@@ -100,5 +110,57 @@ export function PageHeader({
         <ActionGroup className="md:shrink-0 md:justify-end">{actionContent}</ActionGroup>
       )}
     </header>
+  );
+  return sticky ? <StickyFrame>{header}</StickyFrame> : header;
+}
+
+/**
+ * Pins its header and condenses the title once the page scrolls. The state comes
+ * from an IntersectionObserver on a sentinel above the frame, never from a scroll
+ * handler, and only transform/opacity change, so scrolling never re-lays the
+ * content out and cannot oscillate around the threshold. The frame publishes its
+ * height as `--sticky-header-h` for the toolbar that pins beneath it.
+ */
+function StickyFrame({ children }: { children: React.ReactNode }) {
+  const sentinel = useRef<HTMLDivElement>(null);
+  const frame = useRef<HTMLDivElement>(null);
+  const [condensed, setCondensed] = useState(false);
+  useEffect(() => {
+    const node = sentinel.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setCondensed(!entry.isIntersecting && entry.boundingClientRect.top < 0),
+      { threshold: 0 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    const node = frame.current;
+    if (!node) return;
+    const root = document.documentElement;
+    const publish = () => root.style.setProperty("--sticky-header-h", `${node.offsetHeight}px`);
+    publish();
+    if (typeof ResizeObserver === "undefined")
+      return () => root.style.removeProperty("--sticky-header-h");
+    const observer = new ResizeObserver(publish);
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--sticky-header-h");
+    };
+  }, []);
+  return (
+    <>
+      <div ref={sentinel} aria-hidden="true" className="-mb-px h-px" />
+      <div
+        ref={frame}
+        data-sticky-header
+        data-condensed={condensed ? "" : undefined}
+        style={{ viewTransitionName: "section-header" }}
+      >
+        {children}
+      </div>
+    </>
   );
 }

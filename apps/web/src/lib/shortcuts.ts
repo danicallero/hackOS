@@ -206,13 +206,20 @@ export function triggerShortcutSave(doc: Document): boolean {
   return true;
 }
 
-/** Focuses the first list SearchField in the active layer. */
+/** Focuses the first list SearchField in the active layer; a collapsed one is expanded. */
 export function focusListSearch(doc: Document): boolean {
-  const input = Array.from(
-    activeLayer(doc).querySelectorAll<HTMLInputElement>(`input[${SEARCH_SHORTCUT_ATTR}]`),
+  const target = Array.from(
+    activeLayer(doc).querySelectorAll<HTMLInputElement | HTMLButtonElement>(
+      `[${SEARCH_SHORTCUT_ATTR}]`,
+    ),
   ).find((candidate) => !candidate.disabled && !candidate.closest("[hidden],[inert]"));
-  if (!input) return false;
-  input.focus();
-  input.select();
+  if (!target) return false;
+  if (target instanceof HTMLInputElement) {
+    target.focus();
+    target.select();
+  } else {
+    // The collapsed trigger expands the field and focuses it.
+    target.click();
+  }
   return true;
 }
