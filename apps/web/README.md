@@ -51,7 +51,7 @@ updating the three places together: `robots.ts`, the `headers()` pattern and the
 ## Edition theme
 
 `src/styles/theme.css` is the visual source of truth: the HackUDC 2027 palette,
-Inter/Rockwell font roles, semantic light/dark colors, control/surface geometry,
+Inter/Arvo font roles, semantic light/dark colors, control/surface geometry,
 and title scale. `src/app/globals.css` imports it and exposes the standard
 shadcn/Tailwind utilities; every management page inherits it through the root
 layout. Buttons use `rounded-button`, fields use `rounded-control`, navigation

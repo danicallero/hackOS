@@ -397,7 +397,7 @@ transparent PNG exports are hosted under
 and `brand-mark.png` stay available for images in already-sent messages. The
 footer retains hackOS as the sending platform.
 
-Body text uses an Inter/system sans stack; 28px regular Rockwell headings load
+Body text uses an Inter/system sans stack; 28px regular Arvo headings load
 from the web's existing font asset and fall back to Georgia. Clients that block
 webfonts retain readable system typography. Narrow layouts reduce padding and
 expand action links, including long verification labels. The document language

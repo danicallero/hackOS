@@ -80,10 +80,10 @@ const EMAIL_BUTTON_RADIUS = 8;
 // H52: reuse the edition's self-hosted display face where email clients allow
 // webfonts. Body text uses Inter when available and email-safe sans fallbacks.
 const EMAIL_FONT_FACES = `
-      @font-face { font-family:'Rockwell'; font-style:normal; font-weight:400; font-display:swap; src:url(${escapeHtml(`${config.WEB_URL}/fonts/hackudc-2027/rockwell-regular.woff2`)}) format('woff2'); }`;
+      @font-face { font-family:'Arvo'; font-style:normal; font-weight:400; font-display:swap; src:url(${escapeHtml(`${config.WEB_URL}/fonts/hackudc-2027/arvo-regular.woff2`)}) format('woff2'); }`;
 const EMAIL_FONT_STACK =
   "Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
-const EMAIL_DISPLAY_FONT_STACK = "'Rockwell',Georgia,'Times New Roman',serif";
+const EMAIL_DISPLAY_FONT_STACK = "'Arvo',Georgia,'Times New Roman',serif";
 const EMAIL_MONO_FONT_STACK =
   "ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace";
 
