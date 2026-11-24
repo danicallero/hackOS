@@ -1154,7 +1154,10 @@ Loading / empty / error:
   spacing carry the hierarchy. Say what is actually the case ("No applicant has
   completed the form."), not that something "will appear here". A bordered
   drop destination in a builder is a target, not an empty state, and keeps its
-  dashed outline.
+  dashed outline. A section that is empty under its own heading (landing and
+  Home: challenges, sponsors) uses `<EmptyState inline>`: left-aligned quiet
+  text with no vertical padding, so sibling sections never mix centered blocks
+  with plain paragraphs.
 - Confirmation and error pages (sign-up, verify email, link expired, account
   deleted) lead with their heading; they do not stack an icon in a tinted circle
   above it. Circles are for avatars, initials, presence dots and timeline markers.

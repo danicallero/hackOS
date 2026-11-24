@@ -462,7 +462,7 @@ export function ScheduleTimeline({
                         type="button"
                         onClick={() => openItem(item)}
                         className={cn(
-                          "button-interaction absolute z-20 flex flex-col items-start justify-start overflow-hidden rounded-sm border border-l-[3px] px-2 text-left",
+                          "button-interaction absolute z-[5] flex flex-col items-start justify-start overflow-hidden rounded-sm border border-l-[3px] px-2 text-left",
                           itemHeight < 42 ? "py-0.5" : itemHeight < 60 ? "py-1" : "py-2",
                           SCHEDULE_CATEGORY_STYLES[toActivityKind(item.type) ?? "activity"],
                           liveIds.has(item.id) && "ring-2 ring-destructive/70",
@@ -490,12 +490,21 @@ export function ScheduleTimeline({
                         </span>
                         {itemHeight >= 42 && (
                           <span className="block max-w-full shrink-0 truncate text-xs opacity-80">
-                            {t(activityKindLabelKey(toActivityKind(item.type) ?? "activity"))}
-                            {` · ${timeFormatter.format(new Date(item.startsAt))}–${timeFormatter.format(new Date(item.endsAt))}`}
+                            {/* Side-by-side items are narrow: the time is the useful part. */}
+                            {laneCount === 1 &&
+                              `${t(activityKindLabelKey(toActivityKind(item.type) ?? "activity"))} · `}
+                            {`${timeFormatter.format(new Date(item.startsAt))}–${timeFormatter.format(new Date(item.endsAt))}`}
                           </span>
                         )}
                         {itemHeight >= 88 && item.location && (
-                          <span className="mt-1 flex max-w-[calc(100%-6.5rem)] shrink-0 items-center gap-1 text-xs opacity-80">
+                          <span
+                            className={cn(
+                              "mt-1 flex min-w-0 max-w-full shrink-0 items-center gap-1 text-xs opacity-80",
+                              (item.speakers?.length ?? 0) > 0 &&
+                                laneCount === 1 &&
+                                "max-w-[calc(100%-6.5rem)]",
+                            )}
+                          >
                             <MapPinIcon aria-hidden="true" className="size-3 shrink-0" />
                             <span className="truncate">{item.location}</span>
                           </span>
@@ -515,7 +524,7 @@ export function ScheduleTimeline({
                     <div
                       aria-hidden="true"
                       className={cn(
-                        "pointer-events-none absolute inset-x-0 z-10 border-t",
+                        "pointer-events-none absolute inset-x-0 z-[6] border-t",
                         key === today ? "border-t-2 border-destructive" : "border-destructive/20",
                       )}
                       style={{ top: nowHour * HOUR_HEIGHT }}

@@ -11,6 +11,7 @@ export function EmptyState({
   description,
   action,
   className,
+  inline,
 }: {
   title: string;
   /** Secondary line under the title, e.g. why the state is empty. */
@@ -18,7 +19,16 @@ export function EmptyState({
   /** The one thing to do next, e.g. a "Create" button. */
   action?: React.ReactNode;
   className?: string;
+  /** Empty section under a heading: left-aligned quiet text, no vertical padding. */
+  inline?: boolean;
 }) {
+  if (inline)
+    return (
+      <div className={cn("min-w-0 space-y-2", className)}>
+        <p className="text-muted-foreground text-sm text-pretty">{description ?? title}</p>
+        {action}
+      </div>
+    );
   return (
     <div
       className={cn(

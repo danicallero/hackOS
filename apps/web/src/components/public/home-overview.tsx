@@ -70,14 +70,14 @@ export function HomeOverview({
             ))}
           </div>
         ) : (
-          <EmptyState title={t("challengesPending")} />
+          <EmptyState inline title={t("challengesPending")} />
         )}
       </SectionCard>
       <SectionCard variant="plain" title={t("sponsors")}>
         {sponsors.length ? (
           <SponsorGrid sponsors={sponsors} />
         ) : (
-          <p className="text-sm text-muted-foreground">{t("sponsorsPending")}</p>
+          <EmptyState inline title={t("sponsorsPending")} />
         )}
       </SectionCard>
     </div>

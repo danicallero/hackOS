@@ -4,7 +4,7 @@ import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { mascotAvatarChoice } from "@hackos/shared/mascot-avatars";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import Link from "next/link";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
@@ -26,6 +26,7 @@ import { precomputeLogoColor } from "@/lib/company";
 import { eventDateFormat } from "@/lib/datetime";
 import { apiAssetUrl, type DirectoryEntry, personCompanies } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
+import { type DiaryEntry, PersonActions, useDiaryMutations } from "../diary-actions";
 import { useChallengeNames } from "../person-row";
 
 /** Singular and plural row labels per project kind. */
@@ -56,6 +57,22 @@ function PersonReader({ userId, companyId }: { userId: number; companyId?: numbe
     [EVENTS.DOMAIN_CHANGED],
     { resourceKey: ["directory", "person", userId], enabled: validId },
   );
+  // The reader's own diary entry for this person: favorite, note and removal.
+  const { data: diary } = useLiveQuery(
+    (signal) => api.get<{ items: DiaryEntry[] }>("/api/me/diary", { signal }),
+    domainScope(SSE_TOPICS.DIRECTORY),
+    [EVENTS.DOMAIN_CHANGED],
+    { resourceKey: ["me", "diary"], enabled: validId },
+  );
+  const [override, setOverride] = useState<DiaryEntry | null>(null);
+  const [removedId, setRemovedId] = useState<number | null>(null);
+  const saved = diary?.items.find((item) => item.person?.userId === userId);
+  const mark =
+    saved && saved.id !== removedId ? (override?.id === saved.id ? override : saved) : null;
+  const { handlers, dialogs } = useDiaryMutations({
+    onReplace: setOverride,
+    onRemoved: useCallback((id: number) => setRemovedId(id), []),
+  });
   // Hidden and missing profiles share the 404, so both read as "not found".
   const missing = !validId || isNotFoundError(error);
 
@@ -96,7 +113,20 @@ function PersonReader({ userId, companyId }: { userId: number; companyId?: numbe
     );
   }
 
-  return <PersonProfile entry={entry} context={back} />;
+  return (
+    <>
+      <PersonProfile
+        entry={entry}
+        context={back}
+        actions={
+          mark ? (
+            <PersonActions name={entry.displayName} mark={mark} handlers={handlers} />
+          ) : undefined
+        }
+      />
+      {dialogs}
+    </>
+  );
 }
 
 /**
@@ -110,7 +140,10 @@ export function PersonProfile({
   children,
   visibleRole,
   present,
+  actions,
 }: {
+  /** Trailing controls of the top row (favorite, menu). */
+  actions?: React.ReactNode;
   visibleRole?: string | null;
   present?: boolean;
   entry: DirectoryEntry;
@@ -240,7 +273,10 @@ export function PersonProfile({
       >
         <div className="flex items-center justify-between gap-3">
           {context}
-          {visibleRole && <Badge variant="secondary">{visibleRole}</Badge>}
+          <div className="flex items-center gap-2">
+            {visibleRole && <Badge variant="secondary">{visibleRole}</Badge>}
+            {actions}
+          </div>
         </div>
         <header className="flex flex-col items-center gap-3 pt-6 text-center sm:flex-row sm:items-center sm:gap-6 sm:text-left">
           <UserAvatar
