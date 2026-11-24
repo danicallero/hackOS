@@ -571,6 +571,9 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   z-index: 20;
   background: var(--hackos-shell, var(--background));
   box-shadow: 0 1px 0 transparent;
+  /* Breathing room while pinned; the negative margin keeps the resting position. */
+  padding-block: 0.5rem;
+  margin-block: -0.5rem;
 }
 
 [data-sticky-header] .heading-row {
@@ -599,9 +602,8 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   top: var(--sticky-header-h, 0px);
   z-index: 15;
   background: var(--hackos-shell, var(--background));
-  /* Cover rows scrolling under the pinned bar without moving anything in flow. */
-  padding-bottom: 0.5rem;
-  margin-bottom: -0.5rem;
+  /* A little breathing room so rows scrolling under the bar do not touch it. */
+  padding-bottom: 0.25rem;
 }
 
 /*
