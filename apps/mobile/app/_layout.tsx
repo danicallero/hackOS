@@ -57,7 +57,6 @@ import { useLocalReminders } from "@/lib/use-local-reminders";
 import { useSideInsets } from "@/lib/vertical-bar-edge";
 import { warmWalletCache } from "@/lib/wallet-cache";
 import { colors, navigationCanvas, radius, type } from "@/theme";
-import { DISPLAY_FONT_FAMILY } from "@/theme/screen-title";
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -69,7 +68,6 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
-    [DISPLAY_FONT_FAMILY]: require("../assets/fonts/Arvo-Regular.ttf"),
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
 

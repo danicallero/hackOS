@@ -2546,6 +2546,7 @@
   "reviewsWord": "reviews",
   "reviewWord": "review",
   "reviewedByYou": "Reviewed by you",
+  "notReviewedByYou": "Not reviewed by you",
   "viewReviews": "View reviews ({count})",
   "unknownReviewer": "Unknown reviewer",
   "previousCandidate": "Previous candidate",

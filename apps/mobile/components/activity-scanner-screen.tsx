@@ -6,7 +6,6 @@ import { Stack } from "expo-router/stack";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AppState,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -24,6 +23,7 @@ import { PeopleDirectoryScreen } from "@/components/people-directory-screen";
 import { PeopleFinderPane } from "@/components/people-finder-pane";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { QrCamera } from "@/components/QrCamera";
+import { QrCameraModal } from "@/components/qr-camera-modal";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { NfcScannerSurface } from "@/components/scanner-nfc-surface";
 import { ScannerStatBlock } from "@/components/scanner-stat-block";
@@ -524,25 +524,19 @@ export function ActivityScannerScreen({
           }
         />
       )}
-      <Modal
-        visible={cameraVisible}
-        animationType="slide"
-        onRequestClose={() => setCameraVisible(false)}
-      >
-        {cameraVisible ? (
-          <QrCamera
-            hideNfc
-            autoStartNfc={false}
-            requestCameraOnFocus
-            onClose={() => setCameraVisible(false)}
-            onValue={(value) => {
-              setCameraVisible(false);
-              void scanned(value);
-            }}
-            scanningEnabled={Boolean(activity) && !result && !registering}
-          />
-        ) : null}
-      </Modal>
+      <QrCameraModal visible={cameraVisible} onClose={() => setCameraVisible(false)}>
+        <QrCamera
+          hideNfc
+          autoStartNfc={false}
+          requestCameraOnFocus
+          onClose={() => setCameraVisible(false)}
+          onValue={(value) => {
+            setCameraVisible(false);
+            void scanned(value);
+          }}
+          scanningEnabled={Boolean(activity) && !result && !registering}
+        />
+      </QrCameraModal>
       <NfcReader
         visible={nfcRunning && nfcVisible && focused && !result && !registering}
         showAndroidOverlay={false}

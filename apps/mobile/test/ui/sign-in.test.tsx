@@ -1,6 +1,7 @@
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { fireEvent, screen, userEvent, waitFor } from "@testing-library/react-native";
-import { Alert } from "react-native";
+import { Alert, TextInput } from "react-native";
+import { setSignInEmailDraft } from "@/lib/sign-in-draft";
 
 const mockSearchParams: { accessDenied?: string } = {};
 const mockReplace = jest.fn();
@@ -25,9 +26,6 @@ jest.mock("@/lib/auth-client", () => ({
 jest.mock("@/lib/api-mode", () => ({
   useApiMode: () => ({ mode: "production", setMode: mockSetMode }),
 }));
-jest.mock("@/components/auth-credential-field", () =>
-  jest.requireActual("@/components/auth-credential-field.tsx"),
-);
 jest.mock("@/lib/env", () => ({
   EVENT_WEBSITE_DISPLAY: "event.example",
 }));
@@ -90,6 +88,7 @@ const mockSignOut = signOut as jest.Mock;
 
 describe("native sign-in UI contract", () => {
   beforeEach(() => {
+    setSignInEmailDraft("");
     delete mockSearchParams.accessDenied;
     mockReplace.mockReset();
     mockSetParams.mockReset();
@@ -182,20 +181,47 @@ describe("native sign-in UI contract", () => {
     expect(email).toHaveProp("autoComplete", "username");
     expect(password).toHaveProp("autoComplete", "current-password");
     expect(password).toHaveProp("secureTextEntry", true);
+    expect(email).toHaveProp("textContentType", "username");
+    expect(password).toHaveProp("textContentType", "password");
+    // Native fields own their text: a controlled value would let a re-render erase AutoFill.
     expect(email.props.value).toBeUndefined();
     expect(password.props.value).toBeUndefined();
     expect(email).not.toHaveProp("placeholder");
-
-    // Opening a password-provider sheet temporarily blurs the native input.
-    // The fields must stay uncontrolled so iOS can inject the selected pair.
-    fireEvent(email, "blur");
-    expect(screen.getByTestId(UI_TEST_IDS.auth.email).props.value).toBeUndefined();
-    expect(screen.getByTestId(UI_TEST_IDS.auth.password).props.value).toBeUndefined();
 
     await user.press(screen.getByRole("button", { name: "Show password" }));
 
     expect(screen.getByTestId(UI_TEST_IDS.auth.password)).toHaveProp("secureTextEntry", false);
     expect(screen.getByRole("button", { name: "Hide password" })).toBeTruthy();
+  });
+
+  it("restores the typed password after the reveal toggle flips secureTextEntry", async () => {
+    const user = userEvent.setup();
+    const setNativeProps = jest.spyOn(TextInput.prototype, "setNativeProps");
+    await renderMobile(<SignInScreen />);
+
+    await user.type(screen.getByTestId(UI_TEST_IDS.auth.password), "secret");
+    await user.press(screen.getByRole("button", { name: "Show password" }));
+
+    expect(setNativeProps).toHaveBeenLastCalledWith({ text: "secret" });
+    setNativeProps.mockRestore();
+  });
+
+  it("submits text AutoFill reported only when the field ended editing", async () => {
+    const user = userEvent.setup();
+    await renderMobile(<SignInScreen />);
+
+    await user.type(screen.getByTestId(UI_TEST_IDS.auth.email), "person@example.com");
+    fireEvent(screen.getByTestId(UI_TEST_IDS.auth.password), "endEditing", {
+      nativeEvent: { text: "autofilled" },
+    });
+    await user.press(screen.getByTestId(UI_TEST_IDS.auth.submit));
+
+    await waitFor(() =>
+      expect(mockSignInEmail).toHaveBeenCalledWith({
+        email: "person@example.com",
+        password: "autofilled",
+      }),
+    );
   });
 
   it("keeps a sign-in error accessible when the API rejects the request", async () => {
@@ -224,5 +250,21 @@ describe("native sign-in UI contract", () => {
       expect.objectContaining({ text: "Switch" }),
     ]);
     alert.mockRestore();
+  });
+
+  it("keeps the typed email when the screen is remounted, but never the password", async () => {
+    const user = userEvent.setup();
+    await renderMobile(<SignInScreen />);
+    await user.type(screen.getByTestId(UI_TEST_IDS.auth.email), "draft@example.com");
+    await user.type(screen.getByTestId(UI_TEST_IDS.auth.password), "secret");
+    screen.unmount();
+
+    await renderMobile(<SignInScreen />);
+
+    expect(screen.getByTestId(UI_TEST_IDS.auth.email)).toHaveProp(
+      "defaultValue",
+      "draft@example.com",
+    );
+    expect(screen.getByTestId(UI_TEST_IDS.auth.password).props.defaultValue).toBeUndefined();
   });
 });

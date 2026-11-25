@@ -74,8 +74,8 @@ function NoticeText({ entry, preview }: { entry: LicenseEntry; preview: boolean 
 }
 
 /**
- * Account → Legal lists bundled third-party components and their sources.
- * Each entry opens its full notice.
+ * Account → Legal → every package shipped in the app (`assets/licenses.json`):
+ * its notice, truncated, and its source. A package opens its full notice.
  */
 export function LicensesScreen() {
   const router = useRouter();

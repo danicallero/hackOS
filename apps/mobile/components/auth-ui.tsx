@@ -1,4 +1,4 @@
-import { type ReactNode, type RefObject, useState } from "react";
+import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import {
   Keyboard,
   Pressable,
@@ -9,14 +9,12 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import Animated, { useAnimatedKeyboard, useAnimatedStyle } from "react-native-reanimated";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { useAuthFrameExtra } from "@/lib/auth-frame";
 import { colors, radius, space, type } from "@/theme";
-import { DISPLAY_FONT_FAMILY } from "@/theme/screen-title";
 
 /**
  * The gutters and the frame's extra padding sit OUTSIDE the form's 440 pt cap. Put on the capped
@@ -41,16 +39,19 @@ export function AuthScreen({
   children,
   footer,
   scrollable = true,
+  anchor = "center",
 }: {
   children: ReactNode;
   footer?: ReactNode;
   scrollable?: boolean;
+  /** Fixed screens only: "top" keeps a form above the keyboard without ever moving it. */
+  anchor?: "center" | "top";
 }) {
   const safe = useSafeAreaInsets();
   const extra = useAuthFrameExtra();
   if (!scrollable) {
     return (
-      <FixedAuthScreen extra={extra} footer={footer}>
+      <FixedAuthScreen anchor={anchor} extra={extra} footer={footer}>
         {children}
       </FixedAuthScreen>
     );
@@ -81,32 +82,31 @@ export function AuthScreen({
 }
 
 /**
- * Moves the centered form on the compositor while keeping the footer fixed. Only the vertical
- * safe area is applied here: the stack already pads the side column, and a second horizontal
- * inset pushed the form far off-center on a foldable.
+ * A fixed screen: nothing here reacts to the keyboard, so showing or hiding it (Passwords and Face
+ * ID included) never moves the form. A form with inputs is anchored to the top so it stays above
+ * the keyboard; the footer sits behind it. Only the vertical safe area is applied: the stack
+ * already pads the side column, and a second horizontal inset pushed the form off-center on a
+ * foldable.
  */
 function FixedAuthScreen({
   children,
   footer,
   extra,
+  anchor,
 }: {
   children: ReactNode;
   footer?: ReactNode;
   extra: { left: number; right: number };
+  anchor: "center" | "top";
 }) {
-  const keyboard = useAnimatedKeyboard();
-  const formStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -Math.min(keyboard.height.value * 0.38, 160) }],
-  }));
-
   return (
     <SafeAreaView edges={["top", "bottom"]} style={{ backgroundColor: colors.background, flex: 1 }}>
       <TouchableWithoutFeedback accessible={false} onPress={Keyboard.dismiss}>
         <View style={{ flex: 1, paddingBottom: 16, paddingTop: 24, ...authGutters(extra) }}>
           <View style={[formColumn, { flex: 1 }]}>
-            <Animated.View style={[{ flex: 1, justifyContent: "center" }, formStyle]}>
-              <View style={{ gap: 24 }}>{children}</View>
-            </Animated.View>
+            <View style={{ flex: 1, justifyContent: anchor === "top" ? "flex-start" : "center" }}>
+              <View style={{ gap: 24, paddingTop: anchor === "top" ? 32 : 0 }}>{children}</View>
+            </View>
             <AuthFooter>{footer}</AuthFooter>
           </View>
         </View>
@@ -165,8 +165,8 @@ export function AuthHeader({
           accessibilityRole="header"
           style={{
             color: colors.label,
-            fontFamily: DISPLAY_FONT_FAMILY,
             fontSize: leading ? type.largeTitle.fontSize : type.title.fontSize,
+            fontWeight: "700",
             textAlign: leading ? "left" : "center",
           }}
         >
@@ -199,6 +199,8 @@ export function AuthField({
   onBlur,
   onFocus,
   secureTextEntry,
+  onChangeText,
+  onEndEditing,
   ...props
 }: TextInputProps & {
   label: string;
@@ -210,6 +212,18 @@ export function AuthField({
   const [focused, setFocused] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const canRevealPassword = Boolean(secureTextEntry && showPasswordLabel && hidePasswordLabel);
+  const fallbackRef = useRef<TextInput>(null);
+  const nativeRef = inputRef ?? fallbackRef;
+  const typedText = useRef("");
+  const lastVisible = useRef(passwordVisible);
+
+  // iOS empties a native field whose secureTextEntry flips. This input is uncontrolled (Password
+  // AutoFill owns its text), so write the last known text back after the flip.
+  useLayoutEffect(() => {
+    if (lastVisible.current === passwordVisible) return;
+    lastVisible.current = passwordVisible;
+    nativeRef.current?.setNativeProps({ text: typedText.current });
+  }, [passwordVisible, nativeRef]);
 
   return (
     <View style={{ gap: 7 }}>
@@ -232,7 +246,7 @@ export function AuthField({
         }}
       >
         <TextInput
-          ref={inputRef}
+          ref={nativeRef}
           accessibilityLabel={label}
           accessibilityHint={error ?? undefined}
           aria-invalid={Boolean(error)}
@@ -257,6 +271,14 @@ export function AuthField({
           onFocus={(event) => {
             setFocused(true);
             onFocus?.(event);
+          }}
+          onChangeText={(value) => {
+            typedText.current = value;
+            onChangeText?.(value);
+          }}
+          onEndEditing={(event) => {
+            typedText.current = event.nativeEvent.text;
+            onEndEditing?.(event);
           }}
           {...props}
         />
