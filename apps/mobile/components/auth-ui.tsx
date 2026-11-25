@@ -1,4 +1,4 @@
-import { type ReactNode, type RefObject, useState } from "react";
+import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import {
   Keyboard,
   Pressable,
@@ -199,6 +199,8 @@ export function AuthField({
   onBlur,
   onFocus,
   secureTextEntry,
+  onChangeText,
+  onEndEditing,
   ...props
 }: TextInputProps & {
   label: string;
@@ -210,6 +212,18 @@ export function AuthField({
   const [focused, setFocused] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const canRevealPassword = Boolean(secureTextEntry && showPasswordLabel && hidePasswordLabel);
+  const fallbackRef = useRef<TextInput>(null);
+  const nativeRef = inputRef ?? fallbackRef;
+  const typedText = useRef("");
+  const lastVisible = useRef(passwordVisible);
+
+  // iOS empties a native field whose secureTextEntry flips. This input is uncontrolled (Password
+  // AutoFill owns its text), so write the last known text back after the flip.
+  useLayoutEffect(() => {
+    if (lastVisible.current === passwordVisible) return;
+    lastVisible.current = passwordVisible;
+    nativeRef.current?.setNativeProps({ text: typedText.current });
+  }, [passwordVisible, nativeRef]);
 
   return (
     <View style={{ gap: 7 }}>
@@ -232,7 +246,7 @@ export function AuthField({
         }}
       >
         <TextInput
-          ref={inputRef}
+          ref={nativeRef}
           accessibilityLabel={label}
           accessibilityHint={error ?? undefined}
           aria-invalid={Boolean(error)}
@@ -257,6 +271,14 @@ export function AuthField({
           onFocus={(event) => {
             setFocused(true);
             onFocus?.(event);
+          }}
+          onChangeText={(value) => {
+            typedText.current = value;
+            onChangeText?.(value);
+          }}
+          onEndEditing={(event) => {
+            typedText.current = event.nativeEvent.text;
+            onEndEditing?.(event);
           }}
           {...props}
         />

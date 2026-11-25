@@ -211,6 +211,11 @@ export function useMe(enabled = true) {
             clearProfileSeeds();
           }
           return null;
+        } else if (!sessionCookie && !hasData.current) {
+          // Nobody is signed in, so there is no session to recover. Surfacing the
+          // transport failure would swap the auth stack for the session-recovery
+          // screen and wipe what the user is typing into the sign-in form.
+          return null;
         } else if (!hasData.current) {
           // The server couldn't be confirmed as rejecting the session (network
           // failure, timeout, 5xx) — fall back to the last known profile

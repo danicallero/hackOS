@@ -1,6 +1,6 @@
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { fireEvent, screen, userEvent, waitFor } from "@testing-library/react-native";
-import { Alert } from "react-native";
+import { Alert, TextInput } from "react-native";
 
 const mockSearchParams: { accessDenied?: string } = {};
 const mockReplace = jest.fn();
@@ -196,6 +196,18 @@ describe("native sign-in UI contract", () => {
 
     expect(screen.getByTestId(UI_TEST_IDS.auth.password)).toHaveProp("secureTextEntry", false);
     expect(screen.getByRole("button", { name: "Hide password" })).toBeTruthy();
+  });
+
+  it("restores the typed password after the reveal toggle flips secureTextEntry", async () => {
+    const user = userEvent.setup();
+    const setNativeProps = jest.spyOn(TextInput.prototype, "setNativeProps");
+    await renderMobile(<SignInScreen />);
+
+    await user.type(screen.getByTestId(UI_TEST_IDS.auth.password), "secret");
+    await user.press(screen.getByRole("button", { name: "Show password" }));
+
+    expect(setNativeProps).toHaveBeenLastCalledWith({ text: "secret" });
+    setNativeProps.mockRestore();
   });
 
   it("keeps a sign-in error accessible when the API rejects the request", async () => {

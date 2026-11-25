@@ -167,6 +167,20 @@ describe("useMe foreground revalidation (H55)", () => {
     await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
   });
 
+  it("keeps the auth stack mounted when an anonymous revalidation fails on the network", async () => {
+    mockGetCookie.mockReturnValue("");
+    mockApiFetch.mockRejectedValue(new TypeError("Network request failed"));
+    const { result } = await renderHook(() => useMe(true));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => emitAppState("inactive"));
+    await act(async () => emitAppState("active"));
+
+    expect(result.current.me).toBeNull();
+    expect(result.current.error).toBeNull();
+    expect(result.current.offline).toBe(false);
+  });
+
   it("coalesces concurrent profile refreshes into one request", async () => {
     const profileFetch = deferred<{ id: number; capabilities: string[] }>();
     mockApiFetch.mockReturnValue(profileFetch.promise);
