@@ -9,7 +9,6 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import Animated, { useAnimatedKeyboard, useAnimatedStyle } from "react-native-reanimated";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
 import { PressableFeedback } from "@/components/pressable-feedback";
@@ -41,16 +40,19 @@ export function AuthScreen({
   children,
   footer,
   scrollable = true,
+  anchor = "center",
 }: {
   children: ReactNode;
   footer?: ReactNode;
   scrollable?: boolean;
+  /** Fixed screens only: "top" keeps a form above the keyboard without ever moving it. */
+  anchor?: "center" | "top";
 }) {
   const safe = useSafeAreaInsets();
   const extra = useAuthFrameExtra();
   if (!scrollable) {
     return (
-      <FixedAuthScreen extra={extra} footer={footer}>
+      <FixedAuthScreen anchor={anchor} extra={extra} footer={footer}>
         {children}
       </FixedAuthScreen>
     );
@@ -81,32 +83,31 @@ export function AuthScreen({
 }
 
 /**
- * Moves the centered form on the compositor while keeping the footer fixed. Only the vertical
- * safe area is applied here: the stack already pads the side column, and a second horizontal
- * inset pushed the form far off-center on a foldable.
+ * A fixed screen: nothing here reacts to the keyboard, so showing or hiding it (Passwords and Face
+ * ID included) never moves the form. A form with inputs is anchored to the top so it stays above
+ * the keyboard; the footer sits behind it. Only the vertical safe area is applied: the stack
+ * already pads the side column, and a second horizontal inset pushed the form off-center on a
+ * foldable.
  */
 function FixedAuthScreen({
   children,
   footer,
   extra,
+  anchor,
 }: {
   children: ReactNode;
   footer?: ReactNode;
   extra: { left: number; right: number };
+  anchor: "center" | "top";
 }) {
-  const keyboard = useAnimatedKeyboard();
-  const formStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -Math.min(keyboard.height.value * 0.38, 160) }],
-  }));
-
   return (
     <SafeAreaView edges={["top", "bottom"]} style={{ backgroundColor: colors.background, flex: 1 }}>
       <TouchableWithoutFeedback accessible={false} onPress={Keyboard.dismiss}>
         <View style={{ flex: 1, paddingBottom: 16, paddingTop: 24, ...authGutters(extra) }}>
           <View style={[formColumn, { flex: 1 }]}>
-            <Animated.View style={[{ flex: 1, justifyContent: "center" }, formStyle]}>
-              <View style={{ gap: 24 }}>{children}</View>
-            </Animated.View>
+            <View style={{ flex: 1, justifyContent: anchor === "top" ? "flex-start" : "center" }}>
+              <View style={{ gap: 24, paddingTop: anchor === "top" ? 32 : 0 }}>{children}</View>
+            </View>
             <AuthFooter>{footer}</AuthFooter>
           </View>
         </View>

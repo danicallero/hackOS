@@ -183,6 +183,9 @@ describe("native sign-in UI contract", () => {
     expect(password).toHaveProp("secureTextEntry", true);
     expect(email).toHaveProp("textContentType", "username");
     expect(password).toHaveProp("textContentType", "password");
+    // Native fields own their text: a controlled value would let a re-render erase AutoFill.
+    expect(email.props.value).toBeUndefined();
+    expect(password.props.value).toBeUndefined();
     expect(email).not.toHaveProp("placeholder");
 
     await user.press(screen.getByRole("button", { name: "Show password" }));
@@ -201,6 +204,24 @@ describe("native sign-in UI contract", () => {
 
     expect(setNativeProps).toHaveBeenLastCalledWith({ text: "secret" });
     setNativeProps.mockRestore();
+  });
+
+  it("submits text AutoFill reported only when the field ended editing", async () => {
+    const user = userEvent.setup();
+    await renderMobile(<SignInScreen />);
+
+    await user.type(screen.getByTestId(UI_TEST_IDS.auth.email), "person@example.com");
+    fireEvent(screen.getByTestId(UI_TEST_IDS.auth.password), "endEditing", {
+      nativeEvent: { text: "autofilled" },
+    });
+    await user.press(screen.getByTestId(UI_TEST_IDS.auth.submit));
+
+    await waitFor(() =>
+      expect(mockSignInEmail).toHaveBeenCalledWith({
+        email: "person@example.com",
+        password: "autofilled",
+      }),
+    );
   });
 
   it("keeps a sign-in error accessible when the API rejects the request", async () => {
@@ -240,7 +261,10 @@ describe("native sign-in UI contract", () => {
 
     await renderMobile(<SignInScreen />);
 
-    expect(screen.getByTestId(UI_TEST_IDS.auth.email)).toHaveProp("value", "draft@example.com");
-    expect(screen.getByTestId(UI_TEST_IDS.auth.password)).toHaveProp("value", "");
+    expect(screen.getByTestId(UI_TEST_IDS.auth.email)).toHaveProp(
+      "defaultValue",
+      "draft@example.com",
+    );
+    expect(screen.getByTestId(UI_TEST_IDS.auth.password).props.defaultValue).toBeUndefined();
   });
 });

@@ -562,16 +562,18 @@ only for its framework-neutral principles.
   first field that needs attention instead of hiding validation behind a disabled
   submit button. The password field has a 52-point, screen-reader-labeled reveal
   action, and password recovery keeps a 44-point hit target. At standard text
-  sizes, the form is anchored to the top of a scroll view, so showing or hiding
-  the keyboard (including the Passwords/Face ID sheet) never moves it; the
-  system's keyboard inset keeps the focused field visible. The account/application
-  note follows the form inside the scroll content. The note shows the configured
-  `EXPO_PUBLIC_EVENT_WEBSITE_URL` as selectable text but deliberately does not
-  link out to account creation (see `docs/mobile-release.md`). The
-  email and password fields are ordinary controlled inputs with the
-  username/current-password pairing, so password managers fill both credentials
-  and the screen always reads what the field shows. No focus is forced back after
-  the provider sheet closes. Session
+  sizes, the screen is fixed (no scrolling) and the form is anchored to the top,
+  so showing or hiding the keyboard (including the Passwords/Face ID sheet) never
+  moves it; the account/application note sits behind the keyboard. The note shows
+  the configured `EXPO_PUBLIC_EVENT_WEBSITE_URL` as selectable text but
+  deliberately does not link out to account creation (see
+  `docs/mobile-release.md`). The email and password fields are uncontrolled
+  native inputs (no `value`) with the username/current-password pairing:
+  Password AutoFill fills them without a JS event, so a controlled value would
+  let a re-render (a focus change, a tap outside) write the empty JS state over
+  the filled field. Submit ends editing first, which makes iOS report each
+  field's real text, then reads it. No focus is forced back after the provider
+  sheet closes. Session
   revalidation never unmounts the auth navigator while nobody is signed in (a
   failed request with no session is not a session to recover), and the email
   draft survives a remount; the password never leaves the field. iOS additionally associates the domain through

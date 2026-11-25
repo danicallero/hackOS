@@ -30,8 +30,10 @@ export default function SignInScreen() {
   const { refetch } = useMeActions();
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
-  const [email, setEmail] = useState(getSignInEmailDraft);
-  const [password, setPassword] = useState("");
+  // The native fields own their text (Password AutoFill fills them without a JS event), so no
+  // `value` is passed and a re-render can never write over them. These mirror what they report.
+  const emailText = useRef(getSignInEmailDraft());
+  const passwordText = useRef("");
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -91,8 +93,12 @@ export default function SignInScreen() {
 
   async function onSubmit() {
     if (submitting) return;
-    const currentEmail = email;
-    const currentPassword = password;
+    // Ending editing makes iOS report the field's real text, AutoFill's included.
+    emailRef.current?.blur();
+    passwordRef.current?.blur();
+    await Promise.resolve();
+    const currentEmail = emailText.current;
+    const currentPassword = passwordText.current;
     const nextEmailError = currentEmail.trim() ? null : t("emailRequired");
     const nextPasswordError = currentPassword ? null : t("passwordRequired");
     setEmailError(nextEmailError);
@@ -169,6 +175,8 @@ export default function SignInScreen() {
 
   return (
     <AuthScreen
+      anchor="top"
+      scrollable={false}
       footer={
         <View style={{ alignItems: "center", gap: 4 }}>
           <Text
@@ -308,11 +316,15 @@ export default function SignInScreen() {
             returnKeyType="next"
             spellCheck={false}
             textContentType="username"
-            value={email}
+            defaultValue={emailText.current}
             onChangeText={(value) => {
-              setEmail(value);
+              emailText.current = value;
               setSignInEmailDraft(value);
               if (emailError) setEmailError(null);
+            }}
+            onEndEditing={(event) => {
+              emailText.current = event.nativeEvent.text;
+              setSignInEmailDraft(event.nativeEvent.text);
             }}
             onSubmitEditing={() => passwordRef.current?.focus()}
           />
@@ -331,10 +343,12 @@ export default function SignInScreen() {
             hidePasswordLabel={t("hidePassword")}
             spellCheck={false}
             textContentType="password"
-            value={password}
             onChangeText={(value) => {
-              setPassword(value);
+              passwordText.current = value;
               if (passwordError) setPasswordError(null);
+            }}
+            onEndEditing={(event) => {
+              passwordText.current = event.nativeEvent.text;
             }}
             onSubmitEditing={() => void onSubmit()}
           />
@@ -346,7 +360,7 @@ export default function SignInScreen() {
           onPress={() =>
             router.push({
               pathname: "/(auth)/forgot-password",
-              params: { email: email.trim() },
+              params: { email: emailText.current.trim() },
             })
           }
           style={{
