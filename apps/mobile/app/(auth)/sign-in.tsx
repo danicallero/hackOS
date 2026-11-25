@@ -1,12 +1,8 @@
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { AppState, Linking, Text, View } from "react-native";
-import {
-  AuthCredentialField,
-  type AuthCredentialFieldHandle,
-} from "@/components/auth-credential-field";
-import { AuthAlert, AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
+import { Linking, Text, type TextInput, View } from "react-native";
+import { AuthAlert, AuthButton, AuthField, AuthHeader, AuthScreen } from "@/components/auth-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { alert } from "@/lib/alert";
 import { apiFetch } from "@/lib/api";
@@ -22,6 +18,7 @@ import {
   clearAccountRemovalProgress,
   readAccountRemovalProgress,
 } from "@/lib/removal-progress";
+import { getSignInEmailDraft, setSignInEmailDraft } from "@/lib/sign-in-draft";
 import type { PublicEvent } from "@/lib/types";
 import { colors, type } from "@/theme";
 
@@ -31,11 +28,12 @@ export default function SignInScreen() {
   const { t } = useLocale();
   const { mode, setMode } = useApiMode();
   const { refetch } = useMeActions();
-  const emailRef = useRef<AuthCredentialFieldHandle>(null);
-  const passwordRef = useRef<AuthCredentialFieldHandle>(null);
-  const focusedFieldRef = useRef<"email" | "password" | null>(null);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  // The native fields own their text (Password AutoFill fills them without a JS event), so no
+  // `value` is passed and a re-render can never write over them. These mirror what they report.
+  const emailText = useRef(getSignInEmailDraft());
+  const passwordText = useRef("");
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -59,32 +57,6 @@ export default function SignInScreen() {
     });
     return () => {
       active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let appState = AppState.currentState;
-    let restoreField: "email" | "password" | null = null;
-    let restoreTimeout: ReturnType<typeof setTimeout> | null = null;
-    const subscription = AppState.addEventListener("change", (nextState) => {
-      if (appState === "active" && nextState.match(/inactive|background/)) {
-        restoreField = focusedFieldRef.current;
-      }
-      if (appState.match(/inactive|background/) && nextState === "active" && restoreField) {
-        const field = restoreField;
-        // Passwords/Face ID returns focus before its native transition has
-        // completely settled. Reassert the field the user initiated from so a
-        // late AutoFill event cannot leave focus on the email input.
-        restoreTimeout = setTimeout(() => {
-          if (field === "email") emailRef.current?.focus();
-          else passwordRef.current?.focus();
-        }, 250);
-      }
-      appState = nextState;
-    });
-    return () => {
-      subscription.remove();
-      if (restoreTimeout) clearTimeout(restoreTimeout);
     };
   }, []);
 
@@ -121,8 +93,12 @@ export default function SignInScreen() {
 
   async function onSubmit() {
     if (submitting) return;
-    const currentEmail = emailRef.current?.getText() ?? email;
-    const currentPassword = passwordRef.current?.getText() ?? password;
+    // Ending editing makes iOS report the field's real text, AutoFill's included.
+    emailRef.current?.blur();
+    passwordRef.current?.blur();
+    await Promise.resolve();
+    const currentEmail = emailText.current;
+    const currentPassword = passwordText.current;
     const nextEmailError = currentEmail.trim() ? null : t("emailRequired");
     const nextPasswordError = currentPassword ? null : t("passwordRequired");
     setEmailError(nextEmailError);
@@ -158,6 +134,7 @@ export default function SignInScreen() {
         router.replace({ pathname: "/(auth)/sign-in", params: { accessDenied: "1" } });
         return;
       }
+      setSignInEmailDraft("");
       router.replace("/");
     } catch {
       setError(t("signInError"));
@@ -198,6 +175,7 @@ export default function SignInScreen() {
 
   return (
     <AuthScreen
+      anchor="top"
       scrollable={false}
       footer={
         <View style={{ alignItems: "center", gap: 4 }}>
@@ -325,39 +303,52 @@ export default function SignInScreen() {
         ) : null}
         {error ? <AuthAlert message={error} testID={UI_TEST_IDS.auth.error} /> : null}
         <View style={{ gap: 14 }}>
-          <AuthCredentialField
+          <AuthField
             testID={UI_TEST_IDS.auth.email}
-            autoComplete="username"
-            fieldRef={emailRef}
+            inputRef={emailRef}
             label={t("emailLabel")}
             error={emailError}
+            autoCapitalize="none"
+            autoComplete="username"
+            autoCorrect={false}
+            importantForAutofill="yes"
             keyboardType="email-address"
-            onFocus={() => {
-              focusedFieldRef.current = "email";
-            }}
             returnKeyType="next"
+            spellCheck={false}
+            textContentType="username"
+            defaultValue={emailText.current}
             onChangeText={(value) => {
-              setEmail(value);
+              emailText.current = value;
+              setSignInEmailDraft(value);
               if (emailError) setEmailError(null);
+            }}
+            onEndEditing={(event) => {
+              emailText.current = event.nativeEvent.text;
+              setSignInEmailDraft(event.nativeEvent.text);
             }}
             onSubmitEditing={() => passwordRef.current?.focus()}
           />
-          <AuthCredentialField
+          <AuthField
             testID={UI_TEST_IDS.auth.password}
-            autoComplete="current-password"
-            fieldRef={passwordRef}
+            inputRef={passwordRef}
             label={t("passwordLabel")}
             error={passwordError}
-            showPasswordLabel={t("showPassword")}
-            hidePasswordLabel={t("hidePassword")}
+            autoCapitalize="none"
+            autoComplete="current-password"
+            autoCorrect={false}
+            importantForAutofill="yes"
             returnKeyType="go"
             secureTextEntry
-            onFocus={() => {
-              focusedFieldRef.current = "password";
-            }}
+            showPasswordLabel={t("showPassword")}
+            hidePasswordLabel={t("hidePassword")}
+            spellCheck={false}
+            textContentType="password"
             onChangeText={(value) => {
-              setPassword(value);
+              passwordText.current = value;
               if (passwordError) setPasswordError(null);
+            }}
+            onEndEditing={(event) => {
+              passwordText.current = event.nativeEvent.text;
             }}
             onSubmitEditing={() => void onSubmit()}
           />
@@ -369,7 +360,7 @@ export default function SignInScreen() {
           onPress={() =>
             router.push({
               pathname: "/(auth)/forgot-password",
-              params: { email: (emailRef.current?.getText() ?? email).trim() },
+              params: { email: emailText.current.trim() },
             })
           }
           style={{
