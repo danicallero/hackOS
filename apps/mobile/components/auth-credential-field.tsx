@@ -17,7 +17,7 @@ export function AuthCredentialField({
   ...props
 }: AuthCredentialFieldProps) {
   const nativeRef = useRef<TextInput>(null);
-  const textRef = useRef("");
+  const textRef = useRef(props.defaultValue ?? "");
 
   useImperativeHandle(fieldRef, () => ({
     focus: () => nativeRef.current?.focus(),

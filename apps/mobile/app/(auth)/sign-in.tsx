@@ -22,6 +22,7 @@ import {
   clearAccountRemovalProgress,
   readAccountRemovalProgress,
 } from "@/lib/removal-progress";
+import { getSignInEmailDraft, setSignInEmailDraft } from "@/lib/sign-in-draft";
 import type { PublicEvent } from "@/lib/types";
 import { colors, type } from "@/theme";
 
@@ -34,8 +35,6 @@ export default function SignInScreen() {
   const emailRef = useRef<AuthCredentialFieldHandle>(null);
   const passwordRef = useRef<AuthCredentialFieldHandle>(null);
   const focusedFieldRef = useRef<"email" | "password" | null>(null);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -121,8 +120,8 @@ export default function SignInScreen() {
 
   async function onSubmit() {
     if (submitting) return;
-    const currentEmail = emailRef.current?.getText() ?? email;
-    const currentPassword = passwordRef.current?.getText() ?? password;
+    const currentEmail = emailRef.current?.getText() ?? "";
+    const currentPassword = passwordRef.current?.getText() ?? "";
     const nextEmailError = currentEmail.trim() ? null : t("emailRequired");
     const nextPasswordError = currentPassword ? null : t("passwordRequired");
     setEmailError(nextEmailError);
@@ -158,6 +157,7 @@ export default function SignInScreen() {
         router.replace({ pathname: "/(auth)/sign-in", params: { accessDenied: "1" } });
         return;
       }
+      setSignInEmailDraft("");
       router.replace("/");
     } catch {
       setError(t("signInError"));
@@ -336,8 +336,9 @@ export default function SignInScreen() {
               focusedFieldRef.current = "email";
             }}
             returnKeyType="next"
+            defaultValue={getSignInEmailDraft()}
             onChangeText={(value) => {
-              setEmail(value);
+              setSignInEmailDraft(value);
               if (emailError) setEmailError(null);
             }}
             onSubmitEditing={() => passwordRef.current?.focus()}
@@ -355,8 +356,7 @@ export default function SignInScreen() {
             onFocus={() => {
               focusedFieldRef.current = "password";
             }}
-            onChangeText={(value) => {
-              setPassword(value);
+            onChangeText={() => {
               if (passwordError) setPasswordError(null);
             }}
             onSubmitEditing={() => void onSubmit()}
@@ -369,7 +369,7 @@ export default function SignInScreen() {
           onPress={() =>
             router.push({
               pathname: "/(auth)/forgot-password",
-              params: { email: (emailRef.current?.getText() ?? email).trim() },
+              params: { email: (emailRef.current?.getText() ?? "").trim() },
             })
           }
           style={{

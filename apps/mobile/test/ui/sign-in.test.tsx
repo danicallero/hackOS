@@ -1,6 +1,7 @@
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { fireEvent, screen, userEvent, waitFor } from "@testing-library/react-native";
 import { Alert, TextInput } from "react-native";
+import { setSignInEmailDraft } from "@/lib/sign-in-draft";
 
 const mockSearchParams: { accessDenied?: string } = {};
 const mockReplace = jest.fn();
@@ -90,6 +91,7 @@ const mockSignOut = signOut as jest.Mock;
 
 describe("native sign-in UI contract", () => {
   beforeEach(() => {
+    setSignInEmailDraft("");
     delete mockSearchParams.accessDenied;
     mockReplace.mockReset();
     mockSetParams.mockReset();
@@ -236,5 +238,21 @@ describe("native sign-in UI contract", () => {
       expect.objectContaining({ text: "Switch" }),
     ]);
     alert.mockRestore();
+  });
+
+  it("keeps the typed email when the screen is remounted, but never the password", async () => {
+    const user = userEvent.setup();
+    await renderMobile(<SignInScreen />);
+    await user.type(screen.getByTestId(UI_TEST_IDS.auth.email), "draft@example.com");
+    await user.type(screen.getByTestId(UI_TEST_IDS.auth.password), "secret");
+    screen.unmount();
+
+    await renderMobile(<SignInScreen />);
+
+    expect(screen.getByTestId(UI_TEST_IDS.auth.email)).toHaveProp(
+      "defaultValue",
+      "draft@example.com",
+    );
+    expect(screen.getByTestId(UI_TEST_IDS.auth.password).props.defaultValue).toBeUndefined();
   });
 });

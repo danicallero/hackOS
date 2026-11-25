@@ -7,6 +7,7 @@ export type AuthCredentialFieldHandle = {
 
 export type AuthCredentialFieldProps = {
   autoComplete: "username" | "current-password";
+  defaultValue?: string;
   error?: string | null;
   fieldRef: RefObject<AuthCredentialFieldHandle | null>;
   hidePasswordLabel?: string;
