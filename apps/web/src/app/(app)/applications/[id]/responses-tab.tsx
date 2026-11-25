@@ -126,6 +126,7 @@ export function ResponsesTab({
   const { selectedId, setSelectedId } = useResponseSelection();
   const [answerFilters, setAnswerFilters] = useState<Record<string, string[]>>({});
   const [dietaryFilter, setDietaryFilter] = useState<string[]>([]);
+  const [myReviewFilter, setMyReviewFilter] = useState<string[]>([]);
   const { intolerances } = useFoodIntolerances();
   const catalogueNames = useCatalogueNames(allRows, template);
   const [decisionStatusOverrides, setDecisionStatusOverrides] = useState<Record<number, string>>(
@@ -161,6 +162,12 @@ export function ResponsesTab({
       (row) =>
         (statusFilter.length === 0 || statusFilter.includes(row.status)) &&
         matchesResponseSearch(row, search) &&
+        (myReviewFilter.length === 0 ||
+          myReviewFilter.includes(
+            row.reviews.some((review) => review.author_id === me?.id && review.score != null)
+              ? "reviewed"
+              : "pending",
+          )) &&
         (dietaryFilter.length === 0 ||
           dietaryFilter.includes(hasDietaryRestrictions(row) ? "yes" : "no")) &&
         Object.entries(answerFilters).every(
@@ -175,7 +182,16 @@ export function ResponsesTab({
             ).some((value) => values.includes(value)),
         ),
     );
-  }, [allRows, workspace, statusFilter, search, dietaryFilter, answerFilters]);
+  }, [
+    allRows,
+    workspace,
+    statusFilter,
+    search,
+    dietaryFilter,
+    answerFilters,
+    myReviewFilter,
+    me?.id,
+  ]);
 
   // Keep the table snapshot stable while a response modal is open: accepting a
   // review moves it out of this workspace, and the reviewer should still be
@@ -305,6 +321,21 @@ export function ResponsesTab({
               value: status,
               label: applicationStatusLabel(status, t),
             })),
+          },
+          {
+            id: "my-review",
+            label: t("yourReview"),
+            icon: ChecksIcon,
+            type: "multiple",
+            value: myReviewFilter,
+            onChange: (value) => {
+              setMyReviewFilter(value);
+              setSelectedIds(new Set());
+            },
+            options: [
+              { value: "pending", label: t("notReviewedByYou") },
+              { value: "reviewed", label: t("reviewedByYou") },
+            ],
           },
           ...(askShirtSize
             ? [
@@ -820,6 +851,7 @@ export function ResponsesTab({
           title: t("noResponsesTitle"),
           description:
             statusFilter.length === 0 &&
+            myReviewFilter.length === 0 &&
             !search.trim() &&
             dietaryFilter.length === 0 &&
             !Object.values(answerFilters).some((values) => values.length > 0)
@@ -829,11 +861,13 @@ export function ResponsesTab({
         filteredEmpty={{
           active:
             statusFilter.length > 0 ||
+            myReviewFilter.length > 0 ||
             search.trim().length > 0 ||
             dietaryFilter.length > 0 ||
             Object.values(answerFilters).some((values) => values.length > 0),
           onClear: () => {
             setStatusFilter([]);
+            setMyReviewFilter([]);
             setAnswerFilters({});
             setDietaryFilter([]);
             setSearch("");

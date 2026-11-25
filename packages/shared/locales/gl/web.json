@@ -2546,6 +2546,7 @@
   "reviewsWord": "avaliacións",
   "reviewWord": "avaliación",
   "reviewedByYou": "Avaliada por ti",
+  "notReviewedByYou": "Sen avaliar por ti",
   "viewReviews": "Ver avaliacións ({count})",
   "unknownReviewer": "Avaliador descoñecido",
   "previousCandidate": "Candidato anterior",
