@@ -26,9 +26,6 @@ jest.mock("@/lib/auth-client", () => ({
 jest.mock("@/lib/api-mode", () => ({
   useApiMode: () => ({ mode: "production", setMode: mockSetMode }),
 }));
-jest.mock("@/components/auth-credential-field", () =>
-  jest.requireActual("@/components/auth-credential-field.tsx"),
-);
 jest.mock("@/lib/env", () => ({
   EVENT_WEBSITE_DISPLAY: "event.example",
 }));
@@ -184,15 +181,9 @@ describe("native sign-in UI contract", () => {
     expect(email).toHaveProp("autoComplete", "username");
     expect(password).toHaveProp("autoComplete", "current-password");
     expect(password).toHaveProp("secureTextEntry", true);
-    expect(email.props.value).toBeUndefined();
-    expect(password.props.value).toBeUndefined();
+    expect(email).toHaveProp("textContentType", "username");
+    expect(password).toHaveProp("textContentType", "password");
     expect(email).not.toHaveProp("placeholder");
-
-    // Opening a password-provider sheet temporarily blurs the native input.
-    // The fields must stay uncontrolled so iOS can inject the selected pair.
-    fireEvent(email, "blur");
-    expect(screen.getByTestId(UI_TEST_IDS.auth.email).props.value).toBeUndefined();
-    expect(screen.getByTestId(UI_TEST_IDS.auth.password).props.value).toBeUndefined();
 
     await user.press(screen.getByRole("button", { name: "Show password" }));
 
@@ -249,10 +240,7 @@ describe("native sign-in UI contract", () => {
 
     await renderMobile(<SignInScreen />);
 
-    expect(screen.getByTestId(UI_TEST_IDS.auth.email)).toHaveProp(
-      "defaultValue",
-      "draft@example.com",
-    );
-    expect(screen.getByTestId(UI_TEST_IDS.auth.password).props.defaultValue).toBeUndefined();
+    expect(screen.getByTestId(UI_TEST_IDS.auth.email)).toHaveProp("value", "draft@example.com");
+    expect(screen.getByTestId(UI_TEST_IDS.auth.password)).toHaveProp("value", "");
   });
 });
