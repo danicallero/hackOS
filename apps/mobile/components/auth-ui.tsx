@@ -16,7 +16,6 @@ import { PressableFeedback } from "@/components/pressable-feedback";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { useAuthFrameExtra } from "@/lib/auth-frame";
 import { colors, radius, space, type } from "@/theme";
-import { DISPLAY_FONT_FAMILY } from "@/theme/screen-title";
 
 /**
  * The gutters and the frame's extra padding sit OUTSIDE the form's 440 pt cap. Put on the capped
@@ -165,8 +164,8 @@ export function AuthHeader({
           accessibilityRole="header"
           style={{
             color: colors.label,
-            fontFamily: DISPLAY_FONT_FAMILY,
             fontSize: leading ? type.largeTitle.fontSize : type.title.fontSize,
+            fontWeight: "700",
             textAlign: leading ? "left" : "center",
           }}
         >

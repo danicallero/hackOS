@@ -1,12 +1,23 @@
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { type BarcodeScanningResult, CameraView, useCameraPermissions } from "expo-camera";
 import { useIsFocused } from "expo-router";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Linking, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedProps,
+  useDerivedValue,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { GlassView } from "@/components/glass-view";
 import { NfcReader } from "@/components/nfc-reader";
+import { QrCameraClosing, QrCameraModal } from "@/components/qr-camera-modal";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { NfcScannerSurface } from "@/components/scanner-nfc-surface";
@@ -108,34 +119,28 @@ export function QrCamera({
       ) : (
         <CameraPreview
           onValue={onValue}
-          onClose={nfcFirst ? () => setCameraVisible(false) : onClose}
+          onClose={onClose}
           hint={hint}
           scanningEnabled={scanningEnabled && !nfcVisible}
           nfcSessionPending={nfcSessionPending}
-          requestCameraOnFocus={nfcFirst || requestCameraOnFocus}
+          requestCameraOnFocus={requestCameraOnFocus}
           onNfc={openNfc}
         />
       )}
       {nfcFirst ? (
-        <Modal
-          visible={cameraVisible}
-          animationType="slide"
-          onRequestClose={() => setCameraVisible(false)}
-        >
-          {cameraVisible ? (
-            <CameraPreview
-              onValue={(value) => {
-                setCameraVisible(false);
-                onValue(value);
-              }}
-              onClose={() => setCameraVisible(false)}
-              hint={hint}
-              scanningEnabled={scanningEnabled}
-              nfcSessionPending={false}
-              requestCameraOnFocus
-            />
-          ) : null}
-        </Modal>
+        <QrCameraModal visible={cameraVisible} onClose={() => setCameraVisible(false)}>
+          <CameraPreview
+            onValue={(value) => {
+              setCameraVisible(false);
+              onValue(value);
+            }}
+            onClose={() => setCameraVisible(false)}
+            hint={hint}
+            scanningEnabled={scanningEnabled}
+            nfcSessionPending={false}
+            requestCameraOnFocus
+          />
+        </QrCameraModal>
       ) : null}
       <NfcReader
         visible={nfcSupported && nfcVisible && scanningEnabled}
@@ -165,6 +170,7 @@ function CameraPreview({
   nfcSessionPending: boolean;
   requestCameraOnFocus: boolean;
 }) {
+  const closing = useContext(QrCameraClosing);
   const [permission, requestPermission] = useCameraPermissions();
   const { t } = useLocale();
   const isFocused = useIsFocused();
@@ -172,6 +178,15 @@ function CameraPreview({
   const sideRegion = useSideRegion();
   const tabBarBottomInset = useRouterTabBarBottomInset();
   const locked = useRef(false);
+  const unlockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reducedMotion = useReducedMotion();
+  const idleScale = useSharedValue(1);
+  useEffect(
+    () => () => {
+      if (unlockTimer.current) clearTimeout(unlockTimer.current);
+    },
+    [],
+  );
   const permissionRequestStarted = useRef(false);
   const scanCandidate = useRef<QrScanCandidate | null>(null);
   const [{ height, width }, setViewport] = useState({ height: 0, width: 0 });
@@ -185,6 +200,20 @@ function CameraPreview({
   });
   const [manualEntryVisible, setManualEntryVisible] = useState(false);
   const [permissionError, setPermissionError] = useState<Error | null>(null);
+  const pulseWhileScanning =
+    isFocused && scanningEnabled && !closing && !manualEntryVisible && permission?.granted;
+  useEffect(() => {
+    if (!pulseWhileScanning || reducedMotion) {
+      idleScale.value = 1;
+      return;
+    }
+    idleScale.value = withRepeat(
+      withTiming(1.012, { duration: 1100, easing: Easing.inOut(Easing.sin) }),
+      -1,
+      true,
+    );
+    return () => cancelAnimation(idleScale);
+  }, [idleScale, pulseWhileScanning, reducedMotion]);
   const requestCamera = useCallback(() => {
     permissionRequestStarted.current = true;
     setPermissionError(null);
@@ -194,26 +223,40 @@ function CameraPreview({
     });
   }, [requestPermission]);
   const frameSize = scanFrameSize(width, height);
-  const frameLeft = (width - frameSize) / 2;
-  const frameTop = (height - frameSize) / 2;
-  const frameRight = frameLeft + frameSize;
-  const frameBottom = frameTop + frameSize;
-  const shadePath = [
-    `M0 0 H${width} V${height} H0 Z`,
-    `M${frameLeft + FRAME_RADIUS} ${frameTop}`,
-    `H${frameRight - FRAME_RADIUS}`,
-    `A${FRAME_RADIUS} ${FRAME_RADIUS} 0 0 1 ${frameRight} ${frameTop + FRAME_RADIUS}`,
-    `V${frameBottom - FRAME_RADIUS}`,
-    `A${FRAME_RADIUS} ${FRAME_RADIUS} 0 0 1 ${frameRight - FRAME_RADIUS} ${frameBottom}`,
-    `H${frameLeft + FRAME_RADIUS}`,
-    `A${FRAME_RADIUS} ${FRAME_RADIUS} 0 0 1 ${frameLeft} ${frameBottom - FRAME_RADIUS}`,
-    `V${frameTop + FRAME_RADIUS}`,
-    `A${FRAME_RADIUS} ${FRAME_RADIUS} 0 0 1 ${frameLeft + FRAME_RADIUS} ${frameTop}`,
-    "Z",
-  ].join(" ");
+  // Use the same edge for the cutout and the corner strokes throughout the pulse.
+  const frame = useDerivedValue(() => {
+    const frameScale = idleScale.value;
+    const size = frameSize * frameScale;
+    const left = (width - size) / 2;
+    const top = (height - size) / 2;
+    const right = left + size;
+    const bottom = top + size;
+    const radius = FRAME_RADIUS * frameScale;
+    const leg = 52 * frameScale;
+    const arc = `A${radius} ${radius} 0 0 1`;
+    const topLeft = `${arc} ${left + radius} ${top}`;
+    const topRight = `${arc} ${right} ${top + radius}`;
+    const bottomRight = `${arc} ${right - radius} ${bottom}`;
+    const bottomLeft = `${arc} ${left} ${bottom - radius}`;
+
+    return {
+      outline: `M${left + radius} ${top} H${right - radius} ${topRight} V${bottom - radius} ${bottomRight} H${left + radius} ${bottomLeft} V${top + radius} ${topLeft} Z`,
+      corners: [
+        `M${left} ${top + leg} V${top + radius} ${topLeft} H${left + leg}`,
+        `M${right - leg} ${top} H${right - radius} ${topRight} V${top + leg}`,
+        `M${right} ${bottom - leg} V${bottom - radius} ${bottomRight} H${right - leg}`,
+        `M${left + leg} ${bottom} H${left + radius} ${bottomLeft} V${bottom - leg}`,
+      ].join(" "),
+    };
+  });
+  const shade = useAnimatedProps(() => ({
+    d: `M0 0 H${width} V${height} H0 Z ${frame.value.outline}`,
+  }));
+  const corners = useAnimatedProps(() => ({ d: frame.value.corners }));
 
   useEffect(() => {
     if (
+      closing ||
       permission?.status !== "undetermined" ||
       !isFocused ||
       !scanningEnabled ||
@@ -224,6 +267,7 @@ function CameraPreview({
       return;
     requestCamera();
   }, [
+    closing,
     isFocused,
     nfcSessionPending,
     permission?.status,
@@ -233,13 +277,14 @@ function CameraPreview({
   ]);
 
   useEffect(() => {
-    if (!isFocused) {
+    if (!isFocused && !closing) {
       locked.current = false;
+      if (unlockTimer.current) clearTimeout(unlockTimer.current);
       scanCandidate.current = null;
       setTorchEnabled(false);
       setManualEntryVisible(false);
     }
-  }, [isFocused]);
+  }, [closing, isFocused]);
 
   useEffect(() => {
     scanCandidate.current = null;
@@ -263,12 +308,14 @@ function CameraPreview({
       scanCandidate.current = confirmation.candidate;
       if (!confirmation.accepted) return;
       locked.current = true;
-      onValue(result.data);
-      setTimeout(() => {
+      void haptic("light");
+      if (unlockTimer.current) clearTimeout(unlockTimer.current);
+      unlockTimer.current = setTimeout(() => {
         locked.current = false;
       }, 1200);
+      onValue(result.data);
     },
-    [frameSize, height, width, onValue],
+    [frameSize, height, onValue, width],
   );
 
   function nfcPermissionButton() {
@@ -379,9 +426,9 @@ function CameraPreview({
       }}
       style={styles.black}
     >
-      {isFocused ? (
+      {isFocused || closing ? (
         <CameraView
-          active={isFocused}
+          active={isFocused || closing}
           // The preview only scans barcodes; it must never win hit-testing
           // over the controls rendered above it (toolbar, queue, flashlight,
           // and manual-entry buttons) on iOS 18's native camera surface.
@@ -391,21 +438,20 @@ function CameraPreview({
           enableTorch={cameraControls.showTorch && torchEnabled}
           barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
           onBarcodeScanned={
-            scanningEnabled && !manualEntryVisible ? handleBarcodeScanned : undefined
+            scanningEnabled && !closing && !manualEntryVisible ? handleBarcodeScanned : undefined
           }
         />
       ) : null}
       <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <Path d={shadePath} fill="rgba(0,0,0,0.54)" fillRule="evenodd" />
+        <AnimatedPath animatedProps={shade} fill="rgba(0,0,0,0.54)" fillRule="evenodd" />
+        <AnimatedPath
+          animatedProps={corners}
+          fill="none"
+          stroke="white"
+          strokeWidth={6}
+          strokeLinecap="round"
+        />
       </Svg>
-      <View pointerEvents="none" style={styles.frameOverlay}>
-        <View style={[styles.frame, { height: frameSize, width: frameSize }]}>
-          <View style={[styles.corner, styles.topLeft]} />
-          <View style={[styles.corner, styles.topRight]} />
-          <View style={[styles.corner, styles.bottomLeft]} />
-          <View style={[styles.corner, styles.bottomRight]} />
-        </View>
-      </View>
       {hint === null ? null : (
         <Text
           maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
@@ -520,48 +566,10 @@ function CameraPreview({
   );
 }
 
+const AnimatedPath = Animated.createAnimatedComponent(Path);
 const FRAME_RADIUS = 28;
 const styles = StyleSheet.create({
   black: { backgroundColor: "#000", flex: 1 },
-  frameOverlay: {
-    alignItems: "center",
-    bottom: 0,
-    justifyContent: "center",
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: 0,
-  },
-  frame: { borderRadius: FRAME_RADIUS, overflow: "hidden" },
-  corner: { borderColor: "white", height: 52, position: "absolute", width: 52 },
-  topLeft: {
-    borderLeftWidth: 4,
-    borderTopLeftRadius: FRAME_RADIUS,
-    borderTopWidth: 4,
-    left: 0,
-    top: 0,
-  },
-  topRight: {
-    borderRightWidth: 4,
-    borderTopRightRadius: FRAME_RADIUS,
-    borderTopWidth: 4,
-    right: 0,
-    top: 0,
-  },
-  bottomLeft: {
-    borderBottomWidth: 4,
-    borderLeftWidth: 4,
-    bottom: 0,
-    left: 0,
-    borderBottomLeftRadius: FRAME_RADIUS,
-  },
-  bottomRight: {
-    borderBottomWidth: 4,
-    borderRightWidth: 4,
-    bottom: 0,
-    right: 0,
-    borderBottomRightRadius: FRAME_RADIUS,
-  },
   hint: {
     color: "white",
     fontSize: type.callout.fontSize,

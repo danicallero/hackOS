@@ -3,18 +3,22 @@ import { advanceQrScanCandidate, type QrScanCandidate } from "./qr-scan-stabilit
 const centered = { areaRatio: 0.25, centerX: 0, centerY: 0 };
 
 describe("QR scan stability", () => {
-  it("accepts the same QR after three stable detections over time", () => {
-    let candidate: QrScanCandidate | null = null;
-    let result = advanceQrScanCandidate(candidate, "badge-1", centered, 1_000);
-    candidate = result.candidate;
+  it("accepts the same QR after two stable detections 65ms apart", () => {
+    const result = advanceQrScanCandidate(null, "badge-1", centered, 1_000);
     expect(result.accepted).toBe(false);
 
-    result = advanceQrScanCandidate(candidate, "badge-1", centered, 1_050);
-    candidate = result.candidate;
-    expect(result.accepted).toBe(false);
+    const tooSoon = advanceQrScanCandidate(result.candidate, "badge-1", centered, 1_050);
+    expect(tooSoon.accepted).toBe(false);
 
-    result = advanceQrScanCandidate(candidate, "badge-1", centered, 1_100);
-    expect(result).toEqual({ accepted: true, candidate: null });
+    expect(advanceQrScanCandidate(result.candidate, "badge-1", centered, 1_065)).toEqual({
+      accepted: true,
+      candidate: null,
+    });
+  });
+
+  it("accepts identical geometry after the native event throttle", () => {
+    const first = advanceQrScanCandidate(null, "badge-1", centered, 1_000);
+    expect(advanceQrScanCandidate(first.candidate, "badge-1", centered, 1_510).accepted).toBe(true);
   });
 
   it("does not accept duplicate callbacks from a single instant", () => {
@@ -59,7 +63,7 @@ describe("QR scan stability", () => {
     const different = advanceQrScanCandidate(candidate, "badge-2", centered, 1_050);
     expect(different.candidate?.detections).toBe(1);
 
-    const delayed = advanceQrScanCandidate(different.candidate, "badge-2", centered, 1_500);
+    const delayed = advanceQrScanCandidate(different.candidate, "badge-2", centered, 1_801);
     expect(delayed.candidate?.detections).toBe(1);
   });
 });

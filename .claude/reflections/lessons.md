@@ -1062,3 +1062,26 @@ workspace typecheck; confirm the remote check passes on the pushed commit.
 
 ### Exceptions
 None.
+
+## [R040] Preserve Liquid Glass during ancestor transitions
+
+Status: active
+Scope: module:mobile
+Source: user-correction
+Date: 2026-11-25
+
+### Trigger
+Animating a native surface that contains Liquid Glass controls.
+
+### Lesson
+UIKit's visual effect views rely on full ancestor opacity and an unmasked
+ancestor hierarchy. A transition can remove the visible material even when
+the controls still use the shared GlassView component.
+
+### Action
+Animate geometry with full ancestor opacity. Apply any fades to independent
+layers outside the visual effect view's ancestry.
+
+### Validation
+Record the transition on Liquid Glass iOS and inspect the controls at rest
+and in motion against a backdrop that makes refraction visible.
