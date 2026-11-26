@@ -68,6 +68,7 @@ export function useReviewWindow(
   reviewTargetId: number | null,
   activeRoomId: number | null,
   t: Translate,
+  windowOnLinks: boolean,
 ) {
   const reviewWindowRef = useRef<Window | null>(null);
   const openedAtRef = useRef(0);
@@ -81,7 +82,12 @@ export function useReviewWindow(
   }, []);
 
   const moveReviewToWindow = useCallback(async () => {
-    if (!reviewable || reviewTargetId == null || !window.matchMedia("(min-width: 1024px)").matches)
+    if (
+      !windowOnLinks ||
+      !reviewable ||
+      reviewTargetId == null ||
+      !window.matchMedia("(min-width: 1024px)").matches
+    )
       return;
     if (reviewWindowRef.current && !reviewWindowRef.current.closed) return;
     const url = new URL(
@@ -104,7 +110,7 @@ export function useReviewWindow(
     openedAtRef.current = Date.now();
     setWindowOpen(true);
     opened.addEventListener("pagehide", closeReviewWindow);
-  }, [reviewable, reviewTargetId, activeRoomId, closeReviewWindow, t]);
+  }, [windowOnLinks, reviewable, reviewTargetId, activeRoomId, closeReviewWindow, t]);
 
   useEffect(() => {
     const onReturn = () => {

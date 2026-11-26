@@ -2541,6 +2541,7 @@
   "openReviewWindow": "Open review in a window",
   "previousFile": "Previous file",
   "reviewWindowBlocked": "Could not open the review window.",
+  "reviewWindowOnLinks": "Open a window when following links",
   "reviewComposerUnavailable": "There's nothing to review here yet.",
   "rightSide": "right",
   "reviewsWord": "reviews",

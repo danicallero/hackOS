@@ -2541,6 +2541,7 @@
   "openReviewWindow": "Abrir valoración en una ventana",
   "previousFile": "Archivo anterior",
   "reviewWindowBlocked": "No se ha podido abrir la ventana de valoración.",
+  "reviewWindowOnLinks": "Abrir ventana al seguir enlaces",
   "reviewComposerUnavailable": "Todavía no hay nada que valorar aquí.",
   "rightSide": "derecha",
   "reviewsWord": "evaluaciones",

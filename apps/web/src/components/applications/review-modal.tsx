@@ -76,7 +76,7 @@ import {
   type ResponseRow,
   type TemplateField,
 } from "@/lib/applications";
-import { openCompanionWindow } from "@/lib/companion-window";
+import { openCompanionWindow, useCompanionWindowPreference } from "@/lib/companion-window";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
 import { showErrorToast, toast } from "@/lib/toast";
@@ -283,6 +283,7 @@ export function ReviewModal({
   // the inline composer visible alongside the popup.
   const [inlineReviewHidden, setInlineReviewHidden] = useState(false);
   const reviewWindowRef = useRef<Window | null>(null);
+  const { windowOnLinks, changeWindowOnLinks } = useCompanionWindowPreference();
   const mountedRef = useRef(true);
 
   useEffect(
@@ -685,7 +686,7 @@ export function ReviewModal({
   }
 
   function handleAnswerLinkClick() {
-    if (canScore && window.matchMedia("(min-width: 1024px)").matches) {
+    if (canScore && windowOnLinks && window.matchMedia("(min-width: 1024px)").matches) {
       void openReviewWindow({ hideInline: true });
     }
   }
@@ -723,6 +724,8 @@ export function ReviewModal({
     onNotesChange: reviewDraft.setNotes,
     reviewSaveState: reviewDraft.saveState,
     onOpenReviewWindow: () => void openReviewWindow(),
+    windowOnLinks,
+    onWindowOnLinksChange: changeWindowOnLinks,
     dockSide: files.length > 0 ? fileViewerSide : undefined,
   };
 
