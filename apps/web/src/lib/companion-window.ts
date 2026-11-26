@@ -1,3 +1,5 @@
+import { useCallback, useEffect, useState } from "react";
+
 // The Document Picture-in-Picture API (Chromium-only as of writing) is the
 // one real, spec-guaranteed way a page can put its own content in a window
 // the OS keeps above everything else. TypeScript's DOM lib doesn't ship
@@ -66,4 +68,44 @@ export async function openCompanionWindow({
     if (onClosed) popup.addEventListener("unload", onClosed);
   }
   return popup;
+}
+
+const WINDOW_PREFERENCE_KEY = "hackos.review-window.on-links";
+
+/**
+ * Safari and every iOS browser (all WebKit): popups are blocked or behave as
+ * plain tabs there, so the companion window is off by default.
+ */
+function isWebKitBrowser(): boolean {
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua)) return true;
+  if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) return true;
+  return /AppleWebKit/.test(ua) && !/Chrome|Chromium|Edg|Firefox|Android/.test(ua);
+}
+
+/**
+ * Per-device choice: open the review window automatically when the reviewer
+ * follows an external link. Defaults to off on WebKit, on elsewhere. An
+ * explicit "open in a window" button is unaffected.
+ */
+export function useCompanionWindowPreference() {
+  const [enabled, setEnabled] = useState(false);
+  useEffect(() => {
+    let stored: string | null = null;
+    try {
+      stored = window.localStorage.getItem(WINDOW_PREFERENCE_KEY);
+    } catch {
+      // Storage can be unavailable; the default applies.
+    }
+    setEnabled(stored ? stored === "on" : !isWebKitBrowser());
+  }, []);
+  const change = useCallback((next: boolean) => {
+    setEnabled(next);
+    try {
+      window.localStorage.setItem(WINDOW_PREFERENCE_KEY, next ? "on" : "off");
+    } catch {
+      // Not persisted this time.
+    }
+  }, []);
+  return { windowOnLinks: enabled, changeWindowOnLinks: change };
 }

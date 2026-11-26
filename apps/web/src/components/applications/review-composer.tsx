@@ -3,6 +3,7 @@
 // The reviewer's score + notes card: floating over the modal on desktop,
 // inline on small screens, and alone in the companion review window.
 
+import { AppWindowIcon } from "@phosphor-icons/react/dist/csr/AppWindow";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import { DotsSixVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsSixVertical";
 import {
@@ -34,6 +35,8 @@ export interface ReviewComposerProps {
   onNotesChange: (v: string) => void;
   reviewSaveState: SaveState;
   onOpenReviewWindow?: () => void;
+  windowOnLinks?: boolean;
+  onWindowOnLinksChange?: (next: boolean) => void;
   dockSide?: FileViewerSide;
   dragHandle?: React.ReactNode;
 }
@@ -102,6 +105,19 @@ export function ReviewPanelCard({
       <div className="flex items-center gap-1">
         {dragHandle}
         <p className="min-w-0 flex-1 text-sm font-medium">{t("yourReview")}</p>
+        {props.onWindowOnLinksChange && (
+          <IconButton
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className={props.windowOnLinks ? "text-foreground" : "text-muted-foreground"}
+            aria-pressed={props.windowOnLinks}
+            onClick={() => props.onWindowOnLinksChange?.(!props.windowOnLinks)}
+            label={t("reviewWindowOnLinks")}
+          >
+            <AppWindowIcon aria-hidden="true" weight={props.windowOnLinks ? "fill" : "regular"} />
+          </IconButton>
+        )}
         {props.onOpenReviewWindow && (
           <IconButton
             type="button"

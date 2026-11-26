@@ -3,6 +3,7 @@
 // The judging top bar (H29): room, live numbers and the room actions. It stays visible in
 // View project, so the numbers never leave the screen.
 
+import { AppWindowIcon } from "@phosphor-icons/react/dist/csr/AppWindow";
 import { ArrowsInSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsInSimple";
 import { ArrowsOutSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsOutSimple";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
@@ -45,6 +46,8 @@ export function JudgingTopBar({
   canExport,
   focusMode,
   onFocusModeChange,
+  windowOnLinks,
+  onWindowOnLinksChange,
   isPaused,
   busy,
   onPause,
@@ -63,6 +66,8 @@ export function JudgingTopBar({
   canExport: boolean;
   focusMode: boolean;
   onFocusModeChange: (next: boolean) => void;
+  windowOnLinks: boolean;
+  onWindowOnLinksChange: (next: boolean) => void;
   isPaused: boolean;
   busy: string | null;
   onPause: () => void;
@@ -107,6 +112,16 @@ export function JudgingTopBar({
         <div className="flex shrink-0 items-center gap-1.5">
           {canJudge && (
             <>
+              <IconButton
+                className="hidden lg:inline-flex"
+                label={t("reviewWindowOnLinks")}
+                title={t("reviewWindowOnLinks")}
+                variant={windowOnLinks ? "default" : "outline"}
+                aria-pressed={windowOnLinks}
+                onClick={() => onWindowOnLinksChange(!windowOnLinks)}
+              >
+                <AppWindowIcon aria-hidden="true" className="size-4" />
+              </IconButton>
               {/* The label shows whenever there is room for it; the icon alone below sm. */}
               <Button
                 className="hidden sm:inline-flex"
