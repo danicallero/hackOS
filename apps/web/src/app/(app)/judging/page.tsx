@@ -19,6 +19,7 @@ import { confirmDiscardUnsavedChanges } from "@/hooks/use-unsaved-changes-guard"
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import type { Challenge } from "@/lib/challenges";
+import { useCompanionWindowPreference } from "@/lib/companion-window";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { workspaceAccess } from "@/lib/judging-workspace";
 import {
@@ -290,11 +291,13 @@ export default function QueuePage() {
       reviewTarget.status === "presenting" ||
       selectedReviewEntry != null);
 
+  const { windowOnLinks, changeWindowOnLinks } = useCompanionWindowPreference();
   const { windowOpen, moveReviewToWindow } = useReviewWindow(
     reviewable,
     reviewTargetId,
     activeRoomId,
     t,
+    windowOnLinks,
   );
 
   // View project is a standing preference: the layout appears whenever a team
@@ -388,6 +391,8 @@ export default function QueuePage() {
         canExport={canExport}
         focusMode={focusMode}
         onFocusModeChange={changeFocusMode}
+        windowOnLinks={windowOnLinks}
+        onWindowOnLinksChange={changeWindowOnLinks}
         isPaused={isPaused}
         busy={busy}
         onPause={() =>
