@@ -1373,7 +1373,7 @@
   "declinedThisPlaceTitle": "You declined this place",
   "declinedThisPlaceDesc": "If this was a mistake, contact the organizers.",
   "confirmationExpiredTitle": "Your confirmation window expired",
-  "confirmationExpiredDesc": "Ask the organization to resend your acceptance if you'd still like to attend.",
+  "confirmationExpiredDesc": "Your spot has expired and may have been offered to someone else. Ask the organizers if another spot is available.",
   "privacyNoticeTitle": "Privacy notice",
   "yourAnswers": "Your answers",
   "yourSubmittedAnswers": "Your submitted answers",

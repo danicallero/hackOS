@@ -1373,7 +1373,7 @@
   "declinedThisPlaceTitle": "Has rechazado esta plaza",
   "declinedThisPlaceDesc": "Si ha sido un error, contacta con los organizadores.",
   "confirmationExpiredTitle": "Tu ventana de confirmación ha caducado",
-  "confirmationExpiredDesc": "Pide a la organización que reenvíe tu aceptación si aún quieres asistir.",
+  "confirmationExpiredDesc": "Tu plaza ha caducado y puede haberse asignado a otra persona. Consulta con la organización si hay otra plaza disponible.",
   "privacyNoticeTitle": "Aviso de privacidad",
   "yourAnswers": "Tus respuestas",
   "yourSubmittedAnswers": "Tus respuestas enviadas",
