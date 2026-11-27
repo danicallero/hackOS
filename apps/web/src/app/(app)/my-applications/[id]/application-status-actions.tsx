@@ -5,7 +5,7 @@
 
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
-import { ShieldWarningIcon } from "@phosphor-icons/react/dist/csr/ShieldWarning";
+import { HourglassIcon } from "@phosphor-icons/react/dist/csr/Hourglass";
 import { WalletIcon } from "@phosphor-icons/react/dist/csr/Wallet";
 import { XCircleIcon } from "@phosphor-icons/react/dist/csr/XCircle";
 import Link from "next/link";
@@ -23,9 +23,9 @@ interface ApplicationStatusActionsProps {
   canConfirm: boolean;
   acting: boolean;
   actionError: ActionError | null;
-  privacyNotice: string | null;
   onConfirm: () => void;
   onOpenRelease: () => void;
+  onOpenWithdraw: () => void;
   onRetry: () => void;
 }
 
@@ -35,9 +35,9 @@ export function ApplicationStatusActions({
   canConfirm,
   acting,
   actionError,
-  privacyNotice,
   onConfirm,
   onOpenRelease,
+  onOpenWithdraw,
   onRetry,
 }: ApplicationStatusActionsProps) {
   const { t, language } = useLocale();
@@ -100,9 +100,31 @@ export function ApplicationStatusActions({
         </SectionCard>
       )}
 
-      {actionError && (actionError.action === "confirm" || actionError.action === "decline") && (
-        <ContextualError message={actionError.message} onRetry={onRetry} />
+      {status === "waitlist" && (
+        <SectionCard
+          icon={HourglassIcon}
+          title={t("onWaitlistTitle")}
+          description={t("onWaitlistDesc")}
+        >
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={onOpenWithdraw}
+              disabled={acting}
+              className="w-full sm:w-auto"
+            >
+              {t("withdrawFromWaitlist")}
+            </Button>
+          </div>
+        </SectionCard>
       )}
+
+      {actionError &&
+        (actionError.action === "confirm" ||
+          actionError.action === "decline" ||
+          actionError.action === "withdraw") && (
+          <ContextualError message={actionError.message} onRetry={onRetry} />
+        )}
       {status === "draft" && response?.rejection_reason && (
         <Alert variant="warning" role="status">
           <ArrowCounterClockwiseIcon aria-hidden="true" />
@@ -133,14 +155,6 @@ export function ApplicationStatusActions({
           <XCircleIcon aria-hidden="true" />
           <AlertTitle>{t("confirmationExpiredTitle")}</AlertTitle>
           <AlertDescription>{t("confirmationExpiredDesc")}</AlertDescription>
-        </Alert>
-      )}
-
-      {privacyNotice && (
-        <Alert role="status">
-          <ShieldWarningIcon aria-hidden="true" />
-          <AlertTitle>{t("privacyNoticeTitle")}</AlertTitle>
-          <AlertDescription>{privacyNotice}</AlertDescription>
         </Alert>
       )}
     </>

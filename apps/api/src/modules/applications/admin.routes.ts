@@ -138,6 +138,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   const GRANTED_ROLE_NAME_EXPR = grantedRoleNameSql("applications", "granted_role_name");
   const COLUMNS = `id, name, template, sections, description, open_at, close_at,
                    capacity, confirmation_window_hours, ask_shirt_size, ask_food_intolerances,
+                   waitlist_enabled,
                    event_key, attendance_kind,
                    review_hidden_fields, current_form_version, created_at, ${GRANTS_ROLE_IDS_EXPR},
                    ${HAS_CONFIRMED_RESPONSES_EXPR}, ${GRANTED_ROLE_NAME_EXPR}`;
@@ -243,7 +244,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Get one application form",
         description:
-          "Staff read of a single form regardless of window state (H11), including its edition key and attendance classification. Includes `has_confirmed_responses` (H8) — true once any response reached confirmed, meaning further `grants_role_ids` edits only affect future confirmations, not past ones.",
+          "Staff read of a single form regardless of window state (H11), including its edition key and attendance classification. Includes `waitlist_enabled` (H11) and `has_confirmed_responses` (H8) — true once any response reached confirmed, meaning further `grants_role_ids` edits only affect future confirmations, not past ones.",
         params: idParamSchema,
       },
     },
@@ -264,7 +265,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Create an application form",
         description:
-          "Defines a current-edition application form (H11): its attendance_kind (participant, mentor or staff), template, optional named sections that group template fields under a title/description, ungrouped fields positioned after a section with `after_section_key` (mutually exclusive with `section_key`, and both must reference a defined section), open/close window, capacity, confirmation window, whether it asks for a shirt size and/or dietary restrictions (H12, both off by default), and an optional `grants_role_ids` (H8) list of roles granted alongside ticket issuance when a response is confirmed. `grants_role_ids` is also the answer to 'what kind of application is this' — the legacy static `type` classification is retired; a returned form instead carries `granted_role_name`, derived live from the name of its highest-position granted role. Configuring a role into `grants_role_ids` is gated exactly like directly assigning that role (H8): the actor's highest assigned-role position must sit strictly above every requested role's position, and (unless they hold the wildcard) they must already possess every capability that role's own rows explicitly allow.",
+          "Defines a current-edition application form (H11): its attendance_kind (participant, mentor or staff), template, optional named sections that group template fields under a title/description, ungrouped fields positioned after a section with `after_section_key` (mutually exclusive with `section_key`, and both must reference a defined section), open/close window, capacity, confirmation window, whether it asks for a shirt size and/or dietary restrictions (H12, both off by default), the waitlist (`waitlist_enabled`: new submissions join it instead of applying for a place; a closed window still closes the form completely), and an optional `grants_role_ids` (H8) list of roles granted alongside ticket issuance when a response is confirmed. `grants_role_ids` is also the answer to 'what kind of application is this' — the legacy static `type` classification is retired; a returned form instead carries `granted_role_name`, derived live from the name of its highest-position granted role. Configuring a role into `grants_role_ids` is gated exactly like directly assigning that role (H8): the actor's highest assigned-role position must sit strictly above every requested role's position, and (unless they hold the wildcard) they must already possess every capability that role's own rows explicitly allow.",
         body: createApplicationSchema,
       },
     },
@@ -282,8 +283,8 @@ export function registerAdminRoutes(app: FastifyInstance): void {
           `INSERT INTO applications
              (name, template, sections, description, open_at, close_at, capacity,
               confirmation_window_hours, ask_shirt_size, ask_food_intolerances, current_form_version,
-              event_key, attendance_kind)
-           VALUES ($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, 1, $11, $12)
+              event_key, attendance_kind, waitlist_enabled)
+           VALUES ($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, 1, $11, $12, $13)
            RETURNING id`,
           [
             b.name,
@@ -298,6 +299,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
             b.ask_food_intolerances,
             await currentEventKey(client),
             b.attendance_kind,
+            b.waitlist_enabled,
           ],
         );
         const applicationId = rows[0].id as number;
@@ -411,6 +413,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
         if (b.ask_shirt_size !== undefined) put("ask_shirt_size", b.ask_shirt_size);
         if (b.ask_food_intolerances !== undefined)
           put("ask_food_intolerances", b.ask_food_intolerances);
+        if (b.waitlist_enabled !== undefined) put("waitlist_enabled", b.waitlist_enabled);
         if (b.attendance_kind !== undefined) put("attendance_kind", b.attendance_kind);
         if (b.review_hidden_fields !== undefined)
           put("review_hidden_fields", [...new Set(b.review_hidden_fields)], "::text[]");

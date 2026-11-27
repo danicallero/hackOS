@@ -42,15 +42,6 @@ type Content = {
 const dateTime = (value: string, timezone: string, language: Language) =>
   formatEventDate(value, language, "dateTime", timezone);
 
-/**
- * H8: label for a public form's `granted_role_name` — the name of its
- * highest-position granted role, or null if it grants none. Replaces the
- * retired static `type` field's display.
- */
-function grantedRoleNameLabel(roleName: string | null, t: Translate): string {
-  return roleName ?? t("roleUnassigned");
-}
-
 export function PublicPage({ embedded = false }: { embedded?: boolean }) {
   const { language, t } = useLocale();
   // The landing page is worth visiting whether or not you're signed in
@@ -271,7 +262,8 @@ function PublicPageContent({
                   <h3 className="type-subheading">{form.name}</h3>
                   <p className="text-muted-foreground mt-1 text-sm">
                     {[
-                      grantedRoleNameLabel(form.granted_role_name, t),
+                      form.waitlist_enabled ? t("waitlistFull") : null,
+                      form.granted_role_name,
                       form.close_at
                         ? `${t("closes")} ${dateTime(form.close_at, event.timezone, language)}`
                         : null,
@@ -284,7 +276,7 @@ function PublicPageContent({
                   {/* Selecting a specific form survives account creation and
                       verification (#188): land directly back on this form. */}
                   <Link href={withReturnPath("/signup", `/my-applications/${form.id}`)}>
-                    {t("apply")}
+                    {form.waitlist_enabled ? t("joinWaitlist") : t("apply")}
                   </Link>
                 </Button>
               </div>

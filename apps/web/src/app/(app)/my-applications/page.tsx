@@ -25,13 +25,7 @@ import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { formatEventDate } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
-import {
-  formTypeLabel,
-  type MyResponseSummary,
-  type PublicForm,
-  statusLabel,
-  statusTone,
-} from "./lib";
+import { type MyResponseSummary, type PublicForm, statusLabel, statusTone } from "./lib";
 
 export default function MyApplicationsPage() {
   const { t, language } = useLocale();
@@ -188,14 +182,22 @@ export default function MyApplicationsPage() {
               <div className="min-w-0 space-y-0.5">
                 <div className="text-pretty font-medium">{f.name}</div>
                 <div className="text-muted-foreground text-xs">
-                  <span>{formTypeLabel(f.granted_role_name, t)}</span>
+                  {f.waitlist_enabled && (
+                    <span className="text-foreground font-medium">
+                      {t("waitlistFull")}
+                      {f.granted_role_name ? " · " : ""}
+                    </span>
+                  )}
+                  {f.granted_role_name && <span>{f.granted_role_name}</span>}
                   {f.close_at
                     ? t("closesInline", { date: formatEventDate(f.close_at, language, "dateTime") })
                     : ""}
                 </div>
               </div>
               <Button asChild size="sm" className="w-full sm:w-auto">
-                <Link href={`/my-applications/${f.id}`}>{t("apply")}</Link>
+                <Link href={`/my-applications/${f.id}`}>
+                  {f.waitlist_enabled ? t("joinWaitlist") : t("apply")}
+                </Link>
               </Button>
             </div>
           ))

@@ -17,6 +17,7 @@ export function ApplicationHeader({
   title,
   description,
   status,
+  waitlist,
   canDiscard,
   discarding,
   disabled,
@@ -25,6 +26,8 @@ export function ApplicationHeader({
   title: string;
   description?: string;
   status?: string;
+  /** H11: the form is a waitlist, so say so next to the title. */
+  waitlist?: boolean;
   canDiscard: boolean;
   discarding: boolean;
   disabled: boolean;
@@ -65,7 +68,9 @@ export function ApplicationHeader({
           ) : undefined
         }
         state={
-          !canDiscard && status ? (
+          waitlist ? (
+            <StatusBadge tone="warning">{t("waitlist")}</StatusBadge>
+          ) : !canDiscard && status ? (
             <StatusBadge tone={statusTone(status)}>{statusLabel(status, t)}</StatusBadge>
           ) : undefined
         }

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   remove: vi.fn(),
   refetch: vi.fn(),
+  forms: [] as Array<Record<string, unknown>>,
   responses: [
     {
       id: 1,
@@ -45,7 +46,7 @@ vi.mock("@/hooks/use-live-query", () => ({
     data:
       options.resourceKey[0] === "me-applications"
         ? { responses: state.responses }
-        : { applications: [] },
+        : { applications: state.forms },
     loading: false,
     error: null,
     refetch: state.refetch,
@@ -129,5 +130,33 @@ describe("discard application draft (H12)", () => {
     await act(async () => cancel?.click());
     expect(state.remove).not.toHaveBeenCalled();
     expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+  });
+});
+
+describe("open forms in waitlist mode (H11)", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  beforeEach(async () => {
+    state.forms = [
+      { id: 20, name: "Full", granted_role_name: null, close_at: null, waitlist_enabled: true },
+      { id: 21, name: "Open", granted_role_name: null, close_at: null, waitlist_enabled: false },
+    ];
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root.render(<MyApplicationsPage />));
+  });
+  afterEach(() => {
+    state.forms = [];
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("says there are no places and offers the waitlist instead of applying", () => {
+    expect(container.querySelector('a[href="/my-applications/20"]')?.textContent).toBe(
+      "joinWaitlist",
+    );
+    expect(container.textContent).toContain("waitlistFull");
+    expect(container.querySelector('a[href="/my-applications/21"]')?.textContent).toBe("apply");
   });
 });

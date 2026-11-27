@@ -27,6 +27,8 @@ export interface PublicForm {
   confirmation_window_hours: number;
   ask_shirt_size: boolean;
   ask_food_intolerances: boolean;
+  /** H11: new submissions join the waitlist: there is no place to apply for. */
+  waitlist_enabled: boolean;
   created_at: string;
 }
 
@@ -138,7 +140,7 @@ export function isConfirmationExpiredError(error: unknown): boolean {
 
 export type ActionError = {
   message: string;
-  action: "save" | "submit" | "confirm" | "decline";
+  action: "save" | "submit" | "confirm" | "decline" | "withdraw";
 };
 
 export type MutationKey = { responseId: number; status: string; key: string };
@@ -171,6 +173,7 @@ export function missingRequiredFields(
 const STATUS_TONE: Record<string, Tone> = {
   draft: "neutral",
   review: "info",
+  waitlist: "warning",
   accepted: "success",
   confirmed: "success",
   rejected: "danger",
@@ -186,6 +189,7 @@ export function statusLabel(status: string, t: Translate): string {
   const map: Record<string, string> = {
     draft: t("dataStatusDraft"),
     review: t("dataStatusReview"),
+    waitlist: t("waitlist"),
     accepted: t("statusAccepted"),
     confirmed: t("confirmed"),
     rejected: t("statusNotSelected"),
@@ -193,13 +197,4 @@ export function statusLabel(status: string, t: Translate): string {
     expired: t("dataStatusExpired"),
   };
   return map[status] ?? t("unknownStatus");
-}
-
-/**
- * H8: label for a form's `granted_role_name` — the name of its
- * highest-position granted role, or null if it grants none. Replaces the
- * retired static `type` field's display.
- */
-export function formTypeLabel(grantedRoleName: string | null, t: Translate): string {
-  return grantedRoleName ?? t("roleUnassigned");
 }

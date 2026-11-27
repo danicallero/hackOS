@@ -46,6 +46,8 @@ export interface PublicApplicationForm {
   granted_role_name: string | null;
   description: string | null;
   close_at: string | null;
+  /** H11: no places left; applying means joining the waitlist. */
+  waitlist_enabled?: boolean;
 }
 
 export function displayText(

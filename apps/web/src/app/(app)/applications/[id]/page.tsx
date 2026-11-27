@@ -367,7 +367,10 @@ function StatsStrip({ stats }: { stats: ApplicationStats }) {
         label={t("responsesLabel")}
         value={String(nonDraft)}
         icon={UsersIcon}
-        hint={draftCount > 0 ? t("nonDraftHint", { n: draftCount }) : undefined}
+        hint={joinHint([
+          draftCount > 0 ? t("nonDraftHint", { n: draftCount }) : null,
+          (c.waitlist ?? 0) > 0 ? t("statWaitlistCount", { n: c.waitlist ?? 0 }) : null,
+        ])}
       />
       <StatCard
         label={t("acceptedLabel")}

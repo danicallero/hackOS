@@ -66,11 +66,14 @@ function computeAvailableActions(status: string): string[] {
   const actions: string[] = ["staff-notes"];
   switch (status) {
     case "review":
-      actions.push("my-review", "decide");
+      actions.push("my-review", "decide", "waitlist");
+      break;
+    case "waitlist":
+      actions.push("decide", "revert-decision");
       break;
     case "accepted_internal":
     case "rejected_internal":
-      actions.push("decide", "revert-decision", "send-decision");
+      actions.push("decide", "revert-decision", "send-decision", "waitlist");
       break;
     case "accepted":
       actions.push("resend-decision", "revert-decision", "confirm-link", "decline-override");

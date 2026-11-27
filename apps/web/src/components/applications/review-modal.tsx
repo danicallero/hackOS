@@ -589,7 +589,7 @@ export function ReviewModal({
   const showExportAction = canExport && answerFields.length > 0;
   const copyResponseLink = () => {
     const tab =
-      response.status === "review"
+      response.status === "review" || response.status === "waitlist"
         ? "review"
         : response.status.endsWith("_internal")
           ? "outbox"

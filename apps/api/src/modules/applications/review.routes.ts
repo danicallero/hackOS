@@ -33,6 +33,7 @@ import {
 } from "./schemas.js";
 import {
   batchDecide,
+  batchMoveToWaitlist,
   batchReAccept,
   batchResendDecisions,
   batchRevertDecisions,
@@ -44,6 +45,7 @@ import {
   getDecisionPool,
   getResponseDetail,
   listUserResponsesForStaff,
+  moveToWaitlist,
   reAccept,
   resendDecision,
   returnToDraft,
@@ -275,6 +277,22 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       sendDecisionsBatch(req.userId as number, req.params.id, req.body.include_rejected),
   );
 
+  // ── H13/H14: tell a reviewed applicant they are on the waitlist ──────────────
+  r.post(
+    "/api/responses/:responseId/waitlist",
+    {
+      preHandler: [requireCapability(CAPABILITIES.APPLICATIONS_DECIDE), idempotencyGuard],
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
+      schema: {
+        summary: "Move a response to the waitlist",
+        description:
+          "Moves a response that has not been communicated (in review, or with an unsent internal decision) to the waitlist and notifies the applicant that the places are gone and they are on the waitlist (H13, H14). It holds no place and does not count against capacity; staff can later accept it with the normal decision. An Idempotency-Key replays the first result instead of notifying again.",
+        params: responseIdParamSchema,
+      },
+    },
+    async (req) => moveToWaitlist(req.userId as number, req.params.responseId),
+  );
+
   // ── H15: resend (second chance for the expired) ─────────────────────────────
   r.post(
     "/api/responses/:responseId/resend-decision",
@@ -476,6 +494,21 @@ export function registerReviewRoutes(app: FastifyInstance): void {
         req.body.decision,
         req.body.return_to_draft,
       ),
+  );
+
+  r.post(
+    "/api/responses/batch/waitlist",
+    {
+      preHandler: [requireCapability(CAPABILITIES.APPLICATIONS_DECIDE), idempotencyGuard],
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
+      schema: {
+        summary: "Batch move responses to the waitlist",
+        description:
+          "Moves each response id to the waitlist and notifies its applicant (H13, H14). Per-row failures are collected rather than aborting the batch, each with a stable `code`. An Idempotency-Key replays the completed batch without notifying again.",
+        body: batchIdsSchema,
+      },
+    },
+    async (req) => batchMoveToWaitlist(req.userId as number, req.body.response_ids),
   );
 
   r.post(

@@ -16,6 +16,7 @@ import {
   maskResponse,
   saveDraft,
   submitResponse,
+  withdrawFromWaitlist,
 } from "./service.js";
 
 /**
@@ -163,5 +164,21 @@ export function registerMeRoutes(app: FastifyInstance): void {
         decision_sender: decisionSenderAddress(),
       };
     },
+  );
+
+  // H12: leave the waitlist.
+  r.post(
+    "/api/applications/:id/response/withdraw",
+    {
+      preHandler: [requireAuth, idempotencyGuard],
+      config: routeAccess({ kind: "authenticated" }),
+      schema: {
+        summary: "Leave the waitlist",
+        description:
+          "The caller gives up their waitlisted application (H12): it moves to declined, like declining an offered place, and staff can still re-accept it later. 409 unless the response is on the waitlist. Transactional, audited and idempotent.",
+        params: idParamSchema,
+      },
+    },
+    async (req) => withdrawFromWaitlist(req.userId as number, req.params.id),
   );
 }
