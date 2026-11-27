@@ -171,6 +171,13 @@ export interface ApplicationForm {
   /** Whether this form asks for shirt size / dietary restrictions (H12). */
   ask_shirt_size: boolean;
   ask_food_intolerances: boolean;
+  /** H11: staff enabled the waitlist, optionally after `waitlist_after` applications. */
+  waitlist_enabled: boolean;
+  waitlist_after: number | null;
+  /** New submissions currently join the waitlist instead of applying for a place. */
+  waitlist_active: boolean;
+  /** Every non-draft response to the form. */
+  applications_received: number;
   /** Answer keys hidden in the standard review view; every answer stays reachable (H13). */
   review_hidden_fields?: string[];
   /** Roles granted alongside ticket issuance when a response is confirmed (H8). */

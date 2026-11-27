@@ -152,6 +152,7 @@ export function ResponsesTab({
   const [batchResult, setBatchResult] = useState<DurableBatchResult | null>(null);
   const [confirmBatchRevoke, setConfirmBatchRevoke] = useState(false);
   const [confirmBatchResend, setConfirmBatchResend] = useState(false);
+  const [confirmBatchWaitlist, setConfirmBatchWaitlist] = useState(false);
   const [exportingKey, setExportingKey] = useState<string | null>(null);
   const [exportFailures, setExportFailures] = useState<ExportFailuresState | null>(null);
   // The table's own search/sort-applied row order, for modal prev/next.
@@ -550,6 +551,10 @@ export function ResponsesTab({
                   >
                     {t("reject")}
                   </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setConfirmBatchWaitlist(true)}>
+                    {t("moveToWaitlist")}
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -743,6 +748,21 @@ export function ResponsesTab({
         onConfirm={() => {
           void batchAction(t("decisionsResent"), "/api/responses/batch/resend-decision").finally(
             () => setConfirmBatchResend(false),
+          );
+        }}
+      />
+
+      <AlertModal
+        open={confirmBatchWaitlist}
+        onOpenChange={setConfirmBatchWaitlist}
+        title={t("moveToWaitlistConfirmTitle", { count: selectedIds.size })}
+        description={t("moveToWaitlistWarning")}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("moveToWaitlist")}
+        pending={batchBusy}
+        onConfirm={() => {
+          void batchAction(t("movedToWaitlistToast"), "/api/responses/batch/waitlist").finally(() =>
+            setConfirmBatchWaitlist(false),
           );
         }}
       />

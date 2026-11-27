@@ -114,6 +114,10 @@
         "subject": "A túa solicitude de {{applicationName}} precisa cambios",
         "body": "Ola {{name}}:\n\nRevisamos a túa solicitude de {{applicationName}} para {{eventName}} e, tal como está, non podemos aceptala.{{rejectionDetails}}\n\nDevolvémoscha como borrador para que poidas corrixila e presentala de novo, aínda que o prazo xa pechase.\n\n[Revisar a miña solicitude]({{applicationUrl}})\n\nO equipo de {{eventName}}"
       },
+      "waitlisted": {
+        "subject": "Estás na lista de espera de {{applicationName}}",
+        "body": "Ola {{name}}:\n\nRevisamos a túa solicitude de {{applicationName}} para {{eventName}}. Non te seleccionamos porque as prazas encheuse, así que estás na lista de espera.\n\nEstar na lista de espera non é ter praza: non tes praza agora e non podemos asegurarche que a vaias ter. Se se libera algunha, avisarémoste e poderás optar a ela.\n\nSe xa non queres esperar, podes retirarte da lista desde a túa solicitude.\n\n[Ver a miña solicitude]({{applicationUrl}})\n\nO equipo de {{eventName}}"
+      },
       "confirmationReminder": {
         "subject": "Confirmación pendente para {{eventName}}",
         "body": "Ola {{name}},\n\nA túa praza en {{eventName}} segue pendente de confirmación.{{confirmationDetails}}\n\nO equipo de {{eventName}}"

@@ -15,6 +15,8 @@ import {
   sendDecision,
 } from "./decisions.js";
 
+import { moveToWaitlist } from "./waitlist.js";
+
 // ── decision pool (review dashboard) ─────────────────────────────────────────
 
 interface DecisionPoolRow {
@@ -34,6 +36,7 @@ interface DecisionPool {
   accepted: { unsent: DecisionPoolRow[]; sent: DecisionPoolRow[] };
   rejected: { unsent: DecisionPoolRow[]; sent: DecisionPoolRow[] };
   declined: { manual: DecisionPoolRow[]; expired: DecisionPoolRow[] };
+  waitlist: DecisionPoolRow[];
 }
 
 async function loadDecisionPoolRows(
@@ -66,20 +69,29 @@ export async function getDecisionPool(applicationId: number): Promise<DecisionPo
   );
   if (!rows[0]) throw new NotFoundError("Application not found");
 
-  const [acceptedUns, acceptedSent, rejectedUns, rejectedSent, declinedManual, declinedExpired] =
-    await Promise.all([
-      loadDecisionPoolRows(pool, applicationId, ["accepted_internal"]),
-      loadDecisionPoolRows(pool, applicationId, ["accepted"]),
-      loadDecisionPoolRows(pool, applicationId, ["rejected_internal"]),
-      loadDecisionPoolRows(pool, applicationId, ["rejected"]),
-      loadDecisionPoolRows(pool, applicationId, ["declined"]),
-      loadDecisionPoolRows(pool, applicationId, ["expired"]),
-    ]);
+  const [
+    acceptedUns,
+    acceptedSent,
+    rejectedUns,
+    rejectedSent,
+    declinedManual,
+    declinedExpired,
+    waitlisted,
+  ] = await Promise.all([
+    loadDecisionPoolRows(pool, applicationId, ["accepted_internal"]),
+    loadDecisionPoolRows(pool, applicationId, ["accepted"]),
+    loadDecisionPoolRows(pool, applicationId, ["rejected_internal"]),
+    loadDecisionPoolRows(pool, applicationId, ["rejected"]),
+    loadDecisionPoolRows(pool, applicationId, ["declined"]),
+    loadDecisionPoolRows(pool, applicationId, ["expired"]),
+    loadDecisionPoolRows(pool, applicationId, ["waitlist"]),
+  ]);
 
   return {
     accepted: { unsent: acceptedUns, sent: acceptedSent },
     rejected: { unsent: rejectedUns, sent: rejectedSent },
     declined: { manual: declinedManual, expired: declinedExpired },
+    waitlist: waitlisted,
   };
 }
 
@@ -134,6 +146,14 @@ export async function batchDecide(
   returnToDraft = false,
 ): Promise<BatchResult> {
   return runBatch(responseIds, (id) => decide(actorId, id, decision, returnToDraft));
+}
+
+/** Batch move reviewed responses to the waitlist, notifying each applicant (H13, H14). */
+export async function batchMoveToWaitlist(
+  actorId: number,
+  responseIds: number[],
+): Promise<BatchResult> {
+  return runBatch(responseIds, (id) => moveToWaitlist(actorId, id));
 }
 
 /** Batch re-accept declined/rejected/expired responses (M2). */

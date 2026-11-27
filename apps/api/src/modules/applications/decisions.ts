@@ -59,7 +59,8 @@ export async function decide(
     );
     const app = appRows[0] as ApplicationRow;
 
-    if (resp.status !== "review") {
+    // H14: a waitlisted response can be decided when a place frees up.
+    if (resp.status !== "review" && resp.status !== "waitlist") {
       throw new ConflictError("Only reviewed responses can be decided", { status: resp.status });
     }
 
@@ -69,7 +70,9 @@ export async function decide(
 
     const internalStatus = decision === "accepted" ? "accepted_internal" : "rejected_internal";
     const updated = await client.query(
-      `UPDATE application_responses SET status = $2, return_on_send = $3 WHERE id = $1 RETURNING *`,
+      `UPDATE application_responses
+          SET status = $2, return_on_send = $3, decision_sent_at = NULL
+        WHERE id = $1 RETURNING *`,
       [responseId, internalStatus, returnToDraft],
     );
     await audit(client, {
@@ -77,7 +80,7 @@ export async function decide(
       entityType: "application_response",
       entityId: responseId,
       action: `decided_${decision}`,
-      before: { status: "review" },
+      before: { status: resp.status },
       after: {
         status: internalStatus,
         decision_sent_at: null,
@@ -141,7 +144,8 @@ export async function revertDecision(
         resp.status !== "accepted_internal" &&
         resp.status !== "rejected_internal" &&
         resp.status !== "accepted" &&
-        resp.status !== "rejected"
+        resp.status !== "rejected" &&
+        resp.status !== "waitlist"
       ) {
         throw new ConflictError("Only decided responses can be reverted to review", {
           status: resp.status,

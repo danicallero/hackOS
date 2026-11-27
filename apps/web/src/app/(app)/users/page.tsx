@@ -129,6 +129,8 @@ function applicationLabel(status: string | null, t: Translate): string {
       return t("dataStatusDraft");
     case "review":
       return t("dataStatusReview");
+    case "waitlist":
+      return t("waitlist");
     case "accepted_internal":
       return t("acceptedUnsent");
     case "rejected_internal":

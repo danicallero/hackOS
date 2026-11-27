@@ -54,6 +54,8 @@ type MetaValues = {
   confirmation_window_hours: string;
   ask_shirt_size: boolean;
   ask_food_intolerances: boolean;
+  waitlist_enabled: boolean;
+  waitlist_after: string;
   grants_role_ids: string[];
 };
 
@@ -113,6 +115,8 @@ export function MetadataCard({
         confirmation_window_hours: z.string(),
         ask_shirt_size: z.boolean(),
         ask_food_intolerances: z.boolean(),
+        waitlist_enabled: z.boolean(),
+        waitlist_after: z.string(),
         grants_role_ids: z.array(z.string()),
       }),
     [t],
@@ -130,6 +134,8 @@ export function MetadataCard({
       confirmation_window_hours: String(form.confirmation_window_hours),
       ask_shirt_size: form.ask_shirt_size,
       ask_food_intolerances: form.ask_food_intolerances,
+      waitlist_enabled: form.waitlist_enabled,
+      waitlist_after: form.waitlist_after != null ? String(form.waitlist_after) : "",
       grants_role_ids: form.grants_role_ids.map(String),
     },
   });
@@ -149,6 +155,11 @@ export function MetadataCard({
       rhf.setError("confirmation_window_hours", { message: t("mustBePositiveWholeNumber") });
       return;
     }
+    const waitlistAfter = values.waitlist_after.trim() ? Number(values.waitlist_after) : null;
+    if (waitlistAfter !== null && (!Number.isInteger(waitlistAfter) || waitlistAfter < 1)) {
+      rhf.setError("waitlist_after", { message: t("mustBePositiveWholeNumber") });
+      return;
+    }
     try {
       setSaveState("saving");
       // PATCH /api/applications/:id (APPLICATIONS_MANAGE) — audited server-side (H11/H53).
@@ -161,6 +172,8 @@ export function MetadataCard({
         confirmation_window_hours: windowHours,
         ask_shirt_size: values.ask_shirt_size,
         ask_food_intolerances: values.ask_food_intolerances,
+        waitlist_enabled: values.waitlist_enabled,
+        waitlist_after: waitlistAfter,
         grants_role_ids: values.grants_role_ids.map(Number),
       });
       await onSaved();
@@ -302,6 +315,45 @@ export function MetadataCard({
                     </FormItem>
                   )}
                 />
+              </div>
+              <div className="space-y-3 border-t pt-4">
+                <FormField
+                  control={rhf.control}
+                  name="waitlist_enabled"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between gap-4">
+                      <FormLabel className="font-normal">{t("waitlistSettingLabel")}</FormLabel>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                {rhf.watch("waitlist_enabled") && (
+                  <FormField
+                    control={rhf.control}
+                    name="waitlist_after"
+                    render={({ field }) => (
+                      <FormItem className="sm:max-w-xs">
+                        <FormLabel>{t("waitlistAfterLabel")}</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={1}
+                            placeholder={t("waitlistAfterPlaceholder")}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+                {form.waitlist_active && (
+                  <p className="text-muted-foreground text-pretty text-sm">
+                    {t("waitlistActiveNotice", { count: form.applications_received })}
+                  </p>
+                )}
               </div>
             </SettingsGroup>
 

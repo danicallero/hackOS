@@ -53,7 +53,9 @@ export function DecisionMenu({
   onAccepted: () => void;
 }) {
   const { t } = useLocale();
-  const reviewActions = status === "review";
+  const reviewActions = status === "review" || status === "waitlist";
+  const canWaitlist =
+    status === "review" || status === "accepted_internal" || status === "rejected_internal";
   const outboxActions = status === "accepted_internal" || status === "rejected_internal";
   const sentActions = ["accepted", "rejected", "confirmed", "declined", "expired"].includes(status);
   const hasAvailableActions = reviewActions || outboxActions || sentActions;
@@ -113,7 +115,38 @@ export function DecisionMenu({
           >
             {t("rejectAllowResubmit")}
           </DropdownMenuItem>
+          {status === "waitlist" && (
+            <DropdownMenuItem
+              disabled={busy}
+              onSelect={() =>
+                void run(
+                  t("movedBackToReview"),
+                  () =>
+                    api.post(`/api/responses/${responseId}/revert-decision`, {
+                      decision: "review",
+                    }),
+                  { refresh: false, nextStatus: "review" },
+                )
+              }
+            >
+              {t("backToReview")}
+            </DropdownMenuItem>
+          )}
         </>
+      )}
+      {canWaitlist && (
+        <DropdownMenuItem
+          disabled={busy}
+          onSelect={() =>
+            void run(
+              t("movedToWaitlistToast"),
+              () => api.post(`/api/responses/${responseId}/waitlist`),
+              { refresh: false, nextStatus: "waitlist" },
+            )
+          }
+        >
+          {t("moveToWaitlist")}
+        </DropdownMenuItem>
       )}
       {outboxActions && (
         <>

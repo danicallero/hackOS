@@ -33,6 +33,8 @@ export const createApplicationSchema = z
     confirmation_window_hours: z.number().int().positive().default(168),
     ask_shirt_size: z.boolean().default(false),
     ask_food_intolerances: z.boolean().default(false),
+    waitlist_enabled: z.boolean().default(false),
+    waitlist_after: z.number().int().positive().nullish(),
     attendance_kind: z.enum(["participant", "mentor", "staff"]).default("participant"),
     // H8/H11: roles granted alongside ticket issuance on confirmation.
     // Omitted/null grants nothing.
@@ -57,6 +59,8 @@ export const updateApplicationSchema = z
     confirmation_window_hours: z.number().int().positive().optional(),
     ask_shirt_size: z.boolean().optional(),
     ask_food_intolerances: z.boolean().optional(),
+    waitlist_enabled: z.boolean().optional(),
+    waitlist_after: z.number().int().positive().nullish(),
     attendance_kind: z.enum(["participant", "mentor", "staff"]).optional(),
     /** Answer keys hidden in the standard review view (H13); reviewers can still show everything. */
     review_hidden_fields: z.array(z.string().min(1).max(200)).max(500).optional(),
@@ -102,6 +106,8 @@ export const submitSchema = z.object({
   food_intolerances: z.array(z.number().int().positive()).default([]),
   food_intolerance_notes: z.string().nullish(),
   shirt_size: z.string().min(1).nullish(),
+  /** H12: the applicant saw that this form is a waitlist and chose to join it. */
+  waitlist_ack: z.boolean().default(false),
 });
 
 export const reviewUpsertSchema = z.object({

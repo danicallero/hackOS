@@ -22,6 +22,9 @@ export interface ApplicationRow {
   confirmation_window_hours: number;
   ask_shirt_size: boolean;
   ask_food_intolerances: boolean;
+  /** H11: new submissions join the waitlist (see `waitlistActive`). */
+  waitlist_enabled: boolean;
+  waitlist_after: number | null;
   created_at: Date;
 }
 

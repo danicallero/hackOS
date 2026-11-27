@@ -188,6 +188,9 @@ export default function MyApplicationsPage() {
               <div className="min-w-0 space-y-0.5">
                 <div className="text-pretty font-medium">{f.name}</div>
                 <div className="text-muted-foreground text-xs">
+                  {f.waitlist_active && (
+                    <span className="text-foreground font-medium">{t("waitlistFull")} · </span>
+                  )}
                   <span>{formTypeLabel(f.granted_role_name, t)}</span>
                   {f.close_at
                     ? t("closesInline", { date: formatEventDate(f.close_at, language, "dateTime") })
@@ -195,7 +198,9 @@ export default function MyApplicationsPage() {
                 </div>
               </div>
               <Button asChild size="sm" className="w-full sm:w-auto">
-                <Link href={`/my-applications/${f.id}`}>{t("apply")}</Link>
+                <Link href={`/my-applications/${f.id}`}>
+                  {f.waitlist_active ? t("joinWaitlist") : t("apply")}
+                </Link>
               </Button>
             </div>
           ))

@@ -29,8 +29,8 @@ import {
 } from "./forms.js";
 
 import { assertCapacityAvailable } from "./internal.js";
-
 import type { ApplicationRow, ResponseRow } from "./types.js";
+import { isWaitlistActive } from "./waitlist.js";
 
 // ── create / update draft (H12) ──────────────────────────────────────────────
 
@@ -164,6 +164,7 @@ interface SubmitInput {
   food_intolerances: number[];
   food_intolerance_notes?: string | null;
   shirt_size?: string | null;
+  waitlist_ack?: boolean;
 }
 
 export async function submitResponse(
@@ -295,7 +296,30 @@ export async function submitResponse(
       app = appRows[0] as ApplicationRow;
       if (app.capacity != null) await assertCapacityAvailable(client, applicationId, app.capacity);
     }
-    const nextStatus = invited ? "confirmed" : autoAccept ? "accepted_internal" : "review";
+    // H11/H12: a form in waitlist mode holds no place for this applicant, who
+    // must have been told so before submitting. Invited participants and
+    // responses staff returned for a fix are not applying for a place.
+    let waitlisted = false;
+    if (!invited && !autoAccept && !existing.allow_resubmit_after_close && app.waitlist_enabled) {
+      const { rows: appRows } = await client.query(
+        `SELECT * FROM applications WHERE id = $1 FOR UPDATE`,
+        [applicationId],
+      );
+      app = appRows[0] as ApplicationRow;
+      waitlisted = await isWaitlistActive(client, app);
+      if (waitlisted && !input.waitlist_ack) {
+        throw new ConflictError("This form is now a waitlist: there are no places left", {
+          code: "waitlist_required",
+        });
+      }
+    }
+    const nextStatus = invited
+      ? "confirmed"
+      : autoAccept
+        ? "accepted_internal"
+        : waitlisted
+          ? "waitlist"
+          : "review";
     const updated = await client.query(
       `UPDATE application_responses
        SET responses = $3::jsonb,
@@ -338,13 +362,27 @@ export async function submitResponse(
       entityId: existing.id,
       action: "submitted",
       source: "web",
-      after: { status: invited ? "confirmed" : autoAccept ? "accepted" : "review" },
+      after: {
+        status: invited
+          ? "confirmed"
+          : autoAccept
+            ? "accepted"
+            : waitlisted
+              ? "waitlist"
+              : "review",
+      },
     });
 
     return {
       response: {
         ...updated.rows[0],
-        status: invited ? "confirmed" : autoAccept ? "accepted" : "review",
+        status: invited
+          ? "confirmed"
+          : autoAccept
+            ? "accepted"
+            : waitlisted
+              ? "waitlist"
+              : "review",
       },
       privacyNotice: privacyNotice(userRows[0].language),
     };

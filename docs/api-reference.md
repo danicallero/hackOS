@@ -234,7 +234,24 @@ reason (`application.returned`) and shows it on the draft until resubmission.
 Every rejection a response went through before coming back as a draft (this
 one, or a rejection later returned with **Return to draft**) is kept in
 `application_response_rejections` and listed as `previous_rejections` on staff
-reads, so the re-review shows when, by whom and why it was rejected. Form deletion removes its responses, reviews,
+reads, so the re-review shows when, by whom and why it was rejected.
+
+**Waitlist (H11–H14).** A form's `waitlist_enabled` switches applying into
+joining a waitlist, immediately or, with `waitlist_after`, once that many
+applications (every non-draft response, so moving people never reopens the
+form) have been received. The form reads expose `waitlist_active` and
+`applications_received`; a closed window still closes the form completely.
+Submitting while `waitlist_active` requires `waitlist_ack: true` (the applicant
+was told there is no place), else `409 waitlist_required`, and stores the
+response as `waitlist`; invited participants and responses staff returned for
+a fix are not affected. A waitlisted response holds no place and is not
+counted against `capacity`. `POST /api/responses/:id/waitlist` and
+`/batch/waitlist` (`applications:decide`) move reviewed or unsent-decision
+responses there and notify the applicant (`application.waitlisted`; no unsent
+stage, unlike accept/reject). Staff decide a waitlisted response with the
+normal `decide` once a place frees up. `POST /api/applications/:id/response/withdraw`
+lets the applicant leave the waitlist; it ends as `declined` (audit action
+`waitlist_withdrawn`), so staff can still re-accept it. Form deletion removes its responses, reviews,
 versions, grants and confirmation tokens transactionally; anonymous-retention
 records remain a deliberate deletion boundary. The confirmation-window expirer worker is registered in `applications/expirer.ts`;
 its transition implementation lives in `applications/expirations.ts`, not a

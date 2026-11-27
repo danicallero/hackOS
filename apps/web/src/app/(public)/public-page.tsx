@@ -271,6 +271,7 @@ function PublicPageContent({
                   <h3 className="type-subheading">{form.name}</h3>
                   <p className="text-muted-foreground mt-1 text-sm">
                     {[
+                      form.waitlist_active ? t("waitlistFull") : null,
                       grantedRoleNameLabel(form.granted_role_name, t),
                       form.close_at
                         ? `${t("closes")} ${dateTime(form.close_at, event.timezone, language)}`
@@ -284,7 +285,7 @@ function PublicPageContent({
                   {/* Selecting a specific form survives account creation and
                       verification (#188): land directly back on this form. */}
                   <Link href={withReturnPath("/signup", `/my-applications/${form.id}`)}>
-                    {t("apply")}
+                    {form.waitlist_active ? t("joinWaitlist") : t("apply")}
                   </Link>
                 </Button>
               </div>

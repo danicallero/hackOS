@@ -40,6 +40,7 @@ export function applicationStatusLabel(status: string, t: Translate): string {
   const key: Record<string, MessageKey> = {
     draft: "dataStatusDraft",
     review: "dataStatusReview",
+    waitlist: "waitlist",
     accepted_internal: "acceptedUnsentStatus",
     rejected_internal: "rejectedUnsentStatus",
     accepted: "dataStatusAccepted",

@@ -979,7 +979,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                     WHEN 'rejected' THEN 6
                     WHEN 'rejected_internal' THEN 7
                     WHEN 'review' THEN 8
-                    ELSE 9
+                    WHEN 'waitlist' THEN 9
+                    ELSE 10
                   END,
                   id DESC`,
               [ids],
