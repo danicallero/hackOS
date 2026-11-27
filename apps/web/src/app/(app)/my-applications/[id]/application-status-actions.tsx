@@ -6,7 +6,6 @@
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { HourglassIcon } from "@phosphor-icons/react/dist/csr/Hourglass";
-import { ShieldWarningIcon } from "@phosphor-icons/react/dist/csr/ShieldWarning";
 import { WalletIcon } from "@phosphor-icons/react/dist/csr/Wallet";
 import { XCircleIcon } from "@phosphor-icons/react/dist/csr/XCircle";
 import Link from "next/link";
@@ -24,7 +23,6 @@ interface ApplicationStatusActionsProps {
   canConfirm: boolean;
   acting: boolean;
   actionError: ActionError | null;
-  privacyNotice: string | null;
   onConfirm: () => void;
   onOpenRelease: () => void;
   onOpenWithdraw: () => void;
@@ -37,7 +35,6 @@ export function ApplicationStatusActions({
   canConfirm,
   acting,
   actionError,
-  privacyNotice,
   onConfirm,
   onOpenRelease,
   onOpenWithdraw,
@@ -158,14 +155,6 @@ export function ApplicationStatusActions({
           <XCircleIcon aria-hidden="true" />
           <AlertTitle>{t("confirmationExpiredTitle")}</AlertTitle>
           <AlertDescription>{t("confirmationExpiredDesc")}</AlertDescription>
-        </Alert>
-      )}
-
-      {privacyNotice && (
-        <Alert role="status">
-          <ShieldWarningIcon aria-hidden="true" />
-          <AlertTitle>{t("privacyNoticeTitle")}</AlertTitle>
-          <AlertDescription>{privacyNotice}</AlertDescription>
         </Alert>
       )}
     </>

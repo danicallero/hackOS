@@ -7,7 +7,7 @@
 //   GET  /api/public/applications/:id          → an open form + current template
 //   GET  /api/applications/:id/response         → my saved response + its form snapshot
 //   PUT  /api/applications/:id/response          → create/update my draft
-//   POST /api/applications/:id/response/submit   → submit (returns privacy_notice)
+//   POST /api/applications/:id/response/submit   → submit (returns decision_sender)
 //   POST /api/me/responses/:responseId/confirm   → confirm my place (H15)
 //   POST /api/me/responses/:responseId/decline   → decline my place (H15)
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
@@ -84,7 +84,6 @@ export default function MyApplicationDetailPage() {
   const [waitlistAck, setWaitlistAck] = useState(false);
   const [joinedWaitlist, setJoinedWaitlist] = useState(false);
   const [decisionSender, setDecisionSender] = useState("");
-  const [privacyNotice, setPrivacyNotice] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -301,7 +300,6 @@ export default function MyApplicationDetailPage() {
         : (me?.foodIntolerances ?? []);
       const res = await api.post<{
         response: MyResponseDetail;
-        privacy_notice: string;
         decision_sender: string;
       }>(`/api/applications/${id}/response/submit`, {
         responses: values,
@@ -320,7 +318,6 @@ export default function MyApplicationDetailPage() {
       hasLocalEditsRef.current = false;
       setValues(res.response.responses ?? {});
       await refresh();
-      setPrivacyNotice(res.privacy_notice);
       setFieldErrors({});
       setSaveState("saved");
       setActionError(null);
@@ -547,7 +544,6 @@ export default function MyApplicationDetailPage() {
         canConfirm={canConfirm}
         acting={acting || withdrawing}
         actionError={actionError}
-        privacyNotice={privacyNotice}
         onConfirm={() => void handleConfirm()}
         onOpenRelease={() => setReleaseOpen(true)}
         onOpenWithdraw={() => setWithdrawOpen(true)}
