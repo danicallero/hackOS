@@ -189,9 +189,14 @@ export default function MyApplicationsPage() {
                 <div className="text-pretty font-medium">{f.name}</div>
                 <div className="text-muted-foreground text-xs">
                   {f.waitlist_active && (
-                    <span className="text-foreground font-medium">{t("waitlistFull")} · </span>
+                    <span className="text-foreground font-medium">
+                      {t("waitlistFull")}
+                      {f.granted_role_name ? " · " : ""}
+                    </span>
                   )}
-                  <span>{formTypeLabel(f.granted_role_name, t)}</span>
+                  {(f.granted_role_name || !f.waitlist_active) && (
+                    <span>{formTypeLabel(f.granted_role_name, t)}</span>
+                  )}
                   {f.close_at
                     ? t("closesInline", { date: formatEventDate(f.close_at, language, "dateTime") })
                     : ""}
