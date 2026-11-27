@@ -7,10 +7,9 @@
 //   GET  /api/public/applications/:id          → an open form + current template
 //   GET  /api/applications/:id/response         → my saved response + its form snapshot
 //   PUT  /api/applications/:id/response          → create/update my draft
-//   POST /api/applications/:id/response/submit   → submit (returns privacy_notice)
+//   POST /api/applications/:id/response/submit   → submit (returns decision_sender)
 //   POST /api/me/responses/:responseId/confirm   → confirm my place (H15)
 //   POST /api/me/responses/:responseId/decline   → decline my place (H15)
-import { sponsorShareKey } from "@hackos/shared/applications";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -18,13 +17,12 @@ import { AlertModal } from "@/components/common/alert-modal";
 import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
-import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
-import { TemplateFieldControl, templateFieldId } from "@/components/common/template-field-control";
+import { templateFieldId } from "@/components/common/template-field-control";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Section } from "@/components/ui/surface";
@@ -33,11 +31,10 @@ import { useLiveReload } from "@/hooks/use-live-reload";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api, isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { groupApplicationFields } from "@/lib/application-field-groups";
 import { enrichTemplate, withLogisticsSection } from "@/lib/application-form";
 import { fieldErrorsFromApi, validationErrorSummary } from "@/lib/application-validation";
 import { formatEventDate } from "@/lib/datetime";
-import { pickText, useLocale } from "@/lib/i18n";
+import { useLocale } from "@/lib/i18n";
 import { onboardingAfterConfirm } from "@/lib/onboarding";
 import type { SaveState } from "@/lib/save-state";
 import { useSessionContext } from "@/lib/session";
@@ -53,10 +50,17 @@ import {
   seedApplicationValues,
 } from "../lib";
 import { ApplicationHeader } from "./application-header";
-import { ApplicationTimeline, ReadOnlyAnswers } from "./application-sections";
+import { ApplicationFields, ApplicationTimeline, ReadOnlyAnswers } from "./application-sections";
 import { ApplicationStatusActions } from "./application-status-actions";
 import { useApplicationDraft } from "./use-application-draft";
 import { useApplicationFieldValidation } from "./use-application-field-validation";
+import { useWaitlistWithdraw } from "./use-waitlist-withdraw";
+import {
+  SubmissionNoticeModal,
+  WaitlistAck,
+  WaitlistFormNotice,
+  WithdrawWaitlistModal,
+} from "./waitlist-section";
 
 export default function MyApplicationDetailPage() {
   const { t, language } = useLocale();
@@ -77,8 +81,9 @@ export default function MyApplicationDetailPage() {
   const [acting, setActing] = useState(false);
   const [releaseOpen, setReleaseOpen] = useState(false);
   const [submissionNoticeOpen, setSubmissionNoticeOpen] = useState(false);
+  const [waitlistAck, setWaitlistAck] = useState(false);
+  const [joinedWaitlist, setJoinedWaitlist] = useState(false);
   const [decisionSender, setDecisionSender] = useState("");
-  const [privacyNotice, setPrivacyNotice] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -225,6 +230,10 @@ export default function MyApplicationDetailPage() {
   // Accepted + decision sent (the API only unmasks to 'accepted' once sent) means
   // the applicant now holds a confirmation window (H15).
   const canConfirm = status === "accepted" && !responseError;
+  // H11/H12: the form has no places left. Staff-returned drafts are not a new
+  // application for a place, so they keep the normal wording.
+  const joiningWaitlist =
+    editable && form?.waitlist_enabled === true && !response?.allow_resubmit_after_close;
 
   function setValue(key: string, value: FieldValue) {
     hasLocalEditsRef.current = true;
@@ -259,6 +268,19 @@ export default function MyApplicationDetailPage() {
     setActionError,
   });
 
+  const {
+    open: withdrawOpen,
+    setOpen: setWithdrawOpen,
+    withdrawing,
+    withdraw,
+  } = useWaitlistWithdraw({
+    applicationId: id,
+    response,
+    t,
+    reload: load,
+    setActionError,
+  });
+
   async function handleSubmit() {
     if (!validateFields()) {
       toast.warning(t("fillRequiredFields"), { compactTitle: t("submitApplication") });
@@ -278,7 +300,6 @@ export default function MyApplicationDetailPage() {
         : (me?.foodIntolerances ?? []);
       const res = await api.post<{
         response: MyResponseDetail;
-        privacy_notice: string;
         decision_sender: string;
       }>(`/api/applications/${id}/response/submit`, {
         responses: values,
@@ -291,20 +312,30 @@ export default function MyApplicationDetailPage() {
           typeof values.shirt_size === "string" && values.shirt_size
             ? values.shirt_size
             : (me?.shirtSize ?? null),
+        waitlist_ack: joiningWaitlist && waitlistAck,
       });
       setResponse(res.response);
       hasLocalEditsRef.current = false;
       setValues(res.response.responses ?? {});
       await refresh();
-      setPrivacyNotice(res.privacy_notice);
       setFieldErrors({});
       setSaveState("saved");
       setActionError(null);
       setDecisionSender(res.decision_sender);
+      setJoinedWaitlist(res.response.status === "waitlist");
       setSubmissionNoticeOpen(true);
-      toast.success(t("applicationSubmitted"), { compactTitle: t("submitApplication") });
+      toast.success(
+        res.response.status === "waitlist" ? t("waitlistJoinedToast") : t("applicationSubmitted"),
+        {
+          compactTitle:
+            res.response.status === "waitlist" ? t("joinWaitlist") : t("submitApplication"),
+        },
+      );
     } catch (err) {
       setSaveState("error");
+      // The form turned into a waitlist while it was being filled in: show the
+      // warning and ask again instead of joining a list nobody was told about.
+      if (err instanceof ApiError && err.code === "waitlist_required") void load();
       if (err instanceof ApiError) {
         const nextErrors = fieldErrorsFromApi(err, t, template, lang);
         setFieldErrors(nextErrors);
@@ -427,6 +458,7 @@ export default function MyApplicationDetailPage() {
     if (actionError.action === "save") return void handleSaveDraft();
     if (actionError.action === "submit") return void handleSubmit();
     if (actionError.action === "confirm") return void handleConfirm();
+    if (actionError.action === "withdraw") return void withdraw();
     return void handleDecline();
   }
 
@@ -490,6 +522,7 @@ export default function MyApplicationDetailPage() {
         title={title}
         description={description}
         status={status}
+        waitlist={joiningWaitlist}
         canDiscard={response?.can_delete_draft === true && status === "draft"}
         disabled={submitting}
         discarding={discarding}
@@ -501,17 +534,19 @@ export default function MyApplicationDetailPage() {
 
       {loadError && <ContextualError message={loadError} onRetry={retry} />}
 
+      {joiningWaitlist && <WaitlistFormNotice />}
+
       <ApplicationTimeline response={timelineResponse} />
 
       <ApplicationStatusActions
         response={response}
         status={status}
         canConfirm={canConfirm}
-        acting={acting}
+        acting={acting || withdrawing}
         actionError={actionError}
-        privacyNotice={privacyNotice}
         onConfirm={() => void handleConfirm()}
         onOpenRelease={() => setReleaseOpen(true)}
+        onOpenWithdraw={() => setWithdrawOpen(true)}
         onRetry={retryAction}
       />
 
@@ -521,6 +556,13 @@ export default function MyApplicationDetailPage() {
         footer={
           editable ? (
             <div className="flex w-full flex-wrap items-center gap-2">
+              {joiningWaitlist && (
+                <WaitlistAck
+                  checked={waitlistAck}
+                  disabled={submitting}
+                  onChange={setWaitlistAck}
+                />
+              )}
               <SaveStatus
                 state={saving || submitting ? "saving" : saveState}
                 showIcon={!saving && !submitting}
@@ -540,10 +582,15 @@ export default function MyApplicationDetailPage() {
                 type="button"
                 onClick={handleSubmit}
                 pending={submitting}
-                disabled={saving || discarding || me?.emailVerified !== true}
+                disabled={
+                  saving ||
+                  discarding ||
+                  me?.emailVerified !== true ||
+                  (joiningWaitlist && !waitlistAck)
+                }
                 className="w-full sm:w-auto"
               >
-                {t("submitApplication")}
+                {joiningWaitlist ? t("joinWaitlist") : t("submitApplication")}
               </SubmitButton>
             </div>
           ) : undefined
@@ -554,49 +601,19 @@ export default function MyApplicationDetailPage() {
         )}
 
         {template.length > 0 ? (
-          groupApplicationFields(
-            template,
-            withLogisticsSection(response?.sections ?? form?.sections ?? [], asksForLogistics),
-          ).map((group, i) => (
-            <div
-              key={group.section?.key ?? `ungrouped-${i}`}
-              className={
-                group.section
-                  ? "border-border bg-muted/20 space-y-4 rounded-lg border p-4 sm:p-5"
-                  : "space-y-4"
-              }
-            >
-              {group.section && (
-                <div className="space-y-0.5">
-                  <h3 className="type-section-title text-balance">
-                    {pickText(group.section.title, lang)}
-                  </h3>
-                  {group.section.description && pickText(group.section.description, lang) && (
-                    <p className="text-muted-foreground text-pretty text-sm">
-                      {pickText(group.section.description, lang)}
-                    </p>
-                  )}
-                </div>
-              )}
-              <div className="space-y-4">
-                {group.fields.map((field) => (
-                  <TemplateFieldControl
-                    key={field.key}
-                    field={field}
-                    applicationId={id}
-                    value={values[field.key] as FieldValue}
-                    onChange={(v) => setValue(field.key, v)}
-                    onBlur={(value) => validateOnBlur(field, value)}
-                    disabled={!editable || discarding}
-                    lang={lang}
-                    error={fieldErrors[field.key]}
-                    sharedWithSponsors={values[sponsorShareKey(field.key)] === true}
-                    onSharedWithSponsorsChange={(v) => setValue(sponsorShareKey(field.key), v)}
-                  />
-                ))}
-              </div>
-            </div>
-          ))
+          <ApplicationFields
+            applicationId={id}
+            template={template}
+            sections={withLogisticsSection(
+              response?.sections ?? form?.sections ?? [],
+              asksForLogistics,
+            )}
+            values={values}
+            fieldErrors={fieldErrors}
+            disabled={!editable || discarding}
+            onChange={setValue}
+            onBlur={validateOnBlur}
+          />
         ) : form || response?.template ? (
           // An empty saved template is still a valid form snapshot.
           <p className="text-muted-foreground text-sm">{t("formHasNoQuestions")}</p>
@@ -628,21 +645,19 @@ export default function MyApplicationDetailPage() {
         <p className="text-muted-foreground text-pretty text-sm">{t("releaseCantBeUndone")}</p>
       </AlertModal>
 
-      <Modal
+      <WithdrawWaitlistModal
+        open={withdrawOpen}
+        pending={withdrawing}
+        onOpenChange={setWithdrawOpen}
+        onConfirm={withdraw}
+      />
+
+      <SubmissionNoticeModal
         open={submissionNoticeOpen}
+        waitlist={joinedWaitlist}
+        sender={decisionSender}
         onOpenChange={setSubmissionNoticeOpen}
-        title={t("applicationSubmissionNoticeTitle")}
-        footer={<Button onClick={() => setSubmissionNoticeOpen(false)}>{t("close")}</Button>}
-      >
-        <div className="space-y-3">
-          <p className="text-pretty text-sm">
-            {t("applicationSubmissionNoticeDecision", { sender: decisionSender })}
-          </p>
-          <p className="text-muted-foreground text-pretty text-sm">
-            {t("applicationSubmissionNoticeSpam")}
-          </p>
-        </div>
-      </Modal>
+      />
     </PageLayout>
   );
 }

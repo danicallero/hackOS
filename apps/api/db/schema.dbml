@@ -17,6 +17,7 @@ Enum app_response_status {
   expired
   accepted_internal
   rejected_internal
+  waitlist
 }
 
 Enum notification_channel {
@@ -338,6 +339,7 @@ Table applications {
   review_hidden_fields "text[]" [not null, default: `'{}'::text[]`]
   sections jsonb [not null, default: `'[]'::jsonb`]
   template jsonb [not null]
+  waitlist_enabled boolean [not null, default: `false`, note: 'H11: when true and the window is open, new submissions join the waitlist instead of applying for a place.']
 }
 
 Table attempt_review {

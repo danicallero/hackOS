@@ -59,6 +59,7 @@ export const APPLICATION_EXPORT_STATUSES = [
   "expired",
   "accepted_internal",
   "rejected_internal",
+  "waitlist",
 ] as const;
 
 export const applicationExportFieldSchema = z

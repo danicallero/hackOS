@@ -14,6 +14,7 @@ export {
 export type { BatchResult } from "./decision-batches.js";
 export {
   batchDecide,
+  batchMoveToWaitlist,
   batchReAccept,
   batchResendDecisions,
   batchRevertDecisions,
@@ -48,3 +49,4 @@ export { editResponse, getResponseDetail } from "./response-details.js";
 export { returnToDraft, setStaffNotes, upsertReview } from "./review.js";
 export { canDeleteDraft, deleteDraft, saveDraft, submitResponse } from "./submission.js";
 export type { ApplicationRow, ResponseRow } from "./types.js";
+export { isWaitlistActive, moveToWaitlist, withdrawFromWaitlist } from "./waitlist.js";

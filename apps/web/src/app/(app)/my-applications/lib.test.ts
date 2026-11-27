@@ -3,7 +3,6 @@ import { ApiError } from "@/lib/api";
 import type { TemplateField } from "@/lib/applications";
 import type { Translate } from "@/lib/i18n";
 import {
-  formTypeLabel,
   isConfirmationExpiredError,
   missingRequiredFields,
   seedApplicationValues,
@@ -15,12 +14,6 @@ const translate: Translate = (key) => key;
 describe("participant application presentation", () => {
   it("does not expose an unknown API status as user-facing copy", () => {
     expect(statusLabel("accepted_internal", translate)).toBe("unknownStatus");
-  });
-
-  it("shows a form's granted role name as-is, or unassigned when it grants none (H8)", () => {
-    expect(formTypeLabel("Participant", translate)).toBe("Participant");
-    expect(formTypeLabel("Mentor", translate)).toBe("Mentor");
-    expect(formTypeLabel(null, translate)).toBe("roleUnassigned");
   });
 
   it("recognizes an expired confirmation response", () => {

@@ -22,6 +22,8 @@ export interface ApplicationRow {
   confirmation_window_hours: number;
   ask_shirt_size: boolean;
   ask_food_intolerances: boolean;
+  /** H11: new submissions join the waitlist instead of applying for a place. */
+  waitlist_enabled: boolean;
   created_at: Date;
 }
 

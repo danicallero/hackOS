@@ -1,10 +1,14 @@
 "use client";
 
+import { sponsorShareKey } from "@hackos/shared/applications";
 import { SectionCard } from "@/components/common/section-card";
+import { TemplateFieldControl } from "@/components/common/template-field-control";
+import { groupApplicationFields } from "@/lib/application-field-groups";
 import { applicantTimelineState } from "@/lib/application-workflow";
-import { useLocale } from "@/lib/i18n";
+import type { FormSection, TemplateField } from "@/lib/applications";
+import { pickText, useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import type { MyResponseDetail } from "../lib";
+import type { FieldValue, MyResponseDetail } from "../lib";
 
 export function ApplicationTimeline({ response }: { response: MyResponseDetail | null }) {
   const { t } = useLocale();
@@ -71,4 +75,67 @@ export function ReadOnlyAnswers({ responses }: { responses: Record<string, unkno
       ))}
     </dl>
   );
+}
+
+/** The form's questions, grouped under their sections (H12). */
+export function ApplicationFields({
+  applicationId,
+  template,
+  sections,
+  values,
+  fieldErrors,
+  disabled,
+  onChange,
+  onBlur,
+}: {
+  applicationId: number;
+  template: TemplateField[];
+  sections: FormSection[];
+  values: Record<string, unknown>;
+  fieldErrors: Record<string, string | undefined>;
+  disabled: boolean;
+  onChange: (key: string, value: FieldValue) => void;
+  onBlur: (field: TemplateField, value: unknown) => void;
+}) {
+  const { language } = useLocale();
+  return groupApplicationFields(template, sections).map((group, i) => (
+    <div
+      key={group.section?.key ?? `ungrouped-${i}`}
+      className={
+        group.section
+          ? "border-border bg-muted/20 space-y-4 rounded-lg border p-4 sm:p-5"
+          : "space-y-4"
+      }
+    >
+      {group.section && (
+        <div className="space-y-0.5">
+          <h3 className="type-section-title text-balance">
+            {pickText(group.section.title, language)}
+          </h3>
+          {group.section.description && pickText(group.section.description, language) && (
+            <p className="text-muted-foreground text-pretty text-sm">
+              {pickText(group.section.description, language)}
+            </p>
+          )}
+        </div>
+      )}
+      <div className="space-y-4">
+        {group.fields.map((field) => (
+          <TemplateFieldControl
+            key={field.key}
+            field={field}
+            applicationId={applicationId}
+            value={values[field.key] as FieldValue}
+            onChange={(v) => onChange(field.key, v)}
+            onBlur={(value) => onBlur(field, value)}
+            disabled={disabled}
+            lang={language}
+            error={fieldErrors[field.key]}
+            sharedWithSponsors={values[sponsorShareKey(field.key)] === true}
+            onSharedWithSponsorsChange={(v) => onChange(sponsorShareKey(field.key), v)}
+          />
+        ))}
+      </div>
+    </div>
+  ));
 }

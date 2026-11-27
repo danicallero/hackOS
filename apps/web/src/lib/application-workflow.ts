@@ -36,7 +36,8 @@ export function defaultApplicationWorkspace(
 }
 
 const WORKSPACE_STATUSES: Record<ApplicationWorkspace, ReadonlySet<string>> = {
-  review: new Set(["review"]),
+  // Waitlisted responses still await a decision when a place frees up (H14).
+  review: new Set(["review", "waitlist"]),
   outbox: new Set(["accepted_internal", "rejected_internal"]),
   sent: new Set(["accepted", "rejected", "confirmed", "declined", "expired"]),
 };
@@ -58,6 +59,7 @@ export function statusesForWorkspace(workspace: ApplicationWorkspace): string[] 
 export const APPLICATION_STATUS_ORDER: readonly string[] = [
   "draft",
   "review",
+  "waitlist",
   "accepted_internal",
   "accepted",
   "confirmed",
@@ -70,6 +72,7 @@ export const APPLICATION_STATUS_ORDER: readonly string[] = [
 const STATUS_TONE: Record<string, Tone> = {
   draft: "neutral",
   review: "warning",
+  waitlist: "info",
   accepted_internal: "warning",
   rejected_internal: "warning",
   accepted: "success",
@@ -95,6 +98,7 @@ export function applicationStatusLabel(status: string, t: Translate, returnOnSen
   const labels: Record<string, string> = {
     draft: t("dataStatusDraft"),
     review: t("dataStatusReview"),
+    waitlist: t("waitlist"),
     accepted_internal: t("acceptedInternalOnly"),
     rejected_internal: t("rejectedInternalOnly"),
     accepted: t("acceptanceSent"),

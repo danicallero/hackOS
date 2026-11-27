@@ -114,6 +114,10 @@
         "subject": "Your {{applicationName}} application needs changes",
         "body": "Hi {{name}},\n\nWe've reviewed your {{applicationName}} application for {{eventName}} and, as it stands, we can't accept it.{{rejectionDetails}}\n\nWe've returned it to you as a draft so you can fix it and submit it again, even if the deadline has passed.\n\n[Review my application]({{applicationUrl}})\n\nThe {{eventName}} team"
       },
+      "waitlisted": {
+        "subject": "You're on the waitlist for {{applicationName}}",
+        "body": "Hi {{name}},\n\nWe've reviewed your {{applicationName}} application for {{eventName}}. We haven't selected you because the places have been filled, so you're on the waitlist.\n\nBeing on the waitlist is not having a place: you have no place now and we can't promise you'll get one. If a place frees up, we'll let you know and you can be considered for it.\n\nIf you no longer want to wait, you can leave the waitlist from your application.\n\n[View my application]({{applicationUrl}})\n\nThe {{eventName}} team"
+      },
       "confirmationReminder": {
         "subject": "Pending confirmation for {{eventName}}",
         "body": "Hi {{name}},\n\nYour spot at {{eventName}} is still awaiting confirmation.{{confirmationDetails}}\n\nThe {{eventName}} team"

@@ -54,6 +54,7 @@ type MetaValues = {
   confirmation_window_hours: string;
   ask_shirt_size: boolean;
   ask_food_intolerances: boolean;
+  waitlist_enabled: boolean;
   grants_role_ids: string[];
 };
 
@@ -113,6 +114,7 @@ export function MetadataCard({
         confirmation_window_hours: z.string(),
         ask_shirt_size: z.boolean(),
         ask_food_intolerances: z.boolean(),
+        waitlist_enabled: z.boolean(),
         grants_role_ids: z.array(z.string()),
       }),
     [t],
@@ -130,6 +132,7 @@ export function MetadataCard({
       confirmation_window_hours: String(form.confirmation_window_hours),
       ask_shirt_size: form.ask_shirt_size,
       ask_food_intolerances: form.ask_food_intolerances,
+      waitlist_enabled: form.waitlist_enabled,
       grants_role_ids: form.grants_role_ids.map(String),
     },
   });
@@ -161,6 +164,7 @@ export function MetadataCard({
         confirmation_window_hours: windowHours,
         ask_shirt_size: values.ask_shirt_size,
         ask_food_intolerances: values.ask_food_intolerances,
+        waitlist_enabled: values.waitlist_enabled,
         grants_role_ids: values.grants_role_ids.map(Number),
       });
       await onSaved();
@@ -299,6 +303,20 @@ export function MetadataCard({
                         <Input type="number" min={1} {...field} />
                       </FormControl>
                       <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="space-y-3 border-t pt-4">
+                <FormField
+                  control={rhf.control}
+                  name="waitlist_enabled"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between gap-4">
+                      <FormLabel className="font-normal">{t("waitlistSettingLabel")}</FormLabel>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
                     </FormItem>
                   )}
                 />

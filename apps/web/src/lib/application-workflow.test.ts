@@ -82,6 +82,13 @@ describe("application lifecycle presentation", () => {
     expect(applicationStatusLabel("accepted", translate)).toBe("acceptanceSent");
   });
 
+  it("keeps waitlisted responses in the review workspace, where a freed place is decided", () => {
+    const withWaitlist = [...rows, row(7, "waitlist")];
+    expect(rowsForWorkspace(withWaitlist, "review").map((item) => item.id)).toEqual([1, 7]);
+    expect(rowsForWorkspace(withWaitlist, "sent").map((item) => item.id)).not.toContain(7);
+    expect(applicationStatusLabel("waitlist", translate)).toBe("waitlist");
+  });
+
   it("names an unsent reject-and-return apart from a final rejection", () => {
     expect(applicationStatusLabel("rejected_internal", translate)).toBe("rejectedInternalOnly");
     expect(applicationStatusLabel("rejected_internal", translate, true)).toBe(
