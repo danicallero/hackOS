@@ -45,6 +45,10 @@ export function WaitlistAck({
       />
       <Label htmlFor="waitlist-ack" className="text-pretty font-normal leading-snug">
         {t("waitlistAckLabel")}
+        <span aria-hidden="true" className="text-destructive">
+          {" "}
+          *
+        </span>
       </Label>
     </div>
   );
