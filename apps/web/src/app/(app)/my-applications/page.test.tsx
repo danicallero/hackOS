@@ -138,8 +138,8 @@ describe("open forms in waitlist mode (H11)", () => {
   let root: Root;
   beforeEach(async () => {
     state.forms = [
-      { id: 20, name: "Full", granted_role_name: null, close_at: null, waitlist_active: true },
-      { id: 21, name: "Open", granted_role_name: null, close_at: null, waitlist_active: false },
+      { id: 20, name: "Full", granted_role_name: null, close_at: null, waitlist_enabled: true },
+      { id: 21, name: "Open", granted_role_name: null, close_at: null, waitlist_enabled: false },
     ];
     container = document.createElement("div");
     document.body.append(container);

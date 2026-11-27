@@ -306,7 +306,7 @@ export async function submitResponse(
         [applicationId],
       );
       app = appRows[0] as ApplicationRow;
-      waitlisted = await isWaitlistActive(client, app);
+      waitlisted = isWaitlistActive(app);
       if (waitlisted && !input.waitlist_ack) {
         throw new ConflictError("This form is now a waitlist: there are no places left", {
           code: "waitlist_required",

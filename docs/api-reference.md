@@ -236,12 +236,9 @@ one, or a rejection later returned with **Return to draft**) is kept in
 `application_response_rejections` and listed as `previous_rejections` on staff
 reads, so the re-review shows when, by whom and why it was rejected.
 
-**Waitlist (H11–H14).** A form's `waitlist_enabled` switches applying into
-joining a waitlist, immediately or, with `waitlist_after`, once that many
-applications (every non-draft response, so moving people never reopens the
-form) have been received. The form reads expose `waitlist_active` and
-`applications_received`; a closed window still closes the form completely.
-Submitting while `waitlist_active` requires `waitlist_ack: true` (the applicant
+**Waitlist (H11–H14).** Staff switch a form's `waitlist_enabled` by hand to
+turn applying into joining a waitlist; a closed window still closes the form
+completely. Submitting while `waitlist_enabled` requires `waitlist_ack: true` (the applicant
 was told there is no place), else `409 waitlist_required`, and stores the
 response as `waitlist`; invited participants and responses staff returned for
 a fix are not affected. A waitlisted response holds no place and is not

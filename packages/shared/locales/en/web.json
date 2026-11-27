@@ -4482,8 +4482,5 @@
   "moveToWaitlistWarning": "Each applicant is told they weren't selected, the places are full and they're on the waitlist.",
   "statWaitlistCount": "{n} on the waitlist",
   "waitlistSettingLabel": "Waitlist",
-  "waitlistAfterLabel": "Start after this many applications",
-  "waitlistAfterPlaceholder": "Right away",
-  "waitlistActiveNotice": "Waitlist running: {count} applications received.",
   "waitlistJoinedSpam": "Add that address to your contacts and, if you don't see the email, check Promotions and spam."
 }

@@ -28,7 +28,7 @@ export interface PublicForm {
   ask_shirt_size: boolean;
   ask_food_intolerances: boolean;
   /** H11: new submissions join the waitlist: there is no place to apply for. */
-  waitlist_active: boolean;
+  waitlist_enabled: boolean;
   created_at: string;
 }
 
@@ -197,13 +197,4 @@ export function statusLabel(status: string, t: Translate): string {
     expired: t("dataStatusExpired"),
   };
   return map[status] ?? t("unknownStatus");
-}
-
-/**
- * H8: label for a form's `granted_role_name` — the name of its
- * highest-position granted role, or null if it grants none. Replaces the
- * retired static `type` field's display.
- */
-export function formTypeLabel(grantedRoleName: string | null, t: Translate): string {
-  return grantedRoleName ?? t("roleUnassigned");
 }

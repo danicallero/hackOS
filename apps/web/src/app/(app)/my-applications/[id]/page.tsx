@@ -234,7 +234,7 @@ export default function MyApplicationDetailPage() {
   // H11/H12: the form has no places left. Staff-returned drafts are not a new
   // application for a place, so they keep the normal wording.
   const joiningWaitlist =
-    editable && form?.waitlist_active === true && !response?.allow_resubmit_after_close;
+    editable && form?.waitlist_enabled === true && !response?.allow_resubmit_after_close;
 
   function setValue(key: string, value: FieldValue) {
     hasLocalEditsRef.current = true;

@@ -1,5 +1,3 @@
-import type pg from "pg";
-
 import { withTransaction } from "../../db/pool.js";
 
 import { audit } from "../../lib/audit.js";
@@ -18,35 +16,12 @@ import { invalidateConfirmationToken, lockResponse } from "./internal.js";
 import type { ApplicationRow, ResponseRow } from "./types.js";
 
 /**
- * H11/H12 waitlist. A form is "in waitlist mode" when staff enabled it and
- * the number of applications received (every non-draft response, so staff
- * moving people around never reopens the form) reached `waitlist_after`, or
- * right away when no threshold is set. A closed window still closes the form
- * completely; the waitlist never reopens it.
+ * H11/H12 waitlist: staff switch a form into waitlist mode by hand
+ * (`waitlist_enabled`). A closed window still closes the form completely; the
+ * waitlist never reopens it.
  */
-const RECEIVED_SQL = (alias: string) => `(SELECT count(*)::int
-    FROM application_responses wr
-    JOIN users wu ON wu.id = wr.user_id AND wu.is_test_account = false
-   WHERE wr.application_id = ${alias}.id AND wr.status <> 'draft')`;
-
-/** Selectable columns for staff/public form reads. `alias` is the applications alias. */
-export const waitlistColumnsSql = (alias: string) =>
-  `${alias}.waitlist_enabled, ${alias}.waitlist_after,
-   ${RECEIVED_SQL(alias)} AS applications_received,
-   (${alias}.waitlist_enabled AND (${alias}.waitlist_after IS NULL
-     OR ${RECEIVED_SQL(alias)} >= ${alias}.waitlist_after)) AS waitlist_active`;
-
-export async function isWaitlistActive(
-  client: pg.PoolClient,
-  app: Pick<ApplicationRow, "id" | "waitlist_enabled" | "waitlist_after">,
-): Promise<boolean> {
-  if (!app.waitlist_enabled) return false;
-  if (app.waitlist_after == null) return true;
-  const { rows } = await client.query(
-    `SELECT ${RECEIVED_SQL("a")} AS n FROM applications a WHERE a.id = $1`,
-    [app.id],
-  );
-  return Number(rows[0]?.n ?? 0) >= app.waitlist_after;
+export function isWaitlistActive(app: Pick<ApplicationRow, "waitlist_enabled">): boolean {
+  return app.waitlist_enabled;
 }
 
 /**

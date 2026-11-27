@@ -20,13 +20,13 @@ beforeEach(async () => {
   manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
 });
 
-async function configure(appId: number, waitlist_enabled: boolean, waitlist_after: number | null) {
+async function configure(appId: number, waitlist_enabled: boolean) {
   const a = await getApp();
   const res = await a.inject({
     method: "PATCH",
     url: `/api/applications/${appId}`,
     headers: asUser(manager),
-    payload: { waitlist_enabled, waitlist_after },
+    payload: { waitlist_enabled },
   });
   expect(res.statusCode).toBe(200);
   return res.json();
@@ -59,20 +59,16 @@ describe("waitlist mode", () => {
     const appId = await createApplication();
     const a = await getApp();
     const form = await a.inject({ method: "GET", url: `/api/public/applications/${appId}` });
-    expect(form.json()).toMatchObject({
-      waitlist_enabled: false,
-      waitlist_active: false,
-      applications_received: 0,
-    });
+    expect(form.json()).toMatchObject({ waitlist_enabled: false });
     const { res, responseId } = await submit(appId);
     expect(res.statusCode).toBe(200);
     expect((await getResponse(responseId)).status).toBe("review");
   });
 
-  it("starts at once when enabled without a threshold and requires an explicit acknowledgement", async () => {
+  it("requires an explicit acknowledgement once staff enable it", async () => {
     const appId = await createApplication();
-    const form = await configure(appId, true, null);
-    expect(form).toMatchObject({ waitlist_active: true, waitlist_after: null });
+    const form = await configure(appId, true);
+    expect(form).toMatchObject({ waitlist_enabled: true });
 
     const refused = await submit(appId);
     expect(refused.res.statusCode).toBe(409);
@@ -85,24 +81,9 @@ describe("waitlist mode", () => {
     expect((await getResponse(joined.responseId)).status).toBe("waitlist");
   });
 
-  it("starts once the threshold of received applications is reached", async () => {
-    const appId = await createApplication();
-    await configure(appId, true, 2);
-    expect((await submit(appId)).res.statusCode).toBe(200);
-    const second = await submit(appId);
-    expect((await getResponse(second.responseId)).status).toBe("review");
-
-    const a = await getApp();
-    const form = await a.inject({ method: "GET", url: `/api/public/applications/${appId}` });
-    expect(form.json()).toMatchObject({ waitlist_active: true, applications_received: 2 });
-
-    const third = await submit(appId, { waitlist_ack: true });
-    expect((await getResponse(third.responseId)).status).toBe("waitlist");
-  });
-
   it("does not reopen a closed form", async () => {
     const appId = await createApplication({ close_at: "2020-01-01T00:00:00Z" });
-    await configure(appId, true, null);
+    await configure(appId, true);
     const a = await getApp();
     const userId = await createUser({ emailVerified: true });
     const res = await a.inject({
@@ -112,18 +93,6 @@ describe("waitlist mode", () => {
       payload: { responses: { motivation: "yes" } },
     });
     expect(res.statusCode).toBe(409);
-  });
-
-  it("rejects a non-positive threshold", async () => {
-    const appId = await createApplication();
-    const a = await getApp();
-    const res = await a.inject({
-      method: "PATCH",
-      url: `/api/applications/${appId}`,
-      headers: asUser(manager),
-      payload: { waitlist_after: 0 },
-    });
-    expect(res.statusCode).toBe(400);
   });
 });
 
@@ -256,7 +225,7 @@ describe("moving reviewed responses to the waitlist", () => {
 describe("leaving the waitlist", () => {
   it("lets a directly waitlisted applicant withdraw, audited", async () => {
     const appId = await createApplication();
-    await configure(appId, true, null);
+    await configure(appId, true);
     const { userId, responseId } = await submit(appId, { waitlist_ack: true });
     const a = await getApp();
     const res = await a.inject({

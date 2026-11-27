@@ -4482,8 +4482,5 @@
   "moveToWaitlistWarning": "Cada solicitante recibe un aviso: non foi seleccionado, as prazas encheuse e está na lista de espera.",
   "statWaitlistCount": "{n} en lista de espera",
   "waitlistSettingLabel": "Lista de espera",
-  "waitlistAfterLabel": "Comezar tras este número de solicitudes",
-  "waitlistAfterPlaceholder": "Desde xa",
-  "waitlistActiveNotice": "Lista de espera en marcha: {count} solicitudes recibidas.",
   "waitlistJoinedSpam": "Engade ese enderezo aos teus contactos e, se non ves o correo, revisa Promocións e spam."
 }

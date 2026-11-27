@@ -47,7 +47,7 @@ export interface PublicApplicationForm {
   description: string | null;
   close_at: string | null;
   /** H11: no places left; applying means joining the waitlist. */
-  waitlist_active?: boolean;
+  waitlist_enabled?: boolean;
 }
 
 export function displayText(
