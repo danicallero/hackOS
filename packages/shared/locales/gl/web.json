@@ -4471,7 +4471,7 @@
   "onWaitlistTitle": "Estás na lista de espera",
   "onWaitlistDesc": "Non tes praza. Se se libera unha, avisarémoste por correo e poderás confirmala.",
   "withdrawFromWaitlist": "Retirarme da lista de espera",
-  "withdrawFromWaitlistDesc": "Deixaremos de contar contigo se se libera unha praza. Poderías non recuperar o teu sitio na lista.",
+  "withdrawFromWaitlistDesc": "Se te retiras non poderás recuperar a túa inscrición nin participar en hackudc.",
   "stayOnWaitlist": "Seguir na lista",
   "yesWithdrawFromWaitlist": "Si, retirarme",
   "waitlistWithdrawnToast": "Retiraches a túa solicitude da lista de espera",

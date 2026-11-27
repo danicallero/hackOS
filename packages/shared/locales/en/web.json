@@ -4471,7 +4471,7 @@
   "onWaitlistTitle": "You're on the waitlist",
   "onWaitlistDesc": "You don't have a place. If one frees up, we'll email you and you'll be able to confirm it.",
   "withdrawFromWaitlist": "Leave the waitlist",
-  "withdrawFromWaitlistDesc": "We'll stop counting on you if a place frees up. You may not get your spot in the list back.",
+  "withdrawFromWaitlistDesc": "If you leave, you won't be able to recover your application or take part in hackudc.",
   "stayOnWaitlist": "Stay on the list",
   "yesWithdrawFromWaitlist": "Yes, leave",
   "waitlistWithdrawnToast": "You've left the waitlist",
